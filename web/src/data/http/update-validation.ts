@@ -7,7 +7,7 @@
 import { AdapterOutcomeError } from "../capability";
 import type { components } from "@/api/generated/schema";
 import { enBackend } from "../messages/en";
-export const updateReasons = new Set(Object.entries(enBackend.errors).flatMap(([prefix, entries]) => Object.keys(entries).map((key) => `${prefix}.${key}`)));
+export const updateReasons = new Set(Object.entries(enBackend.errors).flatMap(([prefix, entries]) => typeof entries === "string" ? [prefix] : Object.keys(entries).map((key) => `${prefix}.${key}`)));
 
 export const invalidUpdate = () => new AdapterOutcomeError({ kind: "error", code: "http.error" });
 export function record(value: unknown): Record<string, unknown> {

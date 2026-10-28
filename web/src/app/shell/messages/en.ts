@@ -27,6 +27,7 @@ export const enShell = {
     setup: "First-run setup",
     newHost: "Add host",
   },
+  partialSecurity: "Partial security total: scan data is unavailable for one or more hosts.",
   preview: "Preview",
   hostFilter: {
     title: "Host filter",

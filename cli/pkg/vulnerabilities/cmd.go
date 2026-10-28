@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; asynchronous scan acceptance and request-carried ignore-unfixed policy.
 
 // Package vulnerabilities provides CLI commands for image vulnerability
 // scanning on Arcane servers.
@@ -32,14 +32,15 @@ import (
 )
 
 var (
-	jsonOutput   bool
-	limitFlag    int
-	startFlag    int
-	allFlag      bool
-	forceFlag    bool
-	severityFlag string
-	imageFlag    string
-	summaryFlag  bool
+	ignoreUnfixed bool
+	jsonOutput    bool
+	limitFlag     int
+	startFlag     int
+	allFlag       bool
+	forceFlag     bool
+	severityFlag  string
+	imageFlag     string
+	summaryFlag   bool
 
 	ignoreImageFlag   string
 	ignorePkgFlag     string
@@ -171,7 +172,7 @@ var scanCmd = &cobra.Command{
 		// Scans can take a long time on large images.
 		c.SetTimeout(30 * time.Minute)
 
-		result, err := c.PostJSON[vulnerability.ScanResult](cmd.Context(), types.ImageVulnerabilitiesScan(c.EnvID(), imageID), nil)
+		result, err := c.PostJSON[vulnerability.AcceptedScan](cmd.Context(), types.ImageVulnerabilitiesScan(c.EnvID(), imageID), vulnerability.ImageScanRequest{Origin: "manual", IgnoreUnfixed: ignoreUnfixed})
 		if err != nil {
 			return fmt.Errorf("failed to scan image: %w", err)
 		}
@@ -181,18 +182,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		output.Header("Vulnerability Scan")
-		output.KeyValue("Image", result.Data.ImageName)
-		output.KeyValue("Status", string(result.Data.Status))
-		if result.Data.ScanPhase != "" {
-			output.KeyValue("Phase", string(result.Data.ScanPhase))
-		}
-		if result.Data.Error != "" {
-			output.KeyValue("Error", result.Data.Error)
-		}
-		if result.Data.ScannerVersion != "" {
-			output.KeyValue("Scanner", result.Data.ScannerVersion)
-		}
-		printSeveritySummary(result.Data.Summary)
+		output.KeyValue("Activity", result.Data.ActivityID)
 		return nil
 	},
 }
@@ -392,6 +382,7 @@ func init() {
 	listCmd.Flags().StringVar(&imageFlag, "image", "", "Filter by image name (substring)")
 	listCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
+	scanCmd.Flags().BoolVar(&ignoreUnfixed, "ignore-unfixed", false, "Ignore vulnerabilities without a fix")
 	scanCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	imageCmd.Flags().BoolVar(&summaryFlag, "summary", false, "Show the scan summary instead of the detailed list")

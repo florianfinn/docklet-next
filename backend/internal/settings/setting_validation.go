@@ -14,9 +14,22 @@ import (
 	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/types/features"
+	dto "github.com/florianfinn/docklet-next/types/settings"
 )
 
 func validateSettingValueInternal(key, value string) error {
+	if key == "vulnerabilityScanSchedule" {
+		if _, err := dto.ParseVulnerabilitySchedule(value); err != nil {
+			return common.Classify(common.ErrValidation, err)
+		}
+	}
+	switch key {
+	case "vulnerabilityScanEnabled", "trivyIgnoreUnfixed", "vulnerabilityNotifyCritical", "vulnerabilityNotifyHigh", "vulnerabilityNotifyFailed":
+		if value != "true" && value != "false" {
+			return common.Classify(common.ErrValidation, errors.New("scan switch must be true or false"))
+		}
+	}
+
 	if key == "toolsImage" && value != "" {
 		if _, err := reference.ParseNormalizedNamed(value); err != nil {
 			return common.Classify(common.ErrValidation, errors.New("toolsImage must be a valid Docker image reference or empty for the release default"))

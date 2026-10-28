@@ -1,6 +1,26 @@
 // American English texts of hub settings and the profile page.
 
 export const enSettings = {
+  liveScans: {
+    title: "Scans",
+    enabled: "Enable vulnerability scanning",
+    automatic: "Automatic scans",
+    schedule: "Schedule",
+    time: "Time",
+    unscheduled: "Choose a daily or weekly schedule.",
+    zone: "Times use the hub time zone ({zone}). Spring gaps are skipped; autumn folds run twice.",
+    nextUnavailable: "Next run unavailable.",
+    next: "Next run: {at}",
+    noNext: "No next run is scheduled.",
+    savedProjection: "The next run reflects the saved configuration.",
+    ignoreUnfixed: "Ignore findings without a fix",
+    notifications: "Scheduled scan notifications",
+    notifyCritical: "New critical findings",
+    notifyHigh: "New high findings",
+    notifyFailed: "Failed scans",
+    notificationHint: "Scheduled scans only. Delivery uses channels subscribed to vulnerability findings.",
+    loading: "Loading scan settings …",
+  },
   title: "Hub settings",
   description: (import.meta.env.DEV ? "Apply to the whole hub, regardless of the host filter. Saving affects this tab''s demo data." : "Applies to the whole hub, regardless of the host filter."),
   navLabel: "Hub settings sections",

@@ -142,6 +142,7 @@ interface OpsSummaryProps {
   attentionText: (item: AttentionItem) => string;
   updates: number;
   critical: number | undefined;
+  securityNotScanned?: boolean;
   runningActions: number;
   editing: boolean;
   animate: boolean;
@@ -169,7 +170,8 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
 }
 
 /** Shared all-host situation: fleet visual, verdict, pulse chips and per-host live cards. */
-export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, attention, attentionText, updates, critical, runningActions, editing, animate, duration }: OpsSummaryProps) {
+export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, attention, attentionText, updates, critical, securityNotScanned, runningActions, editing, animate, duration }: OpsSummaryProps) {
+  const ts = useTranslations("security");
   const t = useTranslations("dashboard.summary");
   const tr = useTranslations("dashboard.ring");
   const view = useFleetView();
@@ -218,7 +220,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
             {t("chips.hosts", { online, total: hosts.length })}
           </PulseChip>
           <PulseChip tone={critical === undefined ? "info" : critical ? "err" : "ok"} icon={<ShieldAlert />} to="/security">
-            {critical === undefined ? t("securityUnknown") : t("chips.critical", { count: critical })}
+            {securityNotScanned ? ts("notScanned") : critical === undefined ? t("securityUnknown") : t("chips.critical", { count: critical })}
           </PulseChip>
           {runningActions > 0 && (
             <PulseChip tone="accent" icon={<Activity className="animate-pulse" />} onClick={() => openActivity()}>

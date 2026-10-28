@@ -1,0 +1,455 @@
+{
+  "version": 8,
+  "minimumAgentContractVersion": 8,
+  "edgeProtocol": "tunnel/v1 (unchanged)",
+  "lifecycleOperations": ["deploy-project","down-project","restart-project","redeploy-project","start-container","stop-container","restart-container","update-project","restore-project"],
+  "runtimeRoutes": ["POST /api/environments/0/runtime-registration","POST /api/environments/0/runtime-target","POST /api/environments/0/runtime-runs","GET /api/environments/0/runtime-runs/{runId}","POST /api/environments/0/runtime-runs/{runId}/cancel"],
+  "identityFields": ["managerId","registrationId","executorGeneration","runId","requestDigest"],
+  "registrationFields": ["managerId","registrationId"],
+  "attributionFields": ["id","username","displayName?"],
+  "outcomeStates": ["active","terminal","not-received"],
+  "knowledgeFields": ["outcomeState","cancelRequested"],
+  "detailFields": ["activity","messages","stepTrace","output","outputTruncated","retainedStartSeq"],
+  "runtimeOutputFields": ["timestamp","stream","text","step?","level?","outputSeq"],
+  "legacyOutputFields": ["timestamp","stream","text","step?","level?"],
+  "admission": {
+    "preference": "respond-async",
+    "key": "Idempotency-Key",
+    "newStatus": 202,
+    "retainedStatus": 200,
+    "fields": ["activityId","code","activity"],
+    "completion": false
+  },
+  "conflicts": ["run.busy","run.cancelling","run.request-mismatch"],
+  "limits": {"deliveryMinutes":30,"admissionMinutes":5,"clientRetryMinutes":10,"compactRetentionHours":24,"negativeEvidenceMinutes":60,"querySeconds":5,"bodyBytes":1048576,"outputBytes":262144},
+  "recovery": {"globalAdministrator":true,"activityReadAndCancel":true,"reasonAndAcknowledgment":true,"stoppedExecutorAndCheckedDocker":true,"effectReplay":false},
+  "restrictedRoutes": ["GET /api/health","HEAD /api/health","GET /api/app-version","GET /api/version","HEAD /api/environments/0/system/health","GET /api/environments/0/system/upgrade/check","POST /api/environments/0/system/upgrade"],
+  "hubRuntimeRoutes": ["GET /api/environments/{id}/runtime-runs/{runId}","POST /api/environments/{id}/runtime-runs/{runId}/cancel","POST /api/environments/{id}/runtime-runs/{runId}/release"],
+  "executorIdentityFields": ["managerId","registrationId","executorGeneration"],
+  "recoveryFields": ["unknownReason?","executorState","executorResultCode?","executorError?","executorSettledAt?","disposition?","dispositionBy?","dispositionReason?","dispositionAt?","releaseAcknowledged"],
+  "preAdmissionCodes": ["run.busy","run.cancelling","run.request-mismatch","runtime.target-changed","runtime.target-unavailable","runtime.parent-unresolved","runtime.target-removed","agent.update-required"],
+  "authentication": {"receiver":"AgentCredential","requestHeader":"X-Arcane-Agent-Token","ordinaryBearer":false,"bootstrap":false,"wireAttributionGrantsAuthority":false},
+  "capabilities": {"runStack":"unavailable until consumer mapping","runContainer":"unavailable until consumer mapping","deployStack":"unavailable until consumer mapping"},
+  "legacyNonStreamingFailureStatuses": {"runtime.outcome-unknown":503,"runtime.interrupted":409,"runtime.cancelled":409,"runtime.failed":500,"runtime.wait-timeout":504,"runtime.waiter-disconnected":408},
+  "legacyStreaming": {
+    "operations": ["deploy-project","redeploy-project"],
+    "contentType": "application/x-ndjson",
+    "startedFields": ["type","activityId"],
+    "doneOnConfirmedSuccessOnly": true,
+    "postFlushFailureStatus": 200,
+    "postFlushFailureFields": ["error","code","activityId"],
+    "preFlushAdmissionUsesErrorStatus": true
+  },
+  "storage": {
+    "routes": [
+      {"method":"GET","path":"/environments/{id}/projects/{projectId}/workspace","operationId":"get-project-workspace"},
+      {"method":"PUT","path":"/environments/{id}/projects/{projectId}/workspace","operationId":"update-project-workspace"},
+      {"method":"GET","path":"/environments/{id}/projects/{projectId}/workspace/file","operationId":"get-project-workspace-file"},
+      {"method":"GET","path":"/environments/{id}/projects/{projectId}/workspace/file/download","operationId":"download-project-workspace-file"},
+      {"method":"GET","path":"/environments/{id}/volumes","operationId":"list-volumes"},
+      {"method":"POST","path":"/environments/{id}/volumes","operationId":"create-volume"},
+      {"method":"DELETE","path":"/environments/{id}/volumes/backups/{backupId}","operationId":"delete-volume-backup"},
+      {"method":"GET","path":"/environments/{id}/volumes/backups/{backupId}/download","operationId":"download-volume-backup"},
+      {"method":"GET","path":"/environments/{id}/volumes/backups/{backupId}/files","operationId":"list-backup-files"},
+      {"method":"GET","path":"/environments/{id}/volumes/backups/{backupId}/files/browse","operationId":"browse-volume-backup-files"},
+      {"method":"GET","path":"/environments/{id}/volumes/backups/{backupId}/has-path","operationId":"backup-has-path"},
+      {"method":"GET","path":"/environments/{id}/volumes/counts","operationId":"get-volume-usage-counts"},
+      {"method":"GET","path":"/environments/{id}/volumes/prune","operationId":"plan-volume-prune"},
+      {"method":"POST","path":"/environments/{id}/volumes/prune","operationId":"prune-volumes"},
+      {"method":"GET","path":"/environments/{id}/volumes/sizes","operationId":"get-volume-sizes"},
+      {"method":"DELETE","path":"/environments/{id}/volumes/{volumeName}","operationId":"remove-volume"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}","operationId":"get-volume"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}/backup-policy","operationId":"get-volume-backup-policy"},
+      {"method":"PUT","path":"/environments/{id}/volumes/{volumeName}/backup-policy","operationId":"update-volume-backup-policy"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}/backups","operationId":"list-volume-backups"},
+      {"method":"POST","path":"/environments/{id}/volumes/{volumeName}/backups","operationId":"create-volume-backup"},
+      {"method":"POST","path":"/environments/{id}/volumes/{volumeName}/backups/upload","operationId":"upload-volume-backup"},
+      {"method":"POST","path":"/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore","operationId":"restore-volume-backup"},
+      {"method":"POST","path":"/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore-files","operationId":"restore-volume-backup-files"},
+      {"method":"POST","path":"/environments/{id}/volumes/{volumeName}/rename","operationId":"rename-volume"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}/usage","operationId":"get-volume-usage"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}/workspace","operationId":"get-volume-workspace"},
+      {"method":"PUT","path":"/environments/{id}/volumes/{volumeName}/workspace","operationId":"update-volume-workspace"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}/workspace/file","operationId":"get-volume-workspace-file"},
+      {"method":"GET","path":"/environments/{id}/volumes/{volumeName}/workspace/file/download","operationId":"download-volume-workspace-file"}
+    ],
+    "requiredFields": {
+      "VolumeHelperIncompatibleError": ["code","detail","status","title"],
+      "VolumePruneCandidate": ["createdAt","name"],
+      "VolumePruneFailed": ["code","name"],
+      "VolumePrunePlan": ["candidates"],
+      "VolumePrunePlanCandidate": ["createdAt","driver","name","reason"],
+      "VolumePruneRequest": ["candidates"],
+      "VolumePruneResult": ["failed","removed","skipped","spaceReclaimed"],
+      "VolumePruneSkipped": ["name","reason"],
+      "VolumeHelperUnavailableError": ["code","detail","status","title"]
+    },
+    "helperErrorCode": "volume.helper-incompatible",
+    "helperImageSetting": "toolsImage",
+    "pruneSelection": "anonymous-local-without-options-by-default; all-includes-named; no-running-or-stopped-container-references",
+    "pruneExecution": "explicit-name-createdAt-list; fresh-identity-and-all-container-recheck; non-forced-remove; independent-results",
+    "helperUnavailableCode": "volume.helper-unavailable",
+    "helperImageDefault": "empty-override; resolve-running-release-default; migrate-shipped-defaults-to-empty; local-env-wins",
+    "pruneSizes": "sizeBytes-omitted; no-host-wide-disk-usage-scan; reclaimed-bytes-unknown-zero"
+  },
+  "network": {
+    "routes": [
+      {"method":"GET","path":"/environments/{id}/networks","operationId":"list-networks"},
+      {"method":"POST","path":"/environments/{id}/networks","operationId":"create-network"},
+      {"method":"GET","path":"/environments/{id}/networks/counts","operationId":"network-counts"},
+      {"method":"POST","path":"/environments/{id}/networks/prune","operationId":"prune-networks"},
+      {"method":"GET","path":"/environments/{id}/networks/topology","operationId":"get-network-topology"},
+      {"method":"DELETE","path":"/environments/{id}/networks/{networkId}","operationId":"delete-network"},
+      {"method":"GET","path":"/environments/{id}/networks/{networkId}","operationId":"get-network"},
+      {"method":"POST","path":"/environments/{id}/networks/{networkId}/connect","operationId":"connect-network-container"},
+      {"method":"POST","path":"/environments/{id}/networks/{networkId}/disconnect","operationId":"disconnect-network-container"}
+    ],
+    "fields": {
+      "NetworkCreateRequest": ["name","options"],
+      "NetworkCreateOptions": ["checkDuplicate","driver","enableIPv4","enableIPv6","internal","ipam","labels","options"],
+      "NetworkIPAM": ["config","driver","options"],
+      "NetworkIPAMConfig": ["auxAddress","gateway","ipRange","subnet"],
+      "NetworkConnectContainerRequest": ["aliases","containerId","ipv4Address","ipv6Address"],
+      "NetworkDisconnectContainerRequest": ["containerId","force"],
+      "NetworkError": ["code","detail","status","title"]
+    },
+    "errorCodes": ["network.already-connected","network.builtin-network","network.compose-managed","network.exists","network.in-use","network.invalid-ip","network.invalid-network","network.network-mode","network.not-connected","network.not-found","network.overlap"]
+  },
+  "imageSafety": {
+    "capabilities": ["guarded-images","write-only-registries","read-only-update-info","hub-agent-upgrade-cap","stack-update","restore","candidate-notifications","policies","auto-apply","hub-image-schedules","system-image-hints"],
+    "inactiveCapabilities": [],
+    "archiveFormats": ["docker-save-tar","docker-save-tar-gzip"],
+    "unsupportedArchiveCode": "image.invalid-archive",
+    "leaseScope": "image-mutation",
+    "normalComposePullsTakeLease": false,
+    "protectionReasons": ["in-use","system","restore-point","active-update"],
+    "errorCodes": ["image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","restore.deploy-failed","restore.image-mismatch","restore.in-use","restore.not-found","restore.shared-reference","restore.unavailable","update.permission-denied","update.schedule-owner-unset","update.agent-local-job-disabled","update.auto-excluded","update.invalid-policy","update.policy-changed","update.schedule-hub-owned","update.baseline-unavailable","update.check-unavailable","update.config-drift","update.deploy-failed","update.image-binding-unsupported","update.invalid-target","update.path-retired","update.persistence-failed","update.requires-hub-update","update.snapshot-unavailable","update.system-version-unknown","update.target-changed","update.target-not-found"],
+    "edgeCommands": ["image.list","image.counts","image.inspect","image.pull","image.delete","image.prune","image.tag","image.upload","image_update.check","image_update.check_one","image_update.check_batch","image_update.check_all","image_update.summary","image_update.by_refs","container_registry.sync","system.upgrade.run"],
+    "registryPublicFields": ["id","url","description?","insecure","enabled","registryType","repositoryNames","awsRegion?","createdAt","updatedAt","hasCredential"],
+    "updateStates": ["unchecked","current","version","rebuild","local","unknown","error"],
+    "updateInfoFields": ["state","checkedAt","imageRef","platform?","authState","code?","checkTime","updateType","currentVersion","latestVersion","currentDigest","latestDigest","error","authMethod?","authRegistry?","responseTimeMs","hasUpdate","usedCredential?"],
+    "pruneFields": ["imagesDeleted","spaceReclaimed","spaceReclaimedKnown","skipped","failed"],
+    "protectionFields": ["reason","ownerId?"],
+    "registryTestFields": ["ok","checkedAt","code?"],
+    "edgeRoutes": [
+      {"method":"POST","path":"/api/container-registries/sync","command":"container_registry.sync"},
+      {"method":"GET","path":"/api/environments/{id}/images","command":"image.list"},
+      {"method":"GET","path":"/api/environments/{id}/images/counts","command":"image.counts"},
+      {"method":"GET","path":"/api/environments/{id}/images/{imageId}","command":"image.inspect"},
+      {"method":"DELETE","path":"/api/environments/{id}/images/{imageId}","command":"image.delete"},
+      {"method":"POST","path":"/api/environments/{id}/images/pull","command":"image.pull"},
+      {"method":"POST","path":"/api/environments/{id}/images/prune","command":"image.prune"},
+      {"method":"POST","path":"/api/environments/{id}/images/upload","command":"image.upload"},
+      {"method":"POST","path":"/api/environments/{id}/images/{name}/tag","command":"image.tag"},
+      {"method":"GET","path":"/api/environments/{id}/image-updates/check","command":"image_update.check"},
+      {"method":"GET","path":"/api/environments/{id}/image-updates/check/{imageId}","command":"image_update.check_one"},
+      {"method":"POST","path":"/api/environments/{id}/image-updates/check/{imageId}","command":"image_update.check_one"},
+      {"method":"POST","path":"/api/environments/{id}/image-updates/check-batch","command":"image_update.check_batch"},
+      {"method":"POST","path":"/api/environments/{id}/image-updates/check-all","command":"image_update.check_all"},
+      {"method":"GET","path":"/api/environments/{id}/image-updates/summary","command":"image_update.summary"},
+      {"method":"GET","path":"/api/environments/{id}/image-updates/by-refs","command":"image_update.by_refs"},
+      {"method":"POST","path":"/api/environments/{id}/system/upgrade","command":"system.upgrade.run"}
+    ],
+    "pullStream": {
+      "route": "POST /environments/{id}/images/pull",
+      "mediaType": "application/x-json-stream",
+      "frame": {
+        "oneOf": [
+          {"$ref":"#/components/schemas/ImagePullStartedFrame"},
+          {"$ref":"#/components/schemas/ImagePullProgressFrame"},
+          {"$ref":"#/components/schemas/ImagePullErrorFrame"},
+          {"$ref":"#/components/schemas/ImagePullDoneFrame"}
+        ]
+      },
+      "schemas": {
+        "ImagePullStartedFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "activityId": {"minLength":1,"type":"string"},
+            "type": {
+              "enum": ["activity"],
+              "type": "string"
+            }
+          },
+          "required": ["type","activityId"],
+          "type": "object"
+        },
+        "ImagePullProgressFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {"pattern":"^[a-f0-9]{12,64}$","type":"string"},
+            "progressDetail": {"$ref":"#/components/schemas/ImagePullProgressCounts"},
+            "status": {
+              "enum": ["Pulling image","Pulling fs layer","Waiting","Downloading","Verifying Checksum","Download complete","Extracting","Pull complete","Already exists"],
+              "type": "string"
+            }
+          },
+          "required": ["status"],
+          "type": "object"
+        },
+        "ImagePullProgressCounts": {
+          "additionalProperties": false,
+          "properties": {
+            "current": {"format":"int64","minimum":0,"type":"integer"},
+            "total": {"format":"int64","minimum":0,"type":"integer"}
+          },
+          "required": ["current","total"],
+          "type": "object"
+        },
+        "ImagePullErrorFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "error": {"$ref":"#/components/schemas/ImageProblem"}
+          },
+          "required": ["error"],
+          "type": "object"
+        },
+        "ImageProblem": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": ["image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","restore.deploy-failed","restore.image-mismatch","restore.in-use","restore.not-found","restore.shared-reference","restore.unavailable","update.permission-denied","update.schedule-owner-unset","update.agent-local-job-disabled","update.auto-excluded","update.invalid-policy","update.policy-changed","update.schedule-hub-owned","update.baseline-unavailable","update.check-unavailable","update.config-drift","update.deploy-failed","update.image-binding-unsupported","update.invalid-target","update.path-retired","update.persistence-failed","update.requires-hub-update","update.snapshot-unavailable","update.system-version-unknown","update.target-changed","update.target-not-found"],
+              "type": "string"
+            },
+            "message": {"type":"string"}
+          },
+          "required": ["code","message"],
+          "type": "object"
+        },
+        "ImagePullDoneFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "done": {
+              "enum": [true],
+              "type": "boolean"
+            }
+          },
+          "required": ["done"],
+          "type": "object"
+        }
+      },
+      "registryAuthenticationStatus": 502
+    }
+  },
+  "activityDiscovery": {
+    "route": "GET /environments/{id}/activities",
+    "includeParameter": {
+      "description": "Include bounded steps and runtime presentation in list rows",
+      "explode": false,
+      "in": "query",
+      "name": "includeSummary",
+      "schema": {"description":"Include bounded steps and runtime presentation in list rows","type":"boolean"}
+    },
+    "responseSchema": {"$ref":"#/components/schemas/BasePaginatedActivityActivitySummary"},
+    "fields": ["affectedServices","batchId","cancelRequested","createdAt","durationMs","endedAt","environmentId","error","id","imageLifecycle","latestMessage","messageCode","metadata","outcomeState","progress","recovery","resourceId","resourceName","resourceType","sourceEnvironmentId","sourceEnvironmentName","startedAt","startedBy","status","step","stepTrace","type","updatedAt"],
+    "optionalFields": ["affectedServices","batchId","cancelRequested","durationMs","endedAt","error","imageLifecycle","latestMessage","messageCode","metadata","outcomeState","progress","recovery","resourceId","resourceName","resourceType","sourceEnvironmentId","sourceEnvironmentName","startedBy","step","stepTrace","updatedAt"],
+    "knowledgeDependencies": {
+      "cancelRequested": ["outcomeState"],
+      "outcomeState": ["cancelRequested"]
+    },
+    "stepTrace": {
+      "items": {"$ref":"#/components/schemas/ActivityStepTraceEntry"},
+      "type": ["array","null"]
+    },
+    "recovery": {"$ref":"#/components/schemas/ActivityActivitySummaryRecovery"},
+    "recoveryProperties": {
+      "disposition": {
+        "type": ["string","null"]
+      },
+      "unknownReason": {
+        "type": ["string","null"]
+      }
+    }
+  },
+  "imageLifecycle": {
+    "targetKinds": ["project"],
+    "routes": [
+      {"method":"GET","path":"/environments/{id}/updater/projects/{projectId}/baseline","operationId":"get-update-baseline","sha256":"272a23db153b9a580ea95c0e47611421104bec1ed6f2f5a2e5b28bc5691594a4"},
+      {"method":"POST","path":"/environments/{id}/updater/projects/{projectId}/update","operationId":"update-project-images","sha256":"48da79944df3ba2ebf28a46a9fea8e458a75e6c97ead8e6a127e9f5fd10c1e3c"},
+      {"method":"GET","path":"/environments/{id}/updater/restore-points","operationId":"list-host-restore-points","sha256":"860a516a25b0d8f2abecce3c5c7e5ef37425a546b92f9100f67281787953b1fe"},
+      {"method":"DELETE","path":"/environments/{id}/updater/restore-points/{pointId}","operationId":"delete-host-restore-point","sha256":"489cf1bd6cda7cb5dd6f9f76037a8b76c9df295b2d39a6033f71bf4938fdaed5"},
+      {"method":"GET","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points","operationId":"list-restore-points","sha256":"e7aa68e1badc68c3cbb648f9b11c2dc3b441245df30c111280ccb6c6c35a9a25"},
+      {"method":"DELETE","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}","operationId":"delete-restore-point","sha256":"d94ec5225f6e44479df8aaa2f427f143f7e1d7eeaec5e7cc7cd98ae52ce097b9"},
+      {"method":"POST","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore","operationId":"restore-update","sha256":"92d5f6dd0245a3a3441c086a28a3c7f531415c94d11d4baa2c3f19d6c7df3239"}
+    ],
+    "schemas": {
+      "UpdaterLifecycleRequest": {"sha256":"b4d8a19a85ffe9b3007138541f73aeae4663a616e873966ef66d3d9c10035d48"},
+      "UpdaterLifecycleIntent": {"sha256":"2f4ccaff689610b693669796e51662a00fe1c5411dee2b9124e97265687bf396"},
+      "UpdaterPolicyBinding": {"sha256":"bf4abb7900dc020784127c1a648a2a7464a8c80655e89bf9cd6492c7cbd13cb7"},
+      "UpdaterImageSelection": {"sha256":"bafcb6906dff24c4e7ad9df5bc930991979ee412d335c9eb6869102d920f52df"},
+      "UpdaterLifecycleResult": {"sha256":"9f1349f2122ae2c06414394edf7e30bf9f5743453a9e23d6a4ba2f9c7dfc35a0"},
+      "UpdaterRestorePoint": {"sha256":"1544f4c87161aa66dbf1fdf2991c862a137362c2ebade4beedba093ce38663e2"},
+      "UpdaterPointImage": {"sha256":"d6b87f8a92b5310b7860c3706ea4ea9298249c4e70760122be31079509d44d2c"},
+      "UpdaterBaselineStatus": {"sha256":"bdbe4d57839547f011b0ba4b5e32ec4c17ef474714adcb6c3f213e6db8d3bddc"},
+      "ActivityRuntimeOptions": {"sha256":"3936ce01fd00c25c8ee9aa3a320dba75e60aa1b546ce46c4d5327d9ba6ab1951"},
+      "ActivityRuntimeTargetRequest": {"sha256":"712c5ed295d4baed3976e93f520786bd5fd4b3387f2a69abe22428a4bfd6355b"},
+      "ActivityRuntimeTargetMetadata": {"sha256":"5ce176d5300f3f1bd0a8cc94afeae2ad44deff1d6878db90d538a046faa2899b"}
+    },
+    "edgeRoutes": [
+      {"method":"POST","path":"/api/environments/{id}/updater/projects/{projectId}/check","command":"updater.project.check"},
+      {"method":"GET","path":"/api/environments/{id}/updater/projects/{projectId}/baseline","command":"updater.project.baseline"},
+      {"method":"GET","path":"/api/environments/{id}/updater/{kind}/{targetId}/restore-points","command":"updater.restore.list"},
+      {"method":"DELETE","path":"/api/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}","command":"updater.restore.delete"},
+      {"method":"GET","path":"/api/environments/{id}/updater/restore-points","command":"updater.restore.host-list"},
+      {"method":"DELETE","path":"/api/environments/{id}/updater/restore-points/{pointId}","command":"updater.restore.host-delete"}
+    ],
+    "retiredRoutes": [
+      {"method":"POST","path":"/environments/{id}/containers/{containerId}/update","operationId":"update-container","sha256":"1626f1f9bac335057bd44221d3e7618c18fe637b3b6d2f0fffc50ab090683ccb"},
+      {"method":"POST","path":"/environments/{id}/projects/{projectId}/update-services","operationId":"update-project-services","sha256":"852b6d3cdadf4857496a0d1463c263f1b94587ca927fb364312ea3df5e17aa30"},
+      {"method":"POST","path":"/environments/{id}/updater/run","operationId":"run-updater","sha256":"63e508da7ecec75439a19b7ef20f710b4a31c822a6d23750858438e1fc34d4aa"}
+    ],
+    "runtimePreflightSha256": "63841bcfb8378c57a25010ca34631269f84503e90c64c7de77ad172ee8481561",
+    "retainedPoints": 5,
+    "retentionProtections": ["restore-target","healthy-baseline"],
+    "holdStates": ["none","active","unknown"],
+    "pointRequiredFields": ["protectionReason","holdState","failedAttempt","images","id","registrationId","targetId","targetIdentity","sourceRunId","createdAt","sourceState","volumeDataIncluded","available","orphaned"],
+    "failedAttemptPoints": 1,
+    "failedAttemptScope": "partial-source from failed attempts; healthy baseline and successful pre-restore points exempt",
+    "volumeDataIncluded": false,
+    "normalComposePullsTakeLease": false,
+    "retiredUpdateCode": "update.path-retired",
+    "observedIdentity": "target identity and modeled/extra container/image IDs and labels; running state is recorded only",
+    "configurationProof": "saved Compose/env bytes, rendered model, config-hash labels and image bindings; no runtime state",
+    "runtimeEvidence": "all containers are captured; only configured non-one-off service and replica images require inspection and pins",
+    "resultSettlement": "atomic with terminal receipt; failed persistence never replays Docker"
+  },
+  "imagePolicies": {
+    "targetKinds": ["project"],
+    "defaultMode": "off",
+    "modes": ["off","notify","apply"],
+    "owner": "hub",
+    "jobs": ["image-polling","auto-update"],
+    "timeZone": "hub IANA zone",
+    "routes": [
+      {"method":"GET","path":"/environments/{id}/updater/policies/{kind}/{targetId}","operationId":"get-auto-update-policy","sha256":"a06773e67638d535656791201ac62b462bb420176109d026610d1be330dd0b0e"},
+      {"method":"PUT","path":"/environments/{id}/updater/policies/{kind}/{targetId}","operationId":"set-auto-update-policy","sha256":"6021b06b30787b5e35bca47c8c694e7585f338e0bc6f46c6ed4f790b23ff3136"},
+      {"method":"GET","path":"/environments/{id}/updater/schedules","operationId":"get-update-schedules","sha256":"db23ea902ea5ed372dee349e69626500e7b5dfc3fa101c9cb2bf13ca2b964b9b"},
+      {"method":"PUT","path":"/environments/{id}/updater/schedules","operationId":"set-update-schedules","sha256":"963d9adc63e91cdb7213192c9ab444695d40590da3c010573ba3ea1f2947dc9b"},
+      {"method":"GET","path":"/environments/{id}/updater/system-image-hints","operationId":"get-system-image-hints","sha256":"94bf1f565355dcbb220628d67337a85953e15130fed6b31f616f75a15a3d4d48"}
+    ],
+    "schemas": {
+      "ProjectUpdateInfo": {"sha256":"24459bf84774d16c517fe139f9e2f7b34e7bfc7da67133f257e5750e2bbf7648"},
+      "UpdaterAutoUpdatePolicy": {"sha256":"a1b13819958a8f79c1fcd939b2b4cf62b808c6aafaf50a9e4928915013a1f994"},
+      "UpdaterUpdatePolicyInput": {"sha256":"9aa0631c54ad53ca36cd096885acc27a92e2322e2add7bbc7a62ca50b96443e7"},
+      "UpdaterUpdateCandidate": {"sha256":"fa66965e30135bf2893054b3ef364624d48e3e7e855c05b83f692bf9f27aaa7a"},
+      "UpdaterUpdateScheduleConfig": {"sha256":"9ceab30f6a316e514750dfc300cec4b6265962c161b3b0c77d847907cfdcfcf0"},
+      "UpdaterUpdateScheduleInput": {"sha256":"042121fb8cac41e0e063eae2e184988525a4fa0947cec955a8961a867b0516a2"},
+      "JobscheduleConfig": {"sha256":"23a7234d30089bddfec1e1c54d930f4bda6ff18f0c017f2f4584a10c3a6e1dcf"},
+      "JobscheduleUpdate": {"sha256":"aa0bd775c121a870f849c2201f770b20fe58f4497ac1c54f1b384f432a16cf1e"},
+      "JobscheduleJobStatus": {"sha256":"9e45b20e032742d679489e84cbca18ce7a0e298927361978640c6cd6fba5754d"},
+      "SchedulerOutcome": {"sha256":"3056137424076e45751128da7561407f70fe228e521f0f8eb6c83d041fa335d0"},
+      "SchedulerTargetOutcome": {"sha256":"c2e84c0fb2e95f857314f347455f06e435c9765eb03cbbc109fb8e157343f2b7"},
+      "UpdaterSystemImageHint": {"sha256":"4dc38d688d5a7dd6778f361e836963dd3ee9ec558a00b25a297c32eb4ca01d88"},
+      "UpdaterSystemImageHints": {"sha256":"1d1b3c851b9360e8d781cb08ec30c9a6b62f314546b27178072ef74dd80294ef"},
+      "VersionInfo": {"sha256":"5291d2f09c3fd953fccf20c069d078fce17e963c280581f7324768fd71698712"}
+    },
+    "admission": "current actor/key, registration, baseline and revision; freeze revision in runtime receipt transaction",
+    "execution": "existing update-project runtime; serial children per host; retry/restart queries original receipts only",
+    "agentLocalCode": "update.agent-local-job-disabled",
+    "legacyScheduleWriteCode": "update.schedule-hub-owned",
+    "legacyScheduleFields": "autoUpdateInterval and pollingInterval omitted from reads/schema; any write including null or mixed fields refuses before forwarding",
+    "notificationIdentity": ["host","registration","stack identity","repository","platform","normalized version/tag","immutable digest"],
+    "notificationCommit": "candidate dedup row and linked durable notification entry in one hub transaction",
+    "notificationRecovery": "reuse entry across checks, restart and policy toggles; failed/unknown delivery never creates another entry"
+  },
+  "vulnerability": {
+    "routes": [
+      {"method":"POST","path":"/environments/{id}/images/vulnerabilities/summaries","operationId":"get-image-vulnerability-summaries","sha256":"08521698596ea33fe777e26a8a47361a1aa88957fb2c138dc1e38518225a6764"},
+      {"method":"GET","path":"/environments/{id}/images/{imageId}/vulnerabilities","operationId":"get-image-vulnerabilities","sha256":"98404f725ee7a818bf4d3c25d0d435c5aa7a29a8a5c6ac09a44a509f0a641fd9"},
+      {"method":"GET","path":"/environments/{id}/images/{imageId}/vulnerabilities/list","operationId":"list-image-vulnerabilities","sha256":"3533bd3b765325df8609e0c0ae8d119f8adea7a9b139d40f8b9c5a5e046e0566"},
+      {"method":"POST","path":"/environments/{id}/images/{imageId}/vulnerabilities/scan","operationId":"scan-image-vulnerabilities","sha256":"4975ef1ddfd607e07971238b2073e6f55bef6008c3a0cf3895430cd47a55c0de"},
+      {"method":"GET","path":"/environments/{id}/images/{imageId}/vulnerabilities/summary","operationId":"get-image-vulnerability-summary","sha256":"d13505b1b5141531f69169836e05e9712f20ff8746ff4e0f76da7e36b5fc83fa"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/all","operationId":"list-environment-vulnerabilities","sha256":"102d12a800d73b83d7c3053066751991da40f61ed00ec9b51e1eb86e6268d87c"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/export","operationId":"export-environment-vulnerabilities","sha256":"21fffa8e91a21adaebc1aec2f3d2314d484764e1e3ed130b8196156167d85933"},
+      {"method":"POST","path":"/environments/{id}/vulnerabilities/ignore","operationId":"ignore-vulnerability","sha256":"60896b0fa83fabd93c94c794420cb438e2f84037e656ee0ebefb1dd5c17f42e2"},
+      {"method":"POST","path":"/environments/{id}/vulnerabilities/ignore/bulk","operationId":"bulk-ignore-vulnerabilities","sha256":"b56c25f7a3b9577ad857f52327dbab9fd2e1cdf0c6b9504f72533c5412bdf04d"},
+      {"method":"DELETE","path":"/environments/{id}/vulnerabilities/ignore/{ignoreId}","operationId":"unignore-vulnerability","sha256":"7adbfad42d64c0217ef096192530776dd7acd33072d2858ed1ad5ad2e9fcfe62"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/ignored","operationId":"list-ignored-vulnerabilities","sha256":"516b2ed4228aaac3e9662a1fbaa8ed0ec8c1834196405524ee644ceb7188025b"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/image-options","operationId":"list-environment-vulnerability-image-options","sha256":"35eaff105500d1c64fce9562b3182315e69a5d06215773d843583d66add4f8d8"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/overview","operationId":"get-environment-vulnerability-overview","sha256":"22e19a982853ff8c50b8714ef573b8e4915ec61c83486c3fb09c8da4c082d6bc"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/runs","operationId":"list-vulnerability-scan-runs","sha256":"b158c2100bd88ff570af02868c23f63dff8e1372b134a505faf3918e40adb09c"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/runs/{activityId}","operationId":"get-vulnerability-scan-run","sha256":"daf1e9a6a27ff2f3fce0b04693e88b0c1badf2b26d7e32d52f75ecf4e4e1852f"},
+      {"method":"POST","path":"/environments/{id}/vulnerabilities/scan","operationId":"scan-host-vulnerabilities","sha256":"4b40a7097113fed5cb237c10a7b280dd468b796efab76ac1f33d654e801f669b"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/scanner-status","operationId":"get-vulnerability-scanner-status","sha256":"625efa65a11936fee24cbc58ac70302d84466b873c7a7405bf323e409ea7a376"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/summary","operationId":"get-environment-vulnerability-summary","sha256":"13f24ea16ea40b06cda7211d7e52061840b0dc29a6dcab747fd813727a506732"},
+      {"method":"POST","path":"/environments/{id}/vulnerabilities/unignore/bulk","operationId":"bulk-unignore-vulnerabilities","sha256":"ea0e5867ce8960c7b0a662eb078c38feb0b547a63fad2b5200a8460db29e05d6"}
+    ],
+    "schemas": {
+      "VulnerabilityScanSummariesRequest": {"sha256":"57fdc2b5237b51010bb27555cff386e98e743e665950c3af4994993b3140897c"},
+      "BaseApiResponseVulnerabilityScanSummariesResponse": {"sha256":"ae907277cde95d14973c9d668c60d4e886c48265bbc6f2f2ef0191e5b89e7c92"},
+      "VulnerabilityScanSummariesResponse": {"sha256":"8c8230f343a501a8a6b14bb0f5f2de0ae2f2d4eed7f53de3ee9c1d9f62d992e3"},
+      "VulnerabilityScanSummary": {"sha256":"fdcbf08253b4a6085b93016f8b9d0a709e0bc767bb0933386048efe6ab5bb847"},
+      "VulnerabilitySeveritySummary": {"sha256":"71c316f0d676308a2eecd3835ce5bd7922c133e24422e4ab2b4b9663a931b241"},
+      "VulnerabilityProblem": {"sha256":"2d13b3cce185e17fa3eaaee429a5ab5a24812e5895d150cfe05c3b5b93c4baa2"},
+      "ErrorModel": {"sha256":"de6693ef65f515c0ea1c872ae25d3f0f51944322a121a72e678ba01cc2ade431"},
+      "ErrorDetail": {"sha256":"49cf23b6da926628d882e50a67fcdff6de7f5a0dc72506d557ab692375ab8b6e"},
+      "BaseApiResponseVulnerabilityScanResult": {"sha256":"b3d35af7185cbdd9e22c802a68c6bf42cd63f0447a1c9cbcc1b296515012664a"},
+      "VulnerabilityScanResult": {"sha256":"511c8630fa66334fd471213f80297e04734b301ca123763256e820d622aa2860"},
+      "VulnerabilityScanInsights": {"sha256":"f20ca4ec92e4af3f32ffa2412b19023c4de14561630602c8cbadad9add7437de"},
+      "VulnerabilityPackageInsight": {"sha256":"d4ac1fa42acf3710023e4c9fdf7e080c85d399cb4d69a76823c71f549de50c30"},
+      "VulnerabilityVulnerability": {"sha256":"f6ea8d4046496e5ee1ce1102baa1b8ce064e8f26418fcd5c635096f4c084c398"},
+      "VulnerabilityCVSSInfo": {"sha256":"4110eab2f4487bba8394897b857a49b654f5d141f73e1648b4a22bc3b8c87150"},
+      "BasePaginatedVulnerabilityVulnerability": {"sha256":"df8d50e341008aee66b3583c1746896ab6aa82b21d2388eb8d7b954d31bcc365"},
+      "BasePaginationResponse": {"sha256":"61076b3341e5bc327291d98490479178db64fb6221db4fbb1b59117bc97a2d59"},
+      "VulnerabilityImageScanRequest": {"sha256":"bc8fc48ab7440ecc789d33e783b23cbaeb2a23f97b85014adae38c6880966f15"},
+      "BaseApiResponseVulnerabilityAcceptedScan": {"sha256":"433121a3164dbc2ba7f6bf2e3c662ba70c1a4a372c6b4fe2f5af5fdff2fd077a"},
+      "VulnerabilityAcceptedScan": {"sha256":"29e1e8918c1097cbc0facc56bca6328ca6ab749b888f8bc0f74c03117604c32f"},
+      "BaseApiResponseVulnerabilityScanSummary": {"sha256":"4fe34429b17d4de8f874cc14008073bfc26564f9b78c5ead6a0317c8d4975d5d"},
+      "BasePaginatedVulnerabilityVulnerabilityWithImage": {"sha256":"2211fd01a086d8f1157610e4dc9799e06d3f8fc4e44cf62100840b038d7dbae9"},
+      "VulnerabilityVulnerabilityWithImage": {"sha256":"e8f13f83af6e87fe22e3f225a5522b1993f074ad014d4d0987f8b060cfd7d474"},
+      "VulnerabilityIgnorePayload": {"sha256":"96439c76769c2d35251743df6ced1f2652ee06b888e6707057a4eda7cd972724"},
+      "BaseApiResponseVulnerabilityIgnoredVulnerability": {"sha256":"bc97b904dbdf0ff029105eac0d1a0fedddbd4a734b1c374ad10ceda7f59105d9"},
+      "VulnerabilityIgnoredVulnerability": {"sha256":"1a6482483f293fc055cf02c253a11268798a71e4989700057d4036a3f21aae94"},
+      "VulnerabilityBulkVulnerabilityFilters": {"sha256":"a794e6ac48419d6f55c8a18ce574d5f632592402f5f31612c04632b2a9e89844"},
+      "BaseApiResponseVulnerabilityBulkIgnoreResponse": {"sha256":"6b12c92bc9d8bded4d571a6454c88f49ddc254c7efa77be820ab7acfcc789a97"},
+      "VulnerabilityBulkIgnoreResponse": {"sha256":"d2a9df1b0276b7c37df1f65e42a0ad2979c8f8f31a84b8ac86673af716918b7a"},
+      "BaseApiResponseStruct {}": {"sha256":"82f490253fce7ef20bacbbc6a76aab5e3bcbb169dcca08e9dd53281639a5b20d"},
+      "ApiResponseStruct {}DataStruct": {"sha256":"cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e"},
+      "BasePaginatedVulnerabilityIgnoredVulnerability": {"sha256":"3291fed89944dab9a3d912e227954b00f257cec97e26c1c1ba9a6d651b16456e"},
+      "BaseApiResponseListString": {"sha256":"1288f11aebe92df89582fd17524d9d2c3ff68755185239add2dadad9f0fd0a3d"},
+      "BaseApiResponseVulnerabilityRiskOverview": {"sha256":"284bce968b758423dbd5127d321a5c207c03d7c5204574d211c4cb6e3d0cd8a3"},
+      "VulnerabilityRiskOverview": {"sha256":"80ba509ebbd1b5b976c896ed4147adea841c0d50bd948d283e7041ac400ad871"},
+      "VulnerabilityRiskDrivers": {"sha256":"aef635c6926b7effefa8df83227a139a35ac838e5d65c944994330f5c13be180"},
+      "VulnerabilityRiskExposureBreakdown": {"sha256":"fdc7f61db9fa6f99a8d3c02a46869105ba05523f79ed5ea6d6a00c1f7402c72e"},
+      "VulnerabilityRiskFinding": {"sha256":"a4d912ffbd3cfc1d010db0fb64a422d3f1d36c72297aee422596e9237174bd8a"},
+      "VulnerabilityRiskImage": {"sha256":"e3c0f8c77548e70e412487763c2dd6c4ed82ea07330609570044ce31dc647239"},
+      "VulnerabilityRiskScoreDriver": {"sha256":"09ddf3dcf60619328868ff54dc64f6f2b5e13433eba8e7b96e55b53dab7d33d9"},
+      "VulnerabilityThreatIntelStatus": {"sha256":"6069a49d719042ab2c8ce9ccc43fbdc33ac9eccf619889e5b5d784c2dfcf81d1"},
+      "VulnerabilityRiskTrendPoint": {"sha256":"6d3861d6a40e18c20b7663a6b6c00c8561a3a4c87e6dd4f4f2e295d51879fbf5"},
+      "BaseApiResponseListVulnerabilityScanRun": {"sha256":"01eee913d270ab08b8f16f8b15f9a82c990092fca6e761609e34671c257cbaeb"},
+      "VulnerabilityScanRun": {"sha256":"6ba42990f7685e9b6375cb1a6a6abd094fecdcdba0f48ab493a48053cfa3a865"},
+      "VulnerabilityNewFinding": {"sha256":"9ce3cd2e09d3d4eb6f5fc32261a27589fdb6ce91504e0783ab65413f8e319565"},
+      "BaseApiResponseVulnerabilityScanRun": {"sha256":"37ec56b73385cc504ebb15334f666fb846561d5d245524c63b11e18b0f3abcc9"},
+      "VulnerabilityScanRequest": {"sha256":"ff0b0ade3ab20865b9a5fe0e517ec6983fb09609bbf4e9381e2af64e10ce18b9"},
+      "BaseApiResponseScannerStatus": {"sha256":"4bf5b906599c2f8659b0284dd377d4cd3553ad50f3de65515164889736903318"},
+      "ScannerStatus": {"sha256":"f8f2c002e276e2bcd51f1ce34c8a3fb323d3705defe26cf04c4b72278bee9a90"},
+      "BaseApiResponseVulnerabilityEnvironmentVulnerabilitySummary": {"sha256":"818f8d75d9d9305a20311126fa9296fbf6877ed29f941bc741f6676eb34c4cc5"},
+      "VulnerabilityEnvironmentVulnerabilitySummary": {"sha256":"4c38983c29c00ff59f33f7336c8556f8f250a610a448d09c368391d5a85f6e8d"}
+    },
+    "edgeRoutes": [
+      {"method":"POST","path":"/api/environments/{id}/vulnerabilities/scan","command":"vulnerability.scan_host"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/runs/{activityId}","command":"vulnerability.run"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/runs","command":"vulnerability.runs"},
+      {"method":"POST","path":"/api/environments/{id}/vulnerabilities/ignore/bulk","command":"vulnerability.ignore.bulk"},
+      {"method":"POST","path":"/api/environments/{id}/vulnerabilities/unignore/bulk","command":"vulnerability.unignore.bulk"},
+      {"method":"POST","path":"/api/environments/{id}/images/{imageId}/vulnerabilities/scan","command":"vulnerability.scan"},
+      {"method":"GET","path":"/api/environments/{id}/images/{imageId}/vulnerabilities","command":"vulnerability.list"},
+      {"method":"GET","path":"/api/environments/{id}/images/{imageId}/vulnerabilities/summary","command":"vulnerability.summary"},
+      {"method":"POST","path":"/api/environments/{id}/images/vulnerabilities/summaries","command":"vulnerability.summary"},
+      {"method":"GET","path":"/api/environments/{id}/images/{imageId}/vulnerabilities/list","command":"vulnerability.list"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/scanner-status","command":"vulnerability.scanner_status"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/summary","command":"vulnerability.summary"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/overview","command":"vulnerability.overview"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/all","command":"vulnerability.all"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/export","command":"vulnerability.export"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/image-options","command":"vulnerability.image_options"},
+      {"method":"POST","path":"/api/environments/{id}/vulnerabilities/ignore","command":"vulnerability.ignore.create"},
+      {"method":"DELETE","path":"/api/environments/{id}/vulnerabilities/ignore/{ignoreId}","command":"vulnerability.ignore.delete"},
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/ignored","command":"vulnerability.ignore.list"}
+    ],
+    "responseLimit": 33554432,
+    "reportLimit": 67108864,
+    "admission": "one host operation; busy includes running activity ID",
+    "baseline": "last completed image findings survive failed attempts"
+  }
+}

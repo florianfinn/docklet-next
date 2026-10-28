@@ -6,6 +6,8 @@
 
 package notification
 
+import "github.com/florianfinn/docklet-next/types/vulnerability"
+
 import (
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
@@ -54,6 +56,7 @@ const (
 	DispatchKindContainerUpdate      DispatchKind = "container_update"
 	DispatchKindBatchContainerUpdate DispatchKind = "batch_container_update"
 	DispatchKindVulnerabilityFound   DispatchKind = "vulnerability_found"
+	DispatchKindVulnerabilityScan    DispatchKind = "vulnerability_scan"
 	DispatchKindPruneReport          DispatchKind = "prune_report"
 	DispatchKindAutoHeal             DispatchKind = "auto_heal"
 )
@@ -148,7 +151,17 @@ type DispatchAutoHeal struct {
 	ContainerID   string `json:"containerId"`
 }
 
+type DispatchVulnerabilityScan struct {
+	HostName    string                     `json:"hostName" maxLength:"256"`
+	Outcome     string                     `json:"outcome" enum:"completed,partial,cancelled,failed,interrupted"`
+	NewCritical int                        `json:"newCritical" minimum:"0"`
+	NewHigh     int                        `json:"newHigh" minimum:"0"`
+	NewFindings []vulnerability.NewFinding `json:"newFindings" maxItems:"50"`
+}
+
 type DispatchRequest struct {
+	VulnerabilityScan *DispatchVulnerabilityScan `json:"vulnerabilityScan,omitempty"`
+
 	Kind                 DispatchKind                  `json:"kind"`
 	ImageUpdate          *DispatchImageUpdate          `json:"imageUpdate,omitempty"`
 	BatchImageUpdate     *DispatchBatchImageUpdate     `json:"batchImageUpdate,omitempty"`

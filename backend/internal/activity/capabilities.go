@@ -24,6 +24,7 @@ var adapterOperationIDs = []string{
 	"getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply", "saveUpdateSchedule",
 	"checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
+	"getScanSettings", "saveScanSettings", "cancelScan",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
 	"getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
@@ -64,6 +65,36 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {
 		switch descriptors[i].OperationID {
+		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan":
+			ref := descriptors[i].ResourceRef
+			grant := authz.PermVulnsRead
+			if descriptors[i].OperationID == "runScan" {
+				grant = authz.PermVulnsScan
+			}
+			if descriptors[i].OperationID == "cancelScan" {
+				grant = authz.PermActivitiesCancel
+			}
+			valid := ref.Kind == "host" && ref.ID != "" && !strings.Contains(ref.ID, "~") && permissions.Allows(grant, ref.ID)
+			if descriptors[i].OperationID == "runScan" && ref.Kind == "image" {
+				env, raw, scoped := strings.Cut(ref.ID, "~")
+				valid = scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(grant, env)
+			}
+			if ref.Kind == "hub" && ref.ID == "0" {
+				valid = permissions.AllowsAny(grant)
+			}
+			if descriptors[i].OperationID == "getScanSettings" || descriptors[i].OperationID == "saveScanSettings" || descriptors[i].OperationID == "setScanEnabled" {
+				grant = authz.PermSettingsWrite
+				if descriptors[i].OperationID == "getScanSettings" {
+					grant = authz.PermSettingsRead
+				}
+				valid = ref.Kind == "hub" && ref.ID == "0" && permissions.Allows(grant, "0")
+			}
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
 		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents":
 			descriptors[i].Available = updateCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {

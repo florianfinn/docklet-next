@@ -20,11 +20,12 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/validation"
 )
 
 func (s *SettingsService) UpdateSetting(ctx context.Context, key, value string) error {
+	if retiredVulnerabilitySetting(key) {
+		return common.Classify(common.ErrValidation, errors.New("retired vulnerability setting"))
+	}
 	if err := validateSettingValueInternal(key, value); err != nil {
 		return err
 	}
@@ -48,6 +49,9 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, key, value string) 
 func (s *SettingsService) UpdateSettingValues(ctx context.Context, updates []libarcane.SettingUpdate) error {
 	values := make([]SettingVariable, 0, len(updates))
 	for _, update := range updates {
+		if retiredVulnerabilitySetting(update.Key) {
+			return common.Classify(common.ErrValidation, errors.New("retired vulnerability setting"))
+		}
 		if err := validateSettingValueInternal(update.Key, update.Value); err != nil {
 			return err
 		}
@@ -78,6 +82,9 @@ func (s *SettingsService) updateSettingValueNoRefreshInternal(ctx context.Contex
 // UpdateSettings publishes the refreshed snapshot before returning. Each
 // subscriber's effects remain ordered and may finish after this method returns.
 func (s *SettingsService) UpdateSettings(ctx context.Context, updates settings.Update) ([]SettingVariable, error) {
+	if updates.VulnerabilityScanInterval != nil || updates.TrivyConcurrentScanContainers != nil || updates.TrivyServerEnabled != nil || updates.TrivyServerUrl != nil || updates.TrivyServerToken != nil || updates.TrivyConfig != nil || updates.TrivyIgnore != nil {
+		return nil, common.Classify(common.ErrValidation, errors.New("retired vulnerability setting"))
+	}
 	if updates.AuthLocalEnabled != nil {
 		return nil, common.Classify(common.ErrValidation, errors.New("sign-in mode is read-only; configure AUTH_MODE and restart"))
 	}
@@ -117,34 +124,11 @@ func (s *SettingsService) publishSettingsChangesInternal(updates []libarcane.Set
 func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates settings.Update) (settingsUpdateResultInternal, error) {
 	defaultCfg := s.getDefaultSettings()
 	cfg := s.GetSettingsConfig().Clone()
-	trivyServerTokenUpdated := updates.TrivyServerToken != nil && *updates.TrivyServerToken != "" && !s.IsEnvOverrideActive("trivyServerToken")
-	normalizeTargetURL := func(value string) string {
-		normalized, err := httpx.NormalizeBaseURL(value)
-		if err != nil {
-			return strings.TrimSpace(value)
-		}
-		return normalized
-	}
-
-	if err := validation.ValidateCredentialTargetChange(
-		"Trivy server URL",
-		cfg.TrivyServerUrl.Value,
-		updates.TrivyServerUrl,
-		normalizeTargetURL,
-		map[string]bool{"trivyServerToken": cfg.TrivyServerToken.Value != ""},
-		map[string]bool{"trivyServerToken": trivyServerTokenUpdated},
-	); err != nil {
-		return settingsUpdateResultInternal{}, err
-	}
 
 	valuesToUpdate, err := s.prepareUpdateValues(updates, cfg, defaultCfg)
 	if err != nil {
 		return settingsUpdateResultInternal{}, err
 	}
-	if trivyServerTokenUpdated {
-		valuesToUpdate = append(valuesToUpdate, SettingVariable{Key: "trivyServerToken", Value: *updates.TrivyServerToken})
-	}
-
 	if persistSettingsErr := s.persistSettings(ctx, valuesToUpdate); persistSettingsErr != nil {
 		return settingsUpdateResultInternal{}, persistSettingsErr
 	}

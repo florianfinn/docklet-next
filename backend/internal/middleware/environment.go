@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
 	"log/slog"
 	"mime"
@@ -87,13 +88,15 @@ type EnvironmentMiddleware struct {
 	registry      *edge.TunnelRegistry
 	matcher       *authz.PermissionMatcher
 	// checkOrigin shares the local WebSocket origin and credential policy.
-	checkOrigin         func(*http.Request) bool
-	proxyIdentityHeader string
-	snapshots           *hoststate.Store
-	inventoryPending    func(context.Context, string) (bool, error)
-	agentAccess         remenv.AgentAccessCheck
-	pointHolds          PointHoldReader
-	pointAccess         PointAccessReader
+	checkOrigin                func(*http.Request) bool
+	proxyIdentityHeader        string
+	snapshots                  *hoststate.Store
+	inventoryPending           func(context.Context, string) (bool, error)
+	agentAccess                remenv.AgentAccessCheck
+	pointHolds                 PointHoldReader
+	pointAccess                PointAccessReader
+	vulnerabilityEnabled       func(context.Context) bool
+	vulnerabilityIgnoreUnfixed func() bool
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -124,6 +127,8 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.vulnerabilityEnabled = options[0].VulnerabilityEnabled
+		m.vulnerabilityIgnoreUnfixed = options[0].VulnerabilityIgnoreUnfixed
 		m.pointHolds = options[0].PointHolds
 		m.pointAccess = options[0].PointAccess
 		m.snapshots = options[0].Snapshots
@@ -143,12 +148,11 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 // Handle is the main middleware handler.
 func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) error {
 	envID := m.extractEnvironmentID(c)
-
-	if envID == "" || envID == m.localID {
-		return next(c)
-	}
-
-	if !m.hasResourcePath(c, envID) {
+	isVulnerability := isVulnerabilityRequest(c)
+	// Refusals answer in the shape declared for the operation the hub router matched.
+	vulnerabilityShape := isVulnerability || isVulnerabilityOperation(c)
+	// Local vulnerability requests keep the Huma order: auth, permission, then the feature veto.
+	if envID == "" || envID == m.localID || (!isVulnerability && !m.hasResourcePath(c, envID)) {
 		return next(c)
 	}
 
@@ -158,6 +162,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if m.authValidator != nil {
 		ps, u, ok := m.authValidator(c.Request().Context(), c)
 		if !ok {
+			if vulnerabilityShape {
+				return genericProblem(c, http.StatusUnauthorized, "Authentication required to access remote environments")
+			}
 			return c.JSON(http.StatusUnauthorized, map[string]any{
 				"success": false,
 				"data":    map[string]any{"error": "Authentication required to access remote environments"},
@@ -166,8 +173,20 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		perms, user = ps, u
 		c.Set("pointHostAdmin", ps.IsGlobalAdmin())
 	}
+	if isVulnerability {
+		if m.proxyPermissionDenied(c, perms, envID) {
+			return genericProblem(c, http.StatusForbidden, "permission denied")
+		}
+		if m.vulnerabilityEnabled != nil && !m.vulnerabilityEnabled(c.Request().Context()) {
+			return vulnerabilityProblem(c, vulnerability.Fail("feature-disabled", 403))
+		}
+	}
+
 	// Check client authority before Edge forwarding injects server-side agent tokens.
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) && (m.checkOrigin == nil || !m.checkOrigin(c.Request())) {
+		if vulnerabilityShape {
+			return genericProblem(c, http.StatusForbidden, "websocket origin not allowed")
+		}
 		return echo.NewHTTPError(http.StatusForbidden, "websocket origin not allowed")
 	}
 
@@ -176,6 +195,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 
 	apiURL, accessToken, enabled, err := m.resolver(c.Request().Context(), envID)
 	if err != nil || apiURL == "" {
+		if vulnerabilityShape {
+			return genericProblem(c, http.StatusNotFound, "Environment not found")
+		}
 		return c.JSON(http.StatusNotFound, map[string]any{
 			"success": false,
 			"data":    map[string]any{"error": "Environment not found"},
@@ -188,6 +210,16 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	// mirroring the per-operation RequirePermission checks used for the local
 	// environment.
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	// The scan policy follows the route the agent serves, which ends at a decoded "?" or "#".
+	scanSuffix := suffix
+	if i := strings.IndexAny(scanSuffix, "?#"); i >= 0 {
+		scanSuffix = scanSuffix[:i]
+	}
+	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(scanSuffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
+		if handled, err := m.canonicalizeVulnerabilityScan(c); handled {
+			return err
+		}
+	}
 	if strings.HasPrefix(suffix, "/updater/") && (strings.Contains(suffix, "/restore-points") || strings.HasSuffix(suffix, "/baseline")) {
 		host := strings.HasPrefix(suffix, "/updater/restore-points")
 		grants := []string{authz.PermProjectsRead, authz.PermImageUpdatesRead}
@@ -196,17 +228,26 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		}
 		if host {
 			if perms == nil || !perms.IsGlobalAdmin() {
+				if vulnerabilityShape {
+					return genericProblem(c, http.StatusForbidden, "Host administrator required")
+				}
 				return echo.NewHTTPError(http.StatusForbidden, "Host administrator required")
 			}
 			grants = []string{authz.PermImageUpdatesRead}
 		}
 		for _, grant := range grants {
 			if perms == nil || !perms.Allows(grant, envID) {
+				if vulnerabilityShape {
+					return genericProblem(c, http.StatusForbidden, "Restore point grants required")
+				}
 				return echo.NewHTTPError(http.StatusForbidden, "Restore point grants required")
 			}
 		}
 	}
 	if m.proxyPermissionDenied(c, perms, envID) {
+		if vulnerabilityShape {
+			return genericProblem(c, http.StatusForbidden, "permission denied")
+		}
 		return c.JSON(http.StatusForbidden, map[string]any{
 			"success": false,
 			"data":    map[string]any{"error": "You don't have permission to perform this action on this environment"},
@@ -216,9 +257,15 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if list, point := pointRoute(suffix); (list || point != "") && !perms.IsGlobalAdmin() {
 		parts := strings.Split(strings.Trim(suffix, "/"), "/")
 		if m.pointAccess == nil {
+			if vulnerabilityShape {
+				return genericProblem(c, http.StatusServiceUnavailable, "restore point access unavailable")
+			}
 			return pointFailure(c, "update.check-unavailable", 503)
 		}
 		if err := m.pointAccess(c.Request().Context(), envID, parts[2], point); err != nil {
+			if vulnerabilityShape {
+				return genericProblem(c, http.StatusServiceUnavailable, "restore point access unavailable")
+			}
 			problem := imageDTO.Neutral(err, "update.check-unavailable", 503)
 			return c.JSON(problem.Status, problem)
 		}
@@ -234,15 +281,24 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	}
 
 	if err := InlineImageCredentials(c.Request().URL.Path, c.Request().Header, c.QueryParams()); err != nil {
+		if vulnerabilityShape {
+			return genericProblem(c, http.StatusBadRequest, "inline registry credentials are not allowed")
+		}
 		problem := imageDTO.Neutral(err, "registry.inline-credentials-not-allowed", 400)
 		return c.JSON(problem.Status, problem)
 	}
 	if err := checkImageUpgrade(c); err != nil {
+		if vulnerabilityShape {
+			return genericProblem(c, http.StatusBadRequest, "invalid image target")
+		}
 		problem := imageDTO.Neutral(err, "update.invalid-target", 400)
 		return c.JSON(problem.Status, problem)
 	}
 	return m.inventoryRead(c, envID, func() error {
 		if !enabled {
+			if vulnerabilityShape {
+				return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
+			}
 			return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "code": "agent.unavailable"})
 		}
 		return m.forwardInventoryRequest(c, envID, apiURL, accessToken)
@@ -274,6 +330,9 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
 		if err != nil {
 			status, code := remenv.AgentAccessFailure(err)
+			if isVulnerabilityOperation(c) {
+				return vulnerabilityProblem(c, vulnerabilityAccessFailure(status, code))
+			}
 			return c.JSON(status, map[string]any{"success": false, "code": code})
 		}
 		defer cancel()
@@ -563,6 +622,9 @@ func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, 
 
 func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunnel *edge.AgentTunnel, envID string) error {
 	proxyPath := m.buildProxyPath(c, envID)
+	if isVulnerabilityRequest(c) {
+		return m.proxyVulnerability(c, tunnel, envID)
+	}
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
 		return edge.ProxyWebSocketRequest(c, tunnel, proxyPath, m.checkOrigin)
 	}
@@ -733,6 +795,9 @@ func (m *EnvironmentMiddleware) waitForActiveEdgeTunnelInternal(ctx context.Cont
 }
 
 func (m *EnvironmentMiddleware) abortEdgeTunnelUnavailable(c *echo.Context) error {
+	if isVulnerabilityOperation(c) {
+		return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
+	}
 	return c.JSON(http.StatusBadGateway, map[string]any{
 		"success": false,
 		"code":    "agent.unavailable",
@@ -772,6 +837,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		if errors.Is(err, common.ErrEnvironmentInvalidProxyTarget) {
 			errMessage = err.Error()
 		}
+		if isVulnerabilityOperation(c) {
+			return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", http.StatusBadGateway))
+		}
 		return c.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
 			"data":    map[string]any{"error": errMessage},
@@ -780,6 +848,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
+		if isVulnerabilityOperation(c) {
+			return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
+		}
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
 			"code":    "agent.unavailable",
@@ -787,6 +858,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if isVulnerabilityRequest(c) {
+		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
+	}
 
 	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))); list && c.Request().Method == http.MethodGet {
 		return m.writePointList(c, c.Param(m.paramName), resp.StatusCode, resp.Header, resp.Body)
@@ -874,11 +948,13 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
-	PointHolds          PointHoldReader
-	PointAccess         PointAccessReader
-	Snapshots           *hoststate.Store
-	InventoryPending    func(context.Context, string) (bool, error)
-	HTTPClient          *http.Client
-	ProxyIdentityHeader string
-	AgentAccess         remenv.AgentAccessCheck
+	VulnerabilityEnabled       func(context.Context) bool
+	VulnerabilityIgnoreUnfixed func() bool
+	PointHolds                 PointHoldReader
+	PointAccess                PointAccessReader
+	Snapshots                  *hoststate.Store
+	InventoryPending           func(context.Context, string) (bool, error)
+	HTTPClient                 *http.Client
+	ProxyIdentityHeader        string
+	AgentAccess                remenv.AgentAccessCheck
 }

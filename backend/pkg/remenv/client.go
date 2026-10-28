@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
 	"maps"
 	"net"
@@ -54,6 +55,7 @@ func RedactedTokenFingerprint(token string) string {
 }
 
 type Request struct {
+	ResponseLimit int64
 	EnvironmentID string
 	IsEdge        bool
 	Method        string
@@ -155,7 +157,14 @@ func (c *Client) doDirectHTTPInternal(ctx context.Context, req Request) (*Respon
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	var reader io.Reader = resp.Body
+	if req.ResponseLimit > 0 {
+		reader = io.LimitReader(reader, req.ResponseLimit+1)
+	}
+	respBody, err := io.ReadAll(reader)
+	if req.ResponseLimit > 0 && int64(len(respBody)) > req.ResponseLimit {
+		return nil, vulnerability.Fail("vulnerability.response-too-large", 502)
+	}
 	if err != nil {
 		return nil, &TransportError{Err: fmt.Errorf("failed to read response body: %w", err)}
 	}

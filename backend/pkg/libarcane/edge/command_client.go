@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	dto "github.com/florianfinn/docklet-next/types/updater"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"net/http"
 	"slices"
 	"time"
@@ -46,6 +47,10 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	}
 	if req == nil {
 		return nil, errors.New("command request is required")
+	}
+
+	if vulnerability.IsRoute(req.Method, req.Path) && len(req.Body) > vulnerability.RequestLimit {
+		return nil, vulnerability.Fail("vulnerability.request-too-large", 413)
 	}
 
 	commandName := req.Command
@@ -92,7 +97,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	defer tunnel.Pending.Delete(requestID)
 	completed := false
 	defer func() {
-		if !completed && runtimeRequestPathInternal(req.Path) {
+		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path)) {
 			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
 		}
 	}()
@@ -133,6 +138,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	}
 	if runtimeRequestPathInternal(req.Path) {
 		limit = runtimeRequestBodyLimit
+	}
+	if vulnerability.IsRoute(req.Method, req.Path) {
+		limit = vulnerability.ResponseLimit
 	}
 	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)
 	if err != nil {

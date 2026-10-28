@@ -27,6 +27,7 @@ export const deImages: typeof enImages = {
   consumersNone: "–",
   consumersMore: "+{count} weitere",
   system: "Docklet-Agent (System)",
+  securityUnavailable: "Scan nicht verfügbar",
   securityLabel: "Befunde: {all} – zur Sicherheit",
   securityClean: "keine",
   footer: "{shown} von {total} Images · Zeile öffnet die Details.",

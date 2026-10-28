@@ -30,13 +30,15 @@ interface Data {
 
 const short = (ref: string) => ref.split("/").pop() ?? ref;
 
-export function OverviewTab({ images, findings, history, stacks, animate, onFocus }: Data & { animate: boolean; onFocus: (id: string) => void }) {
+export function OverviewTab({ images: allImages, findings, history, stacks, hosts, animate, onFocus }: Data & { animate: boolean; onFocus: (id: string) => void }) {
   const t = useTranslations("security");
-  const top = useMemo(() => [...findings].sort((a, b) => b.cvss - a.cvss).slice(0, 6), [findings]);
-  const totals = SEVERITIES.map((s) => ({ key: s.key, label: t(`severities.${s.key}`), color: s.color, n: images.reduce((n, i) => n + i.counts[s.key], 0) }));
+  const images = allImages.filter((i) => !i.unavailable && i.scannedAt);
+  const top = useMemo(() => [...findings].sort((a, b) => (b.risk ?? b.cvss) - (a.risk ?? a.cvss)).slice(0, 6), [findings]);
+  const totals = SEVERITIES.map((s) => ({ key: s.key, label: t(`severities.${s.key}`), color: s.color, n: images.reduce((n, i) => n + (i.counts[s.key] ?? 0), 0) }));
   const usage = (u: ScannedImage["usage"]) => images.filter((i) => i.usage === u).reduce((n, i) => n + totalOf(i), 0);
   const max = Math.max(1, ...images.map(totalOf));
   const stackName = (id?: string) => stacks.find((s) => s.id === id)?.name;
+  if (allImages.length && !images.length) return <p role="status">{t(allImages.some((i) => i.unavailable) ? "scanUnavailable" : "notScanned")}</p>;
   return (
     <div className="flex flex-col gap-6">
       <section className="grid items-center gap-8 py-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
@@ -46,7 +48,10 @@ export function OverviewTab({ images, findings, history, stacks, animate, onFocu
             <h3 className="text-sm font-medium">{t("trend.title")}</h3>
             <span className="text-xs text-muted-foreground">{t("trend.runs", { count: history.length })}</span>
           </div>
-          <TrendChart history={history} animate={animate} />
+          <TrendChart history={history} hosts={hosts} animate={animate} />
+          <ul className="max-h-32 overflow-y-auto text-xs text-muted-foreground" aria-label={t("trend.label")}>
+            {history.map((r, index) => <li key={`${r.hostId}:${r.id ?? index}`}>{hosts.get(r.hostId ?? "")?.name ?? r.hostId} · {formatRelative(r.at)} · {r.status ? t(`historyStatus.${r.status}`) : r.trigger}</li>)}
+          </ul>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <h4 className="mb-2 text-sm text-muted-foreground">{t("share.severity")}</h4>
@@ -79,7 +84,7 @@ export function OverviewTab({ images, findings, history, stacks, animate, onFocu
           <h3 className="mb-3 text-sm font-medium">{t("top")}</h3>
           <ol>
             {top.map((f, i) => (
-              <li key={f.id} className="border-t border-border/50 first:border-0">
+              <li key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${i}`} className="border-t border-border/50 first:border-0">
                 <button type="button" onClick={() => onFocus(f.id)} className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted">
                   <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
                   <span className="min-w-0 flex-1">
@@ -101,7 +106,7 @@ export function OverviewTab({ images, findings, history, stacks, animate, onFocu
           <h3 className="mb-3 text-sm font-medium">{t("perImage")}</h3>
           <ul>
             {images.map((im) => (
-              <li key={im.ref} className="border-t border-border/50 px-2 py-2.5 first:border-0">
+              <li key={`${im.hostId}:${im.id ?? im.ref}`} className="border-t border-border/50 px-2 py-2.5 first:border-0">
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate font-mono text-xs">{im.ref}</span>
                   {stackName(im.stackId) && <ToneBadge tone="accent">{stackName(im.stackId)}</ToneBadge>}
@@ -119,11 +124,11 @@ export function OverviewTab({ images, findings, history, stacks, animate, onFocu
   );
 }
 
-type FindingKey = "id" | "severity" | "pkg" | "installed" | "fixed" | "image" | "host" | "cvss";
+type FindingKey = "id" | "severity" | "pkg" | "installed" | "fixed" | "image" | "host" | "cvss" | "risk" | "epss";
 type ImageKey = "image" | "stack" | "host" | "usage" | Severity | "scanned";
 
-const FINDING_COLUMNS: FindingKey[] = ["id", "severity", "pkg", "installed", "fixed", "image", "host", "cvss"];
-const SEV_RANK: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+const FINDING_COLUMNS: FindingKey[] = ["id", "severity", "pkg", "installed", "fixed", "image", "host", "cvss", "risk", "epss"];
+const SEV_RANK: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, unknown: 0 };
 const DAY = 86_400_000;
 
 /** Sort state of one table: a click on the active column flips it, another column starts with its natural direction. */
@@ -195,13 +200,13 @@ function SecurityTable<T, K extends string>({ label, columns, filters, values, s
 
 const ROW = cn("transition-colors duration-(--dur-fast) [&>td]:py-1.5", ROW_SURFACE, ROW_EDGES);
 const edge = (color: string) => ({ "--host": color }) as CSSProperties;
-const worst = (i: ScannedImage) => SEVERITIES.find((s) => i.counts[s.key] > 0)?.color ?? "var(--border)";
+const worst = (i: ScannedImage) => SEVERITIES.find((s) => (i.counts[s.key] ?? 0) > 0)?.color ?? "var(--border)";
 
 export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings" | "hosts"> & { highlight: string | null }) {
   const t = useTranslations("security");
   const tf = useTranslations("common.columnFilters");
   const [values, setValues] = useState<FilterValues>({});
-  const [sort, onSort] = useTableSort<FindingKey>({ key: "cvss", dir: "desc" }, ["cvss", "severity"]);
+  const [sort, onSort] = useTableSort<FindingKey>({ key: "risk", dir: "desc" }, ["cvss", "severity", "risk", "epss"]);
   const filters = useMemo<ColumnFilter<Finding>[]>(() => {
     const images = [...new Set(findings.map((f) => short(f.image)))].sort(COLLATOR.compare);
     const hostIds = [...new Set(findings.map((f) => f.hostId))];
@@ -217,7 +222,7 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
     ];
   }, [findings, hosts, t]);
   const value = (f: Finding, key: FindingKey): string | number =>
-    key === "severity" ? SEV_RANK[f.severity] : key === "cvss" ? f.cvss : key === "fixed" ? (f.fixedIn ?? "") : key === "image" ? short(f.image) : key === "host" ? (hosts.get(f.hostId)?.name ?? f.hostId) : f[key];
+    key === "risk" ? (f.risk ?? f.cvss) : key === "epss" ? (f.epss ?? -1) : key === "severity" ? SEV_RANK[f.severity] : key === "cvss" ? f.cvss : key === "fixed" ? (f.fixedIn ?? "") : key === "image" ? short(f.image) : key === "host" ? (hosts.get(f.hostId)?.name ?? f.hostId) : f[key];
   const rows = byValue(applyColumnFilters(findings, filters, values), sort.dir, (f) => value(f, sort.key));
   const columns = FINDING_COLUMNS.map((c) => ({ id: c, label: t(`columns.${c}`) }));
   return (
@@ -232,12 +237,12 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
       summary={{ shown: rows.length, total: findings.length, noun: t("filters.findings"), nounOf: t("filters.findingsOf") }}
       empty={activeFilters(values) ? tf("empty") : t("noFindings")}
     >
-      {rows.map((f) => {
+      {rows.map((f, index) => {
         const sev = SEVERITIES.find((s) => s.key === f.severity);
         return (
-          <TableRow key={f.id} data-state={highlight === f.id ? "selected" : undefined} style={edge(sev?.color ?? "var(--border)")} className={ROW}>
+          <TableRow key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${index}`} data-state={highlight === f.id ? "selected" : undefined} style={edge(sev?.color ?? "var(--border)")} className={ROW}>
             <TableCell className="font-mono text-xs" title={f.title}>
-              {f.id}
+              {f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}
             </TableCell>
             <TableCell>
               <ToneBadge tone={sev?.tone ?? "gray"}>{t(`severities.${f.severity}`)}</ToneBadge>
@@ -250,6 +255,8 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
               <HostChip host={hosts.get(f.hostId)} />
             </TableCell>
             <TableCell className="font-semibold tabular">{f.cvss.toFixed(1)}</TableCell>
+            <TableCell className="tabular" title={f.risk === undefined ? t("unknownIntel") : undefined}>{f.risk?.toFixed(1) ?? "–"}</TableCell>
+            <TableCell className="tabular">{f.epss === undefined ? "–" : `${(f.epss * 100).toFixed(2)}%`}</TableCell>
           </TableRow>
         );
       })}
@@ -274,13 +281,13 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
       { id: "host", kind: "choice", options: hostIds.map((h) => ({ value: h, label: hosts.get(h)?.name ?? h })), match: (i, v) => i.hostId === v },
       { id: "usage", kind: "choice", options: (["running", "stopped", "unused"] as const).map((u) => ({ value: u, label: t(`usage.${u}`) })), match: (i, v) => i.usage === v },
       ...SEVERITIES.map(
-        (s): ColumnFilter<ScannedImage> => ({ id: s.key, kind: "choice", options: [{ value: "some", label: t("filters.withFindings") }, { value: "none", label: t("filters.none") }], match: (i, v) => (v === "some") === i.counts[s.key] > 0 }),
+        (s): ColumnFilter<ScannedImage> => ({ id: s.key, kind: "choice", options: [{ value: "some", label: t("filters.withFindings") }, { value: "none", label: t("filters.none") }], match: (i, v) => (v === "some") === (i.counts[s.key] ?? 0) > 0 }),
       ),
       { id: "scanned", kind: "choice", options: [{ value: "1", label: t("filters.recent24") }, { value: "7", label: t("filters.recent7") }, { value: "older", label: t("filters.older7") }], match: (i, v) => (v === "older" ? now - Date.parse(i.scannedAt) > 7 * DAY : now - Date.parse(i.scannedAt) <= Number(v) * DAY) },
     ];
   }, [images, stacks, hosts, now, t]);
   const value = (i: ScannedImage, key: ImageKey): string | number =>
-    key === "image" ? i.ref : key === "stack" ? (stackName(i.stackId) ?? "") : key === "host" ? (hosts.get(i.hostId)?.name ?? i.hostId) : key === "usage" ? t(`usage.${i.usage}`) : key === "scanned" ? Date.parse(i.scannedAt) : i.counts[key];
+    key === "image" ? i.ref : key === "stack" ? (stackName(i.stackId) ?? "") : key === "host" ? (hosts.get(i.hostId)?.name ?? i.hostId) : key === "usage" ? t(`usage.${i.usage}`) : key === "scanned" ? Date.parse(i.scannedAt) : i.counts[key] ?? 0;
   const rows = byValue(applyColumnFilters(images, filters, values), sort.dir, (i) => value(i, sort.key));
   const columns: { id: ImageKey; label: string; short?: string }[] = [
     { id: "image", label: t("columns.image") },
@@ -305,8 +312,8 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
       {rows.map((im) => {
         const stack = stacks.find((s) => s.id === im.stackId);
         return (
-          <TableRow key={im.ref} style={edge(worst(im))} className={ROW}>
-            <TableCell className="max-w-72 truncate font-mono text-xs">{im.ref}</TableCell>
+          <TableRow key={`${im.hostId}:${im.id ?? im.ref}`} style={edge(worst(im))} className={ROW}>
+            <TableCell className="max-w-72 text-xs"><div className="truncate font-mono">{im.ref}</div>{im.platform && <div className="text-muted-foreground" title={t("notCovered")}>{t("scannedPlatform", { platform: im.platform })}</div>}</TableCell>
             <TableCell>{stack ? <Link to={`/stacks/${stack.id}`} className="text-primary-text hover:underline">{stack.name}</Link> : "–"}</TableCell>
             <TableCell>
               <HostChip host={hosts.get(im.hostId)} />
@@ -315,11 +322,11 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
             {SEVERITIES.map((s) => (
               <TableCell key={s.key}>
                 <ToneBadge tone={im.counts[s.key] ? s.tone : "gray"} className="min-w-8 justify-center">
-                  {im.counts[s.key]}
+                  {im.unavailable || !im.scannedAt ? "–" : im.counts[s.key] ?? 0}
                 </ToneBadge>
               </TableCell>
             ))}
-            <TableCell className="text-xs text-muted-foreground">{formatRelative(im.scannedAt)}</TableCell>
+            <TableCell className="text-xs text-muted-foreground">{im.unavailable ? t("scanUnavailable") : !im.scannedAt ? t("notScanned") : formatRelative(im.scannedAt)}</TableCell>
           </TableRow>
         );
       })}

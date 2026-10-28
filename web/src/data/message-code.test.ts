@@ -7,6 +7,18 @@
 import { expect, it, vi } from "vitest";
 import { renderMessage } from "./message-code";
 import { mapActivityDetail } from "./http/map-dto";
+import { enBackend } from "./messages/en";
+import { deBackend } from "./messages/de";
+import { reason } from "./http/update-validation";
+
+it("resolves feature-disabled through the declared reason and EN/DE message lookup", () => {
+  const code = reason("feature-disabled");
+  expect(code).toBe("feature-disabled");
+  const message = { code: `images.errors.${code!.replaceAll(".", "_")}`, params: {}, sourceText: "synthetic diagnostic" };
+  for (const [locale, catalogue] of [["en-US", enBackend], ["de", deBackend]] as const) {
+    expect(renderMessage(message, locale)).toBe(catalogue.errors["feature-disabled"]);
+  }
+});
 
 it.each(["de", "en-US"] as const)("renders M5 environment and activity codes in %s without key or source fallback", (locale) => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});

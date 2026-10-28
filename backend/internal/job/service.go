@@ -293,6 +293,11 @@ func (s *JobService) rescheduleAffectedJobInternal(ctx context.Context, jobID st
 	}
 
 	expectedSchedule := job.Schedule(rescheduleCtx)
+	if jobID == "vulnerability-scan" {
+		if conditional, ok := job.(scheduler.ConditionalJob); ok && !conditional.ShouldSchedule(rescheduleCtx) {
+			expectedSchedule = ""
+		}
+	}
 	if runtimeState.Schedule != expectedSchedule {
 		return fmt.Errorf("job %s runtime schedule %q does not match requested schedule %q", jobID, runtimeState.Schedule, expectedSchedule)
 	}
@@ -320,6 +325,13 @@ func (s *JobService) restoreJobSchedulesInternal(ctx context.Context, previousVa
 }
 
 func jobMetadataAffectedBySettingInternal(jobMeta meta.JobMetadata, changed map[string]struct{}) bool {
+	if jobMeta.ID == "vulnerability-scan" {
+		for _, key := range []string{"vulnerabilityScanSchedule", "featureVulnerabilityManagementEnabled"} {
+			if _, ok := changed[key]; ok {
+				return true
+			}
+		}
+	}
 	if jobMeta.SettingsKey != "" {
 		if _, ok := changed[jobMeta.SettingsKey]; ok {
 			return true
@@ -350,7 +362,7 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 		enabled := s.isJobEnabledInternal(ctx, jobMeta)
 		prerequisites := s.evaluatePrerequisitesInternal(ctx, jobMeta)
 
-		if s.scheduler != nil && (jobMeta.SettingsKey != "" || jobMeta.ID == "upgrade-log-cleanup") && jobMeta.ID != "environment-health" {
+		if s.scheduler != nil && (jobMeta.SettingsKey != "" || jobMeta.ID == "upgrade-log-cleanup" || jobMeta.ID == "vulnerability-scan") && jobMeta.ID != "environment-health" {
 			if runtimeState, ok := s.scheduler.GetJobRuntimeState(jobMeta.ID); ok {
 				schedule = cmp.Or(runtimeState.Schedule, schedule)
 				nextRun = runtimeState.NextRun
@@ -358,6 +370,9 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 		}
 
 		jobStatus := jobMeta.ToJobStatus(schedule, nextRun, enabled, prerequisites)
+		if jobMeta.ID == "vulnerability-scan" {
+			jobStatus.Description = "Starts one scan of in-use images per eligible host; execution continues on each host"
+		}
 		jobs = append(jobs, jobStatus)
 	}
 
@@ -380,6 +395,9 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 }
 
 func (s *JobService) getJobScheduleInternal(ctx context.Context, localMeta meta.JobMetadata) string {
+	if localMeta.ID == "vulnerability-scan" {
+		return s.vulnerabilitySchedule(ctx)
+	}
 	// Continuous jobs with a settings key (image-polling) are event-driven but
 	// also poll on that cron schedule, so surface the real expression.
 	if localMeta.IsContinuous && localMeta.SettingsKey == "" {
@@ -399,6 +417,9 @@ func (s *JobService) getJobScheduleInternal(ctx context.Context, localMeta meta.
 }
 
 func (s *JobService) isJobEnabledInternal(ctx context.Context, localMeta meta.JobMetadata) bool {
+	if localMeta.ID == "vulnerability-scan" {
+		return s.settings.GetBoolSetting(ctx, "featureVulnerabilityManagementEnabled", true)
+	}
 	if localMeta.EnabledKey != "" {
 		return s.settings.GetBoolSetting(ctx, localMeta.EnabledKey, false)
 	}
@@ -410,6 +431,9 @@ func (s *JobService) isJobEnabledInternal(ctx context.Context, localMeta meta.Jo
 }
 
 func (s *JobService) evaluatePrerequisitesInternal(ctx context.Context, localMeta meta.JobMetadata) []jobschedule.JobPrerequisite {
+	if localMeta.ID == "vulnerability-scan" {
+		return s.vulnerabilityPrerequisites(ctx)
+	}
 	prerequisites := make([]jobschedule.JobPrerequisite, 0, len(localMeta.Prerequisites))
 
 	for _, prereq := range localMeta.Prerequisites {
@@ -610,7 +634,7 @@ func (s *JobService) validateLocalJobInternal(ctx context.Context, jobID string)
 	if !ok {
 		return errors.New("job is not registered")
 	}
-	if conditional, localOk := job.(scheduler.ConditionalJob); localOk && !conditional.ShouldSchedule(ctx) {
+	if conditional, localOk := job.(scheduler.ConditionalJob); localOk && jobID != "vulnerability-scan" && !conditional.ShouldSchedule(ctx) {
 		return errors.New("job is disabled")
 	}
 	return nil
@@ -640,6 +664,9 @@ func (s *JobService) authorizeRunInternal(ctx context.Context, run scheduler.Run
 }
 
 func (s *JobService) executeRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if (run.JobID == "vulnerability-scan" || run.JobID == "vulnerability-risk") && (run.EnvironmentID != "0" || s.cfg.AgentMode || s.cfg.EdgeAgent) {
+		return scheduler.Outcome{Status: scheduler.Failed, Code: "vulnerability.agent-job-retired"}, nil
+	}
 	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
 		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
 	}
@@ -678,7 +705,7 @@ func (s *JobService) executeRunInternal(ctx context.Context, run scheduler.Run) 
 	if !ok {
 		return scheduler.Outcome{Status: unavailableStatus, Message: "Job or target no longer exists"}, nil
 	}
-	if conditional, localOk := job.(scheduler.ConditionalJob); localOk && !conditional.ShouldSchedule(ctx) {
+	if conditional, localOk := job.(scheduler.ConditionalJob); localOk && (run.JobID != "vulnerability-scan" || run.Trigger != "manual") && !conditional.ShouldSchedule(ctx) {
 		return scheduler.Outcome{Status: unavailableStatus, Message: "Job is disabled"}, nil
 	}
 	outcome, err := job.Run(ctx)
@@ -721,6 +748,9 @@ func safeJobInternal(jobID string) bool {
 }
 
 func (s *JobService) reconcileRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if (run.JobID == "vulnerability-scan" || run.JobID == "vulnerability-risk") && (run.EnvironmentID != "0" || s.cfg.AgentMode || s.cfg.EdgeAgent) {
+		return scheduler.Outcome{Status: scheduler.Failed, Code: "vulnerability.agent-job-retired"}, nil
+	}
 	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
 		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
 	}
@@ -803,7 +833,7 @@ func (s *JobService) runContextInternal(ctx context.Context, run scheduler.Run) 
 
 func requiresDockerInternal(jobID string) bool {
 	switch jobID {
-	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "vulnerability-scan", "image-polling":
+	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "image-polling":
 		return true
 	}
 	return strings.HasPrefix(jobID, "volume-backup:") || strings.HasPrefix(jobID, "system-backup:volumes:")

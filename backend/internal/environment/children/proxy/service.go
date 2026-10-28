@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -175,6 +176,9 @@ func (s *Service) Execute(
 		return nil, err
 	}
 
+	if vulnerability.IsRoute(method, path) {
+		request.ResponseLimit = vulnerability.ResponseLimit
+	}
 	resp, err := s.client.Do(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request to environment %s: %w", target.name, err)
@@ -347,6 +351,9 @@ func doTunnelRequestInternal(
 
 	statusCode, respHeaders, respBody, err := edge.ProxyRequest(ctx, tunnel, method, path, "", headers, body)
 	if err != nil {
+		if vulnerability.IsRoute(method, path) && errors.Is(err, edge.ErrCommandResponseTooLarge) {
+			return nil, vulnerability.Fail("vulnerability.response-too-large", 502)
+		}
 		if errors.Is(err, edge.ErrTunnelConnectionClosed) {
 			err = errors.Join(remenv.ErrEnvironmentUnavailable, err)
 		}

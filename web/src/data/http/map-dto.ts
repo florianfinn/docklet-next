@@ -11,6 +11,7 @@ import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
 import type { RuntimeView } from "@/features/activity/runtime-presentation";
 import { reason, record, bool, id, date, optionalDate } from "./update-validation";
 import { inventoryId } from "./inventory-mapping";
+import { VULNERABILITY_CODES } from "./vulnerability-decoders";
 
 type Activity = components["schemas"]["ActivityActivity"];
 type Detail = components["schemas"]["ActivityDetail"];
@@ -54,6 +55,11 @@ function stepState(status: string): StepState {
 
 function message(code: string | undefined, sourceText: string): MessageCode {
   return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+}
+
+/** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
+function vulnerabilityError(error: string): MessageCode | undefined {
+  return (VULNERABILITY_CODES as readonly string[]).includes(error) ? { code: `images.errors.${error.replaceAll(".", "_")}`, params: {} } : undefined;
 }
 
 function stepKey(name: string): DeployStepKey {
@@ -109,7 +115,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
-    error: run.error ? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
+    error: run.error ? vulnerabilityError(run.error) ?? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
       startedAt: step.startedAt, finishedAt: step.endedAt,

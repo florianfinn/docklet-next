@@ -2,6 +2,32 @@ import type { enBackend } from "./en";
 
 export const deBackend: typeof enBackend = {
   errors: {
+    "feature-disabled": "Diese Funktion ist deaktiviert.",
+    "vulnerability": {
+      "agent-job-retired": "Dieser lokale Schwachstellenauftrag des Agents wurde eingestellt.",
+      "busy": "Ein Schwachstellenscan läuft bereits.",
+      "database-unavailable": "Die Schwachstellendatenbank ist nicht verfügbar.",
+      "dispatch-interrupted": "Der Versand des Scanauftrags wurde unterbrochen.",
+      "dispatch-unknown": "Die Annahme des Scans konnte nicht bestätigt werden.",
+      "host-incompatible": "Der Scan-Host benötigt einen kompatiblen Agent.",
+      "host-offline": "Der Scan-Host ist offline.",
+      "host-pending": "Die Kopplung des Scan-Hosts steht aus.",
+      "image-not-found": "Das Scan-Image wurde nicht gefunden.",
+      "image-removed": "Das Image wurde während des Scans entfernt.",
+      "no-eligible-hosts": "Keine Hosts sind für einen Scan verfügbar.",
+      "platform-unavailable": "Die Daemon-Plattform ist für dieses Image nicht verfügbar.",
+      "report-invalid": "Der Schwachstellenbericht ist ungültig.",
+      "request-too-large": "Die Schwachstellenanfrage überschreitet die Größenbegrenzung.",
+      "response-too-large": "Die Schwachstellenantwort überschreitet die Größenbegrenzung.",
+      "run-not-found": "Der Schwachstellenscanlauf wurde nicht gefunden.",
+      "scan-cancelled": "Der Schwachstellenscan wurde abgebrochen.",
+      "scan-failed": "Der Schwachstellenscan ist fehlgeschlagen.",
+      "scan-interrupted": "Der Schwachstellenscan wurde unterbrochen.",
+      "scan-timeout": "Das Zeitlimit des Schwachstellenscans wurde überschritten.",
+      "scanner-unavailable": "Der Schwachstellenscanner ist nicht verfügbar.",
+      "storage-full": "Der Scannerspeicher ist voll.",
+      "storage-unavailable": "Der Scanspeicher ist nicht verfügbar.",
+    },
     "runtime": {
       "target-changed": "Die Zielidentität hat sich geändert. Aktualisiere die Ansicht vor einem neuen Versuch.",
       "target-unavailable": "Das Ziel ist nicht verfügbar. Prüfe die Verbindung zum Host.",

@@ -187,6 +187,10 @@ func countDocumentedSettingOverrides() int {
 			continue
 		}
 
+		switch tagParts[0] {
+		case "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+			continue
+		}
 		attrs := tagParts[1:]
 		if slices.Contains(attrs, "envOverride") || !slices.Contains(attrs, "internal") {
 			count++
@@ -335,11 +339,8 @@ var expectedSettingOverrideKeys = []string{
 	"scheduledPruneInterval",
 	"setupCompleted",
 	"toolsImage",
-	"trivyConcurrentScanContainers",
-	"trivyConfig",
 	"trivyCpuLimit",
 	"trivyDbRegistry",
-	"trivyIgnore",
 	"trivyIgnoreUnfixed",
 	"trivyMemoryLimitMb",
 	"trivyNetwork",
@@ -347,13 +348,13 @@ var expectedSettingOverrideKeys = []string{
 	"trivyResourceLimitsEnabled",
 	"trivyScanTimeout",
 	"trivySecurityOpts",
-	"trivyServerEnabled",
-	"trivyServerToken",
-	"trivyServerUrl",
 	"updateCheckRegistry",
 	"upgradeLogRetentionDays",
 	"volumeHelperIdleTimeout",
+	"vulnerabilityNotifyCritical",
+	"vulnerabilityNotifyFailed",
+	"vulnerabilityNotifyHigh",
 	"vulnerabilityScanEnabled",
-	"vulnerabilityScanInterval",
+	"vulnerabilityScanSchedule",
 	"vulnerabilityThreatIntelEnabled",
 }

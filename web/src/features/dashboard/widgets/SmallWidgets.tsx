@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
-import { useAdapter } from "@/data/use-adapter";
+import { useScanAction } from "@/features/security/use-scan-action";
 import { useCapability } from "@/data/use-capability";
 import { useMetrics } from "@/data/live";
 import { formatCountdown, formatGb, formatRelative } from "@/domain/format";
@@ -99,38 +99,43 @@ export function ScheduleWidget({ jobs, hosts, now }: { jobs: ScheduledJob[]; hos
   );
 }
 
-const SEV: { key: Severity; tone: "err" | "orange" | "warn" | "lime" }[] = [
+const SEV: { key: Severity; tone: "err" | "orange" | "warn" | "lime" | "gray" }[] = [
   { key: "critical", tone: "err" },
   { key: "high", tone: "orange" },
   { key: "medium", tone: "warn" },
   { key: "low", tone: "lime" },
+  { key: "unknown", tone: "gray" },
 ];
 
 export function SecurityWidget({ security, visibleHostIds }: { security: SecurityOverview; visibleHostIds: Set<string> }) {
   const t = useTranslations("dashboard.security");
   const navigate = useNavigate();
-  const adapter = useAdapter();
-  const scanCapability = useCapability("runScan");
+  const scan = useScanAction();
+  const scanCapability = useCapability("setScanEnabled");
   if (!security.enabled) {
     return (
       <div className="flex h-full flex-col items-start justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("disabled")}</p>
-        <Button size="sm" variant="outline" disabled={!scanCapability.available} title={scanCapability.reason} onClick={() => void adapter.runScan()}>
+        <Button size="sm" variant="outline" disabled={!scanCapability.available || scan.busy} title={scanCapability.reason} onClick={() => void scan.enable()}>
           <ShieldCheck data-icon="inline-start" /> {t("enable")}
         </Button>
+        {scan.note && <p role="status">{scan.note}</p>}
+        {scan.error && <p role="alert">{scan.error}</p>}
       </div>
     );
   }
-  const images = security.images.filter((i) => visibleHostIds.has(i.hostId));
-  const totals = SEV.map((s) => ({ ...s, n: images.reduce((n, i) => n + i.counts[s.key], 0) }));
-  const runningCritical = images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0);
+  const unavailable = security.unavailable?.some((h) => visibleHostIds.has(h.hostId)) || security.images.some((i) => visibleHostIds.has(i.hostId) && i.unavailable);
+  const images = security.images.filter((i) => visibleHostIds.has(i.hostId) && !i.unavailable && i.scannedAt);
+  const totals = SEV.map((s) => ({ ...s, n: images.reduce((n, i) => n + (i.counts[s.key] ?? 0), 0) }));
+  const actionable = images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0);
   const all = totals.reduce((n, s) => n + s.n, 0);
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="grid grid-cols-4 gap-2">
+      {unavailable && <p role="status" className="text-sm text-muted-foreground">{t("unavailable")}</p>}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(4rem,1fr))] gap-2">
         {totals.map((s) => (
           <div key={s.key} data-tone={s.tone} className="rounded-xl border border-(--tone)/25 bg-(--tone)/8 px-2 py-3 text-center">
-            <div className="text-2xl font-semibold text-(--tone) tabular">{s.n}</div>
+            <div className="text-2xl font-semibold text-(--tone) tabular">{!images.length ? "–" : s.n}</div>
             <div className="text-[11px] text-muted-foreground">{t(`severities.${s.key}`)}</div>
           </div>
         ))}
@@ -138,8 +143,8 @@ export function SecurityWidget({ security, visibleHostIds }: { security: Securit
       <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full" aria-hidden>
         {totals.map((s) => (s.n ? <span key={s.key} data-tone={s.tone} className="rounded-full bg-(--tone)" style={{ flexGrow: s.n / Math.max(1, all) }} /> : null))}
       </div>
-      <p data-tone={runningCritical ? "err" : "ok"} className="text-sm text-(--tone)">
-        {t("running", { count: runningCritical })}
+      <p data-tone={!images.length ? "gray" : actionable ? "err" : "ok"} className="text-sm text-(--tone)">
+        {!images.length ? t(unavailable ? "unavailable" : "notScanned") : t("running", { count: actionable })}
       </p>
       <Button size="sm" variant="outline" className="mt-auto self-start" onClick={() => navigate("/security")}>
         {t("open")}

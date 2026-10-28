@@ -202,6 +202,11 @@ type Update struct {
 	// Required: false
 	VulnerabilityScanEnabled *string `json:"vulnerabilityScanEnabled,omitzero"`
 
+	VulnerabilityScanSchedule   *string `json:"vulnerabilityScanSchedule,omitzero" doc:"JSON daily/weekly wall-clock schedule in the hub time zone"`
+	VulnerabilityNotifyCritical *string `json:"vulnerabilityNotifyCritical,omitzero" enum:"true,false"`
+	VulnerabilityNotifyHigh     *string `json:"vulnerabilityNotifyHigh,omitzero" enum:"true,false"`
+	VulnerabilityNotifyFailed   *string `json:"vulnerabilityNotifyFailed,omitzero" enum:"true,false"`
+
 	// VulnerabilityScanInterval is the cron expression for scheduled vulnerability scans.
 	//
 	// Required: false
@@ -274,7 +279,7 @@ type Update struct {
 	// TrivyDbRegistry is the container registry used to pull the Trivy vulnerability database artifacts.
 	//
 	// Required: false
-	TrivyDbRegistry *string `json:"trivyDbRegistry,omitzero" binding:"omitempty,oneof=ghcr.io docker.io"`
+	TrivyDbRegistry *string `json:"trivyDbRegistry,omitzero"`
 
 	// TrivyNetwork sets the Docker network mode/network name for Trivy scan containers.
 	// Leave empty to inherit Arcane's network automatically, with bridge as the final fallback.

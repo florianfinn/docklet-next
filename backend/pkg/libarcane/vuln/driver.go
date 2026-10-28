@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; hardened socket-mounted scanner container with bounded reports and tools-image cache path.
 
 package vuln
 
@@ -43,7 +43,7 @@ const (
 	DefaultNetworkMode = "bridge"
 	// CacheMountTarget is where the shared Trivy cache volume is mounted inside
 	// the scan container.
-	CacheMountTarget = "/root/.cache"
+	CacheMountTarget = "/var/cache/docklet-tools"
 	// RegistryConfigDir is where the generated registry auth config lands inside
 	// the scan container.
 	RegistryConfigDir = "/tmp/arcane-registry-auth"
@@ -100,30 +100,6 @@ func NewOutputPath() string {
 	return outputPathPrefixInternal + strconv.FormatInt(time.Now().UnixNano(), 10) + ".json"
 }
 
-func BuildBatchHostConfig(
-	cacheVolume string,
-	runtimeOptions RuntimeOptions,
-	securityOpts []string,
-	privileged bool,
-) *containertypes.HostConfig {
-	mounts := append([]mounttypes.Mount{}, runtimeOptions.Mounts...)
-	if strings.TrimSpace(cacheVolume) != "" {
-		mounts = append(mounts, mounttypes.Mount{
-			Type:   mounttypes.TypeVolume,
-			Source: cacheVolume,
-			Target: CacheMountTarget,
-		})
-	}
-
-	hostConfig := &containertypes.HostConfig{
-		NetworkMode: containertypes.NetworkMode(SelectDefaultNetworkMode(runtimeOptions.NetworkMode)),
-		Mounts:      mounts,
-	}
-
-	ApplyRuntimeSecurity(hostConfig, securityOpts, privileged)
-	return hostConfig
-}
-
 func BuildHostConfig(
 	cacheVolume string,
 	resources containertypes.Resources,
@@ -165,10 +141,14 @@ func ApplyRuntimeSecurity(hostConfig *containertypes.HostConfig, securityOpts []
 		return
 	}
 
-	if len(securityOpts) > 0 {
-		hostConfig.SecurityOpt = append([]string(nil), securityOpts...)
-	}
 	hostConfig.Privileged = privileged
+	hostConfig.SecurityOpt = append([]string(nil), securityOpts...)
+	if !privileged {
+		hostConfig.CapDrop = []string{"ALL"}
+		hostConfig.ReadonlyRootfs = true
+		hostConfig.SecurityOpt = append(hostConfig.SecurityOpt, "no-new-privileges")
+	}
+
 }
 
 func ApplyContainerResources(hostConfig *containertypes.HostConfig, resources containertypes.Resources, cpuSet string, applyLimits bool) {
@@ -322,7 +302,7 @@ func ReadStartupLogs(ctx context.Context, dockerClient *client.Client, container
 
 	var stdoutBuf bytes.Buffer
 	var stderrBuf bytes.Buffer
-	if _, stdCopyErr := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, logs); stdCopyErr != nil && !docker.IsExpectedStreamEndError(stdCopyErr) {
+	if _, stdCopyErr := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, io.LimitReader(logs, 1<<20)); stdCopyErr != nil && !docker.IsExpectedStreamEndError(stdCopyErr) {
 		slog.DebugContext(ctx, "failed to decode trivy startup logs", "containerId", containerID, "error", stdCopyErr)
 	}
 
@@ -340,7 +320,7 @@ func RemoveContainer(ctx context.Context, dockerClient *client.Client, container
 	cleanupCtx, cleanupCancel := context.WithTimeout(cleanupCtx, timeouts.GetDuration(0, timeouts.DefaultDockerAPI))
 	defer cleanupCancel()
 
-	if _, err := dockerClient.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+	if _, err := dockerClient.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true}); err != nil && !cerrdefs.IsNotFound(err) {
 		slog.WarnContext(cleanupCtx, "failed to remove container", "purpose", purpose, "containerId", containerID, "error", err)
 	}
 }
@@ -579,7 +559,13 @@ func extractFileFromContainerArchiveInternal(archiveReader io.Reader) ([]byte, e
 			continue
 		}
 
-		data, err := io.ReadAll(tarReader)
+		if header.Size > vulnerability.ReportLimit {
+			return nil, errors.New("report too large")
+		}
+		data, err := io.ReadAll(io.LimitReader(tarReader, vulnerability.ReportLimit+1))
+		if len(data) > vulnerability.ReportLimit {
+			return nil, errors.New("report too large")
+		}
 		if err != nil {
 			return nil, fmt.Errorf("read tar file content: %w", err)
 		}
@@ -735,23 +721,6 @@ func extractTopLevelJSONObjectCandidatesInternal(rawOutput []byte) [][]byte {
 	}
 
 	return candidates
-}
-
-func FormatExitError(exitCode int64, errMsg, imageName string) error {
-	errMsg = strings.TrimSpace(errMsg)
-
-	if exitCode == 137 {
-		if errMsg == "" || errMsg == fmt.Sprintf("exit status %d", exitCode) {
-			return fmt.Errorf("trivy scan failed: process killed with exit status 137 (likely out of memory while scanning %s)", imageName)
-		}
-		return fmt.Errorf("trivy scan failed: %s (process killed with exit status 137; likely out of memory)", errMsg)
-	}
-
-	if strings.Contains(strings.ToLower(errMsg), "deadline exceeded") {
-		return fmt.Errorf("trivy scan timed out for %s (increase TRIVY_SCAN_TIMEOUT or trivyScanTimeout setting)", imageName)
-	}
-
-	return fmt.Errorf("trivy scan failed: %s", errMsg)
 }
 
 func AwaitContainerWaitResponse(

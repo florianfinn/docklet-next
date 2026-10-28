@@ -22,7 +22,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/settings"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/kit/pkg/mapping"
-	"go.yaml.in/yaml/v4"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -321,16 +320,6 @@ func (h *SettingsHandler) validateSettingsUpdateInput(ctx context.Context, input
 		value, err := strconv.Atoi(strings.TrimSpace(*input.AvatarMaxUploadSizeMb))
 		if err != nil || value < 1 || value > 50 {
 			return huma.Error400BadRequest("avatarMaxUploadSizeMb must be between 1 and 50")
-		}
-	}
-
-	if input.TrivyConfig != nil && strings.TrimSpace(*input.TrivyConfig) != "" {
-		var doc map[string]any
-		if err := yaml.Unmarshal([]byte(*input.TrivyConfig), &doc); err != nil {
-			return huma.Error400BadRequest("trivyConfig must be a YAML mapping: " + err.Error())
-		}
-		if doc == nil {
-			return huma.Error400BadRequest("trivyConfig must be a YAML mapping")
 		}
 	}
 

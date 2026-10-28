@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { formatDateTime } from "@/domain/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarClock } from "lucide-react";
 import { useState } from "react";
@@ -65,7 +67,7 @@ export function ScanToggle({ enabled }: { enabled: boolean }) {
 }
 
 /** Planned time of the scans from the saved settings; opens the schedule in Settings › Scans. */
-export function ScanScheduleLink({ schedule, enabled }: { schedule: ScanSchedule; enabled: boolean }) {
+function DemoScanScheduleLink({ schedule, enabled }: { schedule: ScanSchedule; enabled: boolean }) {
   const t = useTranslations("security.planned");
   const tc = useTranslations("common.schedule");
   const text = useScheduleText();
@@ -84,4 +86,15 @@ export function ScanScheduleLink({ schedule, enabled }: { schedule: ScanSchedule
       </Link>
     </Button>
   );
+}
+
+export function ScanScheduleLink(props: { schedule: ScanSchedule; enabled: boolean }) {
+  const adapter = useAdapter();
+  return adapter.kind === "http" ? <LiveScanScheduleLink /> : <DemoScanScheduleLink {...props} />;
+}
+function LiveScanScheduleLink() {
+  const adapter = useAdapter(), t = useTranslations("security");
+  const read = useCapability("getScanSettings");
+  const query = useQuery({ queryKey: ["settings", "scans"], queryFn: () => adapter.getScanSettings!(), enabled: read.available && !!adapter.getScanSettings });
+  return <Button asChild variant="secondary"><Link to={`/settings/security#${SCAN_SCHEDULE_ANCHOR}`} title={query.data?.nextRun ? formatDateTime(query.data.nextRun) : undefined}><CalendarClock data-icon="inline-start" />{t("scheduleSettings")}</Link></Button>;
 }

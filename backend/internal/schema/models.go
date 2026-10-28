@@ -33,6 +33,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/query"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
+	vulnerabilityDTO "github.com/florianfinn/docklet-next/types/vulnerability"
 )
 
 // Models is the persistent schema owned by the retained core modules.
@@ -51,7 +52,7 @@ func Models() []any {
 		&updatepolicies.Policy{}, &updatepolicies.HostSchedule{}, &updatepolicies.Child{}, &updatepolicies.Candidate{}, &updatepolicies.Notice{},
 		&user.User{}, &user.UserAvatar{},
 		&volume.VolumeBackup{}, &policies.VolumeBackupPolicy{},
-		&vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
+		&vulnerability.ScanNotification{}, &vulnerabilityDTO.ScanRun{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
 		&vulnerability.VulnerabilityScanItem{}, &vulnerability.VulnerabilityThreatIntel{},
 		&vulnerability.VulnerabilityIgnore{}, &query.VulnerabilityRiskSnapshot{},
 		&webhook.Webhook{},

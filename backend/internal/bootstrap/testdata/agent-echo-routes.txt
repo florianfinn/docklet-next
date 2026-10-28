@@ -97,6 +97,8 @@ GET /api/environments/:id/vulnerabilities/export
 GET /api/environments/:id/vulnerabilities/ignored
 GET /api/environments/:id/vulnerabilities/image-options
 GET /api/environments/:id/vulnerabilities/overview
+GET /api/environments/:id/vulnerabilities/runs
+GET /api/environments/:id/vulnerabilities/runs/:activityId
 GET /api/environments/:id/vulnerabilities/scanner-status
 GET /api/environments/:id/vulnerabilities/summary
 GET /api/environments/:id/ws/containers/:containerId/logs
@@ -178,6 +180,7 @@ POST /api/environments/:id/volumes/:volumeName/rename
 POST /api/environments/:id/volumes/prune
 POST /api/environments/:id/vulnerabilities/ignore
 POST /api/environments/:id/vulnerabilities/ignore/bulk
+POST /api/environments/:id/vulnerabilities/scan
 POST /api/environments/:id/vulnerabilities/unignore/bulk
 POST /api/settings/search
 PUT /api/environments/:id/containers/:containerId/auto-update

@@ -50,6 +50,10 @@ func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *
 	}
 
 	for _, v := range loaded {
+		if retiredVulnerabilitySetting(v.Key) {
+			slog.WarnContext(ctx, "Ignoring retired vulnerability setting", "key", v.Key)
+			continue
+		}
 		err = dest.UpdateField(v.Key, v.Value, false)
 
 		if err != nil && !errors.Is(err, SettingKeyNotFoundError{}) {
@@ -60,6 +64,8 @@ func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *
 	// Apply environment variable overrides for fields tagged with "envOverride"
 	s.applyEnvOverrides(ctx, dest)
 
+	normalizeTrivyMirror(dest)
+	s.normalizeVulnerabilitySchedule(ctx, dest)
 	return dest, nil
 }
 
@@ -83,6 +89,9 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 
 		tagParts := strings.Split(field.Tag.Get("key"), ",")
 		key := tagParts[0]
+		if retiredVulnerabilitySetting(key) {
+			continue
+		}
 		isInternal := slices.Contains(tagParts[1:], "internal")
 
 		if isInternal {
@@ -126,6 +135,8 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 	}
 	slog.DebugContext(ctx, "loadDatabaseConfigFromEnv: completed env load", "loadedFields", count)
 
+	normalizeTrivyMirror(dest)
+	s.normalizeVulnerabilitySchedule(ctx, dest)
 	return dest, nil
 }
 

@@ -9,6 +9,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/types/features"
 	"log/slog"
 	"net"
 	"net/http"
@@ -316,7 +317,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
-		middleware.EnvironmentProxySecurity{PointAccess: func(ctx context.Context, env, target, point string) error {
+		middleware.EnvironmentProxySecurity{VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
+			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
+		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
 		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)

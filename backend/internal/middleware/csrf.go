@@ -96,6 +96,9 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 				if cookieLess && m.localCredential != nil {
 					valid, err := m.localCredential(req)
 					if err != nil {
+						if isVulnerabilityOperation(c) {
+							return genericProblem(c, http.StatusUnauthorized, "Invalid or expired credential")
+						}
 						return c.JSON(http.StatusUnauthorized, common.APIError{Code: common.APIErrorCodeUnauthorized, Message: "Invalid or expired credential"})
 					}
 					if valid {
@@ -142,6 +145,10 @@ func requestCSRFToken(req *http.Request) string {
 	return value.Value
 }
 
+// Vulnerability operations declare framework problems for refusals ahead of the operation.
 func csrfForbidden(c *echo.Context, message string) error {
+	if isVulnerabilityOperation(c) {
+		return genericProblem(c, http.StatusForbidden, message)
+	}
 	return c.JSON(http.StatusForbidden, common.APIError{Code: common.APIErrorCodeForbidden, Message: message})
 }

@@ -34,7 +34,10 @@ adapter operation available: its mapping and server capability must both exist.
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
-| `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
+| `getSecurity` | Image inventory, batch vulnerability summaries, enriched environment findings and host-run lists | Aggregate validated host-qualified rows, preserve unavailable host states, read terminal host history without inventing samples. |
+| `runScan`, `cancelScan` | Per-image or host-wide vulnerability scan; activity cancel | Every scan reaches host admission. `409 vulnerability.busy` follows the returned activity. Activity settlement refreshes security and images. |
+| `getScanSettings`, `saveScanSettings`, `setScanEnabled` | Hub settings; job list for next-run projection | Independent feature/automatic switches, daily/weekly schedule, ignore-unfixed and three notification causes. Next run comes exclusively from the backend. |
+| `listSchedule`, `getSettings` | Update schedule projection; settings | M10 maps update jobs; `getSettings` remains unavailable for unconnected sections. Connected sections use their dedicated ports. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
 | `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and conditional reconnect tail replacement. |
 | `createVolume`, `deleteVolume`, `renameVolume`, `planVolumePrune`, `pruneVolumes` | Environment volume create/delete/rename and plan/prune operations | Connected mappings with host or volume descriptors; prune retains server planning and confirmation. |
@@ -551,3 +554,105 @@ report authentication failure, unreachable and rate-limited separately, without
 treating a registry failure as a hub identity rejection. Saves and deletions
 invalidate registry queries. Identity changes discard late read/write results;
 dialog ownership additionally discards results after close or target changes.
+
+Vulnerability operations require agent contract v8 (minimum v8). Per-image and
+host-wide scan admission return an activity ID, and run reads return durable
+running or terminal host-run evidence. Both scan routes, run reads and bulk
+ignore/unignore have Edge commands. Vulnerability responses have a 32 MiB cap.
+See [vulnerability scanning](vulnerability-scanning.md).
+
+
+## Live vulnerability consumers (#262)
+
+Security reads use `vulnerabilities:read`, scans use `vulnerabilities:scan`, and
+activity cancellation uses `activities:cancel`. Host descriptors scope the
+permission to that host; image scans use a `host~image` identity. Hub descriptors
+only gate the aggregate entry point. Scan settings are hub-owned and use the
+existing `settings:read` and `settings:write` grants for environment `0`. The job
+list has its existing separate permission; an unreadable next-run projection is
+shown as unavailable and never replaced by browser recurrence calculations.
+
+Runtime decoders validate bounded identities, enum values, counts, dates and
+both `VulnerabilityProblem` and framework `ErrorModel` failures before mapping.
+Each vulnerability response is bounded to 32 MiB. Failed reads cannot establish
+zero findings. Images with no completed scan are neutrally labelled not scanned,
+excluded from totals, and never create an unavailable warning. Navigation marks
+partial totals while a visible host is unavailable, including unknown totals when
+all visible hosts fail. Host batches are merged together after all reads settle, retaining
+the prior query snapshot during refetch. A security-owned 30-second budget per
+host covers capability, image/project/container inventory and every vulnerability
+response body. Hub capability, settings and host discovery share a separate
+30-second prerequisite budget. Timeout is `vulnerability.read-timeout`; retained
+image rows are unavailable and failed batches supply no findings or history.
+Identity and request generations fence late responses before the atomic merge.
+Inventory cancellation is opt-in for this path; other inventory readers retain
+their existing behavior. Over HTTP/2 a held host therefore leaves the other hosts
+visible. Over HTTP/1.1 the shell's unbounded inventory reads to a held host can
+occupy every per-origin connection and queue the healthy hosts' reads as well
+(#271). Pending and filtered hosts do not remove
+retained inventory. Image identities include the host, independently of tags.
+
+The security page, dashboard widget, attention items, operations chip, navigation
+badge and image column/details share the same live security query. UNKNOWN is a
+separate severity. Host-run history keeps interrupted and failed labels while
+numeric chart samples require a completed run or a partial run with scanned
+images. Host-wide scan progress (activity resource type `environment`) comes
+from the accepted run read as
+`(scanned + failed + skipped) / targets`; zero targets or an unavailable run read
+remain indeterminate. Per-image activities have no host-run read. Progress and
+history labels resolve host names.
+Observed active scans refresh the owned detail read every three seconds for up to
+thirty minutes, stopping on terminal state or observer release. List refreshes
+retain the same host/run's last known progress. Cancellation
+uses the accepted activity; settlement and
+SSE recovery invalidate security and image reads. The generic browser run gate
+cannot join or reuse a live scan admission.
+
+The v8 full findings DTO carries optional KEV/EPSS intelligence and current risk
+from the same finding-priority function as the overview. Missing intelligence
+remains unknown. The browser enumerates once per host with `limit=-1`, ordered by
+vulnerability ID, within the 32 MiB response and 100,000-row decoder limits. This
+avoids page cuts across changing live risk scores. The browser retains every
+producer finding, including equal rows from different Trivy targets, and sorts
+the complete list by risk for display.
+Server risk sorting remains available to API callers.
+
+Batch and per-image summaries carry the completed scan platform, independent of
+newer failed attempts. Inventory lacks actual container platform attribution, so
+the UI states daemon-default-only coverage rather than asserting coverage for
+individual containers on other platforms; per-container attribution is #265.
+
+An unscheduled settings draft omits the schedule update key: the stored empty
+default is readable, but the producer rejects an explicit empty update. Automatic
+off remains the UI off path once a daily/weekly schedule has been saved. Scan-now
+refusals name each host and its code; offline/pending refusals are informational
+notes while other refusals are errors, without losing accepted host activities.
+
+Security contract coverage in `web/src/data/http/vulnerabilities.test.tsx` and
+`web/src/data/http/vulnerability-fix1.test.tsx`,
+`web/src/data/http/vulnerability-fix2.test.tsx`,
+`web/src/data/http/vulnerability-enrichment.test.tsx`,
+`backend/internal/vulnerability/children/query/enrichment_test.go` and
+`backend/internal/activity/security_capabilities_test.go` includes:
+
+| Observation | Required mutation |
+| --- | --- |
+| Unavailable host rows display unknown counts; another host remains populated. | Render unavailable counts as numeric zeros. |
+| Equal local image IDs on two hosts stay two rows. | Deduplicate by local ID without the host. |
+| Busy admission follows and displays the active activity. | Treat busy as an ordinary failed admission. |
+| Scan permission is required independently of read permission. | Substitute the read grant for the scan grant. |
+| Undeclared vulnerability codes fail runtime decoding. | Accept arbitrary problem codes. |
+| Per-finding risk equals overview priority. | Substitute a different finding priority. |
+| Missing intelligence remains absent. | Substitute false/zero intelligence. |
+| API risk sorting covers the full list. | Disable risk ordering before pagination. |
+| Completed-platform attribution survives a newer failed attempt. | Use the latest attempt platform. |
+| Unscheduled settings saves succeed against producer validation. | Send an empty schedule update. |
+| Never-scanned images remain neutral across all consumers. | Map no completed scan to unavailable. |
+| Scan counters advance without activity events; polling stops within thirty minutes. | Remove polling or its time cap. |
+| List summaries retain the same run's last known progress. | Discard progress on a list refresh. |
+| Equal findings from distinct Trivy targets retain producer totals and unique render keys. | Restore browser dedupe or duplicate render keys. |
+
+The same suite checks host/image command scope, retained delayed host batches,
+independent settings switches, backend next-run projection, interrupted history,
+and narrow/wide viewports. Production boundary and connected-route tests retain
+HTTP behavior and never enable a simulation through the scan controls.

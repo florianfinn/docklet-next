@@ -1,7 +1,7 @@
 // Docker images per host. Consumers are derived from the containers that
 // reference an image, so stacks, containers and images always agree.
 
-import type { ContainerState, InventoryObservation, Severity, UpdateInfo } from "./model";
+import type { ContainerState, InventoryObservation, SecurityCounts, UpdateInfo } from "./model";
 
 export interface ImageConsumer {
   containerId: string;
@@ -42,7 +42,7 @@ export interface DockerImage {
   /** Update state of the consumers using this image, when they have one. */
   update?: UpdateInfo;
   /** Findings of the last scan for this reference on this host. */
-  vulnerabilities?: Record<Severity, number>;
+  vulnerabilities?: SecurityCounts;
 }
 
 export type ImageUsage = "in-use" | "unused" | "dangling" | "unknown";

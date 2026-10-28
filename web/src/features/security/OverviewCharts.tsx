@@ -2,7 +2,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useTranslations } from "use-intl";
 
 import { formatDate } from "@/domain/format";
-import type { Finding, ScannedImage, ScanRun } from "@/domain/model";
+import type { Finding, Host, ScannedImage, ScanRun } from "@/domain/model";
 import { cn } from "@/shared/lib/utils";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/shared/ui/chart";
 
@@ -56,10 +56,11 @@ export function RiskGauge({ images, top, onDriver }: { images: ScannedImage[]; t
 
 const trendConfig = Object.fromEntries(SEVERITIES.map((s) => [s.key, { label: s.key, color: s.color }])) satisfies ChartConfig;
 
-export function TrendChart({ history, animate }: { history: ScanRun[]; animate: boolean }) {
+export function TrendChart({ history, animate, hosts }: { history: ScanRun[]; animate: boolean; hosts?: Map<string, Host> }) {
   const t = useTranslations("security");
-  const data = history.map((h) => ({ when: formatDate(h.at), manual: h.trigger === "manual", ...h.counts }));
+  const data = history.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at)).filter((h) => h.sampled !== false).map((h) => ({ when: `${hosts?.get(h.hostId ?? "")?.name ?? h.hostId ?? ""} ${formatDate(h.at)} ${h.status ? t(`historyStatus.${h.status}`) : ""}`, manual: h.trigger === "manual", ...h.counts }));
   const config = Object.fromEntries(SEVERITIES.map((s) => [s.key, { label: t(`severities.${s.key}`), color: s.color }])) satisfies ChartConfig;
+  if (!data.length) return <p className="text-sm text-muted-foreground">{t("historyEmpty")}</p>;
   return (
     <ChartContainer config={{ ...trendConfig, ...config }} className="aspect-auto h-44 w-full" aria-label={t("trend.label")}>
       <BarChart data={data} margin={{ left: -20, right: 0, top: 10 }}>

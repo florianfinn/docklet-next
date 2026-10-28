@@ -26,6 +26,7 @@ export const enImages = {
   consumersNone: "–",
   consumersMore: "+{count} more",
   system: "Docklet agent (system)",
+  securityUnavailable: "Scan unavailable",
   securityLabel: "Findings: {all} – go to Security",
   securityClean: "none",
   footer: "{shown} of {total} images · Row opens the details.",

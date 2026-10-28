@@ -133,3 +133,18 @@ it("opens product app links and omits unsafe protocols", async () => {
   expect(links[0]?.getAttribute("href")).toBe("https://app.example.com");
   expect(links[0]?.getAttribute("rel")).toBe("noopener noreferrer");
 });
+
+it("connects the production security route and Scans settings to HTTP producers", async () => {
+  const { securityFixture } = await import("./data/http/vulnerabilities.test-support");
+  const f = securityFixture();
+  f.state.settings.vulnerabilityScanSchedule = '{"mode":"daily","time":"03:00"}';
+  const adapter = createAdapter({ fetch: f.fetcher as typeof fetch, eventSource: () => f.source });
+  const { router } = renderRoutes(routes, ["/security?tab=images"], adapter);
+  await screen.findByRole("table", { name: "Images" });
+  expect(screen.getAllByText("example:1.0.0")).toHaveLength(2);
+  expect(document.body.textContent).not.toMatch(/synthetic|synthetisch|Befunde sind/);
+  await act(() => router.navigate("/settings/security"));
+  await screen.findByRole("switch", { name: "Automatische Scans" });
+  expect(screen.getByText(/Nächste Ausführung:/) !== null).toBe(true);
+  expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/environments/0/jobs"))).toBe(true);
+});

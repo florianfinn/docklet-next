@@ -24,13 +24,16 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
+	"github.com/florianfinn/docklet-next/backend/internal/notification"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
+	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
@@ -234,15 +237,18 @@ type registerJobsParams struct {
 	Config    *config.Config
 	Scheduler schedulertypes.JobScheduler
 
-	Activity    *activity.ActivityService
-	Environment *environment.EnvironmentService
-	JobSchedule *job.JobService
-	Settings    *settings.SettingsService
-	Volume      *volume.VolumeService
-	System      *system.SystemService
-	Admission   *runs.Admission
-	Updater     *updater.UpdaterService
-	Version     *version.VersionService
+	DB            *database.DB
+	Notification  *notification.NotificationService
+	Vulnerability *vulnerability.VulnerabilityService
+	Activity      *activity.ActivityService
+	Environment   *environment.EnvironmentService
+	JobSchedule   *job.JobService
+	Settings      *settings.SettingsService
+	Volume        *volume.VolumeService
+	System        *system.SystemService
+	Admission     *runs.Admission
+	Updater       *updater.UpdaterService
+	Version       *version.VersionService
 
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
@@ -273,8 +279,6 @@ func registerJobs(params registerJobsParams) error {
 		params.PruningVolumeHelper,
 		params.ExpiredSessionsCleanup,
 		params.ScheduledPrune,
-		params.VulnerabilityScan,
-		params.VulnerabilityRisk,
 		params.AutoPatch,
 		params.AutoHeal,
 		params.ActivitySweep,
@@ -285,6 +289,12 @@ func registerJobs(params registerJobsParams) error {
 			return err
 		}
 	}
+	hub := vulnerability.NewHubScans(params.DB, params.Settings, params.Environment, params.Vulnerability, params.Notification)
+	params.VulnerabilityScan.SetDispatcher(hub)
+	if err := registerVulnerabilityJobs(params.Scheduler, params.Config, params.VulnerabilityScan, params.VulnerabilityRisk, &scheduler.VulnerabilityNotifyJob{Hub: hub}); err != nil {
+		return err
+	}
+
 	// FilesystemWatcher is intentionally not scheduler-registered; it watches inline
 	// and is only rebound on settings changes below.
 	// Internal self-healing sweep (managers and agents alike); intentionally
@@ -449,10 +459,9 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 	})
 
 	rescheduleOn([]string{"scheduledPruneEnabled", "scheduledPruneInterval"}, params.ScheduledPrune)
-	rescheduleOn([]string{
-		features.VulnerabilityManagementSettingKey, "vulnerabilityScanEnabled", "vulnerabilityScanInterval", "trivyNetwork", "trivySecurityOpts", "trivyPrivileged",
-		"trivyResourceLimitsEnabled", "trivyCpuLimit", "trivyMemoryLimitMb", "trivyConcurrentScanContainers",
-	}, params.VulnerabilityScan)
+	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "vulnerabilityScanEnabled", "vulnerabilityScanSchedule"}, params.VulnerabilityScan)
+	}
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey}, params.VulnerabilityRisk)
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "imageAutoPatchEnabled", "imageAutoPatchInterval"}, params.AutoPatch)
 	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealMaxRestarts", "autoHealRestartWindow"}, params.AutoHeal)
@@ -578,4 +587,24 @@ func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment t
 		}
 		slog.DebugContext(ctx, "Successfully synced timeout settings to environment", "environmentId", env.ID, "environmentName", env.Name)
 	}
+}
+
+// Intel refresh remains host-local; image scans are admitted by the hub dispatcher.
+func registerVulnerabilityJobs(controller interface {
+	RegisterJob(schedulertypes.Job) error
+}, cfg *config.Config, scan, intel schedulertypes.Job, notify ...schedulertypes.Job) error {
+	if err := controller.RegisterJob(intel); err != nil {
+		return err
+	}
+	if !cfg.AgentMode && !cfg.EdgeAgent {
+		if err := controller.RegisterJob(scan); err != nil {
+			return err
+		}
+		for _, job := range notify {
+			if err := controller.RegisterJob(job); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v7.json", import.meta.url);
+const fixtureURL = new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url);
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -127,6 +127,36 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
+  manifest.version = 8;
+  manifest.minimumAgentContractVersion = 8;
+  const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+    .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
+    .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
+  const vulnerabilitySchemas = {};
+  function collectVulnerability(value) {
+    if (!value || typeof value !== "object") return;
+    if (value.$ref) {
+      const name = value.$ref.split("/").at(-1);
+      if (!vulnerabilitySchemas[name]) {
+        vulnerabilitySchemas[name] = { sha256: createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex") };
+        collectVulnerability(schemas[name]);
+      }
+    }
+    for (const child of Object.values(value)) {
+      if (Array.isArray(child)) child.forEach(collectVulnerability); else collectVulnerability(child);
+    }
+  }
+  for (const route of vulnerabilityRoutes) collectVulnerability(document.paths[route.path][route.method.toLowerCase()]);
+  const edgeSource = readFileSync(new URL("../types/vulnerability/routes.go", import.meta.url), "utf8");
+  manifest.vulnerability = {
+    routes: vulnerabilityRoutes,
+    schemas: vulnerabilitySchemas,
+    edgeRoutes: [...edgeSource.matchAll(/Method:\s*"(\w+)",\s*Path:\s*"([^"\n]+)",\s*CommandName:\s*"([^"\n]+)"/g)]
+      .map(([, method, path, command]) => ({method: method.toUpperCase(), path: `/api${path}`, command})),
+    responseLimit: 32 << 20, reportLimit: 64 << 20,
+    admission: "one host operation; busy includes running activity ID",
+    baseline: "last completed image findings survive failed attempts",
+  };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }
 
@@ -137,7 +167,7 @@ export function updateAgentContract(spec, mode) {
   const source = readFileSync(agentURL, "utf8");
   const updated = source.replace(/const AgentHubFingerprint = "[a-f0-9]{64}"/, `const AgentHubFingerprint = "${digest}"`);
   if (mode === "check") {
-    if (!current.equals(fixture) || source !== updated) throw new Error("Agent contract v7 fixture or fingerprint drift");
+    if (!current.equals(fixture) || source !== updated) throw new Error("Agent contract fixture or fingerprint drift");
     return;
   }
   writeFileSync(fixtureURL, fixture);
@@ -154,6 +184,7 @@ function formatFixture(value, depth = 0) {
     if (value.every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
+  if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

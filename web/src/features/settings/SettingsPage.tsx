@@ -14,6 +14,7 @@ import { BackupTargetsSection } from "./sections/BackupTargetsSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { HelpSection } from "./sections/HelpSection";
 import { NotificationsSection } from "./sections/NotificationsSection";
+import { SecurityLiveSection } from "./sections/SecurityLiveSection";
 import { SecuritySection } from "./sections/SecuritySection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { ActivitySection, HostDefaultsSection } from "./sections/SimpleSections";
@@ -37,8 +38,9 @@ export default function SettingsPage() {
   const validSection = !!section && IDS.includes(section as SectionId);
   const id = validSection ? section as SectionId : "general";
   const connected = adapter.kind === "http" && (id === "general" || id === "auth" || id === "activity");
+  const liveScans = adapter.kind === "http" && id === "security";
   const liveUpdates = adapter.kind === "http" && id === "updates";
-  const settings = useSettings(!liveUpdates && !connected && id !== "appearance" && id !== "help");
+  const settings = useSettings(!liveScans && !liveUpdates && !connected && id !== "appearance" && id !== "help");
   const hub = useConnectedSettings(connected && id !== "auth");
   const s = settings.data;
   if (!validSection) return <Navigate to="/settings/general" replace />;
@@ -78,7 +80,7 @@ export default function SettingsPage() {
             </div>
           ) : id === "help" ? (
             <HelpSection />
-          ) : liveUpdates ? <LiveUpdatesSection /> : connected ? (
+          ) : liveScans ? <SecurityLiveSection /> : liveUpdates ? <LiveUpdatesSection /> : connected ? (
             id === "auth" ? <ConnectedAuthSection /> : hub.isError ? <QueryError error={hub.error} onRetry={() => void hub.refetch()} /> : !hub.data ? (
               <div className="flex flex-col gap-3" aria-busy="true"><Skeleton className="h-16 rounded-2xl" /><Skeleton className="h-80 rounded-2xl" /></div>
             ) : id === "general" ? <GeneralSection settings={hub.data} /> : <ActivitySection settings={hub.data} />

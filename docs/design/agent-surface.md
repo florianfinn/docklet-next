@@ -49,3 +49,10 @@ agents, with local key validation and atomic replacement. Agent upgrade requests
 have an explicit target checked against the running hub on both forwarding paths;
 agents reject blank targets. No update/restore/policy/schedule capability is added
 by this PR1 boundary; PR2a/PR2b own that activation.
+
+Vulnerability scanning uses agent contract v8, minimum v8. The hub feature veto
+covers local and remote vulnerability routes; agent feature-disabled and busy
+refusals remain typed. Host-wide runs are agent-owned evidence read through the
+run route. Agents refresh KEV/EPSS intelligence daily and register no local image
+scan job. Legacy remote scan/risk jobs are retired before delivery.
+See [vulnerability scanning](vulnerability-scanning.md).

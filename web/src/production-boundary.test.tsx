@@ -80,3 +80,13 @@ describe("production without a backend", () => {
     await waitFor(() => expect(helpStore.get().mode).toBe("off"));
   });
 });
+
+it("maps advertised production scan operations to live responses without demo content", async () => {
+  const { securityFixture } = await import("./data/http/vulnerabilities.test-support");
+  const f = securityFixture(), adapter = createAdapter({ fetch: f.fetcher as typeof fetch, eventSource: () => f.source });
+  expect((await adapter.getCapability("getSecurity")).available).toBe(true);
+  const data = await adapter.getSecurity();
+  expect(data.findings.every((finding) => finding.imageId === "sha256:user")).toBe(true);
+  expect(data.images.some((image) => image.id === "second~sha256:user")).toBe(true);
+  expect(await adapter.runScan({ hostIds: ["first"] })).toBe("scan-active-first");
+});

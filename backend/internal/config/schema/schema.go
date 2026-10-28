@@ -138,9 +138,14 @@ var overrideDocRules = map[string]overrideDocRule{
 	"featureVulnerabilityManagementEnabled": {
 		note: "Disabling retains existing reports and scanner settings, allows active work to finish, and leaves standalone image patching available.",
 	},
-	"vulnerabilityScanInterval": {
-		requires: "FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true and VULNERABILITY_SCAN_ENABLED=true to have effect at runtime.",
+	"vulnerabilityScanSchedule": {
+		requires: "Hub only; FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true and VULNERABILITY_SCAN_ENABLED=true to schedule dispatches.",
+		note:     "JSON daily or weekly wall-clock schedule. Invalid or empty values leave scans unscheduled. Spring-gap time is skipped; autumn-fold time runs twice.",
 	},
+	"vulnerabilityNotifyCritical": {note: "Hub only. Notify about new critical findings in scheduled scans; default off. Uses the vulnerability_found channel subscription."},
+	"vulnerabilityNotifyHigh":     {note: "Hub only. Notify about new high findings in scheduled scans; default off. Uses the vulnerability_found channel subscription."},
+	"vulnerabilityNotifyFailed":   {note: "Hub only. Notify about failed scheduled scans or dispatches; default off. Manual jobs never notify."},
+
 	"vulnerabilityThreatIntelEnabled": {
 		requires: "FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true to have effect at runtime.",
 	},
@@ -307,6 +312,10 @@ func collectSettingEnvOverridesInternal() ([]SettingOverrideEntry, error) {
 		}
 
 		key := tagParts[0]
+		switch key {
+		case "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+			continue
+		}
 		attrs := tagParts[1:]
 		hasEnvOverride := slices.Contains(attrs, "envOverride")
 		isInternal := slices.Contains(attrs, "internal")

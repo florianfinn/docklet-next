@@ -45,16 +45,17 @@ type SettingsService struct {
 	// the typed getters — ~100 call sites, some in per-project loops) into a
 	// pointer load instead of a full struct Clone plus a reflection pass.
 	// The snapshot is shared: readers must never mutate it.
-	effectiveConfig atomic.Pointer[Settings]
-	envOverrides    []settingsEnvOverride
-	writes          sync.Mutex
-	effectsMu       sync.Mutex
-	effects         []func()
-	effectsWake     chan struct{}
-	effectsDone     chan struct{}
-	effectsClosed   bool
-	lifecycleCtx    context.Context
-	changes         *concurrency.Signal[[]libarcane.SettingUpdate]
+	effectiveConfig     atomic.Pointer[Settings]
+	envOverrides        []settingsEnvOverride
+	scanScheduleWarning sync.Once
+	writes              sync.Mutex
+	effectsMu           sync.Mutex
+	effects             []func()
+	effectsWake         chan struct{}
+	effectsDone         chan struct{}
+	effectsClosed       bool
+	lifecycleCtx        context.Context
+	changes             *concurrency.Signal[[]libarcane.SettingUpdate]
 }
 
 type settingsUpdateResultInternal struct {

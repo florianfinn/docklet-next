@@ -7,10 +7,13 @@
 package vuln
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -220,7 +223,7 @@ func TestBuildTrivyHostConfig_ExcludesResourcesWhenLimitsDisabled(t *testing.T) 
 	require.Equal(t, int64(0), hostConfig.NanoCPUs)
 	require.Equal(t, int64(0), hostConfig.Memory)
 	require.Equal(t, int64(0), hostConfig.MemorySwap)
-	require.Empty(t, hostConfig.SecurityOpt)
+	require.Equal(t, []string{"no-new-privileges"}, hostConfig.SecurityOpt)
 	require.False(t, hostConfig.Privileged)
 }
 
@@ -317,32 +320,6 @@ func TestBuildTrivyHostConfig_SkipsCacheMountWhenVolumeEmpty(t *testing.T) {
 
 	require.Len(t, hostConfig.Mounts, 1)
 	require.Equal(t, socketMount.Source, hostConfig.Mounts[0].Source)
-}
-
-func TestBuildTrivyBatchHostConfig_AppliesRuntimeSecurity(t *testing.T) {
-	hostConfig := BuildBatchHostConfig(
-		"cache-volume",
-		RuntimeOptions{NetworkMode: "arcane-external"},
-		[]string{"label=disable"},
-		true,
-	)
-
-	require.Equal(t, containertypes.NetworkMode("arcane-external"), hostConfig.NetworkMode)
-	require.Equal(t, []string{"label=disable"}, hostConfig.SecurityOpt)
-	require.True(t, hostConfig.Privileged)
-	require.Len(t, hostConfig.Mounts, 1)
-	require.Equal(t, "cache-volume", hostConfig.Mounts[0].Source)
-}
-
-func TestBuildTrivyBatchHostConfig_SkipsCacheMountWhenVolumeEmpty(t *testing.T) {
-	hostConfig := BuildBatchHostConfig(
-		"",
-		RuntimeOptions{NetworkMode: "arcane-external"},
-		nil,
-		false,
-	)
-
-	require.Empty(t, hostConfig.Mounts)
 }
 
 func TestBuildTrivyHostConfig_IncludesInheritedSocketMount(t *testing.T) {
@@ -560,4 +537,26 @@ func TestAwaitContainerWaitResponseInternal_NoStatus(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ended without status")
 	require.Equal(t, int64(0), status)
+}
+
+type reportZeros struct{ left, read int64 }
+
+func (z *reportZeros) Read(p []byte) (int, error) {
+	if z.left == 0 {
+		return 0, io.EOF
+	}
+	n := min(int64(len(p)), z.left)
+	clear(p[:n])
+	z.left -= n
+	z.read += n
+	return int(n), nil
+}
+func TestReportArchiveRejectsOversizeBeforeReadingBody(t *testing.T) {
+	var header bytes.Buffer
+	tw := tar.NewWriter(&header)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "report.json", Size: vulnerability.ReportLimit + 1, Mode: 0644}))
+	zeros := &reportZeros{left: vulnerability.ReportLimit + 1}
+	_, e := extractFileFromContainerArchiveInternal(io.MultiReader(&header, zeros))
+	require.ErrorContains(t, e, "report too large")
+	require.Zero(t, zeros.read)
 }

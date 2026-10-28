@@ -53,7 +53,7 @@ it("invalidates inventory on connection/state changes and caches capabilities pe
     await Promise.all([f.adapter.getCapability("listImages", ref), f.adapter.getCapability("listVolumes", ref)]);
     expect(f.fetcher.mock.calls.filter(([url]) => String(url).includes("/capabilities"))).toHaveLength(2);
     f.source.onmessage?.({ data: JSON.stringify({ timestamp: at, channel: "environments", environment: { type: "snapshot", environments: f.state.hostIds.map((id) => ({ id, name: id, status: id === "second" ? "offline" : "online", apiUrl: "http://agent.example.com", enabled: true, isEdge: false })) } }), lastEventId: "" } as MessageEvent);
-    expect(topics).toHaveBeenLastCalledWith(["hosts", "stacks", "containers", "images", "volumes", "topology"]);
+    expect(topics).toHaveBeenLastCalledWith(["hosts", "stacks", "containers", "images", "volumes", "topology", "security"]);
     await f.adapter.getCapability("listImages");
     expect(f.fetcher.mock.calls.filter(([url]) => String(url).includes("/capabilities"))).toHaveLength(3);
     const original = f.fetcher.getMockImplementation()!;

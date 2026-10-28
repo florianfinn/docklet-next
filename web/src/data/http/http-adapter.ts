@@ -1,3 +1,5 @@
+import { vulnerabilityTransport } from "./vulnerability-transport";
+import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
@@ -18,7 +20,7 @@ import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
 import { createMetricsReader, type MetricsSocket } from "./metrics";
-import { createResourceReader } from "./resources";
+import { createHostImageReader, createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
 import { createHostCommands } from "./host-commands";
@@ -51,7 +53,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "saveAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "getUpdateSchedules", "saveUpdateSchedule", "listSchedule", "getSystemImageHints", "listSystemComponents", "checkStackUpdates", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "clearContainerRegistryCredential", "pullImage", "removeImage", "pruneImages", "listContainerRegistries", "createContainerRegistry", "updateContainerRegistry", "deleteContainerRegistry", "testContainerRegistry", "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["getSecurity", "runScan", "setScanEnabled", "getScanSettings", "saveScanSettings", "cancelScan", "deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "saveAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "getUpdateSchedules", "saveUpdateSchedule", "listSchedule", "getSystemImageHints", "listSystemComponents", "checkStackUpdates", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "clearContainerRegistryCredential", "pullImage", "removeImage", "pruneImages", "listContainerRegistries", "createContainerRegistry", "updateContainerRegistry", "deleteContainerRegistry", "testContainerRegistry", "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -147,7 +149,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   const capabilityReads = new Map<string, Promise<Body<"get-capabilities">["data"]>>();
   let environmentState: string | undefined;
-  const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology"];
+  const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology", "security"];
   const environmentCache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, gcTime: 30_000 } } });
   const environmentsKey = ["environments"];
   const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
@@ -266,16 +268,32 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
+  const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
     retained: runtime.retained,
     mergeSummary: runtime.mergeSummary,
-    changed: (previous, current, recovered) => targets.changed(previous, current, recovered),
+    changed: (previous, current, recovered) => {
+      targets.changed(previous, current, recovered);
+      if (current.some((run) => run.kind === "scan" && !["running", "queued"].includes(run.status) && previous.some((old) => old.id === run.id && old.hostId === run.hostId && ["running", "queued"].includes(old.status)))) securityChanged();
+    },
     detailRun: async (host, id, signal, expanded) => {
       if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
-      try { return mapActivityDetail(dto); } catch { throw classifiedError({ code: "activity.invalid-data" }); }
+      try {
+        const run = mapActivityDetail(dto);
+        if (run.kind === "scan" && dto.activity.resourceType === "environment") {
+          try {
+            const capability = await getCapability("getSecurity", { kind: "host", id: host });
+            if (!capability.available) throw unavailable("getSecurity", capability.resourceRef, capability.disabledReasonCode);
+            run.scanProgress = await readScanProgress(scanRequest, host, id, signal);
+          } catch (error) { if (isCancelledError(error)) throw error; }
+        }
+        // Invalidate before publishing terminal status: progress consumers may unmount immediately.
+        if (run.kind === "scan" && !["running", "queued"].includes(run.status)) securityChanged();
+        return run;
+      } catch (error) { if (isCancelledError(error)) throw error; throw classifiedError({ code: "activity.invalid-data" }); }
     },
     hosts: async () => {
       await requireCapability("listActions");
@@ -323,11 +341,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     targets.notify(environmentId, activityId, terminal, discoverOnTerminal);
   }
 
+  function securityChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["security", "images", "settings"])); }
+
   function refreshSubscribed(reopen = false): void {
     invalidateEnvironments();
     events.changed();
     refreshRuns(reopen);
-    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
+    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security"]));
   }
 
   function handleStream(data: string, eventId: string): void {
@@ -344,6 +364,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sharedReads.clear();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const notification = envelope.activity;
+      if (notification.type !== "message" && notification.activity?.type === "vulnerability_scan") securityChanged();
       const host = notification.environmentId ?? notification.activity?.environmentId;
       if (notification.type === "snapshot" || notification.type === "error") {
         if (host) {
@@ -493,6 +514,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listHosts,
     ...inventory,
     ...resourceReads,
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),
@@ -518,9 +540,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const offActions = adapter.subscribeActions(() => {});
       const owner = lifetimeGeneration;
       let active = true;
+      const pollUntil = Date.now() + 30 * 60_000;
+      let scanTimer: ReturnType<typeof setInterval> | undefined;
+      const stopPolling = () => { clearInterval(scanTimer); scanTimer = undefined; };
+      const pollScan = (run?: CodedActionRun) => {
+        if (run?.kind !== "scan" || !["running", "queued"].includes(run.status)) { stopPolling(); return; }
+        if (scanTimer || Date.now() >= pollUntil) return;
+        // Scan counters change without activity events. Share the existing owned detail read.
+        scanTimer = setInterval(() => {
+          const current = actions.runs().find((row) => row.hostId === host && row.id === id);
+          if (!active || owner !== lifetimeGeneration || Date.now() >= pollUntil || !current || !["running", "queued"].includes(current.status)) { stopPolling(); return; }
+          targets.refreshObserved(host, id);
+        }, 3_000);
+      };
       runtime.observeDetail(id, true);
-      const off = targets.observe(host, id, listener);
-      return () => { if (!active) return; active = false; off(); if (owner === lifetimeGeneration) runtime.observeDetail(id, false); offActions(); };
+      pollScan(actions.runs().find((run) => run.hostId === host && run.id === id));
+      const off = targets.observe(host, id, (state) => {
+        if (state.status === "ready") pollScan(state.run);
+        listener(state);
+      });
+      return () => { if (!active) return; active = false; stopPolling(); off(); if (owner === lifetimeGeneration) runtime.observeDetail(id, false); offActions(); };
     },
     subscribeActionReadHealth(listener) {
       healthListeners.add(listener);
