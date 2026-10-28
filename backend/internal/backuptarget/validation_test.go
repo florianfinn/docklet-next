@@ -17,7 +17,9 @@ func TestTargetInputGrammar(t *testing.T) {
 	local := dto.TargetInput{TargetLocation: dto.TargetLocation{Kind: "local", HostID: new("0"), Path: "/srv/backups"}, Name: "target"}
 	smb := dto.TargetInput{TargetLocation: dto.TargetLocation{Kind: "smb", Server: "nas.example.com", Share: "backups", Path: "snapshots"}, Name: "target", Username: "operator", Secret: new("synthetic-password")}
 	nfs := dto.TargetInput{TargetLocation: dto.TargetLocation{Kind: "nfs", Server: "192.0.2.1", Share: "/exports/backups"}, Name: "target"}
-	for _, input := range []dto.TargetInput{local, smb, nfs} {
+	smbIPv4, nfsIPv6 := smb, nfs
+	smbIPv4.Server, nfsIPv6.Server = "192.0.2.10", "2001:db8::1"
+	for _, input := range []dto.TargetInput{local, smb, nfs, smbIPv4, nfsIPv6} {
 		_, err := Validate(input)
 		require.NoError(t, err)
 	}
@@ -37,6 +39,7 @@ func TestTargetInputGrammar(t *testing.T) {
 		{"missing-host", local, func(i *dto.TargetInput) { i.HostID = nil }},
 		{"remote-host", smb, func(i *dto.TargetInput) { i.HostID = new("0") }},
 		{"server", smb, func(i *dto.TargetInput) { i.Server = "invalid/server" }},
+		{"server-ipv6", smb, func(i *dto.TargetInput) { i.Server = "2001:db8::1" }},
 		{"share", smb, func(i *dto.TargetInput) { i.Share = "nested/share" }},
 		{"parent-remote", smb, func(i *dto.TargetInput) { i.Path = "snapshots/../other" }},
 		{"absolute-remote", smb, func(i *dto.TargetInput) { i.Path = "/snapshots" }},

@@ -12,6 +12,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -254,7 +255,12 @@ func (h *Handler) DeleteBackup(ctx context.Context, input *DeleteBackupInput) (*
 			"backupId": input.BackupID,
 		},
 	}, func(runtimeCtx context.Context) error {
-		return h.service.DeleteBackup(runtimeCtx, input.BackupID, user)
+		// The activity stores the returned text; engine and daemon details stay in debug logs.
+		err := h.service.DeleteBackup(runtimeCtx, input.BackupID, user)
+		if err != nil {
+			slog.DebugContext(runtimeCtx, "volume backup delete failed", "backup", input.BackupID, "error", err)
+		}
+		return neutralBackupError(err, "volume.backup.repository-unavailable")
 	})
 	if err != nil {
 		return nil, neutralBackupError(err, "volume.backup.repository-unavailable")

@@ -397,6 +397,12 @@ func TestIsCentralVolumeBackupPolicyPathInternal_IsMethodAware(t *testing.T) {
 	assert.False(t, isCentralVolumeBackupPolicyPathInternal(http.MethodGet, "/volumes/app-data/backups"))
 }
 
+func TestBackupTargetSetReceiverIsNeverProxied(t *testing.T) {
+	assert.True(t, isManagementPathInternal(http.MethodPut, "/volumes/backups/targets"))
+	assert.False(t, isManagementPathInternal(http.MethodGet, "/volumes/backups/targets/archive/references"))
+	assert.False(t, isManagementPathInternal(http.MethodPut, "/volumes/backups/targets/local/recovery-key"))
+}
+
 const proxyTestEnvID = "remote-1"
 
 func newProxyAuthzMiddleware(matcher *authz.PermissionMatcher) *EnvironmentMiddleware {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied.
 
 package middleware
 
@@ -684,6 +684,10 @@ func isManagementPathInternal(method, suffix string) bool {
 		}
 	}
 	if isCentralVolumeBackupPolicyPathInternal(method, suffix) {
+		return true
+	}
+	// Only the hub pushes backup target sets; clients never reach an agent's receiver.
+	if method == http.MethodPut && suffix == "/volumes/backups/targets" {
 		return true
 	}
 	if suffix == "/activities" || strings.HasPrefix(suffix, "/activities/") {

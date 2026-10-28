@@ -47,7 +47,10 @@ operators can inspect SMB credentials in local-driver volume options; this is an
 accepted operational boundary. Docklet hides target mount volumes from its generic
 volume routes and redacts their `o` option as an additional serialization guard.
 SMB username, password and domain values containing comma or equals are refused;
-mount options use per-kind allowlists. NFS defaults to `hard` mounts.
+mount options use per-kind allowlists. SMB servers given as IPv6 address literals
+are refused (use a host name); NFS passes IPv6 addresses through `addr=`. NFS
+defaults to `hard` mounts. The hub never forwards client requests to an agent's
+target-set receiver; only its own delivery reaches it.
 
 ## Distribution and admission
 

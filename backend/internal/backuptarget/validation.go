@@ -45,6 +45,10 @@ func Validate(input dto.TargetInput) (dto.TargetInput, error) {
 			input.Path = ""
 		}
 		if input.Kind == "smb" {
+			// The CIFS device has no bracket form here; IPv6 SMB servers are named by host name.
+			if ip := net.ParseIP(input.Server); ip != nil && ip.To4() == nil {
+				return input, invalid()
+			}
 			if len(input.Share) < 1 || len(input.Share) > 80 || strings.ContainsAny(input.Share, "/\\\x00\r\n") || strings.ContainsAny(input.Username, ",=\x00\r\n") || input.Secret != nil && strings.ContainsAny(*input.Secret, ",=\x00\r\n") {
 				return input, invalid()
 			}
