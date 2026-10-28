@@ -8,6 +8,7 @@ package bootstrap
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/di"
 	"io"
 	"net"
 	"net/http"
@@ -383,6 +384,7 @@ func TestApplicationOptionsValidate(t *testing.T) {
 		&config.Config{},
 		(*database.DB)(nil),
 		cancelApp,
+		di.AppFailure(func(error) { cancelApp() }),
 	))
 	require.NoError(t, err)
 }

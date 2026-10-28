@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite-only local persistence.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite-only local persistence; actor-host loss ends the application with a fatal cause.
 
 package di
 
@@ -113,7 +113,7 @@ func provideActorRuntimeInternal(
 	cfg *config.Config,
 	settingsService *settings.SettingsService,
 	lc fx.Lifecycle,
-	cancelApp context.CancelFunc,
+	failApp AppFailure,
 ) (*francis.Runtime, error) {
 	runtime, err := francis.New(cfg.DatabaseURL, "", "", cfg.ActorPort)
 	if err != nil {
@@ -123,7 +123,10 @@ func provideActorRuntimeInternal(
 		if configureIdentityErr := runtime.ConfigureIdentity(cfg.EncryptionKey, settingsService.GetSettingsConfig().InstanceID.Value); configureIdentityErr != nil {
 			return configureIdentityErr
 		}
-		return runtime.Start(ctx, appCtx, func(err error) { slog.ErrorContext(appCtx, "Francis host failed", "error", err); cancelApp() })
+		return runtime.Start(ctx, appCtx, func(err error) {
+			slog.ErrorContext(appCtx, "Francis host failed", "code", "runtime.actor-host-lost", "error", err)
+			failApp(err)
+		})
 	}, OnStop: runtime.Stop})
 	return runtime, nil
 }

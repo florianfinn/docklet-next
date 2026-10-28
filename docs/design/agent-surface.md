@@ -56,3 +56,13 @@ refusals remain typed. Host-wide runs are agent-owned evidence read through the
 run route. Agents refresh KEV/EPSS intelligence daily and register no local image
 scan job. Legacy remote scan/risk jobs are retired before delivery.
 See [vulnerability scanning](vulnerability-scanning.md).
+
+Hub, Direct agent and Edge agent processes exit non-zero when their embedded
+actor host ends unexpectedly, for example after a freeze outlasts the 90-second
+registration deadline; otherwise it would keep serving HTTP while its scheduler
+and Edge tunnel have stopped. The shipped hub compose file and the
+Direct, Edge and mTLS snippets use `restart: unless-stopped`, so the container
+restarts with a fresh registration. `GET`/`HEAD /api/health` return 503 once the
+application lifecycle has ended, so the `health` command reports the state even
+before the process exits. Intentional actor-host stops, such as during a hub
+database restore, cancel the runtime context and are not treated as failures.

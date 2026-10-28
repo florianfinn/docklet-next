@@ -8,6 +8,7 @@ package bootstrap
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/di"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"net/http"
@@ -39,7 +40,7 @@ func TestHubStartsAgainstEmptySQLite(t *testing.T) {
 	appCtx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	var server *http.Server
-	app := fx.New(applicationOptions(appCtx, cfg, db, cancel), fx.Populate(&server))
+	app := fx.New(applicationOptions(appCtx, cfg, db, cancel, di.AppFailure(func(error) { cancel() })), fx.Populate(&server))
 	require.NoError(t, app.Err())
 	startCtx, stopStart := context.WithTimeout(t.Context(), 30*time.Second)
 	defer stopStart()

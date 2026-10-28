@@ -2,7 +2,7 @@
 // Revision: 23cd46831a543a73eec05ad034afd46245225876
 // Retrieved: 2026-10-16
 // License: MIT
-// Deviations: Pinned provider restored; whitespace normalized, reserved example hosts and injected production connection policy.
+// Deviations: Pinned provider restored; whitespace normalized, reserved example hosts and injected production connection policy; health-deadline boundary test.
 
 package sqlite
 
@@ -833,4 +833,33 @@ func queryPlan(t *testing.T, p *SQLiteProvider, actorType string, labelField str
 	}
 	require.NoError(t, rows.Err())
 	return plan.String()
+}
+
+// Docklet runs the host with a 90 s deadline (backend/pkg/utils/francis); a renewal exactly at the deadline still counts.
+func TestUpdateActorHostHealthDeadlineBoundary(t *testing.T) {
+	cases := []struct {
+		name    string
+		elapsed time.Duration
+		expired bool
+	}{
+		{name: "renewal interval", elapsed: 80 * time.Second},
+		{name: "just before deadline", elapsed: 90*time.Second - time.Millisecond},
+		{name: "at deadline", elapsed: 90 * time.Second},
+		{name: "just after deadline", elapsed: 90*time.Second + time.Millisecond, expired: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := initTestProvider(t, testutil.SQLiteConnString(t))
+			s.cfg.HostHealthCheckDeadline = 90 * time.Second
+			res, err := s.RegisterHost(t.Context(), components.RegisterHostReq{Address: "192.0.2.10:8080"})
+			require.NoError(t, err)
+			require.NoError(t, s.AdvanceClock(tc.elapsed))
+			err = s.UpdateActorHost(t.Context(), res.HostID, components.UpdateActorHostReq{UpdateLastHealthCheck: true})
+			if tc.expired {
+				require.ErrorIs(t, err, components.ErrHostUnregistered)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
