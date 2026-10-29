@@ -2,7 +2,8 @@
 // Revision: e5218d798f5302f7fa568a6059a70901bcc83219
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original agent compatibility refusal and typed agent problems for central backup routes.
+// Deviations: Original agent compatibility refusal and typed agent problems for central backup routes;
+// the access envelope type is shared with the proxy translation (#292).
 
 package backuptarget
 
@@ -22,34 +23,12 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
-// AgentAccessError carries the host compatibility envelope the environment
-// proxy sends for the same verdict, so central backup routes refuse alike.
-type AgentAccessError struct {
-	Success bool   `json:"success"`
-	Code    string `json:"code"`
-	status  int
-	cause   error
-}
-
-func (e *AgentAccessError) Error() string  { return e.Code }
-func (e *AgentAccessError) Unwrap() error  { return e.cause }
-func (e *AgentAccessError) GetStatus() int { return e.status }
+// AgentAccessError is the shared host access envelope of proxied routes.
+type AgentAccessError = handlerutil.AgentAccessError
 
 // AgentAccess maps an agent access verdict (outdated agent, refused token or
 // upstream 401/403) to its refusal and returns nil for every other error.
-func AgentAccess(err error) *AgentAccessError {
-	var mapped *AgentAccessError
-	if errors.As(err, &mapped) {
-		return mapped
-	}
-	var upstream *remenv.StatusError
-	if !errors.Is(err, remenv.ErrAgentUpdateRequired) && !errors.Is(err, remenv.ErrAgentInvalidToken) &&
-		(!errors.As(err, &upstream) || !remenv.AgentAuthRejected(upstream.StatusCode)) {
-		return nil
-	}
-	status, code := remenv.AgentAccessFailure(err)
-	return &AgentAccessError{Code: code, status: status, cause: err}
-}
+func AgentAccess(err error) *AgentAccessError { return handlerutil.AgentVerdict(err) }
 
 // RemoteProblem rebuilds the typed backup refusal an agent answered with, so
 // central routes keep its status, code and running activity. Only allowlisted

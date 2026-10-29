@@ -2,7 +2,8 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; translate agent authentication failures independently of caller authorization.
+// Deviations: Local module namespace; translate agent authentication failures independently of caller authorization;
+// agent access verdicts use the middleware envelope and responses carry no wrapped error text (#292).
 
 package handlerutil
 
@@ -10,6 +11,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"log/slog"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -52,24 +54,30 @@ func marshalRemoteRequestBodyInternal(requestBody any) ([]byte, error) {
 }
 
 // TranslateRemoteProxyError converts environment transport failures into Huma errors.
+// Agent access verdicts keep the middleware envelope; wrapped Go error text stays
+// out of responses because it can name private hosts or upstream details.
 func TranslateRemoteProxyError(err error) error {
-	if transportErr, ok := errors.AsType[*remenv.TransportError](err); ok {
-		return huma.Error502BadGateway("failed to proxy request to environment: " + transportErr.Error())
+	if access := AgentAccess(err); access != nil {
+		return access
+	}
+
+	if _, ok := errors.AsType[*remenv.TransportError](err); ok {
+		slog.Warn("Remote environment request failed", "error", err)
+		return huma.Error502BadGateway("failed to proxy request to environment")
 	}
 
 	if statusErr, ok := errors.AsType[*remenv.StatusError](err); ok {
-		if remenv.AgentAuthRejected(statusErr.StatusCode) {
-			return huma.Error502BadGateway("Remote environment rejected the manager's credentials")
-		}
 		if statusErr.StatusCode < 400 || statusErr.StatusCode > 599 {
 			return huma.Error502BadGateway("Remote environment response unavailable")
 		}
 		return huma.NewError(statusErr.StatusCode, "environment returned error: "+string(statusErr.Body), nil)
 	}
 
-	if decodeErr, ok := errors.AsType[*remenv.DecodeError](err); ok {
-		return huma.Error500InternalServerError("failed to decode environment response: " + decodeErr.Error())
+	if _, ok := errors.AsType[*remenv.DecodeError](err); ok {
+		slog.Warn("Remote environment response could not be decoded", "error", err)
+		return huma.Error500InternalServerError("failed to decode environment response")
 	}
 
-	return huma.Error500InternalServerError("failed to proxy request to environment: " + err.Error())
+	slog.Warn("Remote environment request failed", "error", err)
+	return huma.Error500InternalServerError("failed to proxy request to environment")
 }
