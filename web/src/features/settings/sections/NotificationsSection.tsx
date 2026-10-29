@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { useNotificationTargets } from "@/data/notification-queries";
+import { useNotificationWrites } from "@/data/notification-writes";
 import { useConnectedSettings } from "@/data/queries";
 import { settingsErrorMessage } from "@/data/settings-error";
 import { useAdapter } from "@/data/use-adapter";
@@ -48,10 +49,11 @@ function Targets() {
   const all = useTranslations();
   const adapter = useAdapter();
   const targets = useNotificationTargets();
+  const { pending, write } = useNotificationWrites();
   const generations = useRef(0);
   const [dialog, setDialog] = useState<DialogState>();
   const [remove, setRemove] = useState<NotificationTargetRow>();
-  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  const [testing, setTesting] = useState<ReadonlySet<NotificationProvider>>(new Set());
   const [error, setError] = useState<string>();
   const rows = targets.data ?? [];
   // Test feedback is owned by the mounted section and the target identity it was started for.
@@ -65,17 +67,7 @@ function Targets() {
 
   const open = (target?: NotificationTarget) => setDialog({ generation: ++generations.current, target });
   const close = (generation: number) => setDialog((current) => (current?.generation === generation ? undefined : current));
-  const busy = (key: string, on: boolean) => setPending((old) => { const next = new Set(old); if (on) next.add(key); else next.delete(key); return next; });
-  /** One full-target write per provider until it and the following refresh settle; it outlives dialogs. */
-  const write = async <T,>(provider: NotificationProvider, run: () => Promise<T>): Promise<T> => {
-    busy(provider, true);
-    try {
-      return await run();
-    } finally {
-      await targets.refetch().catch(() => undefined);
-      busy(provider, false);
-    }
-  };
+  const busy = (provider: NotificationProvider, on: boolean) => setTesting((old) => { const next = new Set(old); if (on) next.add(provider); else next.delete(provider); return next; });
 
   const used = new Set(rows.map((r) => r.provider));
   const available = NOTIFICATION_PROVIDERS.filter((p) => !used.has(p) && !pending.has(p));
@@ -90,7 +82,7 @@ function Targets() {
   };
   const test = async (target: NotificationTarget) => {
     const { provider, id } = target;
-    busy(`test:${provider}`, true);
+    busy(provider, true);
     const kind = t(`kinds.${provider}`);
     const current = () => live.current.mounted && live.current.rows.some((r) => r.id === id && r.provider === provider);
     try {
@@ -106,7 +98,7 @@ function Targets() {
     } catch (cause) {
       if (current() && !(cause instanceof CancelledError)) toast.error(settingsErrorMessage(cause, all));
     } finally {
-      busy(`test:${provider}`, false);
+      busy(provider, false);
     }
   };
 
@@ -150,7 +142,7 @@ function Targets() {
               );
             }
             const label = t(`kinds.${row.provider}`);
-            const testing = pending.has(`test:${row.provider}`);
+            const sending = testing.has(row.provider);
             return (
               <li key={row.id} className={cn("flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3", !row.enabled && "opacity-70")}>
                 <span className="grid size-9 place-items-center rounded-xl bg-primary/12 text-primary-text [&_svg]:size-4"><ProviderIcon provider={row.provider} /></span>
@@ -171,9 +163,9 @@ function Targets() {
                 <div className="flex items-center gap-1.5">
                   <Switch aria-label={`${t("enabled")}: ${label}`} checked={row.enabled} disabled={pending.has(row.provider)} onCheckedChange={(enabled) => void toggle(row, enabled)} />
                   <HelpTarget topic="settingsNotifications.test">
-                    <Button type="button" size="sm" variant="ghost" disabled={testing} onClick={() => void test(row)}>
-                      {testing ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
-                      {testing ? t("testing") : t("test")}
+                    <Button type="button" size="sm" variant="ghost" disabled={sending} onClick={() => void test(row)}>
+                      {sending ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
+                      {sending ? t("testing") : t("test")}
                     </Button>
                   </HelpTarget>
                   <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${t("edit")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => open(row)}>

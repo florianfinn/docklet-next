@@ -12,8 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
+import { useNotificationWrites } from "@/data/notification-writes";
 import type { NotificationTestResult } from "@/domain/notifications";
-import { renderRoutes } from "@/test/render";
+import { renderRoutes, renderWithApp } from "@/test/render";
 
 import SettingsPage from "../SettingsPage";
 
@@ -96,6 +97,24 @@ describe("one full-target write per provider", () => {
     expect(ntfy?.kind === "target" && ntfy.enabled).toBe(false);
   });
 
+  it("keeps a provider busy until the list refresh after its write settles", async () => {
+    const adapter = createDemoAdapter();
+    const list = adapter.listNotificationTargets.bind(adapter);
+    const refresh = barrier();
+    let hold = false;
+    adapter.listNotificationTargets = async () => { if (hold) await refresh.promise; return list(); };
+    const saved = vi.fn();
+    const save = adapter.saveNotificationTarget.bind(adapter);
+    adapter.saveNotificationTarget = async (input) => { hold = true; const result = await save(input); saved(); return result; };
+    renderRoutes(routes, ["/settings/notifications"], adapter);
+    await userEvent.click(await screen.findByRole("switch", { name: "Aktiv: ntfy" }));
+    await waitFor(() => expect(saved.mock.calls.length).toBe(1));
+    await settle();
+    expect(disabled("Bearbeiten: ntfy")).toBe(true);
+    refresh.release();
+    await waitFor(() => expect(disabled("Bearbeiten: ntfy")).toBe(false));
+  });
+
   it("keeps a provider busy after its edit dialog closed with a pending save", async () => {
     const adapter = createDemoAdapter();
     const save = adapter.saveNotificationTarget.bind(adapter);
@@ -109,6 +128,70 @@ describe("one full-target write per provider", () => {
     expect([disabled("Bearbeiten: E-Mail"), disabled("Entfernen: E-Mail"), (screen.getByRole("switch", { name: "Aktiv: E-Mail" }) as HTMLButtonElement).disabled]).toEqual([true, true, true]);
     held.release();
     await waitFor(() => expect(disabled("Bearbeiten: E-Mail")).toBe(false));
+  });
+});
+
+describe("write ownership across section navigation", () => {
+  async function leaveAndReturn(view: ReturnType<typeof renderRoutes>) {
+    await view.router.navigate("/settings/autoHeal");
+    await waitFor(() => expect(screen.queryByRole("switch", { name: "Aktiv: E-Mail", hidden: true }) === null).toBe(true));
+    await view.router.navigate("/settings/notifications");
+    await screen.findByRole("switch", { name: "Aktiv: E-Mail" });
+  }
+
+  it("keeps a held toggle owning its provider after leaving and returning", async () => {
+    const adapter = createDemoAdapter();
+    const save = adapter.saveNotificationTarget.bind(adapter);
+    const held = barrier();
+    adapter.saveNotificationTarget = async (input) => { await held.promise; return save(input); };
+    const view = renderRoutes(routes, ["/settings/notifications"], adapter);
+    await userEvent.click(await screen.findByRole("switch", { name: "Aktiv: ntfy" }));
+    await leaveAndReturn(view);
+    expect([disabled("Bearbeiten: ntfy"), disabled("Entfernen: ntfy"), (screen.getByRole("switch", { name: "Aktiv: ntfy" }) as HTMLButtonElement).disabled, disabled("Bearbeiten: E-Mail")]).toEqual([true, true, true, false]);
+    held.release();
+    await waitFor(() => expect(disabled("Bearbeiten: ntfy")).toBe(false));
+    const ntfy = (await adapter.listNotificationTargets()).find((t) => t.provider === "ntfy");
+    expect(ntfy?.kind === "target" && ntfy.enabled).toBe(false);
+  });
+
+  it("keeps a held create out of the add choices after leaving and returning", async () => {
+    const adapter = createDemoAdapter();
+    const save = adapter.saveNotificationTarget.bind(adapter);
+    const held = barrier();
+    adapter.saveNotificationTarget = async (input) => { await held.promise; return save(input); };
+    const view = renderRoutes(routes, ["/settings/notifications"], adapter);
+    await waitFor(() => expect(disabled("Ziel hinzufügen")).toBe(false));
+    await userEvent.click(screen.getByRole("button", { name: "Ziel hinzufügen" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Google Chat" }));
+    await userEvent.type(within(dialog).getByLabelText("Webhook-Adresse"), "https://chat.example.com/credential");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
+    await leaveAndReturn(view);
+    await waitFor(() => expect(disabled("Ziel hinzufügen")).toBe(false));
+    await userEvent.click(screen.getByRole("button", { name: "Ziel hinzufügen" }));
+    const again = await screen.findByRole("dialog");
+    expect([within(again).queryByRole("button", { name: "Google Chat" }) === null, within(again).queryByRole("button", { name: "Gotify" }) !== null]).toEqual([true, true]);
+    await userEvent.keyboard("{Escape}");
+    held.release();
+    await waitFor(() => expect(screen.queryByRole("switch", { name: "Aktiv: Google Chat" }) !== null).toBe(true));
+  });
+
+  it("refuses a second write for a held provider at the write boundary", async () => {
+    const adapter = createDemoAdapter();
+    const held = barrier();
+    let owner: ReturnType<typeof useNotificationWrites> | undefined;
+    function Probe() {
+      owner = useNotificationWrites();
+      return null;
+    }
+    renderWithApp(<Probe />, adapter);
+    await waitFor(() => expect(owner !== undefined).toBe(true));
+    const first = owner!.write("ntfy", () => held.promise);
+    const results = await Promise.allSettled([owner!.write("ntfy", async () => "late"), owner!.write("email", async () => "other")]);
+    expect([results[0].status === "rejected" && results[0].reason instanceof CancelledError, results[1].status === "fulfilled" && results[1].value]).toEqual([true, "other"]);
+    held.release();
+    await first;
+    await expect(owner!.write("ntfy", async () => "after")).resolves.toBe("after");
   });
 });
 
