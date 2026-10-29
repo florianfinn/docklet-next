@@ -47,6 +47,9 @@ func AgentAccess(err error) *AgentAccessError {
 	if verdict := AgentVerdict(err); verdict != nil {
 		return verdict
 	}
+	if _, decode := errors.AsType[*remenv.DecodeError](err); decode {
+		return nil
+	}
 	var transport *remenv.TransportError
 	if errors.Is(err, remenv.ErrEnvironmentUnavailable) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &transport) && transport.Unavailable()) {
 		return newAgentAccessErrorInternal(err)

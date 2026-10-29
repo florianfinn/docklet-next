@@ -64,6 +64,7 @@ func TestTranslateRemoteProxyErrorHidesWrappedText(t *testing.T) {
 		{"cancelled transport", &remenv.TransportError{Err: fmt.Errorf("%s: %w", syntheticPrivate, context.Canceled)}, 502},
 		{"read failure", &remenv.TransportError{Err: errors.New(syntheticPrivate)}, 502},
 		{"decode failure", &remenv.DecodeError{Err: errors.New(syntheticPrivate)}, 500},
+		{"decode deadline", &remenv.DecodeError{Err: fmt.Errorf("%s: %w", syntheticPrivate, context.DeadlineExceeded)}, 500},
 		{"unclassified", errors.New(syntheticPrivate), 500},
 	}
 	for _, tc := range cases {
