@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator.
+// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296.
 
 package backup
 

@@ -19,6 +19,7 @@ invoke the host operations below, so additions require an explicit review.
 | network | Reads topology; validates create, protected deletion and membership changes on the Docker host (agent contract v6). |
 | port | Reports host port use for deployment decisions. |
 | upload | Accepts bounded uploads used by image and restore operations. |
+| auto-heal | Reads and updates typed per-host Auto Heal settings (contract v10); effective environment overrides refuse writes. |
 | settings | Reads and updates environment settings, including host operational configuration. |
 | updater | Checks and applies configured host resource updates. |
 | system | Reports Docker host state, runs Docker-wide lifecycle/prune operations, and exposes agent self-upgrade checks and trigger. A manager credential can replace the agent binary; hub backup and update-all remain excluded. |
@@ -50,7 +51,7 @@ have an explicit target checked against the running hub on both forwarding paths
 agents reject blank targets. No update/restore/policy/schedule capability is added
 by this PR1 boundary; PR2a/PR2b own that activation.
 
-Vulnerability scanning entered the agent contract at v8; the current minimum is v9. The hub feature veto
+Vulnerability scanning entered the agent contract at v8; the current minimum is v10. The hub feature veto
 covers local and remote vulnerability routes; agent feature-disabled and busy
 refusals remain typed. Host-wide runs are agent-owned evidence read through the
 run route. Agents refresh KEV/EPSS intelligence daily and register no local image
@@ -69,7 +70,7 @@ database restore, cancel the runtime context and are not treated as failures.
 
 ## Volume backup contract v9
 
-The minimum agent contract is v9. Overview, repository metadata/check, restore
+Volume backup requires contract v9; the current minimum is v10. Overview, repository metadata/check, restore
 admissions and target host routes are part of the allowlisted volume module in
 both agent modes. Hub-only target CRUD and administrative key export are absent
 from agent registration. The target-set receiver is agent-only and accepts the
@@ -94,3 +95,13 @@ and check workers keep their independent activity lifetime. Downloads also stay
 registered with maintenance until streaming and helper cleanup finish. The agent
 bounds framed engine output before payload allocation and serialized JSON before
 response commitment; oversized responses never become truncated successes.
+
+## Notification and Auto Heal contract v10
+
+Contract 10/minimum 10 adds the typed Auto Heal GET/PUT surface on Direct and
+Edge agents. Notification settings and provider tests stay hub-only; obsolete
+Edge notification commands are removed. Host-side backup/restore failure and
+Auto Heal events use authenticated notification dispatch with captured credential
+and session identity, strict payload validation and hub insertion deduplication.
+Older Auto Heal dispatch shapes are invalid. Shared agent-access refusals keep
+their stable status and code envelope on both transports.

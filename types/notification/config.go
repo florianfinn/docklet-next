@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Canonical provider wire types; provider config components exported from the wire vocabulary.
+// Deviations: Canonical provider wire types; provider config components exported from the wire vocabulary; notification and Auto Heal contracts and delivery for #296.
 
 package notification
 

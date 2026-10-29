@@ -43,7 +43,7 @@ func TestDispatchHTTPKindsAndDeduplication(t *testing.T) {
 	var n int64
 	require.NoError(t, db.Model(&notificationoutbox.Row{}).Count(&n).Error)
 	require.EqualValues(t, 1, n)
-	for _, body := range []string{`{"kind":"auto_heal","autoHeal":{"containerName":"web","containerId":"old"}}`, `{"kind":"backup_failed","backupFailed":{"eventId":"two","operation":"backup","volume":"data","reason":"volume.backup.failed","extra":true}}`, `{"kind":"deploy_failed"}`, `{"kind":"backup_failed","backupFailed":{"eventId":"bad space","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`} {
+	for _, body := range []string{`{`, `{"kind":"backup_failed","backupFailed":{"eventId":"oversize","operation":"backup","volume":"` + strings.Repeat("x", 129) + `","reason":"volume.backup.failed"}}`, `{"kind":"auto_heal","autoHeal":{"containerName":"web","containerId":"old"}}`, `{"kind":"backup_failed","backupFailed":{"eventId":"two","operation":"backup","volume":"data","reason":"volume.backup.failed","extra":true}}`, `{"kind":"deploy_failed"}`, `{"kind":"backup_failed","backupFailed":{"eventId":"bad space","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`} {
 		r := api.Post("/notifications/dispatch", "X-API-Key: "+token, "Content-Type: application/json", strings.NewReader(body))
 		require.Equal(t, http.StatusBadRequest, r.Code, r.Body.String())
 		require.Contains(t, r.Body.String(), "notification.dispatch-")

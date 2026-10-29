@@ -53,6 +53,13 @@ func TestNotifications013UpgradeBothRoles(t *testing.T) {
 			require.Error(t, db.Exec(`UPDATE auto_heal_restarts SET outcome='restarted'`).Error)
 			require.NoError(t, db.Exec(`UPDATE auto_heal_restarts SET outcome='interrupted',settled_at='2026-10-29'`).Error)
 			require.Error(t, db.Exec(`INSERT INTO auto_heal_restarts(run_id,container_id,container_name,stack,started_at,baseline_started_at,baseline_restart_count,outcome) VALUES('run','container','web','app','2026-10-29','before',0,'attempting')`).Error)
+			var oldID, newID uint
+			require.NoError(t, db.Raw("SELECT id FROM auto_heal_restarts").Scan(&oldID).Error)
+			require.NoError(t, db.Exec("DELETE FROM auto_heal_restarts").Error)
+			require.NoError(t, db.Exec(`INSERT INTO auto_heal_restarts(run_id,container_id,container_name,stack,started_at,baseline_started_at,baseline_restart_count,outcome) VALUES('next-run','container','web','app','2026-10-30','before',0,'attempting')`).Error)
+			require.NoError(t, db.Raw("SELECT id FROM auto_heal_restarts").Scan(&newID).Error)
+			require.Greater(t, newID, oldID, "pruning cannot reuse projection and dispatch identities")
+
 		})
 	}
 }

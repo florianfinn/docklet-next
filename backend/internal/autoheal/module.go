@@ -15,6 +15,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/autoheal"
@@ -51,10 +52,10 @@ func (m *Module) RegisterRoutes(api huma.API) {
 	if m == nil {
 		m = &Module{}
 	}
-	huma.Register(api, huma.Operation{OperationID: "get-auto-heal-settings", Method: http.MethodGet, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.get)
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-auto-heal-settings", Method: http.MethodGet, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, authz.PermSettingsRead, m.get)
 	inputSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Update](), true, "")
 	requestBody := &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{"application/json": {Schema: inputSchema}}}
-	huma.Register(api, huma.Operation{RequestBody: requestBody, OperationID: "update-auto-heal-settings", SkipValidateBody: true, Method: http.MethodPut, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.put)
+	middleware.RegisterWithPermission(api, huma.Operation{RequestBody: requestBody, OperationID: "update-auto-heal-settings", SkipValidateBody: true, Method: http.MethodPut, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, authz.PermSettingsWrite, m.put)
 	failureSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Problem](), true, "")
 	genericSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
 	for _, op := range []*huma.Operation{api.OpenAPI().Paths["/environments/{id}/auto-heal"].Get, api.OpenAPI().Paths["/environments/{id}/auto-heal"].Put} {
