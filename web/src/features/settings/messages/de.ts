@@ -355,7 +355,7 @@ export const deSettings: typeof enSettings = {
     edit: "Bearbeiten",
     remove: "Entfernen",
     removeTitle: "Benachrichtigungsziel entfernen?",
-    removeHint: "Ausstehende Nachrichten für dieses Ziel werden verworfen.",
+    removeHint: "Künftige Benachrichtigungen werden nicht mehr über diese Konfiguration gesendet.",
     dialogAdd: "{kind} hinzufügen",
     dialogEdit: "{kind} bearbeiten",
     dialogHint: "Gespeicherte Geheimnisse werden nie wieder angezeigt.",

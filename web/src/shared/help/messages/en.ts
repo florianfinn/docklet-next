@@ -173,7 +173,7 @@ export const enHelp = {
       events: {
         title: "Events",
         short: "Which events this channel reports.",
-        full: "Each channel subscribes only to the selected events, such as failed deploys or disconnected hosts. Links in messages follow the setting under General.",
+        full: "Each channel subscribes only to the selected events, such as failed deploys or disconnected hosts. An event counts as delivered once one channel accepts it; failed channels are not retried for that event, and each failure appears in Activity. Links in messages follow the setting under General.",
         impact: "Unselected events appear only in the action center.",
       },
       secret: {

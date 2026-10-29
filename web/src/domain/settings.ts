@@ -128,5 +128,3 @@ export function notificationBaseUrl(g: GeneralSettings): { url: string; source: 
   const useDomain = !!domain && g.linkBase !== "internal";
   return useDomain ? { url: domain, source: "domain" } : { url: agentHubUrl(g), source: "internal" };
 }
-
-

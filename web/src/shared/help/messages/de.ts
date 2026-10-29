@@ -174,7 +174,7 @@ export const deHelp: typeof enHelp = {
       events: {
         title: "Ereignisse",
         short: "Welche Ereignisse dieser Kanal meldet.",
-        full: "Jeder Kanal abonniert nur die gewählten Ereignisse, etwa fehlgeschlagene Deploys oder getrennte Hosts. Links in Nachrichten folgen der Einstellung unter Allgemein.",
+        full: "Jeder Kanal abonniert nur die gewählten Ereignisse, etwa fehlgeschlagene Deploys oder getrennte Hosts. Ein Ereignis gilt als zugestellt, sobald ein Kanal es annimmt; fehlgeschlagene Kanäle werden für dieses Ereignis nicht erneut versucht, und jeder Fehler erscheint unter Aktivitäten. Links in Nachrichten folgen der Einstellung unter Allgemein.",
         impact: "Nicht gewählte Ereignisse erscheinen nur im Aktionszentrum.",
       },
       secret: {

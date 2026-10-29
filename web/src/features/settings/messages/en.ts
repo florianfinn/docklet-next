@@ -354,7 +354,7 @@ export const enSettings = {
     edit: "Edit",
     remove: "Remove",
     removeTitle: "Remove notification target?",
-    removeHint: "Pending messages for this target are discarded.",
+    removeHint: "Future notifications are no longer sent through this configuration.",
     dialogAdd: "Add {kind}",
     dialogEdit: "Edit {kind}",
     dialogHint: "Stored secrets are never shown again.",

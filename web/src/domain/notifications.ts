@@ -99,9 +99,24 @@ export function eventsFromMap(map: Partial<Record<WireEvent, boolean>> | undefin
   return NOTIFICATION_EVENTS.filter((event) => EVENT_KEYS[event].some((key) => map?.[key] !== false));
 }
 
-/** Always an explicit map of every wire key. */
-export function eventMap(events: readonly NotificationEvent[]): Record<WireEvent, boolean> {
-  return Object.fromEntries(NOTIFICATION_EVENTS.flatMap((event) => EVENT_KEYS[event].map((key) => [key, events.includes(event)]))) as Record<WireEvent, boolean>;
+/**
+ * Always an explicit map of every wire key. A UI event whose state equals its projection of
+ * `stored` keeps the stored keys, so an untouched split subscription survives a save.
+ */
+export function eventMap(events: readonly NotificationEvent[], stored?: Partial<Record<WireEvent, boolean>>): Record<WireEvent, boolean> {
+  const before = stored ? eventsFromMap(stored) : undefined;
+  return Object.fromEntries(NOTIFICATION_EVENTS.flatMap((event) => {
+    const on = events.includes(event);
+    const keep = before !== undefined && before.includes(event) === on;
+    return EVENT_KEYS[event].map((key) => [key, keep ? stored?.[key] !== false : on]);
+  })) as Record<WireEvent, boolean>;
+}
+
+/** Own keys only: inherited names such as `constructor` are unknown config keys. */
+export function configKind(provider: NotificationProvider, key: string): string | undefined {
+  const keys = CONFIG_KEYS[provider] as Record<string, unknown>;
+  const spec = Object.hasOwn(keys, key) ? keys[key] : undefined;
+  return typeof spec === "string" ? spec : undefined;
 }
 
 function kindOf(value: unknown): ValueKind | undefined {
@@ -114,9 +129,8 @@ function kindOf(value: unknown): ValueKind | undefined {
 }
 
 function validConfig(provider: NotificationProvider, config: Record<string, unknown>): boolean {
-  const keys = CONFIG_KEYS[provider] as Record<string, string>;
   for (const [key, value] of Object.entries(config)) {
-    const spec = keys[key];
+    const spec = configKind(provider, key);
     if (!spec) return false;
     const want = spec.replace("?", "");
     // Generated list fields are nullable on the wire.

@@ -4,13 +4,13 @@
 // License: Apache-2.0
 // Deviations: Original per-channel target form; secrets stay in component state only.
 
+import { CancelledError } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 
 import { SettingsProblemError, settingsErrorMessage } from "@/data/settings-error";
-import { useAdapter } from "@/data/use-adapter";
-import { DEFAULT_EVENTS, NOTIFICATION_EVENTS, NOTIFICATION_PROVIDERS, type NotificationConfig, type NotificationEvent, type NotificationProvider, type NotificationTarget } from "@/domain/notifications";
+import { DEFAULT_EVENTS, NOTIFICATION_EVENTS, NOTIFICATION_PROVIDERS, type NotificationConfig, type NotificationEvent, type NotificationProvider, type NotificationTarget, type NotificationTargetInput } from "@/domain/notifications";
 import { TextField } from "@/shared/components/form-field";
 import { HelpLegend } from "@/shared/help/help-tooltip";
 import { Button } from "@/shared/ui/button";
@@ -27,19 +27,20 @@ import { DEFAULTS, FIELDS, TARGET_FIELD, fromText, toText, type FieldSpec } from
 import { ProviderIcon } from "./ProviderIcon";
 
 /**
- * Edits one channel. The parent owns the dialog generation: `onSaved` and `onClose`
- * carry no state of their own, so a late result cannot reach a replaced dialog.
+ * Edits one channel. The parent owns the dialog generation and the per-provider write:
+ * `onSaved` and `onClose` carry no state of their own, so a late result cannot reach a
+ * replaced dialog, and `save` keeps the provider busy beyond this dialog's lifetime.
  */
-export function NotificationDialog({ target, available, onClose, onSaved }: {
+export function NotificationDialog({ target, available, save, onClose, onSaved }: {
   target?: NotificationTarget;
-  /** Providers without a stored target, offered when adding. */
+  /** Providers without a stored target or pending write, offered when adding. */
   available: readonly NotificationProvider[];
+  save: (input: NotificationTargetInput) => Promise<unknown>;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const t = useTranslations("settings.notifications");
   const all = useTranslations();
-  const adapter = useAdapter();
   const [provider, setProvider] = useState<NotificationProvider | undefined>(target?.provider);
   const [config, setConfig] = useState<NotificationConfig>(() => (target ? structuredClone(target.config) : {}));
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -47,9 +48,12 @@ export function NotificationDialog({ target, available, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; field?: string }>();
 
-  const choose = (p: NotificationProvider) => {
+  // Display text, values and errors belong to one provider choice; a new choice starts clean.
+  const choose = (p: NotificationProvider | undefined) => {
     setProvider(p);
-    setConfig(structuredClone(DEFAULTS[p]));
+    setConfig(p ? structuredClone(DEFAULTS[p]) : {});
+    setTexts({});
+    setError(undefined);
   };
   const stored = new Set(target?.credentialsSet ?? []);
   const targetField = provider && TARGET_FIELD[provider];
@@ -146,9 +150,10 @@ export function NotificationDialog({ target, available, onClose, onSaved }: {
               setBusy(true);
               setError(undefined);
               try {
-                await adapter.saveNotificationTarget({ provider, enabled: target?.enabled ?? true, config, events });
+                await save({ provider, enabled: target?.enabled ?? true, config, events });
                 onSaved();
               } catch (cause) {
+                if (cause instanceof CancelledError) return;
                 const pointer = cause instanceof SettingsProblemError ? cause.field?.match(/^\/config\/([^/]+)/)?.[1] : undefined;
                 setError({ message: settingsErrorMessage(cause, all), field: pointer });
               } finally {
@@ -176,7 +181,7 @@ export function NotificationDialog({ target, available, onClose, onSaved }: {
             {error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
             <DialogFooter className="gap-2 sm:justify-between">
               {!target ? (
-                <Button type="button" variant="ghost" onClick={() => setProvider(undefined)}>
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => choose(undefined)}>
                   <ArrowLeft data-icon="inline-start" />
                   {t("back")}
                 </Button>

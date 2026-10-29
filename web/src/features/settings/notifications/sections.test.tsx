@@ -60,8 +60,9 @@ describe("notification target dialog generations", () => {
     await userEvent.type(topic, "draft-topic");
 
     late.resolve(undefined as never);
-    await waitFor(async () => expect((await adapter.listNotificationTargets()).length).toBe(2));
-    await new Promise((r) => setTimeout(r, 20));
+    // The E-Mail write settles (refresh done, row enabled again) before the late onSaved runs.
+    await waitFor(() => expect((screen.getByRole("button", { name: "Bearbeiten: E-Mail", hidden: true }) as HTMLButtonElement).disabled).toBe(false));
+    await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByRole("dialog") === second).toBe(true);
     expect(within(second).getByRole("heading", { name: "ntfy bearbeiten" }) !== null).toBe(true);
     expect(topic.value).toBe("draft-topic");
@@ -79,6 +80,30 @@ describe("Auto Heal per host", () => {
     expect(screen.getByText("Host offline") !== null).toBe(true);
     expect(screen.getByRole("button", { name: "Bearbeiten: Atlas" }) !== null).toBe(true);
     for (const host of ["Boreal", "Delta", "Cedar"]) expect(screen.queryByRole("button", { name: `Bearbeiten: ${host}` }) === null).toBe(true);
+  });
+
+  it("a late save of a closed host dialog leaves the next host dialog open", async () => {
+    const adapter = createDemoAdapter();
+    const save = adapter.saveAutoHealSettings.bind(adapter);
+    const late = deferred<void>();
+    let settled = false;
+    adapter.saveAutoHealSettings = async (hostId, input) => {
+      if (hostId !== "atlas") return save(hostId, input);
+      await late.promise;
+      try { return await save(hostId, input); } finally { settled = true; }
+    };
+    renderRoutes(routes, ["/settings/autoHeal"], adapter);
+    await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Atlas" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Speichern" }));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    await userEvent.click(screen.getByRole("button", { name: "Bearbeiten: Boreal" }));
+    const second = await screen.findByRole("dialog");
+    late.resolve();
+    await waitFor(() => expect(settled).toBe(true));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole("dialog") === second).toBe(true);
+    expect(within(second).getByRole("heading").textContent?.includes("Boreal")).toBe(true);
   });
 
   it("keeps a custom window and the stored exceptions when another field changes", async () => {

@@ -9,7 +9,7 @@ import type { AutoHealApi, NotificationsApi } from "../api";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { settingsProblem } from "../settings-error";
 import type { AutoHealSettings } from "@/domain/auto-heal";
-import { eventMap, isProvider, parseNotificationTarget, type NotificationTestResult } from "@/domain/notifications";
+import { eventMap, isProvider, parseNotificationTarget, type NotificationTestResult, type WireEvent } from "@/domain/notifications";
 import type { CsrfClient } from "./csrf-client";
 
 export const NOTIFICATION_SETTINGS_OPERATIONS = [
@@ -94,7 +94,7 @@ export function createNotificationSettings({ baseUrl, client, capability, genera
     },
     async saveNotificationTarget(input) {
       await require("saveNotificationTarget", HUB);
-      const config = { ...input.config, events: eventMap(input.events) };
+      const config = { ...input.config, events: eventMap(input.events, input.config.events as Partial<Record<WireEvent, boolean>> | undefined) };
       const saved = parseNotificationTarget(await call("/environments/0/notifications/settings", { method: "POST", body: JSON.stringify({ provider: input.provider, enabled: input.enabled, config }) }));
       if (saved?.kind !== "target") throw invalidResponse();
       return saved;
@@ -112,10 +112,11 @@ export function createNotificationSettings({ baseUrl, client, capability, genera
       await require("getAutoHealSettings", { kind: "host", id: hostId });
       const settings = parseAutoHeal(await call(host(hostId)));
       if (hostId !== "0") return settings;
-      // The hub's own row is read-only while UI configuration is disabled; a failed read leaves the save to refuse.
-      const values = await call("/environments/0/settings").catch((cause) => { if (cause instanceof CancelledError) throw cause; return undefined; });
-      const locked = Array.isArray(values) && values.some((v) => v && typeof v === "object" && v.key === "uiConfigDisabled" && v.value === "true");
-      return locked ? { ...settings, configurationLocked: true } : settings;
+      // The hub row is editable only on a valid "false" lock value; an unreadable lock is an error, never unlocked.
+      const values = await call("/environments/0/settings");
+      const lock = Array.isArray(values) ? values.find((v) => v && typeof v === "object" && v.key === "uiConfigDisabled") : undefined;
+      if (lock?.value !== "true" && lock?.value !== "false") throw invalidResponse();
+      return lock.value === "true" ? { ...settings, configurationLocked: true } : settings;
     },
     async saveAutoHealSettings(hostId, input) {
       await require("saveAutoHealSettings", { kind: "host", id: hostId });

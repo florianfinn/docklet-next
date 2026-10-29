@@ -1,5 +1,6 @@
 import { Pencil, Plus, Send, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { CancelledError } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
@@ -7,7 +8,7 @@ import { useNotificationTargets } from "@/data/notification-queries";
 import { useConnectedSettings } from "@/data/queries";
 import { settingsErrorMessage } from "@/data/settings-error";
 import { useAdapter } from "@/data/use-adapter";
-import { isProvider, NOTIFICATION_PROVIDERS, type NotificationProvider, type NotificationTarget, type NotificationTargetRow } from "@/domain/notifications";
+import { isProvider, NOTIFICATION_PROVIDERS, type NotificationProvider, type NotificationTarget, type NotificationTargetInput, type NotificationTargetRow } from "@/domain/notifications";
 import { ActionPresentationPointer } from "@/features/activity/ActionPresentationSetting";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
@@ -52,32 +53,49 @@ function Targets() {
   const [remove, setRemove] = useState<NotificationTargetRow>();
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string>();
+  const rows = targets.data ?? [];
+  // Test feedback is owned by the mounted section and the target identity it was started for.
+  const live = useRef({ mounted: true, rows });
+  useEffect(() => {
+    const state = live.current;
+    state.mounted = true;
+    return () => { state.mounted = false; };
+  }, []);
+  useEffect(() => { live.current.rows = targets.data ?? []; }, [targets.data]);
 
   const open = (target?: NotificationTarget) => setDialog({ generation: ++generations.current, target });
   const close = (generation: number) => setDialog((current) => (current?.generation === generation ? undefined : current));
-  const busy = (provider: string, on: boolean) => setPending((old) => { const next = new Set(old); if (on) next.add(provider); else next.delete(provider); return next; });
-
-  const rows = targets.data ?? [];
-  const used = new Set(rows.map((r) => r.provider));
-  const available = NOTIFICATION_PROVIDERS.filter((p) => !used.has(p));
-
-  const toggle = async (target: NotificationTarget, enabled: boolean) => {
-    busy(target.provider, true);
-    setError(undefined);
+  const busy = (key: string, on: boolean) => setPending((old) => { const next = new Set(old); if (on) next.add(key); else next.delete(key); return next; });
+  /** One full-target write per provider until it and the following refresh settle; it outlives dialogs. */
+  const write = async <T,>(provider: NotificationProvider, run: () => Promise<T>): Promise<T> => {
+    busy(provider, true);
     try {
-      await adapter.saveNotificationTarget({ provider: target.provider, enabled, config: target.config, events: target.events });
-      await targets.refetch();
-    } catch (cause) {
-      setError(settingsErrorMessage(cause, all));
+      return await run();
     } finally {
-      busy(target.provider, false);
+      await targets.refetch().catch(() => undefined);
+      busy(provider, false);
     }
   };
-  const test = async (provider: NotificationProvider) => {
+
+  const used = new Set(rows.map((r) => r.provider));
+  const available = NOTIFICATION_PROVIDERS.filter((p) => !used.has(p) && !pending.has(p));
+
+  const toggle = async (target: NotificationTarget, enabled: boolean) => {
+    setError(undefined);
+    try {
+      await write(target.provider, () => adapter.saveNotificationTarget({ provider: target.provider, enabled, config: target.config, events: target.events }));
+    } catch (cause) {
+      if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
+    }
+  };
+  const test = async (target: NotificationTarget) => {
+    const { provider, id } = target;
     busy(`test:${provider}`, true);
     const kind = t(`kinds.${provider}`);
+    const current = () => live.current.mounted && live.current.rows.some((r) => r.id === id && r.provider === provider);
     try {
       const result = await adapter.testNotificationTarget(provider);
+      if (!current()) return;
       if (result.code === "notification.test-sent") {
         toast.success(`${kind}: ${all("settings.codes.notification.test-sent")}`);
         if (result.warning) toast.warning(`${kind}: ${all("settings.codes.notification.target-disabled")}`);
@@ -86,7 +104,7 @@ function Targets() {
         toast.error(`${kind}: ${all("settings.codes.notification.test-failed")}${reason ? ` – ${reason}` : ""}`);
       }
     } catch (cause) {
-      toast.error(settingsErrorMessage(cause, all));
+      if (current() && !(cause instanceof CancelledError)) toast.error(settingsErrorMessage(cause, all));
     } finally {
       busy(`test:${provider}`, false);
     }
@@ -124,7 +142,7 @@ function Targets() {
                     <p className="text-xs text-muted-foreground">{t("unsupported")}</p>
                   </div>
                   {isProvider(row.provider) && (
-                    <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} onClick={() => setRemove(row)}>
+                    <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => setRemove(row)}>
                       <Trash2 />
                     </Button>
                   )}
@@ -153,15 +171,15 @@ function Targets() {
                 <div className="flex items-center gap-1.5">
                   <Switch aria-label={`${t("enabled")}: ${label}`} checked={row.enabled} disabled={pending.has(row.provider)} onCheckedChange={(enabled) => void toggle(row, enabled)} />
                   <HelpTarget topic="settingsNotifications.test">
-                    <Button type="button" size="sm" variant="ghost" disabled={testing} onClick={() => void test(row.provider)}>
+                    <Button type="button" size="sm" variant="ghost" disabled={testing} onClick={() => void test(row)}>
                       {testing ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
                       {testing ? t("testing") : t("test")}
                     </Button>
                   </HelpTarget>
-                  <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${t("edit")}: ${label}`} onClick={() => open(row)}>
+                  <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${t("edit")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => open(row)}>
                     <Pencil />
                   </Button>
-                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} onClick={() => setRemove(row)}>
+                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => setRemove(row)}>
                     <Trash2 />
                   </Button>
                 </div>
@@ -175,11 +193,9 @@ function Targets() {
           key={dialog.generation}
           target={dialog.target}
           available={available}
+          save={(input: NotificationTargetInput) => write(input.provider, () => adapter.saveNotificationTarget(input))}
           onClose={() => close(dialog.generation)}
-          onSaved={() => {
-            void targets.refetch();
-            close(dialog.generation);
-          }}
+          onSaved={() => close(dialog.generation)}
         />
       )}
       <ConfirmDialog
@@ -189,11 +205,12 @@ function Targets() {
         description={t("removeHint")}
         confirmLabel={t("remove")}
         onConfirm={async () => {
+          const provider = remove?.provider;
+          if (!isProvider(provider)) return;
           try {
-            if (remove && isProvider(remove.provider)) await adapter.deleteNotificationTarget(remove.provider);
-            void targets.refetch();
+            await write(provider, () => adapter.deleteNotificationTarget(provider));
           } catch (cause) {
-            setError(settingsErrorMessage(cause, all));
+            if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
             return false;
           }
         }}

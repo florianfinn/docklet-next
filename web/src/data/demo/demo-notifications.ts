@@ -7,7 +7,7 @@
 import type { AutoHealApi, NotificationsApi } from "../api";
 import { SettingsProblemError } from "../settings-error";
 import { autoHealFieldError } from "@/domain/auto-heal";
-import { CONFIG_KEYS, eventsFromMap, eventMap, type NotificationTarget } from "@/domain/notifications";
+import { configKind, eventsFromMap, eventMap, type NotificationTarget, type WireEvent } from "@/domain/notifications";
 import { DemoError, wait, type DemoContext } from "./demo-context";
 import { AUTO_HEAL, AUTO_HEAL_DEFAULT } from "./fixtures/notifications";
 
@@ -23,15 +23,15 @@ export function createDemoNotifications({ db }: DemoContext): NotificationsApi &
     },
     async saveNotificationTarget(input) {
       await wait(450);
-      const keys = CONFIG_KEYS[input.provider] as Record<string, string>;
-      const unknown = Object.keys(input.config).find((key) => !keys[key]);
+      const unknown = Object.keys(input.config).find((key) => !configKind(input.provider, key));
       if (unknown) throw new SettingsProblemError("notification.config-invalid", 400, `/config/${unknown}`);
       const previous = db.notificationTargets.find((t) => t.provider === input.provider);
       const secrets = SECRETS[input.provider] ?? [];
       const stored = new Set(previous?.credentialsSet ?? []);
       for (const field of secrets) if (typeof input.config[field] === "string" && input.config[field] !== "") stored.add(field);
-      const config = Object.fromEntries(Object.entries(input.config).map(([k, v]) => [k, secrets.includes(k) ? "" : v]));
-      const target: NotificationTarget = { kind: "target", id: previous?.id ?? db.notificationTargets.length + 1, provider: input.provider, enabled: input.enabled, config, credentialsSet: [...stored], events: eventsFromMap(eventMap(input.events)) };
+      const events = eventMap(input.events, input.config.events as Partial<Record<WireEvent, boolean>> | undefined);
+      const config = { ...Object.fromEntries(Object.entries(input.config).map(([k, v]) => [k, secrets.includes(k) ? "" : v])), events };
+      const target: NotificationTarget = { kind: "target", id: previous?.id ?? Math.max(0, ...db.notificationTargets.map((t) => t.id)) + 1, provider: input.provider, enabled: input.enabled, config, credentialsSet: [...stored], events: eventsFromMap(events) };
       db.notificationTargets = previous ? db.notificationTargets.map((t) => (t === previous ? target : t)) : [...db.notificationTargets, target];
       db.pushEvent({ kind: "config", level: "info", title: "Hub-Einstellungen gespeichert: Benachrichtigungen" });
       db.changed("settings");

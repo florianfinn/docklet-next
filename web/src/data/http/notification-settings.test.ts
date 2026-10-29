@@ -8,19 +8,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AdapterOutcomeError } from "../capability";
 import { SettingsProblemError } from "../settings-error";
-import { EVENT_KEYS, parseNotificationTarget } from "@/domain/notifications";
+import { createDemoAdapter } from "../demo/demo-adapter";
+import { simulationStore } from "../demo/simulation";
+import { EVENT_KEYS, eventMap, parseNotificationTarget } from "@/domain/notifications";
 import type { CsrfClient } from "./csrf-client";
 import { createNotificationSettings } from "./notification-settings";
 import fixture from "./testdata/notification-targets.json";
 
-type Reply = { status?: number; body: unknown };
+type Reply = { status?: number; body?: unknown; text?: string };
 
 function api(reply: (url: string, init: RequestInit) => Reply) {
   const calls: { url: string; init: RequestInit }[] = [];
   const fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
     calls.push({ url, init });
-    const { status = 200, body } = reply(url, init);
-    return new Response(JSON.stringify(body), { status });
+    const { status = 200, body, text } = reply(url, init);
+    return new Response(text ?? JSON.stringify(body), { status });
   });
   const adapter = createNotificationSettings({
     baseUrl: "/api", client: { fetch } as unknown as CsrfClient, generation: () => 0,
@@ -62,6 +64,39 @@ describe("notification target transport", () => {
     expect(parseNotificationTarget({ ...email, id: "1" })).toBeUndefined();
   });
 
+  it("isolates rows whose config names an inherited object property", async () => {
+    const inherited = ["constructor", "toString", "__proto__"].map((key, i) => JSON.stringify(fixture[0]).replace('"config":{', `"id":${90 + i},"config":{"${key}":"x",`));
+    for (const row of inherited) expect(parseNotificationTarget(JSON.parse(row))?.kind).toBe("unsupported");
+    const { adapter } = api(() => ({ text: `[${[...fixture.map((r) => JSON.stringify(r)), ...inherited].join(",")}]` }));
+    expect((await adapter.listNotificationTargets()).map((r) => r.kind)).toEqual(["target", "target", "target", "unsupported", "unsupported", "unsupported"]);
+  });
+
+  it("refuses inherited config keys in the demo adapter too", async () => {
+    simulationStore.set((s) => ({ ...s, latency: "instant", live: false }));
+    try {
+      const demo = createDemoAdapter();
+      for (const key of ["constructor", "toString", "__proto__"]) {
+        const config = JSON.parse(`{"webhookUrl":"https://chat.example.com/hook","${key}":"x"}`) as Record<string, unknown>;
+        const error = await demo.saveNotificationTarget({ provider: "googlechat", enabled: true, config, events: [] }).catch((e: unknown) => e);
+        expect([key, (error as SettingsProblemError).field]).toEqual([key, `/config/${key}`]);
+      }
+    } finally {
+      simulationStore.reset();
+    }
+  });
+
+  it("keeps an untouched split subscription and writes a changed group whole", async () => {
+    const { adapter, calls } = api(() => ({ body: fixture[0] }));
+    const [email] = await api(() => ({ body: fixture })).adapter.listNotificationTargets();
+    if (email?.kind !== "target") throw new Error("typed row expected");
+    await adapter.saveNotificationTarget({ provider: "email", enabled: false, config: email.config, events: email.events });
+    const sent = (JSON.parse(calls[0]!.init.body as string) as { config: { events: Record<string, boolean> } }).config.events;
+    expect([sent.image_update, sent.container_update, sent.deploy_failed]).toEqual([false, true, true]);
+    const stored = { image_update: false };
+    expect([eventMap([], stored).image_update, eventMap([], stored).container_update]).toEqual([false, false]);
+    expect([eventMap(["updates"], { image_update: false, container_update: false }).image_update, eventMap(["updates"], { image_update: false, container_update: false }).container_update]).toEqual([true, true]);
+  });
+
   it("refuses a list row without an identity", async () => {
     const { adapter } = api(() => ({ body: [{ provider: "email" }] }));
     await expect(adapter.listNotificationTargets()).rejects.toBeInstanceOf(AdapterOutcomeError);
@@ -95,9 +130,17 @@ describe("Auto Heal transport", () => {
     expect((await adapter.getAutoHealSettings("0")).configurationLocked).toBe(true);
   });
 
-  it("keeps the hub row editable when the lock read fails and lets the save refuse", async () => {
-    const { adapter } = api((url, init) => (url.endsWith("/settings") ? { status: 500, body: {} } : init.method === "PUT" ? { status: 403, body: { title: "Forbidden", detail: "server text" } } : { body: heal }));
-    expect((await adapter.getAutoHealSettings("0")).configurationLocked).toBeUndefined();
+  it("never offers the hub row as editable while its lock value is unknown", async () => {
+    const replies: Reply[] = [{ status: 500, body: {} }, { body: [] }, { body: {} }, { body: [{ key: "uiConfigDisabled", value: "maybe", type: "boolean" }] }];
+    for (const lock of replies) {
+      const { adapter } = api((url) => (url.endsWith("/settings") ? lock : { body: heal }));
+      await expect(adapter.getAutoHealSettings("0")).rejects.toBeInstanceOf(AdapterOutcomeError);
+      expect(await adapter.getAutoHealSettings("agent-1")).toEqual({ ...heal, excludedContainers: [] });
+    }
+  });
+
+  it("maps a refused hub save without server text", async () => {
+    const { adapter } = api((_url, init) => (init.method === "PUT" ? { status: 403, body: { title: "Forbidden", detail: "server text" } } : { body: heal }));
     const error = await adapter.saveAutoHealSettings("0", { enabled: false, maxRestarts: 3, windowMinutes: 90, excludedStacks: [], excludedContainers: [] }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AdapterOutcomeError);
     expect(error).not.toBeInstanceOf(SettingsProblemError);
