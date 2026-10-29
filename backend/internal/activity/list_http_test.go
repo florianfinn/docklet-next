@@ -2,7 +2,8 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original activity list source-completeness contract and regression evidence.
+// Deviations: Original activity list source-completeness contract and regression evidence;
+// agent credential refusals answer with the shared access envelope (#292).
 
 package activity
 
@@ -87,7 +88,7 @@ func TestActivityListExceptionalErrorsAreNotOutages(t *testing.T) {
 		err    error
 		status int
 	}{
-		{"credential", remenv.ErrAgentInvalidToken, 500},
+		{"credential", remenv.ErrAgentInvalidToken, 502},
 		{"cancelled transport", &remenv.TransportError{Err: context.Canceled}, 502},
 		{"cancelled operation", context.Canceled, 500},
 		{"unavailable text only", errors.New("edge agent is not connected"), 500},
@@ -101,6 +102,9 @@ func TestActivityListExceptionalErrorsAreNotOutages(t *testing.T) {
 			rec := f.request(t, activityListHost, "")
 			require.Equal(t, tc.status, rec.Code, rec.Body.String())
 			require.Empty(t, rec.Header().Get(activityListReason))
+			if tc.name == "credential" {
+				require.JSONEq(t, `{"success":false,"code":"agent.invalid-token"}`, rec.Body.String())
+			}
 			require.Equal(t, 1, calls)
 		})
 	}
