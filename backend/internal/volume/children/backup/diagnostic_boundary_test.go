@@ -21,6 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	jobruntime "github.com/florianfinn/docklet-next/backend/internal/job/children/runtime"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 	"github.com/florianfinn/docklet-next/types/jobschedule"
@@ -145,6 +146,57 @@ func TestRepositoryMetadataKeepsStorageDiagnosticsPrivate(t *testing.T) {
 			require.Equal(t, 500, response.Code)
 			require.Contains(t, response.Body.String(), "volume.backup.engine-unavailable")
 			require.NotContains(t, response.Body.String(), boundarySentinelInternal)
+		})
+	}
+}
+
+func TestScheduledProgressFailureKeepsActivityPrivate(t *testing.T) {
+	for _, transient := range []bool{false, true} {
+		t.Run(map[bool]string{false: "persistent", true: "transient"}[transient], func(t *testing.T) {
+			f := newRuntimePlan(t)
+			db := f.service.deps.DB
+			require.NoError(t, db.AutoMigrate(&policies.VolumeBackupPolicy{}))
+			require.NoError(t, db.AutoMigrate(activity.Models()...))
+			activities := activity.NewActivityService(db, nil)
+			defer activities.CancelAndDrain(t.Context(), "")
+			created := false
+			service := policies.NewService(policies.Dependencies{DB: db, Activity: activities, AlreadyRunning: errors.New("busy"), CreateBackup: func(context.Context, string, string) (*volume.Backup, error) {
+				created = true
+				return &volume.Backup{ID: "created"}, nil
+			}})
+			policy := policies.VolumeBackupPolicy{VolumeName: "data", Enabled: true, Schedule: "0 0 2 * * *", LocalEnabled: true, TargetID: "local"}
+			require.NoError(t, db.Create(&policy).Error)
+			jobs := &volumeBackupPolicySchedulerInternal{jobs: map[string]scheduler.Job{}}
+			require.NoError(t, service.SetScheduler(t.Context(), jobs, newVolumeAdmissionForTestInternal(t)))
+			service.RegisterJobsOnStartup(t.Context())
+			job, ok := jobs.jobs["volume-backup:"+policy.ID]
+			require.True(t, ok)
+			cause := errors.New(boundarySentinelInternal)
+			var targets []scheduler.TargetOutcome
+			ctx := jobcontext.WithExecution(t.Context(), scheduler.Run{}, func(target scheduler.TargetOutcome) error {
+				targets = append(targets, target)
+				if transient && len(targets) > 1 {
+					return nil
+				}
+				return cause
+			})
+
+			_, err := job.Run(ctx)
+
+			require.ErrorIs(t, err, cause)
+			require.Equal(t, "volume.backup.interrupted", err.Error())
+			require.False(t, created)
+			require.Len(t, targets, 2)
+			require.Equal(t, scheduler.Failed, targets[1].Status)
+			require.Equal(t, "volume.backup.interrupted", targets[1].Message)
+			var records []activity.Activity
+			require.NoError(t, db.Where("resource_type = ?", "volume_backup").Find(&records).Error)
+			require.Len(t, records, 1)
+			detail, err := activities.GetActivityDetail(t.Context(), "0", records[0].ID, 10)
+			require.NoError(t, err)
+			wire, err := json.Marshal(detail)
+			require.NoError(t, err)
+			require.NotContains(t, string(wire), boundarySentinelInternal)
 		})
 	}
 }
