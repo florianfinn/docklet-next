@@ -78,7 +78,7 @@ func (h *Handler) Repository(ctx context.Context, in *HostBackupInput) (*handler
 	}
 	var setting struct{ Value string }
 	if err = h.service.deps.DB.WithContext(ctx).Table("settings").Where("key = ?", "volumeBackupRepositoryCheck").Scan(&setting).Error; err != nil {
-		return nil, err
+		return nil, neutralBackupError(err, "volume.backup.engine-unavailable")
 	}
 	if setting.Value != "" {
 		if err = json.Unmarshal([]byte(setting.Value), &result.LastCheck); err != nil {
@@ -87,7 +87,7 @@ func (h *Handler) Repository(ctx context.Context, in *HostBackupInput) (*handler
 	}
 	var active struct{ ID string }
 	if err = h.service.deps.DB.WithContext(ctx).Table("activities").Where("resource_type = ? AND resource_id = ? AND status IN ?", "backup_target", "local", []string{"pending", "running"}).Order("created_at DESC").Limit(1).Scan(&active).Error; err != nil {
-		return nil, err
+		return nil, neutralBackupError(err, "volume.backup.engine-unavailable")
 	}
 	if active.ID != "" {
 		result.Running = &volume.BackupRunning{Kind: "check", ActivityID: active.ID}

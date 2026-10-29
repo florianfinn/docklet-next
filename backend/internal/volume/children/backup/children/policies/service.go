@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; single owning-host policy, target selection and scheduler-produced next-run metadata; M12 backup foundation.
+// Deviations: Local module namespace; single owning-host policy, target selection and scheduler-produced next-run metadata; M12 backup foundation; stable codes instead of diagnostics on policy failures.
 
 package policies
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/danielgtaylor/huma/v2"
 	backupdto "github.com/florianfinn/docklet-next/types/backup"
 	"log/slog"
 	"strings"
@@ -187,7 +188,7 @@ func (s *Service) runScheduledBackupInternal(ctx context.Context, policyID strin
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return scheduler.Outcome{Status: scheduler.Canceled, Message: "Backup policy disabled or deleted"}, nil
 		}
-		return scheduler.Outcome{}, err
+		return scheduler.Outcome{}, publicPolicyErrorInternal(err, 500)
 	}
 	if previous, ok := jobcontext.Run(ctx); ok {
 		outcome := jobcontext.ConfirmedTarget(previous, policy.VolumeName)
@@ -226,10 +227,23 @@ func (s *Service) runScheduledBackupInternal(ctx context.Context, policyID strin
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "Scheduled volume backup failed", "volume", policy.VolumeName, "error", err)
-		return scheduler.Outcome{}, err
+		return scheduler.Outcome{}, publicPolicyErrorInternal(err, 500)
 	}
 	slog.InfoContext(ctx, "Scheduled volume backup completed", "volume", policy.VolumeName, "backupId", entry.ID)
 	return scheduler.Outcome{Status: scheduler.Succeeded, ActivityID: activityID}, nil
+}
+
+// publicPolicyErrorInternal keeps typed refusals; any other failure leaves the
+// host as a stable code, so run history, activities and responses carry no diagnostics.
+func publicPolicyErrorInternal(err error, status int) error {
+	if err == nil {
+		return nil
+	}
+	var typed huma.StatusError
+	if errors.As(err, &typed) {
+		return typed
+	}
+	return backupdto.NewProblem(status, "volume.backup.interrupted", err)
 }
 
 func (s *Service) rescheduleInternal(ctx context.Context, policy *VolumeBackupPolicy) {
