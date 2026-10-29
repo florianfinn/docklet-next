@@ -30,6 +30,9 @@ import { EVENTS, SCHEDULE, SEED_RESTORE_POINTS } from "./fixtures/events";
 import { HOSTS } from "./fixtures/hosts";
 import { SECURITY } from "./fixtures/security";
 import { SETTINGS } from "./fixtures/settings";
+import { NOTIFICATION_TARGETS } from "./fixtures/notifications";
+import type { NotificationTarget } from "@/domain/notifications";
+import type { AutoHealSettings } from "@/domain/auto-heal";
 import { STACKS } from "./fixtures/stacks";
 import { agentContainer, agentInsideProject, agentReport, agentStack } from "./fixtures/system";
 import { TOPOLOGY } from "./fixtures/topology";
@@ -51,6 +54,9 @@ export class DemoDb {
   /** Containers disconnected from their last network; they report no networks instead of their defaults. */
   isolated = new Set<string>();
   settings: HubSettings = structuredClone(SETTINGS);
+  notificationTargets: NotificationTarget[] = structuredClone(NOTIFICATION_TARGETS);
+  /** Saved Auto Heal settings per host; unset hosts read the fixture values. */
+  autoHeal = new Map<string, AutoHealSettings>();
   files = new FileStore();
   /** Volumes Docker knows without a mount in the fixtures: seeded leftovers and ones created in this session. */
   createdVolumes = new Map<string, { name: string; hostId: string; createdAt: string; labels: Record<string, string>; seeded?: boolean }>();

@@ -207,7 +207,7 @@ export const enHelp = {
       enabled: {
         title: "Auto Heal",
         short: "Restarts containers with a failing healthcheck.",
-        full: "Only applies to containers with a healthcheck that become unhealthy. Unexpected stops are still handled by Docker''s restart policy.",
+        full: "Only applies to running containers with a healthcheck that report unhealthy. Stopped containers follow Docker''s restart policy. Each host keeps its own settings.",
         impact: "Once the limit is reached, the container stays unhealthy and is reported.",
       },
       maxRestarts: {
@@ -222,11 +222,11 @@ export const enHelp = {
         full: "When the time window expires, counting starts over.",
         impact: "A long window slows repeated restarts more.",
       },
-      cooldown: {
-        title: "Pause after restart",
-        short: "Wait time before Auto Heal steps in again.",
-        full: "Gives the container time to start before its healthcheck is evaluated again.",
-        impact: "Too short can needlessly restart slow-starting services.",
+      excludedContainers: {
+        title: "Excluded containers",
+        short: "Auto Heal never restarts these containers automatically.",
+        full: "Matches the container name on this host, also for containers outside a stack. Names that do not exist yet can be entered.",
+        impact: "Docklet still reports the state.",
       },
       excluded: {
         title: "Excluded stacks",

@@ -1,0 +1,56 @@
+[
+  {
+    "id": 1,
+    "provider": "email",
+    "enabled": true,
+    "config": {
+      "events": {
+        "deploy_failed": true,
+        "host_offline": true,
+        "image_update": false
+      },
+      "fromAddress": "sender@example.com",
+      "smtpHost": "mail.example.com",
+      "smtpPassword": "",
+      "smtpPort": 587,
+      "smtpUsername": "sender",
+      "tlsMode": "starttls",
+      "toAddresses": [
+        "reader@example.com"
+      ]
+    },
+    "credentialsSet": [
+      "smtpPassword"
+    ]
+  },
+  {
+    "id": 2,
+    "provider": "ntfy",
+    "enabled": false,
+    "config": {
+      "events": {
+        "backup_failed": true
+      },
+      "host": "ntfy.example.com",
+      "topic": "system"
+    },
+    "credentialsSet": []
+  },
+  {
+    "id": 3,
+    "provider": "generic",
+    "enabled": true,
+    "config": {
+      "customHeaders": {
+        "X-Example": "visible"
+      },
+      "events": {
+        "auto_heal": true,
+        "vulnerability_found": false
+      },
+      "method": "POST",
+      "webhookUrl": "https://notify.example.com/hook"
+    },
+    "credentialsSet": []
+  }
+]

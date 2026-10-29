@@ -22,7 +22,7 @@ import { localizeDemoText, localizeEvents, localizeRun } from ".";
 const en = (s: string) => localizeDemoText(s, "en-US");
 
 // User-given names stay as stored; everything else must read as English.
-const NAMES = [...SETTINGS.backups.targets.map((t) => t.name), ...SETTINGS.notifications.map((n) => n.name)];
+const NAMES = SETTINGS.backups.targets.map((t) => t.name);
 const GERMAN = /[äöüÄÖÜß„]|\b(und|oder|nicht|der|die|das|den|dem|mit|von|für|auf|ist|sind|nach|bei|aus|zum|zur|noch|alle|ohne|unter|wird|wurde|keine?|prüfen|abgeschlossen|fehlgeschlagen|gestartet|gestoppt|entfernt|angelegt|verbunden|gesichert|gelöscht|neu|Fehler|Prüfung|Simulierte?r?|Stand|Ziel|Vorlage|Einstellungen|bleibt|meldet|Neustart|Wiederherstellung|lokal|täglich|Stunden|synthetisch|Beispiel|Austausch|Stopp)\b/;
 const germanIn = (texts: (string | undefined)[]) =>
   texts.filter((t): t is string => !!t).map((t) => NAMES.reduce((s, n) => s.replaceAll(n, ""), en(t))).filter((t) => GERMAN.test(t));
@@ -120,7 +120,7 @@ describe("texts the demo backend writes while running actions", () => {
       adapter.runContainerCommand(STANDALONE[0]!.id, "restart"),
       adapter.saveSettings("general", settings.general),
       adapter.testBackupTarget(settings.backups.targets[0]!.id, "atlas"),
-      adapter.testNotification(settings.notifications[0]!),
+      adapter.saveNotificationTarget({ provider: "gotify", enabled: true, config: { host: "gotify.example.com", token: "example", disableTls: false, insecureSkipVerify: false, useHeader: false }, events: ["deployFailed"] }),
     ]);
     expect(started.filter((s) => s.status === "fulfilled").length).toBeGreaterThan(14);
     await waitFor(async () => expect((await adapter.listActions()).filter((r) => r.status === "running")).toEqual([]), { timeout: 15000 });
@@ -129,7 +129,7 @@ describe("texts the demo backend writes while running actions", () => {
     const codedEvents = await adapter.listEvents();
     const runs = codedRuns.map((run) => renderRun(run, "de"));
     const events = codedEvents.map((event) => renderEvent(event, "de"));
-    const results = started.flatMap((s) => (s.status === "fulfilled" && s.value && typeof s.value === "object" && "message" in s.value ? [s.value.message] : []));
+    const results = started.flatMap((s) => (s.status === "fulfilled" && s.value && typeof s.value === "object" && "message" in s.value && typeof s.value.message === "string" ? [s.value.message] : []));
     expect(runs.length).toBeGreaterThan(12);
     expect(germanIn([...runs.flatMap(runTexts), ...events.map((e) => e.title), ...results])).toEqual([]);
     expect(codedRuns.map((run) => renderRun(run, "en-US"))).toEqual(runs.map((run) => localizeRun(run, "en-US")));

@@ -69,34 +69,10 @@ export interface BackupSettings {
   defaultRetentionCount: number;
 }
 
-export type ChannelKind = "email" | "discord" | "telegram" | "signal" | "slack" | "ntfy" | "pushover" | "gotify" | "matrix" | "googlechat" | "generic";
-
-export type NotificationEvent = "updates" | "deployFailed" | "hostOffline" | "backupFailed" | "critical" | "unhealthy";
-
-export interface NotificationChannel {
-  id: string;
-  kind: ChannelKind;
-  name: string;
-  /** Non-secret address shown in lists, e.g. topic, room or recipient. */
-  target: string;
-  secretSet: boolean;
-  enabled: boolean;
-  events: NotificationEvent[];
-}
-
 export interface SecuritySettings {
   scanEnabled: boolean;
   /** Recurring scans run at this wall-clock time in the hub time zone. */
   schedule: ScanSchedule;
-}
-
-export interface AutoHealSettings {
-  enabled: boolean;
-  maxRestarts: number;
-  windowMinutes: number;
-  cooldownMinutes: number;
-  /** Stack ids that are never restarted automatically. */
-  excludedStacks: string[];
 }
 
 /** How major actions (deploy, update, restore …) present their run: the action dialog opens by itself, or only a toast. */
@@ -135,9 +111,7 @@ export interface HubSettings {
   hostDefaults: HostDefaults;
   updates: UpdateSettings;
   backups: BackupSettings;
-  notifications: NotificationChannel[];
   security: SecuritySettings;
-  autoHeal: AutoHealSettings;
   activity: ActivitySettings;
 }
 
@@ -155,6 +129,4 @@ export function notificationBaseUrl(g: GeneralSettings): { url: string; source: 
   return useDomain ? { url: domain, source: "domain" } : { url: agentHubUrl(g), source: "internal" };
 }
 
-export const CHANNEL_KINDS: ChannelKind[] = ["email", "discord", "telegram", "signal", "slack", "ntfy", "pushover", "gotify", "matrix", "googlechat", "generic"];
 
-export const NOTIFICATION_EVENTS: NotificationEvent[] = ["updates", "deployFailed", "hostOffline", "backupFailed", "critical", "unhealthy"];

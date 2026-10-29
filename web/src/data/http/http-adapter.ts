@@ -46,6 +46,7 @@ import { createVolumeCommands } from "./volume-commands";
 import { createProjectWorkspace } from "./project-workspace";
 import { createVolumeWorkspace } from "./volume-workspace";
 import { BACKUP_OPERATIONS, createBackups } from "./backups";
+import { createNotificationSettings, NOTIFICATION_SETTINGS_OPERATIONS } from "./notification-settings";
 import { createVolumeReads } from "./volumes";
 import { createStackAuthoring } from "./stack-authoring";
 
@@ -56,6 +57,7 @@ type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & 
 
 const IMPLEMENTED = new Set<string>([
   ...BACKUP_OPERATIONS,
+  ...NOTIFICATION_SETTINGS_OPERATIONS,
   "getSecurity",
   "runScan",
   "setScanEnabled",
@@ -656,6 +658,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,
     ...createSettingsCore(baseUrl, client),
+    ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
     mappedOperations: IMPLEMENTED,

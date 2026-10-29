@@ -12,9 +12,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   hostDefaults: "Host-Standards",
   updates: "Updates",
   backups: "Backupziele",
-  notifications: "Benachrichtigungen",
   security: "Sicherheitsscans",
-  autoHeal: "Auto Heal",
   activity: "Aktivität",
 };
 
@@ -63,12 +61,6 @@ export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
       db.settings = { ...db.settings, ...structuredClone(input), setupCompleted: true };
       db.pushEvent({ kind: "config", level: "ok", title: `Ersteinrichtung abgeschlossen: ${input.general.hubName}` });
       db.changed("settings");
-    },
-
-    async testNotification(channel) {
-      await wait(700);
-      if (!channel.target.trim()) return { ok: false, message: "Kein Ziel angegeben", simulated: true };
-      return { ok: true, message: `Testnachricht an „${channel.name}“ simuliert – nichts wurde versendet`, simulated: true };
     },
 
     async setContainerAutoUpdate(containerId, policy) {

@@ -27,6 +27,7 @@ import { Switch } from "@/shared/ui/switch";
 import { OverviewRowView, OverviewTable } from "@/shared/components/overview/overview-table";
 
 import { SettingsForm } from "../SettingsForm";
+import { NotificationsPointer } from "../notifications/NotificationsPointer";
 import { useSaveSettings } from "../use-save-settings";
 import { useSectionDraft } from "../use-section-draft";
 
@@ -206,6 +207,7 @@ export function UpdatesSection({ settings }: { settings: HubSettings }) {
           </section>
         </FieldGroup>
       )}
+      <NotificationsPointer />
     </SettingsForm>
   );
 }

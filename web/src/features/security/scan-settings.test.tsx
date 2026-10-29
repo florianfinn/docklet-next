@@ -75,22 +75,21 @@ describe("scan schedule settings", () => {
 
   it("disables the schedule while scans are off, blocks invalid times and discards edits", async () => {
     const adapter = createDemoAdapter();
-    await adapter.saveSettings("security", { scanEnabled: true, schedule: { mode: "daily", time: "" } });
+    await adapter.saveSettings("security", { scanEnabled: false, schedule: { mode: "daily", time: "" } });
     renderRoutes(routes, ["/settings/security"], adapter);
     const recurrence = await screen.findByRole("radiogroup", { name: "Wiederholung" });
-    expect(screen.getByText("Uhrzeit wählen.") !== null).toBe(true);
-    await userEvent.click(screen.getByRole("switch", { name: "Unhealthy-Container automatisch neu starten" }));
-    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    expect(screen.getByRole("status").textContent).toBe("Bitte markierte Felder prüfen");
-    expect((await adapter.getSettings()).autoHeal.enabled).toBe(false);
-
-    await userEvent.click(screen.getByRole("switch", { name: "Scans aktivieren" }));
     // happy-dom does not apply fieldset disabling to :disabled; the browser check covers the effect.
     expect((recurrence.closest("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
     expect(screen.getByText("Der Zeitplan greift erst, wenn Scans aktiv sind.") !== null).toBe(true);
 
+    await userEvent.click(screen.getByRole("switch", { name: "Scans aktivieren" }));
+    expect(screen.getByText("Uhrzeit wählen.") !== null).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(screen.getByRole("status").textContent).toBe("Bitte markierte Felder prüfen");
+    expect((await adapter.getSettings()).security.scanEnabled).toBe(false);
+
     await userEvent.click(screen.getByRole("button", { name: "Verwerfen" }));
-    expect(screen.getByRole("switch", { name: "Scans aktivieren" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Scans aktivieren" }).getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("status").textContent).toBe("Alles gespeichert");
   });
 });

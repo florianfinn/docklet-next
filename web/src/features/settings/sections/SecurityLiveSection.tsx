@@ -23,6 +23,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Switch } from "@/shared/ui/switch";
 import { SettingsForm } from "../SettingsForm";
 import { useSectionDraft } from "../use-section-draft";
+import { NotificationsPointer } from "../notifications/NotificationsPointer";
 
 function ScanForm({ value, refresh }: { value: ScanSettings; refresh: () => Promise<unknown> }) {
   const adapter = useAdapter(), t = useTranslations("settings.liveScans"), tc = useTranslations("common.schedule");
@@ -55,6 +56,7 @@ function ScanForm({ value, refresh }: { value: ScanSettings; refresh: () => Prom
       <FieldSet disabled={!write.available}><FieldLegend>{t("notifications")}</FieldLegend>
         {(["notifyCritical", "notifyHigh", "notifyFailed"] as const).map((key) => <Field key={key} orientation="horizontal"><Checkbox id={`scan-${key}`} checked={d[key]} onCheckedChange={(v) => section.patch({ [key]: v === true })} /><Label htmlFor={`scan-${key}`}>{t(key)}</Label></Field>)}
         <p className="text-xs text-muted-foreground">{t("notificationHint")}</p>
+        <NotificationsPointer />
       </FieldSet>
     </FieldGroup>
   </SettingsForm>;

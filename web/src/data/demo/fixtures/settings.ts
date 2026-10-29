@@ -96,11 +96,6 @@ export const SETTINGS: HubSettings = {
       },
     ],
   },
-  notifications: [
-    { id: "n-mail", kind: "email", name: "Admin-Mail", target: "alex@example.com", secretSet: true, enabled: true, events: ["deployFailed", "hostOffline", "backupFailed", "critical"] },
-    { id: "n-ntfy", kind: "ntfy", name: "Handy (ntfy)", target: "https://ntfy.example.com/docklet-demo", secretSet: false, enabled: true, events: ["updates", "deployFailed", "unhealthy"] },
-  ],
   security: { scanEnabled: true, schedule: { mode: "daily", time: "03:00" } },
-  autoHeal: { enabled: false, maxRestarts: 3, windowMinutes: 60, cooldownMinutes: 10, excludedStacks: ["craft"] },
   activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: true, actionPresentation: "dialog" },
 };

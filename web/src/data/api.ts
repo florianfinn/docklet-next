@@ -7,7 +7,9 @@ import type { DockerImage, ImagePullProgress, ImagePullResult, ImagePruneResult,
 import type { HubDiscovery } from "@/domain/hub-discovery";
 import type { AutoUpdatePolicy, FileOwner, Host, HostConnection, NetworkAttachment, Topology, TopologyNetwork } from "@/domain/model";
 import type { NetworkDraft } from "@/domain/networks";
-import type { BackupTarget, BackupTargetInput, BackupTargetReferences, HubSettings, NotificationChannel, SettingsSection } from "@/domain/settings";
+import type { BackupTarget, BackupTargetInput, BackupTargetReferences, HubSettings, SettingsSection } from "@/domain/settings";
+import type { NotificationProvider, NotificationTarget, NotificationTargetInput, NotificationTargetRow, NotificationTestResult } from "@/domain/notifications";
+import type { AutoHealInput, AutoHealSettings } from "@/domain/auto-heal";
 import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
 import type { BackupBrowse, BackupOverview, BackupPolicy, BackupRepository, BackupSelection, Volume, VolumeDetail } from "@/domain/volumes";
@@ -249,11 +251,6 @@ export interface ImagesApi {
   pruneImages(input: { hostIds: string[]; mode: PruneMode }): Promise<ImagePruneResult>;
 }
 
-export interface TestResult {
-  ok: boolean;
-  message: string;
-}
-
 export interface SettingsApi {
   getSetupStatus(): Promise<boolean>;
   getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;
@@ -261,6 +258,20 @@ export interface SettingsApi {
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */
   completeSetup(input: Pick<HubSettings, "general" | "auth" | "hostDefaults">): Promise<void>;
-  testNotification(channel: NotificationChannel): Promise<TestResult>;
   setContainerAutoUpdate(containerId: string, policy: AutoUpdatePolicy): Promise<void>;
+}
+
+/** Hub-global notification targets, one per provider; global administrators only. */
+export interface NotificationsApi {
+  listNotificationTargets(): Promise<NotificationTargetRow[]>;
+  saveNotificationTarget(input: NotificationTargetInput): Promise<NotificationTarget>;
+  deleteNotificationTarget(provider: NotificationProvider): Promise<void>;
+  /** Sends a test through the saved target. */
+  testNotificationTarget(provider: NotificationProvider): Promise<NotificationTestResult>;
+}
+
+/** Auto Heal settings belong to the host that restarts its containers. */
+export interface AutoHealApi {
+  getAutoHealSettings(hostId: string): Promise<AutoHealSettings>;
+  saveAutoHealSettings(hostId: string, input: AutoHealInput): Promise<AutoHealSettings>;
 }

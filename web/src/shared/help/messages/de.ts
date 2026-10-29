@@ -208,7 +208,7 @@ export const deHelp: typeof enHelp = {
       enabled: {
         title: "Auto Heal",
         short: "Startet Container mit fehlschlagendem Healthcheck neu.",
-        full: "Greift nur bei Containern mit Healthcheck, die unhealthy werden. Unerwartete Stopps regelt weiterhin das Neustartverhalten von Docker.",
+        full: "Greift nur bei laufenden Containern mit Healthcheck, die unhealthy melden. Gestoppte Container regelt das Neustartverhalten von Docker. Jeder Host hat eigene Einstellungen.",
         impact: "Nach Erreichen des Limits bleibt der Container unhealthy und wird gemeldet.",
       },
       maxRestarts: {
@@ -223,11 +223,11 @@ export const deHelp: typeof enHelp = {
         full: "Läuft das Zeitfenster ab, beginnt die Zählung neu.",
         impact: "Ein langes Fenster bremst wiederholte Neustarts stärker.",
       },
-      cooldown: {
-        title: "Pause nach Neustart",
-        short: "Wartezeit, bevor Auto Heal erneut eingreift.",
-        full: "Gibt dem Container Zeit zum Starten, bevor sein Healthcheck wieder bewertet wird.",
-        impact: "Zu kurz kann langsam startende Dienste unnötig neu starten.",
+      excludedContainers: {
+        title: "Ausgenommene Container",
+        short: "Diese Container startet Auto Heal nie automatisch neu.",
+        full: "Vergleicht den Containernamen auf diesem Host, auch für Container außerhalb eines Stacks. Noch nicht vorhandene Namen lassen sich eintragen.",
+        impact: "Docklet meldet den Zustand weiterhin.",
       },
       excluded: {
         title: "Ausgenommene Stacks",
