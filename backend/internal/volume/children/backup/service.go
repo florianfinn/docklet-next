@@ -12,6 +12,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"log/slog"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
@@ -73,6 +75,7 @@ type Dependencies struct {
 
 // Service runs volume backups and owns their policies, file browser, and restores.
 type Service struct {
+	notifier               backupnotify.Notifier
 	deps                   Dependencies
 	inputCleaner           func(context.Context, []string) error
 	targets                *backuptarget.Service
@@ -130,6 +133,7 @@ func NewService(deps Dependencies) *Service {
 	s.restore = restore.NewService(restore.Dependencies{
 		Docker: deps.Docker, Engine: deps.Engine, Run: deps.Store.Run, Repository: s.rusticRepositoryForBackupInternal, Password: s.volumeBackupPasswordInternal, HelperImage: deps.HelperImage, Exec: deps.Exec,
 	})
+	s.notifier = backupnotify.Notifier{DB: deps.DB, Agent: config.Load().AgentMode || config.Load().EdgeAgent}
 	s.configureRestoreLifecycle()
 	if deps.Engine != nil {
 		deps.Engine.RegisterRunKind("volume", s.executeDurableBackupInternal, s.failDurableBackupInternal)
@@ -226,6 +230,7 @@ func (s *Service) prepareBackupInternal(ctx context.Context, volumeName, trigger
 			Policy:       plan.policy,
 		},
 	)
+
 	if err == nil {
 		err = jobcontext.Progress(ctx, scheduler.TargetOutcome{ResourceType: "volume_backup", ID: volumeName, Status: scheduler.Running, RecoveryData: checkpoint})
 	}
@@ -234,38 +239,6 @@ func (s *Service) prepareBackupInternal(ctx context.Context, volumeName, trigger
 		return nil, nil, err
 	}
 	return entry, lease, nil
-}
-
-func (s *Service) completeBackupInternal(ctx context.Context, entry *volume.Backup, err error) error {
-	if err == nil {
-		err = ctx.Err()
-	}
-	if err != nil {
-		if entry.ErrorCode == "" {
-			entry.ErrorCode = "volume.backup.interrupted"
-			var problem *backuptypes.Problem
-			if errors.As(err, &problem) {
-				entry.ErrorCode = problem.Code
-			}
-		}
-		entry.Status = backuptypes.VolumeBackupStatusFailed
-		if entry.LocalSnapshotID != "" {
-			entry.Status = backuptypes.VolumeBackupStatusPartial
-		}
-		entry.Error = entry.ErrorCode
-	} else {
-		entry.Status = backuptypes.VolumeBackupStatusSucceeded
-		entry.Error = ""
-		entry.ErrorCode = ""
-	}
-	// The owning worker remains admitted while terminal persistence is unavailable.
-	for saveErr := s.deps.Store.Save(context.WithoutCancel(ctx), entry); saveErr != nil; saveErr = s.deps.Store.Save(context.WithoutCancel(ctx), entry) {
-		time.Sleep(100 * time.Millisecond)
-	}
-	if err == nil {
-		err = jobcontext.Progress(ctx, scheduler.TargetOutcome{ResourceType: "volume_backup", ID: entry.VolumeName, Status: scheduler.Succeeded})
-	}
-	return err
 }
 
 func (s *Service) executeBackupInternal(ctx context.Context, entry *volume.Backup, user usertypes.Actor, plan backupPlanInternal) (err error) {
@@ -519,4 +492,8 @@ func (s *Service) MigrateRepositoryPasswords(ctx context.Context) error {
 	}
 	s.rekeyRepositoryInternal(ctx, dockerClient, local, key)
 	return nil
+}
+
+func (s *Service) SetNotificationDispatch(dispatch backupnotify.Dispatch) {
+	s.notifier.Dispatch = dispatch
 }

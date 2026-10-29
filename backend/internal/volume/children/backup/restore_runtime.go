@@ -8,13 +8,14 @@ package backup
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 )
 
 func (s *Service) configureRestoreLifecycle() {
-	s.lifecycle = &restore.Lifecycle{DB: s.deps.DB, Activity: s.deps.Activity}
+	s.lifecycle = &restore.Lifecycle{DB: s.deps.DB, Activity: s.deps.Activity, Notify: func(ctx context.Context, r backupnotify.Run) { s.notifier.Terminal(ctx, r) }}
 	s.restore.SetLifecycle(s.lifecycle)
 	s.lifecycle.Effects = restore.LifecycleEffects{
 		Validate: func(ctx context.Context, r restore.StartRequest) error {

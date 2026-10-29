@@ -319,6 +319,12 @@ func registerJobs(params registerJobsParams) error {
 		}
 	}
 	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		if err := params.Notification.ResetAvailability(params.AppCtx, time.Now().UTC()); err != nil {
+			return err
+		}
+		if err := params.Scheduler.RegisterJob(&scheduler.HostAvailabilityJob{Service: params.Notification}); err != nil {
+			return err
+		}
 		if err := params.Scheduler.RegisterJob(&scheduler.NotificationDeliverJob{Service: params.Notification}); err != nil {
 			return err
 		}

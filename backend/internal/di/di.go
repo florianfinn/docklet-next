@@ -63,6 +63,7 @@ var RuntimeOptions = fx.Options(fx.Provide(provideRuntimeInternal))
 // ServiceOptions constructs services once and injects them into route modules.
 var ServiceOptions = fx.Options(
 	fx.Invoke(wireImageSafety),
+ fx.Invoke(wireNotifications),
 	RuntimeOptions,
 	fx.Supply(
 		resources.FS,
