@@ -2,22 +2,31 @@
 import type { enSettings } from "./en";
 
 export const deSettings: typeof enSettings = {
-  "notification.config-invalid": "Ungültige Benachrichtigungseinstellungen",
-  "notification.hub-only": "Benachrichtigungen werden im Hub verwaltet",
-  "notification.dispatch-invalid": "Ungültiges Benachrichtigungsereignis",
-  "notification.dispatch-unsupported": "Nicht unterstütztes Benachrichtigungsereignis",
-  "notification.dispatch-stale": "Benachrichtigungsquelle geändert",
-  "notification.test-busy": "Ein Test läuft bereits",
-  "notification.test-sent": "Testbenachrichtigung gesendet",
-  "notification.test-failed": "Testbenachrichtigung fehlgeschlagen",
-  "notification.target-disabled": "Ziel ist deaktiviert",
-  "delivery-unreachable": "Ziel nicht erreichbar",
-  "delivery-rejected": "Ziel hat die Nachricht abgelehnt",
-  "delivery-auth": "Authentifizierung beim Ziel fehlgeschlagen",
-  "delivery-invalid": "Ungültige Zustellkonfiguration",
-  "autoheal.settings-invalid": "Ungültige Auto-Heal-Einstellungen",
-  "autoheal.settings-env-managed": "Auto Heal wird durch Umgebungsvariablen verwaltet",
-  "settings.key-managed": "Das zugehörige Einstellungsformular verwenden",
+  // Texts of backend notification and Auto Heal codes, keyed by the wire code path.
+  codes: {
+    notification: {
+      "config-invalid": "Ungültige Benachrichtigungseinstellungen",
+      "hub-only": "Benachrichtigungen werden im Hub verwaltet",
+      "dispatch-invalid": "Ungültiges Benachrichtigungsereignis",
+      "dispatch-unsupported": "Nicht unterstütztes Benachrichtigungsereignis",
+      "dispatch-stale": "Benachrichtigungsquelle geändert",
+      "test-busy": "Ein Test läuft bereits",
+      "test-sent": "Testbenachrichtigung gesendet",
+      "test-failed": "Testbenachrichtigung fehlgeschlagen",
+      "target-disabled": "Ziel ist deaktiviert",
+    },
+    autoheal: {
+      "settings-invalid": "Ungültige Auto-Heal-Einstellungen",
+      "settings-env-managed": "Auto Heal wird durch Umgebungsvariablen verwaltet",
+    },
+    settings: {
+      "key-managed": "Das zugehörige Einstellungsformular verwenden",
+    },
+    "delivery-unreachable": "Ziel nicht erreichbar",
+    "delivery-rejected": "Ziel hat die Nachricht abgelehnt",
+    "delivery-auth": "Authentifizierung beim Ziel fehlgeschlagen",
+    "delivery-invalid": "Ungültige Zustellkonfiguration",
+  },
 
   liveScans: {
     title: "Scans",

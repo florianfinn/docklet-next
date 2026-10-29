@@ -1,11 +1,5 @@
 export const enRunMessages = {
   exact: {
-  "autoheal.restarted": "Container restarted by Auto Heal",
-  "autoheal.restart-failed": "Auto Heal restart failed",
-  "autoheal.limit-reached": "Auto Heal restart limit reached",
-  "autoheal.interrupted": "Auto Heal attempt interrupted",
-  "notification.delivery-failed": "Notification delivery failed",
-
   "check": "Check",
   "imagePull": "Image pull",
   "replace": "Replace",
@@ -225,6 +219,18 @@ export const enRunMessages = {
   "composeProject": "Compose project {p1}",
   "edgeVia": "Edge via {p1}"
 },
+  // Activity and event codes of Auto Heal and notification delivery, keyed by the wire code path.
+  codes: {
+    autoheal: {
+      "restarted": "Container restarted by Auto Heal",
+      "restart-failed": "Auto Heal restart failed",
+      "limit-reached": "Auto Heal restart limit reached",
+      "interrupted": "Auto Heal attempt interrupted",
+    },
+    notification: {
+      "delivery-failed": "Notification delivery failed",
+    },
+  },
   join: { dot: '{left} · {right}', dash: '{left} – {right}' },
   value: '{value}',
 };
