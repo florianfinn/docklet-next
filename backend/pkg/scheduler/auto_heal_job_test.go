@@ -7,6 +7,7 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -22,6 +23,8 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
+	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -236,4 +239,23 @@ func TestAutoHealListAndSelfExclusion(t *testing.T) {
 	rows := j.filterCandidatesInternal([]container.Summary{{ID: "self123", Names: []string{"/hub"}}, {ID: "other", Names: []string{"/web"}}}, nil, "self")
 	require.Len(t, rows, 1)
 	require.Equal(t, "other", rows[0].ID)
+}
+
+func TestAutoHealOutOfContractSettingsFailClosedVisibly(t *testing.T) {
+	j, db := autoHealFixture(t)
+	require.NoError(t, j.settingsService.SetStringSetting(t.Context(), "autoHealMaxRestarts", "20"))
+	var calls atomic.Int32
+	j.restartContainer = func(context.Context, *client.Client, string) error { calls.Add(1); return nil }
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	_, err := j.Run(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, calls.Load())
+	var n int64
+	require.NoError(t, db.Model(&autoheal.Restart{}).Count(&n).Error)
+	require.Zero(t, n)
+	require.Equal(t, 1, strings.Count(logs.String(), "auto-heal settings outside the typed contract"))
+	require.Contains(t, logs.String(), "field=/maxRestarts")
 }

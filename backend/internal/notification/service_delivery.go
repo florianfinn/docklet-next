@@ -22,7 +22,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"uuid"
 )
 
 // SendBatchImageUpdateNotification dispatches a batched image-update notification
@@ -170,46 +169,6 @@ func pruneResultHasChangesInternal(result *system.PruneAllResult) bool {
 		len(result.ImagesDeleted) > 0 ||
 		len(result.VolumesDeleted) > 0 ||
 		len(result.NetworksDeleted) > 0
-}
-
-// SendAutoHealNotification sends a notification when a container is auto-healed.
-func (s *NotificationService) SendAutoHealNotification(ctx context.Context, containerName, containerID string) error {
-	if s.config != nil && s.config.AgentMode {
-		_, err := s.dispatchNotificationToManagerInternal(ctx, notification.DispatchRequest{
-			Kind: notification.DispatchKindAutoHeal,
-			AutoHeal: &notification.DispatchAutoHeal{
-				EventID: "autoheal:" + uuid.New().String(), Outcome: "restarted", Container: containerName, Restarts: 1, WindowMinutes: 30,
-			},
-		})
-		return err
-	}
-
-	target, err := s.resolveNotificationTargetInternal(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	return s.sendAutoHealNotificationForTargetInternal(ctx, target, containerName, containerID)
-}
-
-func (s *NotificationService) sendAutoHealNotificationForTargetInternal(ctx context.Context, target NotificationTarget, containerName, containerID string) error {
-	metadata := database.JSON{
-		"containerID": containerID,
-		"eventType":   string(notifications.NotificationEventAutoHeal),
-	}
-	content := s.templates.AutoHeal(target.EnvironmentName, containerName)
-	content.Vars = notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventAutoHeal)
-	_, err := s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventAutoHeal, containerName, metadata, func(
-		ctx context.Context,
-		provider notifications.NotificationProvider,
-		config database.JSON,
-	) (
-		bool,
-		error,
-	) {
-		return notifications.Deliver(ctx, provider, config, content)
-	})
-	return err
 }
 
 // --- Test notifications ---

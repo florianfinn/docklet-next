@@ -16,7 +16,8 @@ import (
 )
 
 // Deployment notices share the terminal receipt transaction and contain only coded facts.
-func runtimeNotifyFailureTx(tx *gorm.DB, now time.Time, row *RuntimeReceipt, code string, silent bool) error {
+// A shutdown or restart interruption stays silent (OQ-1 b); an administrator disposition notifies.
+func runtimeNotifyFailureTx(tx *gorm.DB, now time.Time, row *RuntimeReceipt, code string, silent, disposition bool) error {
 	cfg := config.Load()
 	if silent || cfg.AgentMode || cfg.EdgeAgent || row.OperationID == nil || row.TargetKind == nil || *row.TargetKind != "stack" {
 		return nil
@@ -26,7 +27,7 @@ func runtimeNotifyFailureTx(tx *gorm.DB, now time.Time, row *RuntimeReceipt, cod
 	default:
 		return nil
 	}
-	if code != "runtime.failed" && code != "runtime.interrupted" {
+	if code != "runtime.failed" && (code != "runtime.interrupted" || !disposition) {
 		return nil
 	}
 	host := "Local Docker"

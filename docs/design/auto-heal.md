@@ -18,6 +18,8 @@ loader's presence rules, including explicit false, empty strings and readable
 `_FILE` or `__FILE` values. An effective Auto Heal environment override makes
 typed writes read-only on that executing host. Unreadable files use the loader's
 normal fallback semantics.
+Effective values outside the typed contract fail closed: the host is skipped and
+each run logs the invalid fields.
 
 ## Eligibility and ownership
 
@@ -31,7 +33,9 @@ Auto Heal skips ownership held by runtime receipts, the resolved parent stack,
 queued/running gates, volume backup admission, workspace locks, persisted backup
 or restore work, restore-as-new destinations and writer fences. Missing or
 unreadable ownership evidence is busy. Narrow read accessors inspect existing
-ownership without acquiring runtime or backup leases.
+ownership without acquiring runtime or backup leases. The workspace lock probe
+holds a volume lock for an instant, so a concurrent volume write can meet a short
+busy refusal.
 
 ## Durable attempts and recovery
 

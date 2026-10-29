@@ -159,3 +159,23 @@ func TestRecoveryBaselineAndSettleFailureKeepAttemptsCounted(t *testing.T) {
 	require.NoError(t, s.DB.Model(&notificationoutbox.Row{}).Count(&n).Error)
 	require.Zero(t, n)
 }
+
+func TestAgentEventIdentitySurvivesStoreReset(t *testing.T) {
+	ids := map[string]bool{}
+	for reset := range 2 {
+		s, now := healStore(t)
+		*now = now.Add(time.Duration(reset) * time.Minute)
+		s.Config.AgentMode = true
+		s.Dispatch = func(_ context.Context, p nDTO.DispatchRequest) error {
+			require.Regexp(t, `^[A-Za-z0-9:_-]{1,64}$`, p.AutoHeal.EventID)
+			ids[p.AutoHeal.EventID] = true
+			return nil
+		}
+		r, _, err := s.Reserve(t.Context(), "run", "container", "web", "app", Baseline{}, dto.Settings{MaxRestarts: 5, WindowMinutes: 30})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, r.ID, "a recreated store restarts row IDs")
+		require.NoError(t, s.Settle(t.Context(), r.ID, "restarted"))
+		require.NoError(t, s.Project(t.Context(), r.ID, true))
+	}
+	require.Len(t, ids, 2)
+}

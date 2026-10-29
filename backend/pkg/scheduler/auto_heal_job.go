@@ -132,6 +132,12 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 	if !j.ShouldSchedule(ctx) {
 		return st.Outcome{Status: st.Skipped}, nil
 	}
+	// Candidates fail closed on settings outside the typed contract; the run names the field once.
+	if cfg, cfgErr := j.settingsService.AutoHealSettings(ctx); cfgErr == nil && cfg.Enabled {
+		if problem, invalid := errors.AsType[*autohealDTO.Problem](autohealUpdate(cfg).Validate()); invalid {
+			slog.WarnContext(ctx, "auto-heal settings outside the typed contract; host skipped", "code", problem.Code, "field", problem.Field)
+		}
+	}
 	rows, err := j.ListContainers(ctx, cli)
 	if err != nil {
 		return st.Outcome{}, err

@@ -157,7 +157,8 @@ func (s *Store) Project(ctx context.Context, id uint, live bool) error {
 		if claimed.RowsAffected != 1 {
 			return nil
 		}
-		identity := fmt.Sprintf("autoheal:%d", id)
+		// The attempt start keeps the identity unique when an agent store is recreated and row IDs restart.
+		identity := fmt.Sprintf("autoheal:%d:%d", id, r.StartedAt.UnixNano())
 		code := "autoheal." + r.Outcome
 		status, severity := activityDTO.StatusFailed, event.EventSeverityError
 		if r.Outcome == "restarted" {

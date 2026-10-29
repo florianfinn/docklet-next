@@ -268,6 +268,12 @@ func handleEdgeOriginEventInternal(ctx context.Context, origin notificationdto.D
 		}
 		_, err := notificationService.DispatchIngress(ctx, origin, payload)
 		if err != nil {
+			// Edge has no reply channel, so the dropped dispatch is logged with its code and kind.
+			code := "internal"
+			if problem, ok := errors.AsType[*notificationdto.Problem](err); ok {
+				code = problem.Code
+			}
+			slog.WarnContext(ctx, "edge notification dispatch dropped", "environmentId", envID, "kind", string(payload.Kind), "code", code)
 			return fmt.Errorf("failed to dispatch edge notification: %w", err)
 		}
 		return nil

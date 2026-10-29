@@ -338,12 +338,6 @@ func (s *NotificationService) dispatchForTargetInternal(ctx context.Context, tar
 		}
 		logManagerDispatchNotificationInternal(ctx, target, payload.Kind)
 		return dispatchResponse, s.sendPruneReportNotificationForTargetInternal(ctx, target, &payload.PruneReport.Result)
-	case notification.DispatchKindAutoHeal:
-		if payload.AutoHeal == nil {
-			return notification.DispatchResponse{}, errors.New("auto-heal payload is required")
-		}
-		logManagerDispatchNotificationInternal(ctx, target, payload.Kind)
-		return dispatchResponse, s.sendAutoHealNotificationForTargetInternal(ctx, target, payload.AutoHeal.Container, "")
 	default:
 		return notification.DispatchResponse{}, fmt.Errorf("%s: %w", payload.Kind, ErrUnsupportedDispatchKind)
 	}

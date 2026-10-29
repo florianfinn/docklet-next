@@ -124,7 +124,7 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 	if err := tx.Create(final).Error; err != nil {
 		return empty, nil, err
 	}
-	if err := runtimeNotifyFailureTx(tx, now, row, string(result.code), result.silentNotification); err != nil {
+	if err := runtimeNotifyFailureTx(tx, now, row, string(result.code), result.silentNotification, false); err != nil {
 		return empty, nil, err
 	}
 	snapshot, err := runtimeSnapshotTxInternal(tx, row)

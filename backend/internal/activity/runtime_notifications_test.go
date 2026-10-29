@@ -18,7 +18,7 @@ import (
 )
 
 func TestDeployNotificationSharesTerminalTransaction(t *testing.T) {
-	for _, mode := range []string{"failed", "startup", "agent", "cancelled", "outbox-fault"} {
+	for _, mode := range []string{"failed", "startup", "shutdown", "agent", "cancelled", "outbox-fault"} {
 		t.Run(mode, func(t *testing.T) {
 			f := b1Fixture(t)
 			c := f.command()
@@ -32,6 +32,9 @@ func TestDeployNotificationSharesTerminalTransaction(t *testing.T) {
 			}
 			before := runtimeBoundarySnapshot(t, f.store)
 			result := runtimeLocalResultInternal{state: "failed", code: dto.CodeRuntimeFailed, message: "Runtime failed", settledAt: f.store.now, silentNotification: mode == "startup"}
+			if mode == "shutdown" {
+				result.code = dto.CodeRuntimeInterrupted
+			}
 			if mode == "cancelled" {
 				result.state = "cancelled"
 				result.code = dto.CodeRuntimeCancelled
@@ -63,7 +66,9 @@ func TestDeployFailureOperationFilterAndIdempotentReplay(t *testing.T) {
 	for _, op := range []string{"deploy-project", "redeploy-project", "update-project", "restore-project", "restart-project"} {
 		row := &RuntimeReceipt{RunID: op, EnvironmentID: "0", OperationID: &op, TargetKind: new("stack"), TargetName: new("Example")}
 		for range 2 {
-			require.NoError(t, f.store.svc.db.Transaction(func(tx *gorm.DB) error { return runtimeNotifyFailureTx(tx, f.store.now, row, "runtime.failed", false) }))
+			require.NoError(t, f.store.svc.db.Transaction(func(tx *gorm.DB) error {
+				return runtimeNotifyFailureTx(tx, f.store.now, row, "runtime.failed", false, false)
+			}))
 		}
 	}
 	var rows []notificationoutbox.Row
@@ -115,4 +120,25 @@ func TestRemoteDeployApplyAndDispositionAreAtomicAndDeduplicated(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestRemoteDeployInterruptedByAgentRestartStaysSilent(t *testing.T) {
+	p := &remoteTransportProbe{}
+	f := remoteFixture(t, p, RuntimeReconcileSchedule{})
+	p.execute = func(_ context.Context, e dto.RuntimeExecutionEnvelope) (dto.RuntimeExecutionOutcome, error) {
+		return remoteAnswer(e.Identity, f.store.now, dto.StatusRunning), nil
+	}
+	f.start(t)
+	before := f.receipt(t)
+	answer := remoteAnswer(runtimeWireIdentityInternal(&before), f.store.now, dto.StatusSuccess)
+	answer.Detail.Activity.Status = dto.StatusFailed
+	answer.Detail.Activity.MessageCode = string(dto.CodeRuntimeInterrupted)
+	_, err := f.service.applyRemoteInternal(t.Context(), f.ref, answer, true)
+	require.NoError(t, err)
+	var activity Activity
+	require.NoError(t, f.store.svc.db.First(&activity, "id = ?", before.RunID).Error)
+	require.Equal(t, dto.StatusFailed, activity.Status)
+	var rows []notificationoutbox.Row
+	require.NoError(t, f.store.svc.db.Find(&rows).Error)
+	require.Empty(t, rows)
 }

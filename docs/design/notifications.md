@@ -25,7 +25,9 @@ Deployment failures, backup/restore failures, host availability and Auto Heal
 use `notification_outbox`. Each event has an opaque identity and a unique
 idempotency key. Deployment inserts share the terminal receipt transaction;
 backup notices follow a successful live terminal save. Safety captures,
-retention-only failures, cancellation and startup/history repair remain silent.
+retention-only failures, cancellation, shutdown or restart interruptions and
+startup/history repair remain silent; an administrator disposition of an
+interrupted deployment notifies.
 
 The hub delivery job claims rows with a compare-and-swap predicate. A five-minute
 lease allows recovery of abandoned sends. Every claim, including a reclaimed
@@ -36,7 +38,8 @@ when another target fails; each failed target creates a classified
 Existing image-update, vulnerability and cleanup fan-out keeps its owning policy
 and delivery semantics.
 
-Wake signals submit coordinator-owned work. Maintenance cancels and joins that
+Wake signals submit coordinator-owned work. A wake can arrive before its row
+commits; the one-minute delivery tick bounds that delay. Maintenance cancels and joins that
 work before database replacement. Restore expires pending and sending rows and
 clears availability tracking, so restored history cannot emit stale notices.
 Native transports have 15-second timeouts. SDK calls also have a bounded wait;

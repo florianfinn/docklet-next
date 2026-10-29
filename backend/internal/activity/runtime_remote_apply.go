@@ -122,7 +122,7 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		}
 		updates := map[string]any{"status": d.Activity.Status, "progress": d.Activity.Progress, "step": d.Activity.Step, "latest_message": d.Activity.LatestMessage, "message_code": d.Activity.MessageCode, "affected_services": servicesJSONInternal(d.Activity.AffectedServices), "metadata": database.JSON(d.Activity.Metadata), "runtime_step_trace": RuntimeStepTrace(d.StepTrace), "output": legacy, "runtime_output": RuntimeOutputLines(d.Output), "output_truncated": model.OutputTruncated || d.OutputTruncated, "updated_at": now, "error": d.Activity.Error}
 		if terminal {
-			if err := runtimeNotifyFailureTx(tx, now, row, d.Activity.MessageCode, false); err != nil {
+			if err := runtimeNotifyFailureTx(tx, now, row, d.Activity.MessageCode, false, false); err != nil {
 				return err
 			}
 			updates["ended_at"], updates["duration_ms"] = now, now.Sub(model.StartedAt).Milliseconds()
@@ -223,7 +223,7 @@ func runtimeHubDispositionTxInternal(tx *gorm.DB, now time.Time, row *RuntimeRec
 			return empty, nil, err
 		}
 	}
-	if err := runtimeNotifyFailureTx(tx, now, row, string(code), false); err != nil {
+	if err := runtimeNotifyFailureTx(tx, now, row, string(code), false, true); err != nil {
 		return empty, nil, err
 	}
 	snapshot, err := runtimeSnapshotTxInternal(tx, row)

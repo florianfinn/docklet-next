@@ -8,7 +8,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	wire "github.com/florianfinn/docklet-next/types/notification"
 	dto "github.com/florianfinn/docklet-next/types/updater"
@@ -20,10 +19,4 @@ func (s *NotificationService) NotifyImagePolicyCandidate(ctx context.Context, en
 	ctx = context.WithValue(ctx, imagePolicyEntryKey{}, entry)
 	response, err := s.DispatchNotificationForEnvironment(ctx, env, wire.DispatchRequest{Kind: wire.DispatchKindImageUpdate, ImageUpdate: &wire.DispatchImageUpdate{ImageRef: c.ImageRef, UpdateInfo: imageupdate.Response{HasUpdate: true, LatestVersion: c.Version, LatestDigest: c.Digest, Platform: c.Platform}}})
 	return response.Delivered, err
-}
-func policyDeliveryError(ctx context.Context, err error) error {
-	if _, ok := ctx.Value(imagePolicyEntryKey{}).(string); ok && err != nil {
-		return errors.New("Notification delivery failed")
-	}
-	return err
 }
