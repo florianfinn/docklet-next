@@ -28,7 +28,7 @@ func TestBackupEntryCarriesEveryStoredWireField(t *testing.T) {
 	}
 	entry := entryInternal(&stored)
 	source, target := reflect.ValueOf(stored), reflect.ValueOf(entry)
-	derived := map[string]bool{"Status": true, "ErrorCode": true}
+	derived := map[string]bool{"Status": true, "ErrorCode": true, "Error": true}
 	compared := 0
 	for i := range source.NumField() {
 		field := source.Type().Field(i)
@@ -41,4 +41,5 @@ func TestBackupEntryCarriesEveryStoredWireField(t *testing.T) {
 		compared++
 	}
 	require.Greater(t, compared, 10, "parity covers the shared wire fields")
+	require.Equal(t, "volume.backup.interrupted", entry.Error, "stored diagnostic text becomes a stable code")
 }

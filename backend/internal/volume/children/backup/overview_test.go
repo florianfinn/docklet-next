@@ -101,3 +101,26 @@ func TestOverviewLatestBackupMatchesEntryProjection(t *testing.T) {
 	require.NotEmpty(t, latest.Type)
 	require.Empty(t, started)
 }
+
+// Stored diagnostic text never reaches the overview; it reports the same
+// stable code as the backup list.
+func TestOverviewLatestBackupHidesStoredDiagnostic(t *testing.T) {
+	started := []string{}
+	s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"Volumes": []mobyvolume.Volume{{Name: "data"}}}))
+	}), &started)
+	require.NoError(t, s.deps.DB.AutoMigrate(&checkSetting{}, &backuptarget.Target{}, &policies.VolumeBackupPolicy{}))
+	require.NoError(t, s.deps.DB.AutoMigrate(activity.Models()...))
+	const diagnostic = "private-sentinel engine stderr"
+	require.NoError(t, s.deps.DB.Table("volume_backups").Create(&volume.Backup{
+		ID: "legacy", VolumeName: "data", CreatedAt: time.Now().UTC(), Status: "failed", Trigger: "manual",
+		Destination: "local", Format: volume.BackupFormatRustic, Error: diagnostic,
+	}).Error)
+	result, err := s.Overview(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Volumes, 1)
+	require.Equal(t, "volume.backup.interrupted", result.Volumes[0].LastBackup.Error)
+	body, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.False(t, strings.Contains(string(body), "private-sentinel"), "overview must not serialize stored diagnostics")
+}

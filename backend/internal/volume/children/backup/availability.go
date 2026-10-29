@@ -7,6 +7,7 @@
 package backup
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -59,13 +60,19 @@ func (s *Service) observeRepository(repository backup.Repository, destination st
 	return repository
 }
 
+// entryInternal is the public projection of a stored backup. Its error is a
+// stable code; stored diagnostic text never leaves the host.
 func entryInternal(entry *volume.Backup) volume.BackupEntry {
 	status, code := observedBackupStatus(entry.Status, entry.ErrorCode, entry.Format, entry.SnapshotUnavailableAt)
+	publicError := ""
+	if entry.Error != "" || code != "" {
+		publicError = cmp.Or(code, "volume.backup.interrupted")
+	}
 	return volume.BackupEntry{
 		ActivityID: entry.ActivityID, ID: entry.ID, VolumeName: entry.VolumeName, Size: entry.Size,
 		CreatedAt: entry.CreatedAt.Format(time.RFC3339), Status: status, Trigger: entry.Trigger,
 		Destination: entry.Destination, Format: entry.Format, LocalSnapshotID: entry.LocalSnapshotID,
-		SnapshotUnavailableAt: entry.SnapshotUnavailableAt, PolicyID: entry.PolicyID, Error: entry.Error, ErrorCode: code, StopContainers: entry.StopContainers, Type: backuptypes.ManagementTypeForPolicy(entry.PolicyID),
+		SnapshotUnavailableAt: entry.SnapshotUnavailableAt, PolicyID: entry.PolicyID, Error: publicError, ErrorCode: code, StopContainers: entry.StopContainers, Type: backuptypes.ManagementTypeForPolicy(entry.PolicyID),
 	}
 }
 
