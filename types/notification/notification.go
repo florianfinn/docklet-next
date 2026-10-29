@@ -156,8 +156,6 @@ type DispatchAutoHeal struct {
 	Stack         string `json:"stack,omitempty" maxLength:"128"`
 	Restarts      int    `json:"restarts" minimum:"0" maximum:"100"`
 	WindowMinutes int    `json:"windowMinutes" minimum:"1" maximum:"1440"`
-	ContainerName string `json:"containerName"`
-	ContainerID   string `json:"containerId"`
 }
 
 type DispatchVulnerabilityScan struct {

@@ -58,12 +58,30 @@ func (s *SettingsService) UpdateAutoHeal(ctx context.Context, u dto.Update) (dto
 	if AutoHealManagedByEnvironment() {
 		return dto.Settings{}, &dto.Problem{Code: "autoheal.settings-env-managed", Status: 409}
 	}
-	err := s.UpdateSettingValues(ctx, []libarcane.SettingUpdate{{Key: "autoHealEnabled", Value: strconv.FormatBool(u.Enabled)}, {Key: "autoHealMaxRestarts", Value: strconv.Itoa(u.MaxRestarts)}, {Key: "autoHealRestartWindow", Value: strconv.Itoa(u.WindowMinutes)}, {Key: "autoHealExcludedStacks", Value: strings.Join(u.ExcludedStacks, ",")}, {Key: "autoHealExcludedContainers", Value: strings.Join(u.ExcludedContainers, ",")}})
-	if err != nil {
-		return dto.Settings{}, err
+	updates := []libarcane.SettingUpdate{{Key: "autoHealEnabled", Value: strconv.FormatBool(u.Enabled)}, {Key: "autoHealMaxRestarts", Value: strconv.Itoa(u.MaxRestarts)}, {Key: "autoHealRestartWindow", Value: strconv.Itoa(u.WindowMinutes)}, {Key: "autoHealExcludedStacks", Value: strings.Join(u.ExcludedStacks, ",")}, {Key: "autoHealExcludedContainers", Value: strings.Join(u.ExcludedContainers, ",")}}
+	s.writes.Lock()
+	defer s.writes.Unlock()
+	current := s.GetSettingsConfig()
+	values := make([]SettingVariable, 0, len(updates))
+	changes := make([]libarcane.SettingUpdate, 0, len(updates))
+	for _, update := range updates {
+		value, _, _, err := current.FieldByKey(update.Key)
+		if err != nil {
+			return dto.Settings{}, err
+		}
+		if value != update.Value {
+			changes = append(changes, update)
+			values = append(values, SettingVariable{Key: update.Key, Value: update.Value})
+		}
 	}
-	if err = s.NotifySettingsChanges(ctx, "autoHealEnabled", "autoHealMaxRestarts", "autoHealRestartWindow", "autoHealExcludedStacks", "autoHealExcludedContainers"); err != nil {
-		return dto.Settings{}, err
+	if len(values) > 0 {
+		if err := s.persistSettings(ctx, values); err != nil {
+			return dto.Settings{}, err
+		}
+		if err := s.refreshSettingsCacheInternal(context.WithoutCancel(ctx)); err != nil {
+			return dto.Settings{}, err
+		}
+		s.publishSettingsChangesInternal(changes)
 	}
 	return s.AutoHealSettings(ctx)
 }

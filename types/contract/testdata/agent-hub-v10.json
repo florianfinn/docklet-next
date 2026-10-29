@@ -573,8 +573,8 @@
   },
   "autoHeal": {
     "routes": [
-      {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"e0d38d2a2a1060310e5fab7914fdd1f6d9ce2a14c7584b290f37fda3ab3fed95"},
-      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"3fec03c59daaf5495b74eff89752f8990ad3ad3525c248d57fbd4fda912250e6"}
+      {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"b928d3c8d5f4327a8582451789d94464ad848642bacbbe29cba8a787486221d4"},
+      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"b282cd04488df9cca074ce6f8477c2edb03db18ff2a3b48b1e7b13ff18117225"}
     ],
     "settings": {
       "additionalProperties": false,
@@ -663,8 +663,6 @@
       "additionalProperties": false,
       "properties": {
         "container": {"maxLength":128,"type":"string"},
-        "containerId": {"type":"string"},
-        "containerName": {"type":"string"},
         "eventId": {"maxLength":64,"type":"string"},
         "outcome": {
           "enum": ["restarted","restart-failed","limit-reached"],
@@ -674,7 +672,7 @@
         "stack": {"maxLength":128,"type":"string"},
         "windowMinutes": {"format":"int64","maximum":1440,"minimum":1,"type":"integer"}
       },
-      "required": ["eventId","outcome","container","restarts","windowMinutes","containerName","containerId"],
+      "required": ["eventId","outcome","container","restarts","windowMinutes"],
       "type": "object"
     },
     "backupFailed": {

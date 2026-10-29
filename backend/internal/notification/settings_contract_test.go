@@ -15,6 +15,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 	dto "github.com/florianfinn/docklet-next/types/notification"
 	"github.com/stretchr/testify/require"
@@ -119,6 +121,11 @@ func TestNotificationRoutesRequireGlobalAdminAndLocalID(t *testing.T) {
 	cfg := huma.DefaultConfig("test", "1")
 	cfg.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", func(t reflect.Type, h string) string { return t.PkgPath() + "." + huma.DefaultSchemaNamer(t, h) })
 	_, api := humatest.New(t, cfg)
+	api.UseMiddleware(func(c huma.Context, next func(huma.Context)) {
+		ps := authz.NewPermissionSet()
+		ps.Global[authz.PermNotificationsManage] = struct{}{}
+		next(huma.WithContext(c, context.WithValue(c.Context(), middleware.ContextKeyUserPermissions, ps)))
+	})
 	RegisterNotifications(api, s, &config.Config{})
 	for _, path := range []string{"/environments/0/notifications/settings", "/environments/0/notifications/test/generic"} {
 		var status int

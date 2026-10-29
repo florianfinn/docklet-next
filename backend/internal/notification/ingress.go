@@ -130,11 +130,11 @@ func (s *NotificationService) DispatchIngress(ctx context.Context, o dto.Dispatc
 	if err := validateDispatch(p); err != nil {
 		return dto.DispatchResponse{}, err
 	}
-	if o.SessionID != "" && (s.dispatchSessionCurrent == nil || !s.dispatchSessionCurrent(o)) {
-		return dto.DispatchResponse{}, dispatchStale()
-	}
 	if s.dispatchBarrier != nil {
 		s.dispatchBarrier()
+	}
+	if o.SessionID != "" && (s.dispatchSessionCurrent == nil || !s.dispatchSessionCurrent(o)) {
+		return dto.DispatchResponse{}, dispatchStale()
 	}
 	var target NotificationTarget
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

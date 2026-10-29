@@ -11,6 +11,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/notification"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -119,6 +120,7 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 	// handler. RBAC middleware cannot scope this route because it has no environment ID.
 	huma.Register(api, huma.Operation{
 		OperationID:      "dispatch-notification",
+		RequestBody:      &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.DispatchRequest](), true, "")}}},
 		SkipValidateBody: true,
 		Method:           http.MethodPost,
 		Path:             "/notifications/dispatch",
@@ -126,4 +128,16 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 		Tags:             []string{"Notifications"},
 		Security:         []map[string][]string{{"ApiKeyAuth": {}}},
 	}, h.DispatchNotification)
+	typed := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Problem](), true, "")
+	generic := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
+	for _, item := range api.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Delete} {
+			if op == nil || !slices.Contains(op.Tags, "Notifications") {
+				continue
+			}
+			for _, status := range []string{"400", "409"} {
+				op.Responses[status] = &huma.Response{Description: "Notification or framework refusal", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{typed, generic}}}}}
+			}
+		}
+	}
 }

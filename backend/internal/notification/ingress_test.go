@@ -63,20 +63,21 @@ func TestDispatchRechecksOriginalBindingInTransaction(t *testing.T) {
 			env := environment.Environment{ID: "remote", Name: "Example", Enabled: true, AccessToken: &token, ApiKeyID: &key}
 			require.NoError(t, db.Create(&env).Error)
 			origin := originFor(&env)
-			s.SetDispatchSessionCurrent(func(o dto.DispatchOrigin) bool { return o.SessionID == "old" })
+			session := "old"
+			s.SetDispatchSessionCurrent(func(o dto.DispatchOrigin) bool { return o.SessionID == session })
 			entered, release := make(chan struct{}), make(chan struct{})
 			s.dispatchBarrier = func() { close(entered); <-release }
 			p := dto.DispatchRequest{Kind: "auto_heal", AutoHeal: &dto.DispatchAutoHeal{EventID: "one", Outcome: "restarted", Container: "web", Restarts: 1, WindowMinutes: 30}}
 			if change == "edge-reconnect" {
-				origin.SessionID = "replaced"
-				_, err := s.DispatchIngress(t.Context(), origin, p)
-				require.Error(t, err)
-				return
+				origin.SessionID = "old"
 			}
+
 			done := make(chan error, 1)
 			go func() { _, err := s.DispatchIngress(t.Context(), origin, p); done <- err }()
 			<-entered
 			switch change {
+			case "edge-reconnect":
+				session = "replacement"
 			case "rotate":
 				require.NoError(t, db.Model(&env).Update("access_token", "changeme").Error)
 			case "repair":

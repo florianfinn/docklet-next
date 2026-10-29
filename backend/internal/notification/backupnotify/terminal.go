@@ -30,7 +30,7 @@ type Run struct {
 
 // Terminal runs after a live terminal save. History repair never calls it.
 func (n Notifier) Terminal(ctx context.Context, r Run) {
-	if r.Suppress || ctx.Err() != nil || (r.Status != "failed" && r.Status != "partial" && r.Status != "interrupted") {
+	if r.Reason == "volume.backup.retention-failed" || r.Reason == "backup.retention_failed" || r.Suppress || ctx.Err() != nil || (r.Status != "failed" && r.Status != "partial" && r.Status != "interrupted") {
 		return
 	}
 	if r.EnvironmentID == "" {

@@ -15,9 +15,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/autoheal"
 	"net/http"
+	"reflect"
 )
 
 type Module struct {
@@ -36,7 +38,6 @@ type getInput struct {
 type putInput struct {
 	RawBody []byte
 	ID      string `path:"id"`
-	Body    dto.Update
 }
 type output struct{ Body dto.Settings }
 
@@ -51,11 +52,20 @@ func (m *Module) RegisterRoutes(api huma.API) {
 		m = &Module{}
 	}
 	huma.Register(api, huma.Operation{OperationID: "get-auto-heal-settings", Method: http.MethodGet, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.get)
-	huma.Register(api, huma.Operation{OperationID: "update-auto-heal-settings", SkipValidateBody: true, Method: http.MethodPut, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.put)
+	inputSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Update](), true, "")
+	requestBody := &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{"application/json": {Schema: inputSchema}}}
+	huma.Register(api, huma.Operation{RequestBody: requestBody, OperationID: "update-auto-heal-settings", SkipValidateBody: true, Method: http.MethodPut, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.put)
+	failureSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Problem](), true, "")
+	genericSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
+	for _, op := range []*huma.Operation{api.OpenAPI().Paths["/environments/{id}/auto-heal"].Get, api.OpenAPI().Paths["/environments/{id}/auto-heal"].Put} {
+		for _, status := range []string{"400", "403", "409", "502"} {
+			op.Responses[status] = &huma.Response{Description: "Auto Heal or framework refusal", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{failureSchema, genericSchema}}}}}
+		}
+	}
 }
 func (m *Module) get(ctx context.Context, in *getInput) (*output, error) {
 	if in.ID != "0" {
-		v, err := m.proxy.JSON[dto.Settings](ctx, in.ID, http.MethodGet, "/api/environments/0/auto-heal", nil)
+		v, err := m.remote(ctx, in.ID, http.MethodGet, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -68,27 +78,57 @@ func (m *Module) get(ctx context.Context, in *getInput) (*output, error) {
 	return &output{Body: v}, nil
 }
 func (m *Module) put(ctx context.Context, in *putInput) (*output, error) {
+	var body dto.Update
 	if len(in.RawBody) > 0 {
-		if err := json.Unmarshal(in.RawBody, &in.Body, json.RejectUnknownMembers(true)); err != nil {
-			return nil, problem(&dto.Problem{Code: "autoheal.settings-invalid", Status: 400})
+		if err := json.Unmarshal(in.RawBody, &body, json.RejectUnknownMembers(true)); err != nil {
+			p := &dto.Problem{Code: "autoheal.settings-invalid", Status: 400}
+			if semantic, ok := errors.AsType[*json.SemanticError](err); ok {
+				p.Field = string(semantic.JSONPointer)
+			}
+			return nil, p
 		}
 	}
-	if err := in.Body.Validate(); err != nil {
+	if err := body.Validate(); err != nil {
 		return nil, problem(err)
 	}
 	if in.ID != "0" {
-		v, err := m.proxy.JSON[dto.Settings](ctx, in.ID, http.MethodPut, "/api/environments/0/auto-heal", in.Body)
+		v, err := m.remote(ctx, in.ID, http.MethodPut, body)
 		if err != nil {
 			return nil, err
 		}
 		return &output{Body: *v}, nil
 	}
 	if m.config != nil && m.config.UIConfigurationDisabled {
-		return nil, huma.Error403Forbidden("settings.ui-disabled")
+		return nil, huma.Error403Forbidden("Configuration is managed through the environment")
 	}
-	v, err := m.settings.UpdateAutoHeal(ctx, in.Body)
+	v, err := m.settings.UpdateAutoHeal(ctx, body)
 	if err != nil {
 		return nil, problem(err)
 	}
 	return &output{Body: v}, nil
+}
+
+func (m *Module) remote(ctx context.Context, id, method string, request any) (*dto.Settings, error) {
+	var body []byte
+	var err error
+	if request != nil {
+		body, err = json.Marshal(request)
+		if err != nil {
+			return nil, problem(err)
+		}
+	}
+	var result dto.Settings
+	if err = m.proxy(ctx, id, method, "/api/environments/0/auto-heal", body, &result); err == nil {
+		return &result, nil
+	}
+	if access := handlerutil.AgentAccess(err); access != nil {
+		return nil, access
+	}
+	if status, ok := errors.AsType[*remenv.StatusError](err); ok {
+		var p dto.Problem
+		if json.Unmarshal(status.Body, &p) == nil && p.Status == status.StatusCode && (p.Code == "autoheal.settings-invalid" || p.Code == "autoheal.settings-env-managed") {
+			return nil, &p
+		}
+	}
+	return nil, handlerutil.TranslateRemoteProxyError(err)
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"github.com/stretchr/testify/require"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -34,4 +35,35 @@ func TestDeliveryTransportAndSDKWaitAreBounded(t *testing.T) {
 		t.Fatal("SDK wait did not return within its bound")
 	}
 	require.Equal(t, "delivery-invalid", ClassifyDeliveryError(errors.New("template invalid")))
+}
+
+type blockedNotificationTransport struct{ entered chan struct{} }
+
+func (t blockedNotificationTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	close(t.entered)
+	<-r.Context().Done()
+	return nil, r.Context().Err()
+}
+func TestNativeNotificationTransportHonoursClientBound(t *testing.T) {
+	c := *notificationHTTPClient
+	require.Equal(t, 15*time.Second, c.Timeout)
+	c.Timeout = time.Millisecond
+	entered := make(chan struct{})
+	c.Transport = blockedNotificationTransport{entered}
+	done := make(chan error, 1)
+	go func() {
+		r, e := c.Get("https://notify.example.com/message")
+		if r != nil {
+			_ = r.Body.Close()
+		}
+		done <- e
+	}()
+	<-entered
+	select {
+	case e := <-done:
+		require.Error(t, e)
+		require.Equal(t, "delivery-unreachable", ClassifyDeliveryError(e))
+	case <-time.After(time.Second):
+		t.Fatal("native transport remained blocked")
+	}
 }

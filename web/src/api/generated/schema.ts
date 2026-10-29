@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 875485dbee60e3900b671c59bcdac459074aaf97c097b8f8666bb2bfeca0c5ef
+// Revision: 88aa52e534ac7772c5cf9d25f34ac8b08fe3409ba0dac67bb2850ffcc1936f5b
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5400,6 +5400,13 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        AutohealProblem: {
+            /** @enum {string} */
+            code: "autoheal.settings-invalid" | "autoheal.settings-env-managed" | "settings.key-managed";
+            field?: string;
+            /** Format: int64 */
+            status: number;
+        };
         AutohealSettings: {
             /**
              * Format: uri
@@ -9992,8 +9999,6 @@ export interface components {
         };
         NotificationDispatchAutoHeal: {
             container: string;
-            containerId: string;
-            containerName: string;
             eventId: string;
             /** @enum {string} */
             outcome: "restarted" | "restart-failed" | "limit-reached";
@@ -10085,6 +10090,13 @@ export interface components {
             image_update?: boolean;
             prune_report?: boolean;
             vulnerability_found?: boolean;
+        };
+        NotificationProblem: {
+            /** @enum {string} */
+            code: "notification.config-invalid" | "notification.hub-only" | "notification.dispatch-invalid" | "notification.dispatch-unsupported" | "notification.dispatch-stale" | "notification.test-busy";
+            field?: string;
+            /** Format: int64 */
+            status: number;
         };
         NotificationResponse: {
             /**
@@ -16728,6 +16740,42 @@ export interface operations {
                     "application/json": components["schemas"]["AutohealSettings"];
                 };
             };
+            /** @description Auto Heal or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16762,6 +16810,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutohealSettings"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Auto Heal or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -22203,6 +22287,24 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationResponse"][] | null;
                 };
             };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22239,6 +22341,24 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationResponse"];
                 };
             };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22271,6 +22391,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -22307,6 +22445,24 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22341,6 +22497,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseNotificationTestResponse"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -30914,6 +31088,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseNotificationDispatchResponse"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */

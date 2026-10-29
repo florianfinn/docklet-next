@@ -489,7 +489,7 @@ func (s *JobService) ActivityID(run scheduler.Run) string {
 	}
 	visible := run.Trigger == "manual"
 	switch run.JobID {
-	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "vulnerability-scan":
+	case "auto-update", "auto-patch", "scheduled-prune", "vulnerability-scan":
 		visible = true
 	default:
 		visible = visible || strings.HasPrefix(run.JobID, "volume-backup:") || strings.HasPrefix(run.JobID, "system-backup:")

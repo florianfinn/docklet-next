@@ -70,7 +70,6 @@ type TestNotificationInput struct {
 type DispatchNotificationInput struct {
 	APIKey  string `header:"X-API-Key" doc:"Remote environment access token"`
 	RawBody []byte
-	Body    notification.DispatchRequest
 }
 
 func normalizeNotificationTestType(testType string) string {
@@ -245,12 +244,13 @@ func (h *NotificationHandler) DispatchNotification(ctx context.Context, input *D
 	if strings.TrimSpace(input.APIKey) == "" {
 		return nil, huma.Error401Unauthorized("missing remote environment access token")
 	}
+	var body notification.DispatchRequest
 	if len(input.RawBody) > 0 {
-		if err := json.Unmarshal(input.RawBody, &input.Body, json.RejectUnknownMembers(true)); err != nil {
+		if err := json.Unmarshal(input.RawBody, &body, json.RejectUnknownMembers(true)); err != nil {
 			return nil, dispatchInvalid()
 		}
 	}
-	dispatchResponse, err := h.notificationService.DispatchNotification(ctx, input.APIKey, input.Body)
+	dispatchResponse, err := h.notificationService.DispatchNotification(ctx, input.APIKey, body)
 	if err != nil {
 		if p, ok := errors.AsType[*notification.Problem](err); ok {
 			return nil, p

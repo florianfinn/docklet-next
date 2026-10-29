@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 )
 
 // SendBatchImageUpdateNotification dispatches a batched image-update notification
@@ -177,8 +178,7 @@ func (s *NotificationService) SendAutoHealNotification(ctx context.Context, cont
 		_, err := s.dispatchNotificationToManagerInternal(ctx, notification.DispatchRequest{
 			Kind: notification.DispatchKindAutoHeal,
 			AutoHeal: &notification.DispatchAutoHeal{
-				ContainerName: containerName,
-				ContainerID:   containerID,
+				EventID: "autoheal:" + uuid.New().String(), Outcome: "restarted", Container: containerName, Restarts: 1, WindowMinutes: 30,
 			},
 		})
 		return err

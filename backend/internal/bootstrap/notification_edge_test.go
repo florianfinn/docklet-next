@@ -63,14 +63,14 @@ func TestNotificationDispatchThroughRealEdgeEventPath(t *testing.T) {
 	var registration edge.TunnelMessage
 	require.NoError(t, wsjson.Read(t.Context(), conn, &registration))
 	require.True(t, registration.Accepted)
-	for _, body := range []string{`{"kind":"backup_failed","backupFailed":{"eventId":"one","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`, `{"kind":"backup_failed","backupFailed":{"eventId":"one","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`, `{"kind":"auto_heal","autoHeal":{"containerName":"old"}}`, `{"kind":"backup_failed","backupFailed":{"extra":true}}`} {
+	for _, body := range []string{`{"kind":"backup_failed","backupFailed":{"eventId":"bad space","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`, `{"kind":"backup_failed","backupFailed":{"eventId":"one","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`, `{"kind":"backup_failed","backupFailed":{"eventId":"one","operation":"backup","volume":"data","reason":"volume.backup.failed"}}`, `{"kind":"auto_heal","autoHeal":{"containerName":"old"}}`, `{"kind":"backup_failed","backupFailed":{"extra":true}}`} {
 		require.NoError(t, wsjson.Write(t.Context(), conn, &edge.TunnelMessage{Type: edge.MessageTypeEvent, Event: &edge.TunnelEvent{Type: edge.TunnelEventTypeNotificationDispatch, MetadataJSON: json.RawMessage(body)}}))
 		err := <-results
 		o := <-origins
 		require.Equal(t, key, o.APIKeyID)
 		require.Equal(t, edge.AgentTokenHash(token), o.TokenHash)
 		require.NotEmpty(t, o.SessionID)
-		if strings.Contains(body, "extra") || strings.Contains(body, "old") {
+		if strings.Contains(body, "extra") || strings.Contains(body, "old") || strings.Contains(body, "bad space") {
 			require.Error(t, err)
 		} else {
 			require.NoError(t, err)

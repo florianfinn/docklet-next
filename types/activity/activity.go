@@ -34,6 +34,7 @@ const (
 	TypeProjectDestroy    Type = "project_destroy"
 	TypeContainerStart    Type = "container_start"
 	TypeContainerStop     Type = "container_stop"
+	TypeContainerAutoHeal Type = "container_auto_heal"
 	TypeContainerRestart  Type = "container_restart"
 	TypeContainerRedeploy Type = "container_redeploy"
 	TypeContainerEdit     Type = "container_edit"

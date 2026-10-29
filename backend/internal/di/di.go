@@ -63,7 +63,7 @@ var RuntimeOptions = fx.Options(fx.Provide(provideRuntimeInternal))
 // ServiceOptions constructs services once and injects them into route modules.
 var ServiceOptions = fx.Options(
 	fx.Invoke(wireImageSafety),
- fx.Invoke(wireNotifications),
+	fx.Invoke(wireNotifications),
 	RuntimeOptions,
 	fx.Supply(
 		resources.FS,
@@ -160,7 +160,7 @@ var JobOptions = fx.Options(
 		scheduler.NewVulnerabilityScanJob,
 		scheduler.NewVulnerabilityRiskJob,
 		scheduler.NewAutoPatchJob,
-		scheduler.NewAutoHealJob,
+		provideAutoHealJobInternal,
 		scheduler.NewActivitySweepJob,
 		scheduler.NewUploadSessionsCleanupJob,
 		fx.Annotate(scheduler.NewUpgradeLogCleanupJob, fx.ResultTags(`name:"upgrade-log-cleanup"`)),
