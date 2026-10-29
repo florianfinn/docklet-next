@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/acfs"
 	"go.getarcane.app/acfs/types"
+	arcanedocker "go.getarcane.app/docker"
 	"go.getarcane.app/kit/pkg"
 	"gorm.io/gorm"
 
@@ -197,7 +198,12 @@ func newVolumeWorkspaceTestDockerClientInternal(t *testing.T, server *httptest.S
 		}),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = dockerClient.Close() })
+	// Usage is cached per daemon host; a reused test port must not see a previous fake daemon.
+	arcanedocker.InvalidateVolumeUsageCache(dockerClient)
+	t.Cleanup(func() {
+		arcanedocker.InvalidateVolumeUsageCache(dockerClient)
+		_ = dockerClient.Close()
+	})
 	return dockerClient
 }
 
