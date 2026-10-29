@@ -1,8 +1,8 @@
-// Source: florianfinn/docklet-next/backend/pkg/scheduler/runs
-// Revision: 68ed0f5d915cc4047a2eeedc2cd54e0570390620
+// Source: docklet-next/issues/296
+// Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: New admission retry and duplicate repair regressions.
+// Deviations: Original admission retry and duplicate repair regressions.
 
 package runs
 
@@ -105,4 +105,31 @@ func TestStartupRepairsDuplicatedRunAndResumesDispatch(t *testing.T) {
 		return getErr == nil && persisted.Status == st.Succeeded
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(t, int32(1), executions.Load())
+}
+
+func TestDedupeRunsKeepsLatestCopyAtFirstPosition(t *testing.T) {
+	base := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	run := func(id string, status st.RunStatus, offset time.Duration) st.Run {
+		return st.Run{ID: id, Status: status, UpdatedAt: base.Add(offset)}
+	}
+	cases := []struct {
+		name string
+		runs []st.Run
+		want []st.Run
+	}{
+		{"older copy later", []st.Run{run("a", st.Succeeded, time.Second), run("b", st.Queued, 0), run("a", st.Queued, 0)},
+			[]st.Run{run("a", st.Succeeded, time.Second), run("b", st.Queued, 0)}},
+		{"newer copy later", []st.Run{run("a", st.Queued, 0), run("b", st.Queued, 0), run("a", st.Succeeded, time.Second)},
+			[]st.Run{run("a", st.Succeeded, time.Second), run("b", st.Queued, 0)}},
+		{"equal timestamps keep first", []st.Run{run("a", st.Running, 0), run("a", st.Queued, 0)},
+			[]st.Run{run("a", st.Running, 0)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			record := st.QueueRecord{Runs: tc.runs}
+			require.True(t, dedupeRunsInternal(&record))
+			require.Equal(t, tc.want, record.Runs)
+			require.False(t, dedupeRunsInternal(&record))
+		})
+	}
 }

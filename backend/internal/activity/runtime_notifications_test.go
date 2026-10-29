@@ -61,6 +61,7 @@ func TestDeployNotificationSharesTerminalTransaction(t *testing.T) {
 		})
 	}
 }
+
 // A policy child is an update-project receipt with a policy binding; its failure
 // notifies once like a manual update, and a replayed completion adds nothing.
 func TestPolicyChildDeployFailureNotifiesOnce(t *testing.T) {
