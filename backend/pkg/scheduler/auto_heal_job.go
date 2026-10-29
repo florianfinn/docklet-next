@@ -182,15 +182,19 @@ func (j *AutoHealJob) recover(ctx context.Context, cli *client.Client) error {
 		return autoheal.Baseline{StartedAt: v.State.StartedAt, RestartCount: v.RestartCount, Restarting: v.State.Restarting}, nil
 	})
 }
+
+// Terminal ledger outcomes map to declared reason codes; the durable run guard rejects any other code.
 func targetForRestart(r *autoheal.Restart) st.TargetOutcome {
-	status := st.Failed
-	if r.Outcome == "restarted" {
-		status = st.Succeeded
+	target := st.TargetOutcome{ResourceType: "container", ID: r.ContainerID, Status: st.Failed, Code: "runtime.outcome-unknown"}
+	switch r.Outcome {
+	case "restarted":
+		target.Status, target.Code = st.Succeeded, "autoheal.restarted"
+	case "limit-reached":
+		target.Status, target.Code = st.Skipped, "autoheal.limit-reached"
+	case "restart-failed", "interrupted":
+		target.Code = "autoheal." + r.Outcome
 	}
-	if r.Outcome == "limit-reached" {
-		status = st.Skipped
-	}
-	return st.TargetOutcome{ResourceType: "container", ID: r.ContainerID, Status: status, Code: "autoheal." + r.Outcome}
+	return target
 }
 func (j *AutoHealJob) processCandidateInternal(ctx context.Context, cli *client.Client, candidate container.Summary, _ int, _ time.Duration, _ int) (st.TargetOutcome, error) {
 	target := st.TargetOutcome{ResourceType: "container", ID: candidate.ID, Status: st.Skipped}

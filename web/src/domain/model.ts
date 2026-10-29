@@ -202,7 +202,8 @@ export type ActionKind =
   | "volume-restore"
   | "pull"
   | "prune"
-  | "agent-restart";
+  | "agent-restart"
+  | "auto-heal";
 
 export type ActionStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 

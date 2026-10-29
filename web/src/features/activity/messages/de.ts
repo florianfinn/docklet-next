@@ -71,6 +71,7 @@ export const deActivity: typeof enActivity = {
     pull: "Image-Pull",
     prune: "Aufräumen",
     "agent-restart": "Agent-Neustart",
+    "auto-heal": "Neustart durch Auto Heal",
   },
   dismiss: "Hinweis schließen",
   notices: {

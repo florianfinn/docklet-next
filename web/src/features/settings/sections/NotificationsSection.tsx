@@ -160,7 +160,8 @@ function Targets() {
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                {/* Narrow screens give the actions their own row so the summary and event badges keep the full width. */}
+                <div className="flex w-full items-center justify-end gap-1.5 sm:w-auto">
                   <Switch aria-label={`${t("enabled")}: ${label}`} checked={row.enabled} disabled={pending.has(row.provider)} onCheckedChange={(enabled) => void toggle(row, enabled)} />
                   <HelpTarget topic="settingsNotifications.test">
                     <Button type="button" size="sm" variant="ghost" disabled={sending} onClick={() => void test(row)}>

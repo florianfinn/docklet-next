@@ -112,6 +112,9 @@ export function eventMap(events: readonly NotificationEvent[], stored?: Partial<
   })) as Record<WireEvent, boolean>;
 }
 
+/** Typed reasons of a failed test or delivery; anything else renders without a reason. */
+export const DELIVERY_REASONS = ["delivery-unreachable", "delivery-rejected", "delivery-auth", "delivery-invalid"] as const;
+
 /** Own keys only: inherited names such as `constructor` are unknown config keys. */
 export function configKind(provider: NotificationProvider, key: string): string | undefined {
   const keys = CONFIG_KEYS[provider] as Record<string, unknown>;

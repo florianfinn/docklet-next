@@ -259,3 +259,40 @@ func TestAutoHealOutOfContractSettingsFailClosedVisibly(t *testing.T) {
 	require.Equal(t, 1, strings.Count(logs.String(), "auto-heal settings outside the typed contract"))
 	require.Contains(t, logs.String(), "field=/maxRestarts")
 }
+func TestAutoHealScheduledRunsSettleAndHealTheNextContainer(t *testing.T) {
+	j, db := autoHealFixture(t)
+	runtime := francistest.New(t)
+	q := runs.New(runtime.Service(), time.UTC)
+	require.NoError(t, q.Register(runtime))
+	francistest.Start(t, runtime)
+	var current atomic.Value
+	j.listContainers = func(context.Context, *client.Client) ([]container.Summary, error) {
+		return []container.Summary{{ID: current.Load().(string), Names: []string{"/web"}}}, nil
+	}
+	q.SetExecutor(func(ctx context.Context, _ st.Run) (st.Outcome, error) { return j.Run(ctx) }, func(ctx context.Context, r st.Run) (st.Outcome, error) { return j.Reconcile(ctx, r) })
+	require.NoError(t, q.Start(t.Context(), t.Context()))
+	q.Activate()
+	defer q.Stop(context.WithoutCancel(t.Context()))
+	for _, id := range []string{"first", "second"} {
+		current.Store(id)
+		run, err := q.Submit(t.Context(), st.Request{JobID: j.Name(), RunID: uuid.NewString(), Trigger: "scheduled"})
+		require.NoError(t, err)
+		var settled st.Run
+		require.Eventually(t, func() bool {
+			settled, err = q.Get(t.Context(), run.EnvironmentID, run.JobID, run.ID)
+			return err == nil && settled.Status == st.Succeeded
+		}, 5*time.Second, 20*time.Millisecond, "scheduled run %s did not settle", id)
+		require.Len(t, settled.Outcome.Targets, 1)
+		require.Equal(t, "autoheal.restarted", settled.Outcome.Targets[0].Code)
+	}
+	var restarted int64
+	require.NoError(t, db.Model(&autoheal.Restart{}).Where("outcome = ?", "restarted").Count(&restarted).Error)
+	require.EqualValues(t, 2, restarted)
+}
+func TestAutoHealTerminalOutcomesUseDeclaredReasons(t *testing.T) {
+	for _, outcome := range []string{"restarted", "restart-failed", "interrupted", "limit-reached", "attempting", ""} {
+		target := targetForRestart(&autoheal.Restart{ContainerID: "container", Outcome: outcome})
+		require.NoError(t, st.Outcome{Targets: []st.TargetOutcome{target}}.ValidateReasons(), outcome)
+		require.Equal(t, outcome == "restarted", target.Status == st.Succeeded, outcome)
+	}
+}

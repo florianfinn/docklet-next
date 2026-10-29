@@ -229,6 +229,8 @@ export const deRunMessages = {
     },
     notification: {
       "delivery-failed": "Benachrichtigung konnte nicht zugestellt werden",
+      "delivery-failed-via": "Benachrichtigung über {provider} fehlgeschlagen",
+      "delivery-failed-reason": "Benachrichtigung über {provider} fehlgeschlagen: {reason}",
     },
   },
   join: { dot: '{left} · {right}', dash: '{left} – {right}' },

@@ -292,11 +292,10 @@ func (s *JobService) rescheduleAffectedJobInternal(ctx context.Context, jobID st
 		return fmt.Errorf("job %s has no runtime scheduler state", jobID)
 	}
 
+	// The scheduler installs every disabled conditional job without a schedule.
 	expectedSchedule := job.Schedule(rescheduleCtx)
-	if jobID == "vulnerability-scan" {
-		if conditional, ok := job.(scheduler.ConditionalJob); ok && !conditional.ShouldSchedule(rescheduleCtx) {
-			expectedSchedule = ""
-		}
+	if conditional, ok := job.(scheduler.ConditionalJob); ok && !conditional.ShouldSchedule(rescheduleCtx) {
+		expectedSchedule = ""
 	}
 	if runtimeState.Schedule != expectedSchedule {
 		return fmt.Errorf("job %s runtime schedule %q does not match requested schedule %q", jobID, runtimeState.Schedule, expectedSchedule)

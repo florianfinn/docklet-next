@@ -6,6 +6,7 @@
 
 import type { components } from "@/api/generated/schema";
 import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
+import { DELIVERY_REASONS, isProvider } from "@/domain/notifications";
 
 import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
 import type { RuntimeView } from "@/features/activity/runtime-presentation";
@@ -27,6 +28,7 @@ const KINDS: Record<string, ActionKind> = {
   project_restart: "restart", container_start: "start", container_stop: "stop",
   container_restart: "restart", container_redeploy: "redeploy", container_edit: "recreate",
   vulnerability_scan: "scan", system_prune: "prune", auto_update: "update",
+  container_auto_heal: "auto-heal",
 };
 
 function required(value: unknown, field: string): asserts value {
@@ -55,7 +57,21 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
+  // Auto Heal and notification delivery codes live under runMessages.codes, keyed by their wire path.
+  if (code && /^(autoheal|notification)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
   return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+}
+
+/** A delivery failure names its channel and typed reason; sender diagnostics never reach the title. */
+function eventTitle(event: Event): MessageCode {
+  const meta = event.metadata as Record<string, unknown> | undefined;
+  const provider = meta?.provider;
+  if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return message(event.messageCode, event.title);
+  const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
+  const reason = meta?.reason;
+  return typeof reason === "string" && (DELIVERY_REASONS as readonly string[]).includes(reason)
+    ? { code: "runMessages.codes.notification.delivery-failed-reason", params: { provider: via, reason: { code: `settings.codes.${reason}`, params: {} } }, sourceText: event.title }
+    : { code: "runMessages.codes.notification.delivery-failed-via", params: { provider: via }, sourceText: event.title };
 }
 
 /** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
@@ -120,7 +136,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     services: run.affectedServices ?? [],
     status: mapStatus(run.status),
     ...(run.outcomeState !== undefined ? { outcomeState: run.outcomeState, cancelRequested: run.cancelRequested } : {}),
-    progress: run.progress ?? 0,
+    // A settled Auto Heal restart is one complete container action, not zero progress.
+    progress: kind === "auto-heal" && run.status !== "running" && run.status !== "queued" ? 100 : run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
     error: run.error
@@ -195,7 +212,7 @@ export function mapEvent(event: Event): CodedEvent {
   for (const [key, value] of Object.entries({ id: event?.id, type: event?.type, timestamp: event?.timestamp, messageCode: event?.messageCode })) required(value, key);
   return {
     id: event.id, at: event.timestamp, kind: eventKind(event), level: eventLevel(event.severity),
-    title: message(event.messageCode, event.title),
+    title: eventTitle(event),
     hostId: event.environmentId,
     ...(event.resourceType === "project" && event.resourceId && event.environmentId ? { stackId: inventoryId(event.environmentId, event.resourceId) } : {}),
   };

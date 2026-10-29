@@ -7,9 +7,15 @@
 package job
 
 import (
+	"testing"
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	scanScheduler "github.com/florianfinn/docklet-next/backend/pkg/scheduler"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	"github.com/florianfinn/docklet-next/types/jobschedule"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestAutoHealScheduledRunHasNoEmptyActivity(t *testing.T) {
@@ -19,4 +25,22 @@ func TestAutoHealScheduledRunHasNoEmptyActivity(t *testing.T) {
 		require.NoError(t, e)
 		require.Equal(t, trigger == "manual", r.ActivityID != "")
 	}
+}
+
+func TestAutoHealIntervalChangesWhileDisabled(t *testing.T) {
+	db := setupSettingsTestDBInternal(t)
+	cfg, err := newSettingsServiceForTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	svc := newJobServiceForTestInternal(t, db, cfg, &config.Config{})
+	heal, err := scanScheduler.NewAutoHealJob(nil, cfg, nil, nil, &runs.Admission{})
+	require.NoError(t, err)
+	controller, err := scanScheduler.NewJobScheduler(t.Context(), svc.runs, time.UTC)
+	require.NoError(t, err)
+	svc.SetScheduler(t.Context(), controller)
+	require.NoError(t, controller.RegisterJob(heal))
+	require.NoError(t, cfg.SetBoolSetting(t.Context(), "autoHealEnabled", false))
+	interval := "0 */7 * * * *"
+	_, err = svc.UpdateJobSchedules(t.Context(), jobschedule.Update{AutoHealInterval: &interval})
+	require.NoError(t, err)
+	require.Equal(t, interval, svc.GetJobSchedules(t.Context()).AutoHealInterval)
 }

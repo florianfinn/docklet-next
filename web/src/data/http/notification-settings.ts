@@ -9,7 +9,7 @@ import type { AutoHealApi, NotificationsApi } from "../api";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { settingsProblem } from "../settings-error";
 import type { AutoHealSettings } from "@/domain/auto-heal";
-import { eventMap, isProvider, parseNotificationTarget, type NotificationTestResult, type WireEvent } from "@/domain/notifications";
+import { DELIVERY_REASONS, eventMap, isProvider, parseNotificationTarget, type NotificationTestResult, type WireEvent } from "@/domain/notifications";
 import type { CsrfClient } from "./csrf-client";
 
 export const NOTIFICATION_SETTINGS_OPERATIONS = [
@@ -26,7 +26,6 @@ interface Options {
 
 const HUB: ResourceRef = { kind: "hub", id: "0" };
 const TEST_CODES = ["notification.test-sent", "notification.test-failed"];
-const TEST_REASONS = ["delivery-unreachable", "delivery-rejected", "delivery-auth", "delivery-invalid"];
 const invalidResponse = () => new AdapterOutcomeError({ kind: "error", code: "http.error" });
 
 function names(value: unknown): string[] {
@@ -47,7 +46,7 @@ export function parseAutoHeal(raw: unknown): AutoHealSettings {
 export function parseTestResult(raw: unknown): NotificationTestResult {
   const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   if (typeof v.code !== "string" || !TEST_CODES.includes(v.code)) throw invalidResponse();
-  if (v.reason !== undefined && v.reason !== "" && !(typeof v.reason === "string" && TEST_REASONS.includes(v.reason))) throw invalidResponse();
+  if (v.reason !== undefined && v.reason !== "" && !(typeof v.reason === "string" && (DELIVERY_REASONS as readonly string[]).includes(v.reason))) throw invalidResponse();
   if (v.warning !== undefined && v.warning !== "" && v.warning !== "notification.target-disabled") throw invalidResponse();
   return {
     code: v.code as NotificationTestResult["code"],

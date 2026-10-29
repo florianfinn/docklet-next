@@ -229,6 +229,8 @@ export const enRunMessages = {
     },
     notification: {
       "delivery-failed": "Notification delivery failed",
+      "delivery-failed-via": "Notification via {provider} failed",
+      "delivery-failed-reason": "Notification via {provider} failed: {reason}",
     },
   },
   join: { dot: '{left} · {right}', dash: '{left} – {right}' },
