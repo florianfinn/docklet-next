@@ -694,6 +694,9 @@ func isManagementPathInternal(method, suffix string) bool {
 		return true
 	}
 
+	if suffix == "/auto-heal" {
+		return true
+	}
 	if strings.HasPrefix(suffix, "/notifications") {
 		return true
 	}

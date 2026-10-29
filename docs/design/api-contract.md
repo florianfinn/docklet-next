@@ -223,3 +223,5 @@ only. Explicit snapshot reads and repository checks reconcile observations. Down
 activities remain discoverable through overview until streaming and confirmed helper
 cleanup finish. The synchronous delete route propagates request cancellation to its
 worker; accepted create/restore/check workers retain their application lifetime.
+
+Auto Heal outcome codes: `autoheal.restarted`, `autoheal.restart-failed`, `autoheal.limit-reached`, `autoheal.interrupted`, `notification.delivery-failed`.

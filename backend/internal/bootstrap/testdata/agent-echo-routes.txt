@@ -21,6 +21,7 @@ GET /api/diagnostics/stream
 GET /api/environments/0/runtime-runs/:runId
 GET /api/environments/:id/activities
 GET /api/environments/:id/activities/:activityId
+GET /api/environments/:id/auto-heal
 GET /api/environments/:id/containers
 GET /api/environments/:id/containers/:containerId
 GET /api/environments/:id/containers/:containerId/edit-config
@@ -189,6 +190,7 @@ POST /api/environments/:id/vulnerabilities/ignore/bulk
 POST /api/environments/:id/vulnerabilities/scan
 POST /api/environments/:id/vulnerabilities/unignore/bulk
 POST /api/settings/search
+PUT /api/environments/:id/auto-heal
 PUT /api/environments/:id/containers/:containerId/auto-update
 PUT /api/environments/:id/job-schedules
 PUT /api/environments/:id/projects/:projectId

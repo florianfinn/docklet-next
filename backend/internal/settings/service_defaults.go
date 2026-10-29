@@ -57,6 +57,7 @@ func DefaultSettingsConfig() *Settings {
 		PruneNetworkUntil:                     SettingVariable{Value: ""},
 		PruneBuildCacheMode:                   SettingVariable{Value: "none"},
 		PruneBuildCacheUntil:                  SettingVariable{Value: ""},
+		AutoHealExcludedStacks:                SettingVariable{Value: ""},
 		AutoHealEnabled:                       SettingVariable{Value: "false"},
 		AutoHealInterval:                      SettingVariable{Value: "0 */5 * * * *"},
 		AutoHealExcludedContainers:            SettingVariable{Value: ""},

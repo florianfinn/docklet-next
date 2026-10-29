@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
+	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
@@ -262,6 +263,7 @@ type HandlerDeps struct {
 	Activity          *activity.Module
 	Version           *version.VersionService
 	Notification      *notification.Module
+	AutoHeal          *autoheal.Module
 	ApiKey            *apikey.Module
 	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.Module
@@ -500,6 +502,9 @@ var routeModules = []routeModule{
 	}},
 	{"network", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
 		network.RegisterNetworks(api, d.Network, d.Docker, d.Activity.Service(), c)
+	}},
+	{"autoheal", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.AutoHeal.RegisterRoutes(api)
 	}},
 	{"notification", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Notification.RegisterRoutes(api)

@@ -1,5 +1,11 @@
 export const enRunMessages = {
   exact: {
+  "autoheal.restarted": "Container restarted by Auto Heal",
+  "autoheal.restart-failed": "Auto Heal restart failed",
+  "autoheal.limit-reached": "Auto Heal restart limit reached",
+  "autoheal.interrupted": "Auto Heal attempt interrupted",
+  "notification.delivery-failed": "Notification delivery failed",
+
   "check": "Check",
   "imagePull": "Image pull",
   "replace": "Replace",

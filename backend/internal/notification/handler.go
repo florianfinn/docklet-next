@@ -201,7 +201,7 @@ func (h *NotificationHandler) TestNotification(ctx context.Context, input *TestN
 		Body: base.ApiResponse[notification.TestResponse]{
 			Success: true,
 			Data: notification.TestResponse{
-				Message: "Test notification sent successfully",
+				Code: "notification.test-sent",
 				Warning: warning,
 			},
 		},

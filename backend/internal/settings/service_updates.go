@@ -82,6 +82,9 @@ func (s *SettingsService) updateSettingValueNoRefreshInternal(ctx context.Contex
 // UpdateSettings publishes the refreshed snapshot before returning. Each
 // subscriber's effects remain ordered and may finish after this method returns.
 func (s *SettingsService) UpdateSettings(ctx context.Context, updates settings.Update) ([]SettingVariable, error) {
+	if AutoHealUpdateManaged(updates) {
+		return nil, common.Classify(common.ErrValidation, errors.New("settings.key-managed"))
+	}
 	if updates.VulnerabilityScanInterval != nil || updates.TrivyConcurrentScanContainers != nil || updates.TrivyServerEnabled != nil || updates.TrivyServerUrl != nil || updates.TrivyServerToken != nil || updates.TrivyConfig != nil || updates.TrivyIgnore != nil {
 		return nil, common.Classify(common.ErrValidation, errors.New("retired vulnerability setting"))
 	}

@@ -163,12 +163,8 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/jobs/{jobId}/runs/{runId}/ack", CommandName: "job.run.ack"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/jobs/{jobId}/restart", CommandName: "job.worker.restart"},
 
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/notifications/settings", CommandName: "notification.settings.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/notifications/settings/{provider}", CommandName: "notification.settings.get"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/notifications/settings", CommandName: "notification.settings.upsert"},
-	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/notifications/settings/{provider}", CommandName: "notification.settings.delete"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/notifications/test/{provider}", CommandName: "notification.test"},
-
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/auto-heal", CommandName: "auto_heal.settings.get"},
+	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/auto-heal", CommandName: "auto_heal.settings.update"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/dashboard", CommandName: "dashboard.snapshot"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/dashboard/action-items", CommandName: "dashboard.action_items"},
 

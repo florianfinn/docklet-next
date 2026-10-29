@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
+	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/build"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
@@ -129,6 +130,7 @@ var ServiceOptions = fx.Options(
 		updater.New,
 		webhook.New,
 		notification.New,
+		autoheal.New,
 		vulnerability.New,
 		project.New,
 		upload.New,

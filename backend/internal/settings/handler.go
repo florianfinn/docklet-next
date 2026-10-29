@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/category"
 	searchtypes "github.com/florianfinn/docklet-next/types/search"
@@ -291,6 +292,9 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 }
 
 func (h *SettingsHandler) validateSettingsUpdateInput(ctx context.Context, input settings.Update) error {
+	if AutoHealUpdateManaged(input) {
+		return &autohealDTO.Problem{Code: "settings.key-managed", Status: 400}
+	}
 	if input.SetupCompleted != nil && *input.SetupCompleted == "true" && (h.cfg == nil || h.cfg.SignInMode() == "local") {
 		userID, ok := middleware.GetUserIDFromContext(ctx)
 		if !ok {

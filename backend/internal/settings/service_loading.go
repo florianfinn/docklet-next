@@ -24,7 +24,7 @@ import (
 )
 
 func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *database.DB) (*Settings, error) {
-	if config.Load().UIConfigurationDisabled || config.Load().AgentMode {
+	if config.Load().UIConfigurationDisabled || config.Load().AgentMode || config.Load().EdgeAgent {
 		slog.DebugContext(
 			ctx,
 			"loadDatabaseSettingsInternal: using env path",

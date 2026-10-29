@@ -453,7 +453,8 @@ type Update struct {
 	// AutoHealEnabled indicates if automatic container healing is enabled.
 	//
 	// Required: false
-	AutoHealEnabled *string `json:"autoHealEnabled,omitzero"`
+	AutoHealExcludedStacks *string `json:"autoHealExcludedStacks,omitzero"`
+	AutoHealEnabled        *string `json:"autoHealEnabled,omitzero"`
 
 	// AutoHealInterval is the cron expression for how often to check container health.
 	//
