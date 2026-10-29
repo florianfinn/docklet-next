@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture; M12 backup foundation.
 
 package policies
 
@@ -54,7 +54,7 @@ func (s *volumeBackupPolicySchedulerInternal) HasJob(name string) bool {
 	return ok
 }
 
-func TestVolumeBackupPolicy_UpdateRegistersIndependentJobsAndSettings(t *testing.T) {
+func TestVolumeBackupPolicy_UpdateRegistersSingleJobAndSettings(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-schedule?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&VolumeBackupPolicy{}))
@@ -66,14 +66,12 @@ func TestVolumeBackupPolicy_UpdateRegistersIndependentJobsAndSettings(t *testing
 
 	collection, err := service.UpdateBackupPolicies(t.Context(), "app-data", []volume.UpdateBackupPolicy{
 		{Enabled: true, Schedule: "0 */15 * * * *", RetentionCount: 5, StopContainers: true, LocalEnabled: true},
-		{Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 30, LocalEnabled: true},
 	})
 	require.NoError(t, err)
-	require.Len(t, collection.Policies, 2)
+	require.Len(t, collection.Policies, 1)
 	require.Equal(t, 5, collection.Policies[0].RetentionCount)
 	require.True(t, collection.Policies[0].StopContainers)
-	require.Equal(t, 30, collection.Policies[1].RetentionCount)
-	require.Len(t, jobScheduler.jobs, 2)
+	require.Len(t, jobScheduler.jobs, 1)
 
 	firstID := collection.Policies[0].ID
 	collection, err = service.UpdateBackupPolicies(t.Context(), "app-data", []volume.UpdateBackupPolicy{{

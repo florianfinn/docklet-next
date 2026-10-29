@@ -7,10 +7,10 @@ import type { DockerImage, ImagePullProgress, ImagePullResult, ImagePruneResult,
 import type { HubDiscovery } from "@/domain/hub-discovery";
 import type { AutoUpdatePolicy, FileOwner, Host, HostConnection, NetworkAttachment, Topology, TopologyNetwork } from "@/domain/model";
 import type { NetworkDraft } from "@/domain/networks";
-import type { BackupTarget, HubSettings, NotificationChannel, SettingsSection } from "@/domain/settings";
+import type { BackupTarget, BackupTargetInput, BackupTargetReferences, HubSettings, NotificationChannel, SettingsSection } from "@/domain/settings";
 import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
-import type { BackupPolicy, Volume, VolumeDetail } from "@/domain/volumes";
+import type { BackupBrowse, BackupOverview, BackupPolicy, BackupRepository, BackupSelection, Volume, VolumeDetail } from "@/domain/volumes";
 import type { AuthMode } from "@/domain/settings";
 
 export interface CurrentUser {
@@ -177,8 +177,25 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<WorkspaceWriteResult>;
   downloadFile?(volumeId: string, path: string): Promise<Blob>;
   setBackupPolicy(volumeId: string, policy: BackupPolicy | null): Promise<void>;
-  runBackup(volumeId: string): Promise<string>;
-  restoreBackup(volumeId: string, runId: string, mode: "replace" | "new"): Promise<string>;
+  runBackup(volumeId: string, options?: { stopContainers?: boolean; targetId?: string }): Promise<string>;
+  restoreBackup(volumeId: string, runId: string, mode: "replace" | "new", newVolumeName?: string): Promise<string>;
+  restoreBackupFiles(volumeId: string, runId: string, selection: BackupSelection): Promise<string>;
+  browseBackup(volumeId: string, runId: string, path?: string, start?: number): Promise<BackupBrowse>;
+  downloadBackup(volumeId: string, runId: string): Promise<Blob>;
+  deleteBackup(volumeId: string, runId: string): Promise<void>;
+  uploadRestore(volumeId: string, file: File, mode?: "replace" | "new", newVolumeName?: string): Promise<string>;
+  getBackupOverview(hostId: string): Promise<BackupOverview>;
+  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void): Promise<BackupOverview[]>;
+  getBackupRepository(hostId: string): Promise<BackupRepository>;
+  checkBackupRepository(hostId: string): Promise<string>;
+  listBackupTargets(): Promise<BackupTarget[]>;
+  createBackupTarget(input: BackupTargetInput): Promise<BackupTarget>;
+  updateBackupTarget(id: string, input: BackupTargetInput): Promise<BackupTarget>;
+  deleteBackupTarget(id: string): Promise<void>;
+  testBackupTarget(id: string, hostId: string): Promise<string>;
+  getBackupTargetReferences(id: string, hostId: string): Promise<BackupTargetReferences>;
+  getBackupRecoveryKey(id: string, hostId?: string): Promise<string>;
+  attachLocalBackupRecoveryKey(hostId: string, recoveryKey: string): Promise<void>;
 }
 
 export type CreateNetworkInput = NetworkDraft;
@@ -244,7 +261,6 @@ export interface SettingsApi {
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */
   completeSetup(input: Pick<HubSettings, "general" | "auth" | "hostDefaults">): Promise<void>;
-  testBackupTarget(target: BackupTarget): Promise<TestResult>;
   testNotification(channel: NotificationChannel): Promise<TestResult>;
   setContainerAutoUpdate(containerId: string, policy: AutoUpdatePolicy): Promise<void>;
 }

@@ -29,7 +29,6 @@ import (
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/system/children/backup/children/volumes"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/entityjobs"
@@ -96,7 +95,6 @@ type Service struct {
 	recoveryKeys    *sharedbackup.RecoveryKeyStore
 	volumeService   *volume.VolumeService
 	jobs            *entityjobs.Registry
-	volumes         *volumes.Service
 	maintenance     *MaintenanceGate
 	auth            *auth.AuthService
 	roles           *role.RoleService
@@ -112,14 +110,7 @@ func NewService(deps Dependencies) *Service {
 		config: deps.Config, recoveryKeys: deps.RecoveryKeys, volumeService: deps.Volumes,
 		jobs: entityjobs.New("system-backup:", sharedbackup.SystemAdmissionScope), maintenance: NewMaintenanceGate(),
 		auth: deps.Auth, roles: deps.Roles, coordinator: deps.Coordinator, settings: deps.Settings, runtime: deps.Runtime}
-	s.volumes = volumes.NewService(volumes.Dependencies{
-		DB: deps.DB, Engine: deps.Engine, Volumes: deps.Volumes, Activity: deps.Activity,
-		Settings: deps.Settings, Jobs: s.jobs, AcquireRun: s.acquireRunInternal,
-		AcquireDurableRun: s.acquireDurableRunInternal, AlreadyRunning: ErrSystemBackupAlreadyRunning,
-	})
-	if deps.Engine != nil {
-		deps.Engine.RegisterRunKind("system-volumes", s.volumes.ExecuteDurable, s.volumes.FailDurable)
-	}
+
 	return s
 }
 

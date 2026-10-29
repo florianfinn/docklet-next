@@ -21,7 +21,7 @@ import (
 )
 
 func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v8.json")
+	body, err := os.ReadFile("testdata/agent-hub-v9.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -31,12 +31,12 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 		ImageSafety struct{ RegistryTestFields, RegistryPublicFields, UpdateInfoFields, PruneFields, ProtectionFields, ErrorCodes, InactiveCapabilities, Capabilities, UpdateStates []string }
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
-	require.Equal(t, 8, AgentHubVersion)
-	require.Equal(t, 8, MinimumAgentVersion)
+	require.Equal(t, 9, AgentHubVersion)
+	require.Equal(t, 9, MinimumAgentVersion)
 	require.Equal(t, AgentHubVersion, fixture.Version)
 	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
 	require.False(t, AgentCompatible(6, "be97c8565af13b50db70f2447a1aa47cddb38fff918ddf03c04a3670aa046e25"))
-	require.True(t, AgentCompatible(8, AgentHubFingerprint))
+	require.True(t, AgentCompatible(9, AgentHubFingerprint))
 	require.False(t, AgentCompatible(7, "mixed-intermediate-build"))
 	// Every fixture field list is checked against the real wire producer type,
 	// including optional credential/config fields populated with synthetic data.

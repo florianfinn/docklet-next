@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; Remove legacy archive helpers.
 
 package backup
 
@@ -50,8 +50,6 @@ const (
 	volumeRusticRepositoryPath       = "/repository/volumes"
 	localVolumeRepositoryID          = "volumes:local"
 	legacyVolumePasswordSaltInternal = "arcane-volume-backups:"
-
-	systemRecoverySnapshotLabel = "arcane-system-recovery"
 )
 
 type backupStorageMountInternal struct {
@@ -329,27 +327,11 @@ func sanitizeBackupPathInternal(input string) (string, error) {
 	return cleaned, nil
 }
 
-func sanitizeBackupIDInternal(backupID string) (string, error) {
-	cleaned, err := sanitizeBackupPathInternal(backupID)
-	if err != nil {
-		return "", fmt.Errorf("invalid backup id: %w", err)
-	}
-	if strings.Contains(cleaned, "/") {
-		return "", errors.New("invalid backup id: path separators not allowed")
-	}
-	return cleaned, nil
-}
-
-func backupArchiveFilenameInternal(backupID string) (string, error) {
-	sanitizedBackupID, err := sanitizeBackupIDInternal(backupID)
-	if err != nil {
-		return "", err
-	}
-	return sanitizedBackupID + ".tar.gz", nil
-}
-
 // volumeBackupPasswordInternal returns the recovery key once one is stored, re-keying the given repositories off the legacy derivation first.
 func (s *Service) volumeBackupPasswordInternal(ctx context.Context, dockerClient *client.Client, repositories ...backup.Repository) (string, error) {
+	if len(repositories) > 0 && repositories[0].Password != "" {
+		return repositories[0].Password, nil
+	}
 	if s.deps.RecoveryKeys == nil {
 		return kit.SHA256Hex(legacyVolumePasswordSaltInternal + s.deps.EncryptionKey), nil
 	}
@@ -360,9 +342,7 @@ func (s *Service) volumeBackupPasswordInternal(ctx context.Context, dockerClient
 	if err != nil {
 		return "", err
 	}
-	for _, repository := range repositories {
-		s.rekeyRepositoryInternal(ctx, dockerClient, repository, key)
-	}
+
 	return key, nil
 }
 
@@ -408,7 +388,7 @@ func (s *Service) localRusticRepositoryInternal(ctx context.Context, dockerClien
 
 func (s *Service) rusticRepositoryForBackupInternal(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) (backup.Repository, string, error) {
 	if entry.LocalSnapshotID != "" {
-		repository, err := s.localRusticRepositoryInternal(ctx, dockerClient, true)
+		repository, err := s.repositoryFor(ctx, dockerClient, string(entry.Destination), true)
 		return repository, entry.LocalSnapshotID, err
 	}
 	return backup.Repository{}, "", errors.New("volume backup has no Rustic snapshot")
@@ -457,24 +437,6 @@ func (s *Service) createBackupTempContainerWithMountInternal(ctx context.Context
 	}
 
 	return resp.ID, cleanup, nil
-}
-
-func (s *Service) createBackupTempContainerInternal(ctx context.Context, dockerClient *client.Client, target string, readOnly bool) (string, func(), error) {
-	slog.DebugContext(ctx, "volume service: create backup temp container", "target", target, "readOnly", readOnly)
-	var err error
-	if dockerClient == nil {
-		dockerClient, err = s.deps.Docker.GetClient(ctx)
-		if err != nil {
-			return "", nil, err
-		}
-	}
-
-	backupStorage, err := s.resolveUsableBackupStorageMountInternal(ctx, dockerClient, target, readOnly)
-	if err != nil {
-		return "", nil, err
-	}
-
-	return s.createBackupTempContainerWithMountInternal(ctx, dockerClient, "", backupStorage.mount)
 }
 
 func volumeSourceMountInternal(volumeName string) mount.Mount {

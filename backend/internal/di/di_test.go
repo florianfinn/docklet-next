@@ -115,6 +115,7 @@ func TestOptionsValidate(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(
 			cancel,
+			AppFailure(func(error) {}),
 			&config.Config{},
 			(*database.DB)(nil),
 			&http.Client{},

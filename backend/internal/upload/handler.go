@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; M12 typed backup problems on session refusals.
 
 package upload
 
@@ -18,6 +18,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/upload"
 
@@ -59,9 +60,13 @@ type DeleteUploadSessionInput struct {
 }
 
 // SessionHTTPError maps upload-session errors to HTTP errors for this package
-// and the domain endpoints that consume sessions. It returns nil for errors
-// that are not upload-session errors.
+// and the domain endpoints that consume sessions. Typed backup problems keep
+// their status and code. It returns nil for errors that are not upload-session errors.
 func SessionHTTPError(err error) error {
+	var problem *dto.Problem
+	if errors.As(err, &problem) {
+		return problem
+	}
 	switch {
 	case errors.Is(err, common.ErrUploadSessionNotFound):
 		return huma.Error404NotFound(err.Error())

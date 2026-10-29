@@ -89,6 +89,10 @@ GET /api/environments/:id/volumes/backups/:backupId/download
 GET /api/environments/:id/volumes/backups/:backupId/files
 GET /api/environments/:id/volumes/backups/:backupId/files/browse
 GET /api/environments/:id/volumes/backups/:backupId/has-path
+GET /api/environments/:id/volumes/backups/overview
+GET /api/environments/:id/volumes/backups/repository
+GET /api/environments/:id/volumes/backups/targets/:targetId/references
+GET /api/environments/:id/volumes/backups/targets/local/recovery-key
 GET /api/environments/:id/volumes/counts
 GET /api/environments/:id/volumes/prune
 GET /api/environments/:id/volumes/sizes
@@ -177,6 +181,8 @@ POST /api/environments/:id/volumes/:volumeName/backups/:backupId/restore
 POST /api/environments/:id/volumes/:volumeName/backups/:backupId/restore-files
 POST /api/environments/:id/volumes/:volumeName/backups/upload
 POST /api/environments/:id/volumes/:volumeName/rename
+POST /api/environments/:id/volumes/backups/repository/check
+POST /api/environments/:id/volumes/backups/targets/:targetId/test
 POST /api/environments/:id/volumes/prune
 POST /api/environments/:id/vulnerabilities/ignore
 POST /api/environments/:id/vulnerabilities/ignore/bulk
@@ -193,6 +199,8 @@ PUT /api/environments/:id/updater/schedules
 PUT /api/environments/:id/uploads/:kind/:uploadId/chunks/:index
 PUT /api/environments/:id/volumes/:volumeName/backup-policy
 PUT /api/environments/:id/volumes/:volumeName/workspace
+PUT /api/environments/:id/volumes/backups/targets
+PUT /api/environments/:id/volumes/backups/targets/local/recovery-key
 echo_route_not_found /api
 echo_route_not_found /api/*
 echo_route_not_found /api/diagnostics

@@ -30,7 +30,7 @@ func TestSignInModeReadOnlyAPI(t *testing.T) {
 			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
 			api.UseMiddleware(NewHumaMiddleware(api, svc, nil, nil, nil, svc.config))
 			RegisterAuth(api, svc.userService, svc, svc.settingsService)
-			health.RegisterRoutes(api)
+			health.RegisterRoutes(api, nil)
 			huma.Register(api, huma.Operation{OperationID: "test-pairing", Method: http.MethodPost, Path: "/environments/pair", Security: []map[string][]string{}}, func(_ context.Context, input *struct {
 				Key string `header:"X-API-Key"`
 			}) (*struct{ Body string }, error) {

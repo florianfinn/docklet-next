@@ -14,6 +14,7 @@ export type CodedStep = Omit<ActionStep, "label" | "detail"> & { label: MessageC
 export type CodedOutputLine = Omit<RunOutputLine, "text"> & { text: string | MessageCode };
 export type CodedActionRun = Omit<ActionRun, "title" | "target" | "error" | "steps" | "log" | "output"> & {
   title: MessageCode;
+  backupOutcome?: { status: string; errorCode?: string; reason?: string };
   target: MessageCode;
   error?: MessageCode;
   steps: CodedStep[];

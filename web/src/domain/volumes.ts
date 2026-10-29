@@ -2,7 +2,7 @@
 // the same UI; `kind` keeps the difference visible.
 
 import type { InventoryObservation } from "./model";
-import type { Retention } from "./retention";
+import type { components } from "@/api/generated/schema";
 import { nextOccurrence, type PlanSchedule } from "./schedule";
 
 export type StorageKind = "volume" | "bind";
@@ -19,19 +19,21 @@ export interface VolumeConsumer {
 }
 
 export type { Weekday } from "./schedule";
-export type BackupSchedule = PlanSchedule;
+export type BackupSchedule = Exclude<PlanSchedule, { mode: "once" }> | { mode: "custom"; cron: string };
 
 export interface BackupPolicy {
   enabled: boolean;
   targetId: string;
   schedule: BackupSchedule;
-  /** Archive count and/or total size kept on the target. */
-  retention: Retention;
+  /** Zero keeps all scheduled snapshots; manual snapshots are kept until deleted. */
+  retentionCount: number;
+  id?: string;
+  nextRunAt?: string;
   /** Stop consumers during the archive for a consistent file state. */
   stopContainers: boolean;
 }
 
-export type BackupRunStatus = "running" | "succeeded" | "failed";
+export type BackupRunStatus = "running" | "succeeded" | "failed" | "partial" | "unavailable";
 
 export interface BackupRun {
   id: string;
@@ -40,10 +42,10 @@ export interface BackupRun {
   startedAt: string;
   finishedAt?: string;
   status: BackupRunStatus;
-  trigger: "manual" | "scheduled";
+  trigger: "manual" | "scheduled" | "safety";
   sizeBytes?: number;
   archive?: string;
-  error?: string;
+  errorCode?: string;
   actionId?: string;
   stoppedContainers: boolean;
 }
@@ -71,6 +73,13 @@ export interface Volume {
   consumers: VolumeConsumer[];
   labels: Record<string, string>;
   backup?: BackupPolicy;
+  backupUnavailable?: boolean;
+  timeZone?: string;
+  volumeExists?: boolean;
+  running?: BackupRunning;
+  lastRestore?: RestoreRun;
+  /** Every restore still owing stopped containers, newest first. */
+  pendingRestores?: RestoreRun[];
   lastBackup?: BackupRun;
   /** Created in this demo session; can be deleted when unused. */
   demoCreated?: boolean;
@@ -202,5 +211,22 @@ export function volumeLabel(v: Pick<Volume, "composeName" | "name">): string {
 
 /** Next scheduled run in the hub time zone; manual plans and past one-time runs have none. */
 export function nextBackupRun(schedule: BackupSchedule, from: Date = new Date(), timeZone?: string): Date | undefined {
-  return schedule.mode === "manual" ? undefined : nextOccurrence(schedule, from, timeZone);
+  return schedule.mode === "manual" || schedule.mode === "custom" ? undefined : nextOccurrence(schedule, from, timeZone);
+}
+
+export type RestoreRun = components["schemas"]["VolumeRestoreRun"];
+export type BackupRunning = components["schemas"]["VolumeBackupRunning"];
+export type BackupRepository = components["schemas"]["VolumeBackupRepository"];
+export type UsableBackupTarget = components["schemas"]["VolumeUsableBackupTarget"];
+export type BackupSelection = components["schemas"]["BackupRestoreSelection"];
+export type BackupBrowse = components["schemas"]["BasePaginatedBackupBackupFileEntry"];
+export interface BackupOverview {
+  hostId: string;
+  unavailable?: boolean;
+  timeZone: string;
+  authority: string;
+  setVersion: number;
+  repository?: components["schemas"]["VolumeBackupRepositorySummary"];
+  targets: UsableBackupTarget[];
+  volumes: Volume[];
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.
 
 package backup
 
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
@@ -39,6 +40,7 @@ type volumeBackupTestRow struct {
 	PolicyID        string
 	Status          string
 	LocalSnapshotID string
+	Trigger         string `gorm:"default:scheduled"`
 }
 
 func (volumeBackupTestRow) TableName() string { return "volume_backups" }
@@ -95,7 +97,7 @@ func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
 	).Error)
 
 	service := NewService(Dependencies{DB: &database.DB{DB: gormDB}})
-	require.NoError(t, service.applyVolumeBackupRetentionInternal(t.Context(), policyID, 1))
+	require.NoError(t, service.applyVolumeBackupRetentionInternal(t.Context(), "app-data", "", 1))
 
 	var backups []volume.Backup
 	require.NoError(t, gormDB.Table("volume_backups").Order("created_at ASC").Find(&backups).Error)
@@ -154,18 +156,18 @@ func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
 func TestVolumeBackup_ValidationErrors(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-validation?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}))
+	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &checkSetting{}, &backuptarget.Target{}))
 	service := NewService(Dependencies{DB: &database.DB{DB: gormDB}})
 	ctx := t.Context()
 
 	_, err = service.policies.UpdateBackupPolicies(ctx, "app-data", []volume.UpdateBackupPolicy{{Schedule: "not a cron", LocalEnabled: true}})
-	require.ErrorContains(t, err, "invalid volume backup schedule")
+	require.ErrorContains(t, err, "volume.backup.policy-invalid")
 
 	_, err = service.policies.UpdateBackupPolicies(ctx, "app-data", []volume.UpdateBackupPolicy{{Schedule: "0 0 2 * * *", RetentionCount: 7}})
-	require.ErrorContains(t, err, "select a local volume backup destination")
+	require.ErrorContains(t, err, "volume.backup.policy-invalid")
 
 	_, err = service.StartBackup(ctx, "0", "app-data", user.Actor{}, volume.CreateBackupRequest{Destination: volume.BackupDestination("invalid")})
-	require.EqualError(t, err, "invalid volume backup destination")
+	require.ErrorContains(t, err, "backup.target.unknown")
 
 }
 

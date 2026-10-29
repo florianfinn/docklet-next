@@ -11,7 +11,6 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
-	"github.com/florianfinn/docklet-next/backend/internal/system/children/backup/children/volumes"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 )
@@ -66,9 +65,4 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	deleteBackup := op("delete-system-backup", http.MethodDelete, "/backups/{id}", "Delete a Hub database archive")
 	deleteBackup.DefaultStatus = http.StatusAccepted
 	middleware.RegisterWithPermission(api, deleteBackup, authz.PermSystemBackupsManage, h.Delete)
-	var volumeService *volumes.Service
-	if h.service != nil {
-		volumeService = h.service.volumes
-	}
-	volumes.RegisterRoutes(api, volumes.NewHandler(volumeService, h.appCtx))
 }

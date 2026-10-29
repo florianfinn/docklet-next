@@ -11,6 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/browser"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
@@ -22,13 +23,23 @@ import (
 // RegisterRoutes registers the volume backup endpoints, including policies,
 // file browsing, and restores.
 func RegisterRoutes(api huma.API, h *Handler) {
+	api = backuptarget.BudgetAPI(api)
+	defer backuptarget.RegisterProblemSchemas(api)
+	registerMetadataRoutes(api, h)
 	var policiesService *policies.Service
 	var browserService *browser.Service
 	var restoreService *restore.Service
 	if h.service != nil {
 		policiesService, browserService, restoreService = h.service.policies, h.service.browser, h.service.restore
 	}
-	policies.RegisterRoutes(api, policies.NewHandler(policiesService, h.activityService, h.environmentService, h.appCtx))
+	policyHandler := policies.NewHandler(policiesService, h.activityService, h.environmentService, h.appCtx)
+	if h.service != nil {
+		policyHandler.AroundUpdate = h.service.aroundPolicyUpdate(h.environmentService, h.config)
+		if h.config != nil && (h.config.AgentMode || h.config.EdgeAgent) {
+			policyHandler.BeforeLocalUpdate = h.service.checkPolicySet
+		}
+	}
+	policies.RegisterRoutes(api, policyHandler)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "list-volume-backups",

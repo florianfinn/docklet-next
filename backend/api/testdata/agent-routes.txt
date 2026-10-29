@@ -75,6 +75,10 @@ GET /environments/{id}/updater/system-image-hints
 GET /environments/{id}/updater/{kind}/{targetId}/restore-points
 GET /environments/{id}/uploads/{kind}/{uploadId}
 GET /environments/{id}/volumes
+GET /environments/{id}/volumes/backups/overview
+GET /environments/{id}/volumes/backups/repository
+GET /environments/{id}/volumes/backups/targets/local/recovery-key
+GET /environments/{id}/volumes/backups/targets/{targetId}/references
 GET /environments/{id}/volumes/backups/{backupId}/download
 GET /environments/{id}/volumes/backups/{backupId}/files
 GET /environments/{id}/volumes/backups/{backupId}/files/browse
@@ -164,6 +168,8 @@ POST /environments/{id}/updater/run
 POST /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore
 POST /environments/{id}/uploads/{kind}
 POST /environments/{id}/volumes
+POST /environments/{id}/volumes/backups/repository/check
+POST /environments/{id}/volumes/backups/targets/{targetId}/test
 POST /environments/{id}/volumes/prune
 POST /environments/{id}/volumes/{volumeName}/backups
 POST /environments/{id}/volumes/{volumeName}/backups/upload
@@ -183,5 +189,7 @@ PUT /environments/{id}/settings
 PUT /environments/{id}/updater/policies/{kind}/{targetId}
 PUT /environments/{id}/updater/schedules
 PUT /environments/{id}/uploads/{kind}/{uploadId}/chunks/{index}
+PUT /environments/{id}/volumes/backups/targets
+PUT /environments/{id}/volumes/backups/targets/local/recovery-key
 PUT /environments/{id}/volumes/{volumeName}/backup-policy
 PUT /environments/{id}/volumes/{volumeName}/workspace

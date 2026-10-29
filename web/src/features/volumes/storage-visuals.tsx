@@ -26,12 +26,15 @@ export function KindBadge({ volume, className }: { volume: Pick<Volume, "kind" |
   );
 }
 
-export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup"> }) {
+export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup" | "backupUnavailable" | "kind" | "hostId"> }) {
   const t = useTranslations("volumes.backupState");
-  const backup = useCapability("setBackupPolicy");
-  if (!backup.available) return <span className="text-xs text-muted-foreground" title={backup.reason}>{t("unavailable")}</span>;
-  if (!volume.backup) return <span className="text-xs text-muted-foreground">{t("none")}</span>;
-  if (!volume.backup.enabled) return <ToneBadge tone="gray">{t("disabled")}</ToneBadge>;
+  const backup = useCapability("getBackupOverview", { kind: "host", id: volume.hostId });
+  if (volume.kind === "bind") return <span className="text-xs text-muted-foreground">{t("namedVolumesOnly")}</span>;
+  if (volume.backupUnavailable || !backup.available) return <span className="text-xs text-muted-foreground" title={backup.reason}>{t("unavailable")}</span>;
+  if (volume.lastBackup?.status === "partial") return <ToneBadge tone="warn">{t("partial")}</ToneBadge>;
+  if (volume.lastBackup?.status === "unavailable") return <ToneBadge tone="gray">{t("unavailable")}</ToneBadge>;
+  if (!volume.backup && !volume.lastBackup) return <span className="text-xs text-muted-foreground">{t("none")}</span>;
+  if (volume.backup && !volume.backup.enabled) return <ToneBadge tone="gray">{t("disabled")}</ToneBadge>;
   const last = volume.lastBackup;
   if (last?.status === "running")
     return (

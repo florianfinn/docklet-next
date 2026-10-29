@@ -73,6 +73,9 @@ type Host struct {
 	running  atomic.Bool
 	draining atomic.Bool
 
+	// Receives a background service failure before the host tears down
+	onServiceFailure func(error)
+
 	actorProvider components.ActorProvider
 	service       *actor.Service
 	core          *actorcore.Manager
@@ -211,6 +214,7 @@ func newHost(options *newHostOptions) (h *Host, err error) {
 	// Create the host
 	h = &Host{
 		address:                options.Address,
+		onServiceFailure:       options.ServiceFailureHandler,
 		actorProvider:          actorProvider,
 		cas:                    cas,
 		holder:                 holder,
@@ -386,24 +390,37 @@ func (h *Host) Run(parentCtx context.Context) error {
 
 	// Run all services
 	// This blocks until the context is canceled or one of the services returns
-	return servicerunner.
-		NewServiceRunner(
-			// Perform health checks in background
-			h.runHealthChecks,
+	services := []servicerunner.Service{
+		// Perform health checks in background
+		h.runHealthChecks,
 
-			// Run the alarm fetcher in background
-			h.runAlarmFetcher,
+		// Run the alarm fetcher in background
+		h.runAlarmFetcher,
 
-			// In background also renew leases
-			h.runLeaseRenewal,
+		// In background also renew leases
+		h.runLeaseRenewal,
 
-			// Run the peer server that allows receiving invocations from other hosts
-			h.peerServer.Run,
+		// Run the peer server that allows receiving invocations from other hosts
+		h.peerServer.Run,
 
-			// Run the actor provider
-			h.actorProvider.Run,
-		).
-		Run(ctx)
+		// Run the actor provider
+		h.actorProvider.Run,
+	}
+	for i, service := range services {
+		services[i] = h.reportServiceFailure(service)
+	}
+	return servicerunner.NewServiceRunner(services...).Run(ctx)
+}
+
+// reportServiceFailure forwards a service error that did not come from cancellation to the failure handler before the runner starts the teardown
+func (h *Host) reportServiceFailure(service servicerunner.Service) servicerunner.Service {
+	return func(ctx context.Context) error {
+		err := service(ctx)
+		if err != nil && ctx.Err() == nil && h.onServiceFailure != nil {
+			h.onServiceFailure(err)
+		}
+		return err
+	}
 }
 
 // issueSelfCert generates a key pair and signs this host's workload certificate from the primary CA, installing it in the holder

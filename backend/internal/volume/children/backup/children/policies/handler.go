@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; agent compatibility refusal on remote policy reads and writes; stable codes instead of diagnostics on policy failures.
 
 package policies
 
@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/volume"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -28,6 +29,8 @@ import (
 )
 
 type Handler struct {
+	BeforeLocalUpdate  func(context.Context, *UpdateVolumeBackupPolicyInput) error
+	AroundUpdate       func(context.Context, *UpdateVolumeBackupPolicyInput, func() error) error
 	service            *Service
 	activityService    *activity.ActivityService
 	environmentService *environment.EnvironmentService
@@ -55,10 +58,9 @@ func (h *Handler) GetBackupPolicy(ctx context.Context, input *GetVolumeBackupPol
 			return nil, huma.Error500InternalServerError("environment service not available")
 		}
 		remotePath := fmt.Sprintf("/api/environments/0/volumes/%s/backup-policy", url.PathEscape(input.VolumeName))
-		response, err := handlerutil.RemoteJSONProxy(
-			h.environmentService.ProxyJSONRequest,
-		).JSON[base.ApiResponse[volume.BackupPolicyCollection]](
+		response, err := backuptarget.RemoteJSON[base.ApiResponse[volume.BackupPolicyCollection]](
 			ctx,
+			h.environmentService.ProxyJSONRequest,
 			input.EnvironmentID,
 			http.MethodGet,
 			remotePath,
@@ -72,16 +74,22 @@ func (h *Handler) GetBackupPolicy(ctx context.Context, input *GetVolumeBackupPol
 
 	policies, err := h.service.GetBackupPolicies(ctx, input.VolumeName)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, publicPolicyErrorInternal(err, http.StatusInternalServerError)
 	}
 	return &handlerutil.Out[volume.BackupPolicyCollection]{Body: base.ApiResponse[volume.BackupPolicyCollection]{Success: true, Data: *policies}}, nil
 }
 
 func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBackupPolicyInput) (*handlerutil.Out[volume.BackupPolicyCollection], error) {
+	if h.AroundUpdate != nil {
+		cloned := *h
+		cloned.AroundUpdate = nil
+		var result *handlerutil.Out[volume.BackupPolicyCollection]
+		err := h.AroundUpdate(ctx, input, func() error { var err error; result, err = cloned.UpdateBackupPolicy(ctx, input); return err })
+		return result, publicPolicyErrorInternal(err, http.StatusInternalServerError)
+	}
 	user, _ := userctx.CurrentUserFromContext(ctx)
 	var policies *volume.BackupPolicyCollection
 	var remoteResponse *base.ApiResponse[volume.BackupPolicyCollection]
-	errorStatus := http.StatusBadRequest
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	_, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
@@ -100,37 +108,31 @@ func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBac
 	}, func(activityCtx context.Context) error {
 		if input.EnvironmentID != "0" {
 			if h.environmentService == nil {
-				errorStatus = http.StatusInternalServerError
-				return errors.New("environment service not available")
+				return publicPolicyErrorInternal(errors.New("environment service not available"), http.StatusInternalServerError)
 			}
 			remotePath := fmt.Sprintf("/api/environments/0/volumes/%s/backup-policy", url.PathEscape(input.VolumeName))
 			var proxyErr error
-			remoteResponse, proxyErr = handlerutil.RemoteJSONProxy(
-				h.environmentService.ProxyJSONRequest,
-			).JSON[base.ApiResponse[volume.BackupPolicyCollection]](
+			remoteResponse, proxyErr = backuptarget.RemoteJSON[base.ApiResponse[volume.BackupPolicyCollection]](
 				activityCtx,
+				h.environmentService.ProxyJSONRequest,
 				input.EnvironmentID,
 				http.MethodPut,
 				remotePath,
 				input.Body,
 			)
-			if proxyErr != nil {
-				errorStatus = http.StatusBadGateway
-			}
-			return proxyErr
+			return publicPolicyErrorInternal(proxyErr, http.StatusBadGateway)
 		}
 		var updateErr error
-		policies, updateErr = h.service.UpdateBackupPolicies(activityCtx, input.VolumeName, input.Body.Policies)
-		return updateErr
+		policies, updateErr = h.service.UpdateBackupPoliciesChecked(activityCtx, input.VolumeName, input.Body.Policies, func() error {
+			if h.BeforeLocalUpdate != nil {
+				return h.BeforeLocalUpdate(activityCtx, input)
+			}
+			return nil
+		})
+		return publicPolicyErrorInternal(updateErr, http.StatusInternalServerError)
 	})
 	if err != nil {
-		if errorStatus == http.StatusInternalServerError {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		if errorStatus == http.StatusBadGateway {
-			return nil, huma.NewError(http.StatusBadGateway, err.Error())
-		}
-		return nil, huma.Error400BadRequest(err.Error())
+		return nil, publicPolicyErrorInternal(err, http.StatusInternalServerError)
 	}
 	if remoteResponse != nil {
 		return &handlerutil.Out[volume.BackupPolicyCollection]{Body: *remoteResponse}, nil

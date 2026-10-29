@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss.
 
 package bootstrap
 
@@ -79,7 +79,9 @@ func Bootstrap(ctx context.Context) error {
 	slog.InfoContext(ctx, "Arcane is starting...", "version", config.Version)
 	slog.InfoContext(ctx, "Arcane Identity Configuration", "puid", os.Getuid(), "pgid", os.Getgid())
 
-	appCtx, cancelApp := context.WithCancel(ctx)
+	appCtx, cancelAppCause := context.WithCancelCause(ctx)
+	cancelApp := context.CancelFunc(func() { cancelAppCause(nil) })
+	failApp := actorHostFailure(cancelAppCause)
 	appCtx = utils.WithAppLifecycleContext(appCtx)
 
 	var db *database.DB
@@ -110,7 +112,7 @@ func Bootstrap(ctx context.Context) error {
 		}
 	}()
 
-	app := fx.New(applicationOptions(appCtx, cfg, db, cancelApp))
+	app := fx.New(applicationOptions(appCtx, cfg, db, cancelApp, failApp))
 
 	startCtx, cancelStart := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancelStart()
@@ -118,27 +120,48 @@ func Bootstrap(ctx context.Context) error {
 		return fmt.Errorf("start application: %w", startErr)
 	}
 
-	select {
-	case <-ctx.Done():
-		slog.InfoContext(appCtx, "Context canceled")
-	case signal := <-app.Done():
-		slog.InfoContext(appCtx, "Received shutdown signal", "signal", signal)
-	}
+	fatalErr := waitForShutdown(ctx, appCtx, app.Done())
 
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelStop()
 	if stopErr := app.Stop(stopCtx); stopErr != nil {
 		releaseHubLock = false
-		return fmt.Errorf("stop application: %w", stopErr)
+		return errors.Join(fatalErr, fmt.Errorf("stop application: %w", stopErr))
+	}
+	if fatalErr != nil {
+		return fatalErr
 	}
 
 	slog.InfoContext(context.WithoutCancel(appCtx), "Arcane shutdown complete")
 	return nil
 }
 
-func applicationOptions(appCtx context.Context, cfg *config.Config, db *database.DB, cancelApp context.CancelFunc) fx.Option {
+// waitForShutdown blocks until a signal, the parent context or a fatal application failure ends the run.
+// Only a fatal failure (actor-host loss) returns an error, so the process exits non-zero and is restarted.
+func waitForShutdown(ctx, appCtx context.Context, done <-chan os.Signal) error {
+	select {
+	case <-ctx.Done():
+		slog.InfoContext(appCtx, "Context canceled")
+	case signal := <-done:
+		slog.InfoContext(appCtx, "Received shutdown signal", "signal", signal)
+	case <-appCtx.Done():
+		if cause := context.Cause(appCtx); errors.Is(cause, di.ErrActorHostLost) {
+			slog.ErrorContext(context.WithoutCancel(appCtx), "Stopping after a fatal runtime failure", "code", "runtime.actor-host-lost")
+			return cause
+		}
+		slog.InfoContext(context.WithoutCancel(appCtx), "Application context ended")
+	}
+	return nil
+}
+
+// actorHostFailure ends the application with a cause that waitForShutdown reports as fatal.
+func actorHostFailure(cancel context.CancelCauseFunc) di.AppFailure {
+	return func(err error) { cancel(fmt.Errorf("%w: %w", di.ErrActorHostLost, err)) }
+}
+
+func applicationOptions(appCtx context.Context, cfg *config.Config, db *database.DB, cancelApp context.CancelFunc, failApp di.AppFailure) fx.Option {
 	return fx.Options(
-		fx.Supply(cfg, db, cancelApp),
+		fx.Supply(cfg, db, cancelApp, failApp),
 		fx.Provide(
 			func() context.Context { return appCtx },
 			newConfiguredHTTPClientInternal,

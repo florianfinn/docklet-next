@@ -121,3 +121,11 @@ mainline/alpine-slim/Dockerfile and mainline/alpine/Dockerfile, revision
 Copyright (C) 2011-2023 F5, Inc. All rights reserved.
 The full conditions and disclaimer are retained in
 LICENSES/BSD-2-Clause-docker-nginx.txt.
+
+Separately pulled backup runtime image
+-------------------------------------
+Docklet uses ghcr.io/rustic-rs/rustic:v0.11.2, pinned by OCI index digest in
+runtime configuration, from https://github.com/rustic-rs/rustic. Rustic is
+licensed under Apache-2.0 OR MIT. The upstream licence files and digest
+resolution record are listed in docs/provenance/runtime-images.json.
+DOCKLET_BACKUP_ENGINE_IMAGE may select an operator-supplied reference.

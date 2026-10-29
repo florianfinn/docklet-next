@@ -187,6 +187,9 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		slog.WarnContext(syncCtx, "failed to sync registries during health check", "environmentId", envID, "error", syncRegistriesToEnvironmentErr)
 		syncErrors = append(syncErrors, syncRegistriesToEnvironmentErr)
 	}
+	if err := s.SyncBackupTargetsToEnvironment(syncCtx, envID); err != nil {
+		syncErrors = append(syncErrors, err)
+	}
 	if joinErr := errors.Join(syncErrors...); joinErr != nil {
 		return scheduler.Outcome{Status: scheduler.Partial}, joinErr
 	}

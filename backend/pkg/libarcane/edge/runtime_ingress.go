@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Bounded remote runtime implementation, active in production since #125.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Bounded remote runtime implementation, active in production since #125.
 
 package edge
 
@@ -34,6 +34,21 @@ func NewRuntimeTunnelClient(cfg *Config, handler http.Handler) *TunnelClient {
 func runtimeRequestPathInternal(path string) bool {
 	return path == "/api/environments/0/runtime-registration" || path == "/api/environments/0/runtime-target" || path == "/api/environments/0/runtime-runs" || strings.HasPrefix(path, "/api/environments/0/runtime-runs/")
 }
+
+// Only synchronous backup commands need request cancellation during preparation.
+// Accepted backup/restore/test workers keep their independent activity lifetime.
+func volumeBackupCancelableRequest(method, path string) bool {
+	command, ok := ResolveEdgeCommandName(method, path, false).Get()
+	if !ok {
+		return false
+	}
+	switch command {
+	case "volume.backup.download", "volume.backup.files_browse", "volume.backup.files", "volume.backup.has_path", "volume.backup.delete":
+		return true
+	}
+	return false
+}
+
 func RuntimeCommandName(method, path string) (string, bool) {
 	if method == http.MethodPost && path == "/api/environments/0/runtime-registration" {
 		return "runtime.register", true
@@ -74,11 +89,12 @@ type runtimeRequestIngressInternal struct {
 }
 
 func (c *TunnelClient) scheduleRuntimeRequestInternal(ctx context.Context, conn TunnelConnection, msg *TunnelMessage, workers *sync.WaitGroup, command bool) {
-	if !runtimeRequestPathInternal(msg.Path) {
+	volumeBackup := volumeBackupCancelableRequest(msg.Method, msg.Path)
+	if !runtimeRequestPathInternal(msg.Path) && !volumeBackup {
 		workers.Go(func() { c.handleRequest(ctx, conn, msg) })
 		return
 	}
-	if !c.runtimeCommands || len(msg.Body) > runtimeRequestBodyLimit || msg.ID == "" {
+	if (!c.runtimeCommands && !volumeBackup) || len(msg.Body) > runtimeRequestBodyLimit || msg.ID == "" {
 		c.sendCommandCompleteInternal(conn, msg.ID, 400, "runtime ingress unavailable")
 		return
 	}

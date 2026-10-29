@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; stateless prune HTTP contract; typed API create and rename name conflicts.
+// Deviations: Local module namespace; stateless prune HTTP contract; typed API create and rename name conflicts.; M12 preserve typed backup-target refusals and destination-busy responses.
 
 package volume
 
@@ -161,6 +161,10 @@ func (h *VolumeHandler) ListVolumes(ctx context.Context, input *ListVolumesInput
 func (h *VolumeHandler) GetVolume(ctx context.Context, input *GetVolumeInput) (*handlerutil.Out[*volume.Volume], error) {
 	vol, err := h.volumeService.GetVolumeByName(ctx, input.VolumeName)
 	if err != nil {
+		var typed huma.StatusError
+		if errors.As(err, &typed) {
+			return nil, typed
+		}
 		return nil, huma.Error404NotFound("Volume not found: " + err.Error())
 	}
 
@@ -208,6 +212,14 @@ func (h *VolumeHandler) CreateVolume(ctx context.Context, input *CreateVolumeInp
 		return createErr
 	})
 	if err != nil {
+		var typed huma.StatusError
+		if errors.As(err, &typed) {
+			return nil, typed
+		}
+		var busyErr *volumeWorkspaceBusyError
+		if errors.As(err, &busyErr) {
+			return nil, huma.Error409Conflict(err.Error())
+		}
 		var conflictErr *volume.ProjectVolumeRenameConflictError
 		if errors.As(err, &conflictErr) {
 			return nil, &volume.ExistsError{Status: http.StatusConflict, Title: "Conflict", Detail: "A volume with this name already exists", Code: "volume.exists"}
@@ -266,6 +278,10 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 		return renameErr
 	})
 	if err != nil {
+		var typed huma.StatusError
+		if errors.As(err, &typed) {
+			return nil, typed
+		}
 		var busyErr *volumeWorkspaceBusyError
 		var conflictErr *volume.ProjectVolumeRenameConflictError
 		var inUseErr *volume.ProjectVolumeRenameInUseError
@@ -316,6 +332,10 @@ func (h *VolumeHandler) RemoveVolume(ctx context.Context, input *RemoveVolumeInp
 		return h.volumeService.DeleteVolume(runtimeCtx, input.VolumeName, input.Force, *user)
 	})
 	if err != nil {
+		var typed huma.StatusError
+		if errors.As(err, &typed) {
+			return nil, typed
+		}
 		var busyErr *volumeWorkspaceBusyError
 		if errors.As(err, &busyErr) {
 			return nil, huma.Error409Conflict(err.Error())
@@ -371,6 +391,10 @@ func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInp
 func (h *VolumeHandler) GetVolumeUsage(ctx context.Context, input *GetVolumeUsageInput) (*handlerutil.Out[VolumeUsageResponse], error) {
 	inUse, containers, err := h.volumeService.GetVolumeUsage(ctx, input.VolumeName)
 	if err != nil {
+		var typed huma.StatusError
+		if errors.As(err, &typed) {
+			return nil, typed
+		}
 		if errdefs.IsNotFound(err) {
 			return nil, huma.Error404NotFound("Volume not found: " + err.Error())
 		}

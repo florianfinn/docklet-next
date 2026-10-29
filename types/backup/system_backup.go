@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced the system recovery wire contract with coordinated SQLite archives.
+// Deviations: Replaced the system recovery wire contract with coordinated SQLite archives; M12 backup foundation.
 
 package backup
 
@@ -97,7 +97,8 @@ type UpdateBackupPolicy struct {
 	ID             string `json:"id,omitempty"`
 	Enabled        bool   `json:"enabled"`
 	Schedule       string `json:"schedule"`
-	RetentionCount int    `json:"retentionCount" minimum:"1"`
+	RetentionCount int    `json:"retentionCount" minimum:"0" maximum:"3650"`
+	TargetID       string `json:"targetId,omitempty"`
 	StopContainers bool   `json:"stopContainers,omitempty"`
 	LocalEnabled   bool   `json:"localEnabled"`
 }
@@ -106,7 +107,7 @@ type UpdateSystemBackupPolicy struct {
 	ID             string `json:"id,omitempty" pattern:"^[A-Za-z0-9_-]{1,128}$"`
 	Enabled        bool   `json:"enabled"`
 	Schedule       string `json:"schedule"`
-	RetentionCount int    `json:"retentionCount" minimum:"1"`
+	RetentionCount int    `json:"retentionCount" minimum:"0" maximum:"3650"`
 	TargetID       string `json:"targetId,omitempty" pattern:"^[A-Za-z0-9_-]{1,128}$"`
 }
 

@@ -4,6 +4,7 @@ import { LiveRestorePoints } from "@/shared/components/updates/live-stack-update
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { ChevronRight, History, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
+import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useActionsQuery } from "@/data/queries";
@@ -148,6 +149,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
   const t = useTranslations("stacks.deployments");
   const ta = useTranslations("activity.history");
   const tc = useTranslations("common.actions");
+  const backupText = useTranslations("volumes.backups");
   const cmd = useStackCommands();
   const live = useActionRuns();
   const adapter = useAdapter();
@@ -167,6 +169,11 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,25rem)]" data-slot="deployments">
       <section aria-labelledby="dep-title">
+        <p className="mb-4 text-sm text-muted-foreground">
+          {backupText("deploymentHint")} <Link to="/backups" className="text-primary-text hover:underline">
+            {backupText("title")}
+          </Link>
+        </p>
         <h2 id="dep-title" className="mb-3 text-sm font-medium text-muted-foreground">
           {t("title")}
         </h2>

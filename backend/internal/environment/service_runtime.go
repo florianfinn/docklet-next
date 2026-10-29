@@ -9,6 +9,7 @@ package environment
 import (
 	"context"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/types/environment"
 	"log/slog"
@@ -167,4 +168,14 @@ func (s *EnvironmentService) ApplyHostRuntimeState(ctx context.Context, env *env
 		copy := report.report
 		env.AgentReport = &copy
 	}
+}
+
+// SyncBackupTargetsToEnvironment sends metadata at the same lifecycle points
+// as registry delivery. Mount and repository effects belong to admitted work.
+func (s *EnvironmentService) SyncBackupTargetsToEnvironment(ctx context.Context, id string) error {
+	if id == "0" {
+		return nil
+	}
+	_, err := backuptarget.SyncHost(ctx, s.db, id, s.ProxyJSONRequest)
+	return err
 }

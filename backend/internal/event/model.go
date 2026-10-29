@@ -70,11 +70,12 @@ const (
 	EventTypeVolumeFileUpdate      EventType = "volume.file.update"
 	EventTypeVolumeWorkspaceUpdate EventType = "volume.workspace.update"
 
-	EventTypeVolumeBackupCreate       EventType = "volume.backup.create"
-	EventTypeVolumeBackupDelete       EventType = "volume.backup.delete"
-	EventTypeVolumeBackupRestore      EventType = "volume.backup.restore"
-	EventTypeVolumeBackupRestoreFiles EventType = "volume.backup.restore_files"
-	EventTypeVolumeBackupDownload     EventType = "volume.backup.download"
+	EventTypeVolumeBackupCreate          EventType = "volume.backup.create"
+	EventTypeVolumeBackupDelete          EventType = "volume.backup.delete"
+	EventTypeVolumeBackupRestore         EventType = "volume.backup.restore"
+	EventTypeVolumeBackupRestoreFiles    EventType = "volume.backup.restore_files"
+	EventTypeVolumeBackupDownload        EventType = "volume.backup.download"
+	EventTypeVolumeBackupTargetKeyViewed EventType = "volume.backup.target.key_viewed"
 
 	EventTypeNetworkCreate     EventType = "network.create"
 	EventTypeNetworkDelete     EventType = "network.delete"

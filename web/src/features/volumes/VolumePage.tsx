@@ -1,4 +1,3 @@
-import { CapabilityGate } from "@/shared/components/capability-gate";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
@@ -6,7 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
-import { useContainers, useSettings, useVolume } from "@/data/queries";
+import { useContainers, useVolume } from "@/data/queries";
 import { formatBytes, formatDate } from "@/domain/format";
 import { formatPercentNumber } from "@/domain/locale";
 import type { Host } from "@/domain/model";
@@ -25,8 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
-import { BackupHistory } from "./backups/BackupHistory";
-import { BackupPolicyCard } from "./backups/BackupPolicyCard";
+import { VolumeBackupsTab } from "./backups/VolumeBackupsTab";
 import { FileWorkspace } from "./files/FileWorkspace";
 import { BackupBadge, KindBadge } from "./storage-visuals";
 import { useVolumeCapability } from "./use-volume-capability";
@@ -185,7 +183,6 @@ export default function VolumePage() {
   const tf = useTranslations("volumes.files");
   const volume = useVolume(volumeId);
   const backup = useVolumeCapability("setBackupPolicy", volumeId ?? "");
-  const settings = useSettings(backup.available);
   const containers = useContainers();
   const hosts = useHostScope();
   const [params, setParams] = useSearchParams();
@@ -252,7 +249,7 @@ export default function VolumePage() {
                 <TabsTrigger value="files" className="gap-1.5 px-3">
                   <FolderOpen /> {t("tabs.files")}
                 </TabsTrigger>
-                <TabsTrigger value="backups" disabled={!backup.available} title={backup.reason} aria-description={backup.reason} className="gap-1.5 px-3">
+                <TabsTrigger value="backups" title={v.kind === "bind" ? undefined : backup.reason} className="gap-1.5 px-3">
                   <Archive /> {t("tabs.backups")}
                 </TabsTrigger>
               </TabsList>
@@ -263,18 +260,7 @@ export default function VolumePage() {
                 {online ? <FileWorkspace volume={v} warning={warning} /> : <EmptyState icon={<Unplug />} title={tf("offline")} />}
               </TabsContent>
               <TabsContent value="backups" className="flex flex-col gap-4">
-                <CapabilityGate operation="setBackupPolicy">
-                {settings.data ? (
-                  <>
-                    <BackupPolicyCard key={JSON.stringify(v.backup ?? null)} volume={v} targets={settings.data.backups.targets} defaultRetention={settings.data.backups.defaultRetention} hostOnline={online} />
-                    <BackupHistory volume={v} targets={settings.data.backups.targets} hostOnline={online} />
-                  </>
-                ) : settings.isError ? (
-                  <QueryError error={settings.error} onRetry={() => void settings.refetch()} />
-                ) : (
-                  <Skeleton className="h-72 rounded-2xl" />
-                )}
-                </CapabilityGate>
+                <VolumeBackupsTab key={v.id} volume={v} hostOnline={online} />
               </TabsContent>
             </Tabs>
           </>

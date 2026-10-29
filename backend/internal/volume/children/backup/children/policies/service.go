@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; single owning-host policy, target selection and scheduler-produced next-run metadata; M12 backup foundation; stable codes instead of diagnostics on policy failures, including the scheduled activity and target progress.
 
 package policies
 
@@ -10,8 +10,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/danielgtaylor/huma/v2"
+	backupdto "github.com/florianfinn/docklet-next/types/backup"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -32,7 +36,9 @@ const defaultSchedule = "0 0 2 * * *"
 
 // Dependencies are the backup operations scheduled policies run through.
 type Dependencies struct {
+	ValidateTarget func(context.Context, string) error
 	DB             *database.DB
+	Location       *time.Location
 	Activity       *activity.ActivityService
 	AlreadyRunning error
 	LatestRun      func(ctx context.Context, policyID string) (*volume.BackupEntry, error)
@@ -42,8 +48,9 @@ type Dependencies struct {
 
 // Service owns per-volume backup policies and their scheduled jobs.
 type Service struct {
-	deps Dependencies
-	jobs *entityjobs.Registry
+	deps      Dependencies
+	jobs      *entityjobs.Registry
+	admission sync.Mutex
 }
 
 func NewService(deps Dependencies) *Service {
@@ -65,13 +72,14 @@ func (s *Service) policiesInternal(ctx context.Context, volumeName string) ([]Vo
 		nil
 }
 
-// Policy loads one policy of the volume; an empty or unknown ID returns nil.
+// Policy loads the volume's current policy when policyID is empty.
 func (s *Service) Policy(ctx context.Context, volumeName, policyID string) (*VolumeBackupPolicy, error) {
-	if strings.TrimSpace(policyID) == "" {
-		return nil, nil
-	}
 	var policy VolumeBackupPolicy
-	err := s.deps.DB.WithContext(ctx).Where("id = ? AND volume_name = ?", policyID, volumeName).First(&policy).Error
+	query := s.deps.DB.WithContext(ctx).Where("volume_name = ?", volumeName)
+	if strings.TrimSpace(policyID) != "" {
+		query = query.Where("id = ?", policyID)
+	}
+	err := query.First(&policy).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -86,21 +94,63 @@ func (s *Service) GetBackupPolicies(ctx context.Context, volumeName string) (*vo
 	if err != nil {
 		return nil, err
 	}
-	result := &volume.BackupPolicyCollection{Policies: make([]volume.BackupPolicy, 0, len(policies))}
+	location := s.deps.Location
+	if location == nil {
+		location = time.UTC
+	}
+	result := &volume.BackupPolicyCollection{TimeZone: location.String(), Policies: make([]volume.BackupPolicy, 0, len(policies))}
 	for i := range policies {
 		lastRun, runErr := s.deps.LatestRun(ctx, policies[i].ID)
 		if runErr != nil {
 			return nil, fmt.Errorf("failed to load latest volume backup: %w", runErr)
 		}
-		result.Policies = append(result.Policies, policies[i].ToDTO(lastRun))
+		dto := policies[i].ToDTO(lastRun)
+		if scheduler, ok := s.jobs.Scheduler().(interface {
+			GetJobRuntimeState(string) (scheduler.JobRuntimeState, bool)
+		}); ok {
+			if state, found := scheduler.GetJobRuntimeState(s.jobs.JobName(policies[i].ID)); found && dto.Enabled {
+				dto.NextRunAt = state.NextRun
+			}
+		}
+		result.Policies = append(result.Policies, dto)
 	}
 	return result, nil
 }
 
 func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, updates []volume.UpdateBackupPolicy) (*volume.BackupPolicyCollection, error) {
+	return s.UpdateBackupPoliciesChecked(ctx, volumeName, updates, nil)
+}
+
+// UpdateBackupPoliciesChecked validates the received target set while holding
+// the same admission mutex as target sync and reference collection.
+func (s *Service) UpdateBackupPoliciesChecked(ctx context.Context, volumeName string, updates []volume.UpdateBackupPolicy, check func() error) (*volume.BackupPolicyCollection, error) {
+	s.admission.Lock()
+	defer s.admission.Unlock()
+	if check != nil {
+		if err := check(); err != nil {
+			return nil, err
+		}
+	}
+	if len(updates) > 1 {
+		return nil, backupdto.NewProblem(422, "volume.backup.policy-single", nil)
+	}
+
 	existing, err := s.policiesInternal(ctx, volumeName)
 	if err != nil {
 		return nil, err
+	}
+	for _, update := range updates {
+		if s.deps.ValidateTarget != nil {
+			if err := s.deps.ValidateTarget(ctx, update.TargetID); err != nil {
+				return nil, err
+			}
+		}
+		if update.ID != "" && (len(existing) == 0 || update.ID != existing[0].ID) {
+			return nil, backupdto.NewProblem(422, "volume.backup.policy-invalid", nil)
+		}
+		if _, e := backup.ValidatePolicyUpdate(ctx, "volume", update); e != nil {
+			return nil, backupdto.NewProblem(422, "volume.backup.policy-invalid", e)
+		}
 	}
 	reconcile := backup.PolicyReconciliation[VolumeBackupPolicy, volume.UpdateBackupPolicy]{
 		Domain:   "volume",
@@ -117,6 +167,10 @@ func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, u
 			update = normalized
 			policy.Enabled, policy.Schedule, policy.RetentionCount = update.Enabled, update.Schedule, update.RetentionCount
 			policy.StopContainers, policy.LocalEnabled = update.StopContainers, update.LocalEnabled
+			policy.TargetID = update.TargetID
+			if policy.TargetID == "" {
+				policy.TargetID = "local"
+			}
 			return nil
 		},
 		Unregister: s.jobs.Unregister,
@@ -128,23 +182,13 @@ func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, u
 	return s.GetBackupPolicies(ctx, volumeName)
 }
 
-// HasEnabledBackupPolicy reports whether a volume-level schedule takes precedence over centralized backups.
-func (s *Service) HasEnabledBackupPolicy(ctx context.Context, volumeName string) (bool, error) {
-	var count int64
-	if err := s.deps.DB.WithContext(ctx).Model(&VolumeBackupPolicy{}).
-		Where("volume_name = ? AND enabled = ?", volumeName, true).Count(&count).Error; err != nil {
-		return false, fmt.Errorf("failed to load volume backup policy override: %w", err)
-	}
-	return count > 0, nil
-}
-
 func (s *Service) runScheduledBackupInternal(ctx context.Context, policyID string) (scheduler.Outcome, error) {
 	var policy VolumeBackupPolicy
 	if err := s.deps.DB.WithContext(ctx).Where("id = ? AND enabled = ?", policyID, true).First(&policy).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return scheduler.Outcome{Status: scheduler.Canceled, Message: "Backup policy disabled or deleted"}, nil
 		}
-		return scheduler.Outcome{}, err
+		return scheduler.Outcome{}, publicPolicyErrorInternal(err, 500)
 	}
 	if previous, ok := jobcontext.Run(ctx); ok {
 		outcome := jobcontext.ConfirmedTarget(previous, policy.VolumeName)
@@ -152,18 +196,9 @@ func (s *Service) runScheduledBackupInternal(ctx context.Context, policyID strin
 			return outcome, nil
 		}
 	}
-	var entry *volume.Backup
-	activityID, err := activitylib.RunHandlerActivity(ctx, s.deps.Activity, activitylib.HandlerOptions{
-		EnvironmentID:  "0",
-		Type:           activitytypes.TypeResourceAction,
-		ResourceType:   "volume_backup",
-		ResourceID:     policy.VolumeName,
-		ResourceName:   policy.VolumeName,
-		User:           &user.SystemUser,
-		Step:           "Creating scheduled backup",
-		Message:        "Creating scheduled volume backup",
-		SuccessMessage: "Scheduled volume backup created successfully",
-		Metadata: database.JSON{
+	// The activity and both target progress writes see only the public error.
+	activityID, workCtx := activitylib.StartHandlerActivity(ctx, s.deps.Activity, "0", activitytypes.TypeResourceAction, "volume_backup", policy.VolumeName, policy.VolumeName, &user.SystemUser,
+		"Creating scheduled backup", "Creating scheduled volume backup", database.JSON{
 			"action":         "scheduled_volume_backup",
 			"policyId":       policy.ID,
 			"schedule":       policy.Schedule,
@@ -171,22 +206,45 @@ func (s *Service) runScheduledBackupInternal(ctx context.Context, policyID strin
 			"retentionCount": policy.RetentionCount,
 			"stopContainers": policy.StopContainers,
 			"localEnabled":   policy.LocalEnabled,
-		},
-	}, func(activityCtx context.Context) error {
-		var backupErr error
-		entry, backupErr = s.deps.CreateBackup(activityCtx, policy.VolumeName, policy.ID)
-		return backupErr
-	})
+		}, false)
+	var entry *volume.Backup
+	err := jobcontext.Progress(workCtx, scheduler.TargetOutcome{ID: policy.VolumeName, Status: scheduler.Running, ActivityID: activityID})
+	if err == nil {
+		entry, err = s.deps.CreateBackup(workCtx, policy.VolumeName, policy.ID)
+	}
+	public := publicPolicyErrorInternal(err, 500)
+	activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Scheduled volume backup created successfully", public)
+	target := scheduler.TargetOutcome{ID: policy.VolumeName, Status: scheduler.Succeeded, ActivityID: activityID}
+	if public != nil {
+		target.Status = scheduler.Failed
+		target.Message = public.Error()
+	}
+	if progressErr := jobcontext.Progress(workCtx, target); progressErr != nil && public == nil {
+		err, public = progressErr, publicPolicyErrorInternal(progressErr, 500)
+	}
 	if errors.Is(err, s.deps.AlreadyRunning) {
 		slog.InfoContext(ctx, "Scheduled volume backup skipped; another backup is running", "volume", policy.VolumeName)
 		return scheduler.Outcome{Status: scheduler.Skipped}, nil
 	}
-	if err != nil {
+	if public != nil {
 		slog.ErrorContext(ctx, "Scheduled volume backup failed", "volume", policy.VolumeName, "error", err)
-		return scheduler.Outcome{}, err
+		return scheduler.Outcome{}, public
 	}
 	slog.InfoContext(ctx, "Scheduled volume backup completed", "volume", policy.VolumeName, "backupId", entry.ID)
 	return scheduler.Outcome{Status: scheduler.Succeeded, ActivityID: activityID}, nil
+}
+
+// publicPolicyErrorInternal keeps typed refusals; any other failure leaves the
+// host as a stable code, so run history, activities and responses carry no diagnostics.
+func publicPolicyErrorInternal(err error, status int) error {
+	if err == nil {
+		return nil
+	}
+	var typed huma.StatusError
+	if errors.As(err, &typed) {
+		return typed
+	}
+	return backupdto.NewProblem(status, "volume.backup.interrupted", err)
 }
 
 func (s *Service) rescheduleInternal(ctx context.Context, policy *VolumeBackupPolicy) {
@@ -247,4 +305,23 @@ func (s *Service) Remove(ctx context.Context, volumeName string) {
 // Rename moves a renamed volume's policies inside the caller's transaction.
 func (s *Service) Rename(tx *gorm.DB, oldName, newName string) error {
 	return tx.Model(&VolumeBackupPolicy{}).Where("volume_name = ?", oldName).Update("volume_name", newName).Error
+}
+
+// AdmissionLock shares policy/reference admission with the owning-host backup service.
+func (s *Service) AdmissionLock()   { s.admission.Lock() }
+func (s *Service) AdmissionUnlock() { s.admission.Unlock() }
+
+// NextRun returns scheduler knowledge from the process that owns this policy.
+func (s *Service) NextRun(id string, enabled bool) *time.Time {
+	if !enabled {
+		return nil
+	}
+	if runtime, ok := s.jobs.Scheduler().(interface {
+		GetJobRuntimeState(string) (scheduler.JobRuntimeState, bool)
+	}); ok {
+		if state, found := runtime.GetJobRuntimeState(s.jobs.JobName(id)); found {
+			return state.NextRun
+		}
+	}
+	return nil
 }

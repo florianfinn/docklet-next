@@ -45,6 +45,7 @@ import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
 import { createProjectWorkspace } from "./project-workspace";
 import { createVolumeWorkspace } from "./volume-workspace";
+import { BACKUP_OPERATIONS, createBackups } from "./backups";
 import { createVolumeReads } from "./volumes";
 import { createStackAuthoring } from "./stack-authoring";
 
@@ -53,7 +54,98 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["getSecurity", "runScan", "setScanEnabled", "getScanSettings", "saveScanSettings", "cancelScan", "deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "saveAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "getUpdateSchedules", "saveUpdateSchedule", "listSchedule", "getSystemImageHints", "listSystemComponents", "checkStackUpdates", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "clearContainerRegistryCredential", "pullImage", "removeImage", "pruneImages", "listContainerRegistries", "createContainerRegistry", "updateContainerRegistry", "deleteContainerRegistry", "testContainerRegistry", "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set<string>([
+  ...BACKUP_OPERATIONS,
+  "getSecurity",
+  "runScan",
+  "setScanEnabled",
+  "getScanSettings",
+  "saveScanSettings",
+  "cancelScan",
+  "deleteRestorePoint",
+  "deleteHostRestorePoint",
+  "listHostRestorePoints",
+  "getUpdateBaseline",
+  "listRestorePoints",
+  "getAutoUpdatePolicy",
+  "saveAutoUpdatePolicy",
+  "setAutoUpdate",
+  "setAutoUpdateApply",
+  "getUpdateSchedules",
+  "saveUpdateSchedule",
+  "listSchedule",
+  "getSystemImageHints",
+  "listSystemComponents",
+  "checkStackUpdates",
+  "checkUpdates",
+  "installStackUpdates",
+  "restoreRestorePoint",
+  "clearContainerRegistryCredential",
+  "pullImage",
+  "removeImage",
+  "pruneImages",
+  "listContainerRegistries",
+  "createContainerRegistry",
+  "updateContainerRegistry",
+  "deleteContainerRegistry",
+  "testContainerRegistry",
+  "createNetwork",
+  "removeNetwork",
+  "connectNetwork",
+  "disconnectNetwork",
+  "getProjectWorkspace",
+  "readProjectFile",
+  "downloadProjectFile",
+  "updateProjectWorkspace",
+  "listFiles",
+  "readFile",
+  "writeFile",
+  "createEntry",
+  "renameEntry",
+  "deleteEntry",
+  "uploadFile",
+  "downloadFile",
+  "planVolumePrune",
+  "pruneVolumes",
+  "createVolume",
+  "deleteVolume",
+  "renameVolume",
+  "subscribeLogs",
+  "subscribeContainerLogs",
+  "runStackCommand",
+  "runContainerCommand",
+  "deployStack",
+  "saveStackFiles",
+  "setStackLabels",
+  "convertDockerRun",
+  "registerHost",
+  "issueAgentToken",
+  "removeHost",
+  "discoverHub",
+  "listStacks",
+  "getStack",
+  "listContainers",
+  "listHosts",
+  "listActions",
+  "listEvents",
+  "subscribeActions",
+  "subscribeChanges",
+  "getAuthMode",
+  "getCurrentUser",
+  "login",
+  "logout",
+  "changePassword",
+  "updateMyLocale",
+  "getSetupStatus",
+  "completeSetup",
+  "getConnectedSettings",
+  "saveSettings",
+  "listImages",
+  "listVolumes",
+  "getVolume",
+  "getTopology",
+  "subscribeMetrics",
+]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -157,6 +249,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
+    backups.invalidate();
     events.identityChanged();
     authenticated = nextActive;
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
@@ -181,7 +274,19 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (authenticated) { metrics.reset(true, retain); connect(); }
   }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
-    return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+    return JSON.stringify(rows.map((row) => [
+      row.id,
+      row.connectedAt,
+      row.edgeSessionId,
+      row.edgeAgentInstance,
+      row.status,
+      row.enabled,
+      row.apiUrl,
+      row.isEdge,
+      row.agentReport?.version.currentVersion,
+      row.agentReport?.version.agentContractVersion,
+      row.agentReport?.version.agentContractFingerprint,
+    ]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
   }
 
   async function getCapability(operationId: string, resourceRef: ResourceRef = HUB_REF): Promise<CapabilityDescriptor> {
@@ -283,9 +388,29 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
     detailRun: async (host, id, signal, expanded) => {
       if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
+      const backupOwner = backups.guard(host);
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
       try {
         const run = mapActivityDetail(dto);
+        if (run.kind === "backup" || run.kind === "volume-restore") {
+          backupOwner();
+          try {
+            const overview = await backups.api.getBackupOverview(host);
+            backupOwner();
+            const row = overview.volumes.find((v) => v.lastBackup?.actionId === id || v.lastRestore?.activityId === id);
+            const outcome = row?.lastRestore?.activityId === id
+              ? {
+                  status: row.lastRestore.status,
+                  errorCode: row.lastRestore.code,
+                  reason: row.lastRestore.reason,
+                }
+              : row?.lastBackup
+                ? { status: row.lastBackup.status, errorCode: row.lastBackup.errorCode }
+                : undefined;
+            if (outcome) run.backupOutcome = outcome;
+          } catch (error) { if (isCancelledError(error)) throw error; }
+          if (!["running", "queued"].includes(run.status)) backupChanged();
+        }
         if (run.kind === "scan" && dto.activity.resourceType === "environment") {
           try {
             const capability = await getCapability("getSecurity", { kind: "host", id: host });
@@ -368,6 +493,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const notification = envelope.activity;
       if (notification.type !== "message" && notification.activity?.type === "vulnerability_scan") securityChanged();
+      if (notification.type !== "message"
+        && notification.activity?.metadata?.action
+        && /backup|restore/.test(String(notification.activity.metadata.action))) backupChanged();
       const host = notification.environmentId ?? notification.activity?.environmentId;
       if (notification.type === "snapshot" || notification.type === "error") {
         if (host) {
@@ -396,7 +524,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
-      if (changed) refreshRuns();
+      if (changed) { backups.invalidate(); refreshRuns(); }
       changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics] : ["hosts"]));
       return;
     }
@@ -486,6 +614,19 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
   const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
+  const backups = createBackups({
+    baseUrl,
+    client,
+    capability: getCapability,
+    generation: () => identityGeneration,
+    hosts: listHosts,
+    changed: backupChanged,
+    accepted: (host, id) => {
+      refreshHost(host);
+      targets.notify(host, id, undefined, true);
+    },
+  });
   const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration);
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
@@ -499,7 +640,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const adapter: DockletAdapter = {
     ...methods,
     ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
-    ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
+    ...createHostCommands(baseUrl, client, requireCapability, () => {
+      backups.invalidate();
+      invalidateCapabilities();
+      invalidateEnvironments();
+      changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics]));
+    }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
     installStackUpdates: runtime.installStackUpdates,
     restoreRestorePoint: runtime.restoreRestorePoint,
@@ -519,6 +665,31 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...resourceReads,
     ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
+    ...backups.api,
+    async listVolumes(onPartial) {
+      const rows = await volumeReads.listVolumes(onPartial);
+      const hosts = [...new Set(rows.filter((v) => v.kind === "volume").map((v) => v.hostId))];
+      const mapped = await Promise.all(hosts.map((host) => backups.decorate(host, rows.filter((v) => v.hostId === host))));
+      const covered = new Set(hosts);
+      return [...mapped.flat(), ...rows.filter((v) => !covered.has(v.hostId))];
+    },
+    async getVolume(id) {
+      let volume;
+      try { volume = await volumeReads.getVolume(id); }
+      catch (error) {
+        const missing = error instanceof AdapterOutcomeError
+          && error.outcome.kind === "error" && error.outcome.status === 404
+          || error instanceof Error && error.message === "not-found";
+        if (!missing) throw error;
+        const host = id.split("~")[0]!;
+        const observed = (await backups.api.getBackupOverview(host)).volumes.find((v) => v.id === id && v.volumeExists === false);
+        if (!observed) throw error;
+        volume = { ...observed, backups: [] };
+      }
+      if (volume.kind === "bind") return volume;
+      const [decorated, history] = await Promise.all([backups.decorate(volume.hostId, [volume]), backups.history(id).catch(() => null)]);
+      return { ...volume, ...decorated[0], backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
+    },
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),
     ...createProjectWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
@@ -528,7 +699,24 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
     async listSchedule(hostIds) {
       const selected = hostIds ?? (await listHosts()).map((h) => h.id);
-      return (await Promise.all(selected.map(async (hostId) => {
+      const backupRows = (await Promise.all(selected.map(async (host) => {
+        try {
+          return (await backups.api.getBackupOverview(host)).volumes
+            .filter((v) => v.backup?.enabled && v.backup.nextRunAt)
+            .map((v) => ({
+              id: `${host}~backup-${v.name}`,
+              hostId: host,
+              kind: "backup" as const,
+              title: v.name,
+              volumeId: v.id,
+              cadence: v.backup!.schedule.mode,
+              nextRunAt: v.backup!.nextRunAt,
+              enabled: true,
+            }));
+        }
+        catch { return []; }
+      }))).flat();
+      return [...backupRows, ...(await Promise.all(selected.map(async (hostId) => {
         try {
           const config = await adapter.getUpdateSchedules!(hostId);
           return config.jobs.filter((j) => j.kind === "auto-update" || j.kind === "update-check").map((j) => ({ id: `${hostId}~${j.id}`, hostId, kind: j.kind as "auto-update" | "update-check", title: "", cadence: j.schedule, nextRunAt: j.nextRun, enabled: j.enabled, code: j.code }));
@@ -536,7 +724,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           if (isCancelledError(error)) throw error;
           return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
         }
-      }))).flat();
+      }))).flat()];
     },
     listActions: actions.load,
     observeActionDetail(host, id, listener) {
@@ -547,7 +735,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       let scanTimer: ReturnType<typeof setInterval> | undefined;
       const stopPolling = () => { clearInterval(scanTimer); scanTimer = undefined; };
       const pollScan = (run?: CodedActionRun) => {
-        if (run?.kind !== "scan" || !["running", "queued"].includes(run.status)) { stopPolling(); return; }
+        if (!run || !["scan", "backup", "volume-restore"].includes(run.kind)
+          || !["running", "queued"].includes(run.status)) {
+          stopPolling();
+          return;
+        }
         if (scanTimer || Date.now() >= pollUntil) return;
         // Scan counters change without activity events. Share the existing owned detail read.
         scanTimer = setInterval(() => {

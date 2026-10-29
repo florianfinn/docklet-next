@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -66,6 +67,36 @@ func TestAgentAndEdgeAgentEchoRoutes(t *testing.T) {
 				return
 			}
 			require.Equal(t, string(want), actual)
+		})
+	}
+}
+
+func TestBackupTargetRouteRegistrationByMode(t *testing.T) {
+	for _, mode := range []string{"hub", "agent", "edge-agent"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := &config.Config{AgentMode: mode == "agent", EdgeAgent: mode == "edge-agent", AppUrl: "http://localhost:3552", Environment: config.AppEnvironmentTest}
+			router, _ := newRouter(RouterParams{Context: t.Context(), Lifecycle: fxtest.NewLifecycle(t), Config: cfg, HandlerDeps: api.HandlerDeps{Environment: environment.New(&environment.EnvironmentService{}, nil, nil, nil, cfg, nil), Project: project.New(&project.ProjectService{}, nil), Container: container.New(&container.ContainerService{}, nil, nil, nil), System: system.New(&system.SystemService{}, nil, nil, nil, nil)}, AuthMiddleware: auth.NewAuthMiddleware(nil, cfg), TunnelRegistry: edge.NewTunnelRegistry()})
+			routes := map[string]bool{}
+			for _, route := range router.Router().Routes() {
+				routes[route.Method+" "+route.Path] = true
+			}
+			for _, route := range []string{
+				"GET /api/backup-targets", "POST /api/backup-targets", "GET /api/backup-targets/:id", "PUT /api/backup-targets/:id", "DELETE /api/backup-targets/:id", "POST /api/backup-targets/:id/test", "GET /api/backup-targets/:id/recovery-key",
+			} {
+				require.Equal(t, mode == "hub", routes[route], route)
+			}
+			require.Equal(t, mode != "hub", routes["PUT /api/environments/:id/volumes/backups/targets"], "only agents receive target metadata")
+			for _, route := range []string{
+				"GET /api/environments/:id/volumes/backups/overview",
+				"GET /api/environments/:id/volumes/backups/repository",
+				"POST /api/environments/:id/volumes/backups/repository/check",
+				"POST /api/environments/:id/volumes/backups/targets/:targetId/test",
+				"GET /api/environments/:id/volumes/backups/targets/:targetId/references",
+				"GET /api/environments/:id/volumes/backups/targets/local/recovery-key",
+				"PUT /api/environments/:id/volumes/backups/targets/local/recovery-key",
+			} {
+				require.True(t, routes[route], route)
+			}
 		})
 	}
 }

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "images": [
+    {
+      "name": "Rustic",
+      "reference": "ghcr.io/rustic-rs/rustic:v0.11.2@sha256:fce5854a2df9fdaa1f5999df9d99d832aa8619c79eefb3e4136da46bf912a1b0",
+      "sourceRepository": "https://github.com/rustic-rs/rustic",
+      "upstreamReleaseTag": "v0.11.2",
+      "license": "Apache-2.0 OR MIT",
+      "licenseFiles": [
+        "https://github.com/rustic-rs/rustic/blob/v0.11.2/LICENSE-APACHE",
+        "https://github.com/rustic-rs/rustic/blob/v0.11.2/LICENSE-MIT"
+      ],
+      "digestResolutionMethod": "Registry GET of the OCI/Docker multi-platform index; Docker-Content-Digest verified against SHA-256 of the raw manifest bytes.",
+      "digestResolutionDate": "2026-10-28",
+      "overrideVariable": "DOCKLET_BACKUP_ENGINE_IMAGE"
+    }
+  ]
+}

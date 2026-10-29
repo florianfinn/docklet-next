@@ -2,8 +2,8 @@
 
 M8 shares one storage contract between hub, Direct agents, Edge agents and the
 web adapter. Volume CRUD and workspace access retain their existing permissions;
-backup/restore product features (M12), scanning (M11) and update watchers (M10)
-remain outside this contract.
+backup/restore lifecycle is specified in [volume backups](volume-backups.md).
+Scanning and update watchers retain their own module contracts.
 
 Explicit UI/API volume creation refuses an existing name on the target host with HTTP 409 `volume.exists`, while Compose deployments reuse existing volumes.
 
@@ -105,18 +105,27 @@ first verify `acfs version`; incompatible helpers fail before accessing files.
 | Create file/folder, upload, update content | plus `volumes:upload` |
 | Rename or move entry | plus `volumes:upload` and `volumes:delete` |
 | Delete entry | plus `volumes:delete` |
-| Restore file (existing wire operation; M12 UI) | plus `volumes:backup` |
+| Snapshot file selection restore (separate backup route) | `volumes:backup` |
 | Project workspace reads | `projects:read` |
 | Project workspace manifest | `projects:update` |
 
 The hub enforces host-scoped rights before forwarding; the agent enforces the
 same workspace manifest contract. Direct uses authenticated HTTP, Edge the
 explicit command map with no Direct fallback. Hub and both agent modes register
-the same volume/workspace routes. This intentionally includes
-`volume.backup.import` (`POST /volumes/{volumeName}/backups/upload`) on Edge:
-all registered storage routes are reachable; backup/import functionality remains
-owned by M12. Route coverage tests include actual tunnel
-forwarding, not merely matching command names.
+the same volume/workspace routes. Snapshot file selection uses the separate
+asynchronous backup restore route; workspace manifests reject the removed
+`restore_file` operation. Upload restore requires both `volumes:upload` and
+`volumes:backup` before multipart staging or forwarding. The explicit
+`volume.backup.import` Edge command carries this admission.
+
+Workspace writes use the same non-waiting volume mutex as backup/restore and return
+409 while another operation owns it. Restore into a new volume owns its destination
+name before persisting intent; API create and rename also acquire that destination
+mutex. Rename moves policy, backup and restore metadata in one transaction.
+Target mount volumes are hidden even when internal volumes are requested; the DTO
+producer additionally removes their credential-bearing `o` option. See
+[volume backups and recovery](volume-backups.md). Route coverage tests include
+actual tunnel forwarding, not merely matching command names.
 
 ## File baselines and freshness
 
@@ -198,12 +207,12 @@ it carries no image-selection policy.
 
 ## Compatibility and Before deploy
 
-The changed prune request and new preview route require agent contract v5 and
-minimum v5. The v4 fixture remains historical; the new fingerprint covers the
-storage contract and inherited runtime contract. Upgrade hub and agents as one
+The prune request and preview route entered agent contract v5. Volume backup
+changes require the current contract v9 and minimum v9; historical fixtures stay
+unchanged. The current fingerprint retains the storage and runtime contracts. Upgrade hub and agents as one
 release. Older agents are incompatible before forwarding or settings sync.
 `tunnel/v1` is unchanged: only the command table and application contract change.
 Before deploy, configure any former registry override as a full `toolsImage`
-reference and ensure the published tools image is available. No database schema
-migration is required. Exact-package Direct/Edge practical acceptance remains a
+reference and ensure the published tools image is available. The volume backup lifecycle and targets use forward-only migration 012 on hub
+and agents. The earlier prune-only change required no schema migration. Exact-package Direct/Edge practical acceptance remains a
 milestone release gate.

@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation.
 
 package schema
 
@@ -10,6 +10,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/patch"
@@ -29,6 +30,7 @@ import (
 	updatepolicies "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
+	volumebackup "github.com/florianfinn/docklet-next/backend/internal/volume/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/query"
@@ -51,7 +53,7 @@ func Models() []any {
 		&upgrade.EnvironmentUpdateJob{}, &updater.AutoUpdateRecord{},
 		&updatepolicies.Policy{}, &updatepolicies.HostSchedule{}, &updatepolicies.Child{}, &updatepolicies.Candidate{}, &updatepolicies.Notice{},
 		&user.User{}, &user.UserAvatar{},
-		&volume.VolumeBackup{}, &policies.VolumeBackupPolicy{},
+		&volume.VolumeBackup{}, &policies.VolumeBackupPolicy{}, &volumebackup.RestoreRun{}, &backuptarget.Target{}, &backuptarget.Check{},
 		&vulnerability.ScanNotification{}, &vulnerabilityDTO.ScanRun{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
 		&vulnerability.VulnerabilityScanItem{}, &vulnerability.VulnerabilityThreatIntel{},
 		&vulnerability.VulnerabilityIgnore{}, &query.VulnerabilityRiskSnapshot{},

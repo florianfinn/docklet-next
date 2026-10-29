@@ -555,7 +555,7 @@ treating a registry failure as a hub identity rejection. Saves and deletions
 invalidate registry queries. Identity changes discard late read/write results;
 dialog ownership additionally discards results after close or target changes.
 
-Vulnerability operations require agent contract v8 (minimum v8). Per-image and
+Vulnerability operations entered agent contract v8; the current minimum is v9. Per-image and
 host-wide scan admission return an activity ID, and run reads return durable
 running or terminal host-run evidence. Both scan routes, run reads and bulk
 ignore/unignore have Edge commands. Vulnerability responses have a 32 MiB cap.
@@ -667,3 +667,22 @@ The same suite checks host/image command scope, retained delayed host batches,
 independent settings switches, backend next-run projection, interrupted history,
 and narrow/wide viewports. Production boundary and connected-route tests retain
 HTTP behavior and never enable a simulation through the scan controls.
+
+
+## Volume backup transport boundary
+
+Volume backup clients require agent contract v9 and the current fingerprint.
+The backend overview supplies usable target choices, accepted authority/set
+version, scheduler time zone, next-run times and running operation IDs. Repository
+metadata reports the effective engine image read-only. Backup/restore admission
+means accepted work: clients must follow the activity and refresh host history.
+A lost admission response is resolved through overview, without repeating a POST.
+
+The volume backup mapping must preserve typed repository/target errors, upload
+reasons and unknown capacities. Host generation changes must invalidate pending
+overview, policy, repository, history and activity results together. List views
+project last-observed snapshot availability and must not start repository checks.
+The browser does not write passwords, mount options or the engine image through
+host settings. These backend contracts do not activate the pending web mapping;
+its capability boundary above remains in effect until that mapping is complete.
+See [volume backups and recovery](volume-backups.md).

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M12 backup foundation.
 
 package backup
 
@@ -10,9 +10,11 @@ import "strings"
 
 // Volume backup run statuses and triggers.
 const (
-	VolumeBackupStatusRunning   = "running"
-	VolumeBackupStatusSucceeded = "succeeded"
-	VolumeBackupStatusFailed    = "failed"
+	VolumeBackupStatusPartial     = "partial"
+	VolumeBackupStatusUnavailable = "unavailable"
+	VolumeBackupStatusRunning     = "running"
+	VolumeBackupStatusSucceeded   = "succeeded"
+	VolumeBackupStatusFailed      = "failed"
 
 	VolumeBackupTriggerManual    = "manual"
 	VolumeBackupTriggerScheduled = "scheduled"
