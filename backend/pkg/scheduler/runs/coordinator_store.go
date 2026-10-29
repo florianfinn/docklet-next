@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite actor storage; pending sync and idempotency receipts survive retention.
+// Deviations: Local module namespace; SQLite actor storage; pending sync and idempotency receipts survive retention; duplicated run IDs are repaired.
 
 package runs
 
@@ -412,6 +412,29 @@ func normalizeRunTimesInternal(run *st.Run) {
 		run.Attempts[i].StartedAt = run.Attempts[i].StartedAt.UTC()
 		normalizeTimePointerInternal(run.Attempts[i].FinishedAt)
 	}
+}
+
+// dedupeRunsInternal keeps one entry per run ID: the most recently updated copy,
+// at the position of the first occurrence. A stale duplicate blocks dispatch.
+func dedupeRunsInternal(record *st.QueueRecord) bool {
+	first := make(map[string]int, len(record.Runs))
+	runs := make([]st.Run, 0, len(record.Runs))
+	for _, run := range record.Runs {
+		index, seen := first[run.ID]
+		if !seen {
+			first[run.ID] = len(runs)
+			runs = append(runs, run)
+			continue
+		}
+		if run.UpdatedAt.After(runs[index].UpdatedAt) {
+			runs[index] = run
+		}
+	}
+	if len(runs) == len(record.Runs) {
+		return false
+	}
+	record.Runs = runs
+	return true
 }
 
 func normalizeLegacyRunInternal(run *st.Run) bool {
