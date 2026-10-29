@@ -19,7 +19,7 @@ reviews from a different provider than its implementation.
 | #245 | Actor host loss ends the process; health fails; restart policy in the install snippets | R1 failed with 3 blockers, verification passed |
 | #283 | Volume backup and restore lifecycle, backup targets, migration 012, agent contract v9 | Design reviews before implementation; R1 failed with 3 blockers and 4 nonblockers, verification passed |
 | #284 | Live web UI: volume Backups tab, restore dialogs, `/backups` overview, Settings › Backups, dashboard | R1 failed with 5 blockers, 6 nonblockers and one product question (AUTO-17), verification passed |
-| #285 | Closing integration (#293) | Opus whole-milestone review passed with 3 nonblockers; the Sol closing review and four verification rounds failed with one blocker each, the fifth verification passed on `503d008` |
+| #285 | Closing integration (#293) | Opus whole-milestone review passed with 3 nonblockers; the Sol closing review and four verification rounds failed with 1, 1, 1, 2 and 1 blockers respectively; the fifth verification passed on `503d008` |
 
 ## Defects found before acceptance
 
@@ -42,7 +42,7 @@ The closing reviews found two error classes:
   stop and type. `95db532` made it share the entry projection.
 - Diagnostic text (paths, server addresses, storage errors) reached backup
   entries, policy last runs, backup activities, policy and repository errors and
-  scheduled-run history. Each verification round found one more instance;
+  scheduled-run history. The failing verification rounds found further instances;
   `4a7f78d`, `990c3dd`, `ed88e95` and `503d008` replaced them with stable
   `volume.backup.*` codes. Instances only in shared code that M12 did not change
   on a backup path were left out of this milestone (AUTO-19).
@@ -98,28 +98,29 @@ and no server address, share or storage error.
 
 ## Result
 
-The acceptance runner concluded **accepted**. 69 cells passed, 6 do not apply,
-and the 3 NFS target cells were excluded under the agreed rule X5: the sandbox
+The acceptance runner concluded **accepted**. Of the 75 matrix cells, 66 passed,
+6 do not apply, and the 3 NFS target cells were excluded under the agreed rule X5: the sandbox
 kernel cannot start an NFS server (`rpc.nfsd` could not open its sockets), and
 the SMB cells passed on every host. Both extra checks passed.
 
-No product defect was found. Failed first attempts were harness faults: a
-missing private directory, assertions beyond the matrix, readiness conditions
-and missing target fixtures. Each cell passed within the permitted reruns, and
-all attempts are retained in the private evidence.
+No product defect was found in this acceptance run. Failed attempts included
+harness setup, assertion and readiness faults, plus browser transport failures
+during locale setup. Each required cell has a passing observation within the
+permitted reruns, and all attempts are retained in the private evidence.
 
 Measured in the sandbox with small test volumes, a backup took 4–6 s, or 34–35 s
 when it stopped containers. A full restore took 37–38 s.
 
 ## Limits
 
-- NFS targets were not exercised live (X5). Unit tests cover NFS option
-  validation and mount arguments.
+- NFS targets were not exercised live (X5). Unit tests cover NFS export and
+  option validation.
 - No real NAS was mounted at `/backups`; a bind mount stood in (X2).
   Daylight-saving changes and host time-zone changes were not exercised (X3).
 - Chromium only, over HTTP/1.1 through the sandbox's public proxy. Across all
-  attempts the browser recorded 254 `net::ERR_NETWORK_CHANGED` transport errors;
-  the final observations had none.
+  attempts the browser recorded 254 `net::ERR_NETWORK_CHANGED` transport errors,
+  including events in selected passing matrix observations. The twelve final
+  locale and viewport observations recorded none.
 - No load or large-throughput measurement; Direct downloads have no byte cap
   (#290).
 
