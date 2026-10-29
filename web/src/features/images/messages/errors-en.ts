@@ -9,6 +9,10 @@ import { enBackend } from "@/data/messages/en";
 export const enImageErrors = {
   "update_permission-denied": enBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": enBackend.errors.update["schedule-owner-unset"],
+  "autoheal_interrupted": enBackend.errors.autoheal["interrupted"],
+  "autoheal_limit-reached": enBackend.errors.autoheal["limit-reached"],
+  "autoheal_restart-failed": enBackend.errors.autoheal["restart-failed"],
+  "autoheal_restarted": enBackend.errors.autoheal["restarted"],
   "job_skipped": enBackend.errors.job["skipped"],
   "run_busy": enBackend.errors.run["busy"],
   "run_cancelling": enBackend.errors.run["cancelling"],

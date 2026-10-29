@@ -9,6 +9,10 @@ import { deBackend } from "@/data/messages/de";
 export const deImageErrors = {
   "update_permission-denied": deBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": deBackend.errors.update["schedule-owner-unset"],
+  "autoheal_interrupted": deBackend.errors.autoheal["interrupted"],
+  "autoheal_limit-reached": deBackend.errors.autoheal["limit-reached"],
+  "autoheal_restart-failed": deBackend.errors.autoheal["restart-failed"],
+  "autoheal_restarted": deBackend.errors.autoheal["restarted"],
   "job_skipped": deBackend.errors.job["skipped"],
   "run_busy": deBackend.errors.run["busy"],
   "run_cancelling": deBackend.errors.run["cancelling"],

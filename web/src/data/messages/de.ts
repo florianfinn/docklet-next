@@ -39,6 +39,12 @@ export const deBackend: typeof enBackend = {
       "busy": "Ein anderer Lauf belegt dieses Ziel. Prüfe seinen Status, bevor du es erneut versuchst.",
       "cancelling": "Der vorherige Lauf wird noch abgebrochen.",
     },
+    "autoheal": {
+      "interrupted": "Der Auto-Heal-Versuch wurde unterbrochen.",
+      "limit-reached": "Das Auto-Heal-Neustartlimit wurde erreicht.",
+      "restart-failed": "Der Auto-Heal-Neustart ist fehlgeschlagen.",
+      "restarted": "Der Container wurde durch Auto Heal neu gestartet.",
+    },
     "job": {
       "skipped": "Dieser Job ist deaktiviert oder gilt nicht für diese Richtlinie.",
     },
