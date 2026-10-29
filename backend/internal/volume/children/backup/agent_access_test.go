@@ -221,4 +221,20 @@ func TestRemoteProblemAllowsOnlyTypedBackupRefusals(t *testing.T) {
 	require.Nil(t, backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":409,"code":"invented.code"}`)))
 	require.Nil(t, backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":500,"code":"volume.backup.busy"}`)))
 	require.Nil(t, backuptarget.RemoteProblem(upstream(http.StatusConflict, `not json`)))
+
+	named := backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":409,"code":"backup.target.in-use","volumes":["data","logs"],"hosts":["host-a"]}`))
+	require.NotNil(t, named)
+	require.Equal(t, []string{"data", "logs"}, named.Volumes)
+	require.Equal(t, []string{"host-a"}, named.Hosts)
+	unbounded := backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":409,"code":"backup.target.in-use","volumes":["data","line\nbreak"],"hosts":["`+strings.Repeat("h", 256)+`"]}`))
+	require.NotNil(t, unbounded)
+	require.Nil(t, unbounded.Volumes, "names with control characters are dropped")
+	require.Nil(t, unbounded.Hosts, "names over the display bound are dropped")
+	many := make([]string, 257)
+	for i := range many {
+		many[i] = `"v"`
+	}
+	tooMany := backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":409,"code":"backup.target.in-use","volumes":[`+strings.Join(many, ",")+`]}`))
+	require.NotNil(t, tooMany)
+	require.Nil(t, tooMany.Volumes, "lists over the entry bound are dropped")
 }

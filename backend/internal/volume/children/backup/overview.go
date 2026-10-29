@@ -23,7 +23,7 @@ import (
 // All SQL expressions are fixed identifiers owned here. No request value is
 // interpolated; one snapshot reads policies, history and safe target metadata.
 func overviewQuery() string {
-	fields := []string{"kind", "id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "value", "host_id", "error_reason"}
+	fields := []string{"kind", "id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "value", "host_id", "error_reason", "error"}
 	selectFrom := func(table, kind string, columns []string, overrides map[string]string) string {
 		selected := make(map[string]string, len(columns)+1)
 		for _, column := range columns {
@@ -44,7 +44,7 @@ func overviewQuery() string {
 		return "SELECT " + strings.Join(expressions, ",") + " FROM " + table
 	}
 	return strings.Join([]string{
-		selectFrom("volume_backups", "backup", []string{"id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size"}, nil),
+		selectFrom("volume_backups", "backup", []string{"id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "stop_containers", "error"}, nil),
 		selectFrom("volume_backup_policies", "policy", []string{"id", "volume_name", "created_at", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id"}, nil),
 		selectFrom("volume_restore_runs", "restore", []string{"id", "volume_name", "status", "activity_id", "error_code", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "error_reason"}, map[string]string{"created_at": "started_at", "trigger": "kind"}),
 		selectFrom("settings WHERE key IN ('volumeBackupRepositoryCheck','backup_target_authority','backup_target_set_version','backupTargetAuthority','backupTargetSetVersion','hubHostId')", "setting", []string{"value"}, map[string]string{"id": "key"}),
@@ -64,8 +64,26 @@ type overviewRecord struct {
 	StopContainers, LocalEnabled                                                                                 bool
 	TargetID, Phase, Mode, NewVolumeName                                                                         string
 	PendingRestart                                                                                               bool
-	StoppedContainers, SafetyBackupID, Value, ErrorReason                                                        string
+	StoppedContainers, SafetyBackupID, Value, ErrorReason, Error                                                 string
 	HostID                                                                                                       *string
+}
+
+// backupInternal restores the stored backup row so the overview shares the
+// entry projection of every other backup route.
+func (r *overviewRecord) backupInternal() *volume.Backup {
+	stored := &volume.Backup{
+		ID: r.ID, VolumeName: r.VolumeName, Size: r.Size, Status: r.Status, Trigger: r.Trigger,
+		Destination: volume.BackupDestination(r.Destination), Format: volume.BackupFormat(r.Format),
+		SnapshotUnavailableAt: r.SnapshotUnavailableAt, LocalSnapshotID: r.LocalSnapshotID, PolicyID: r.PolicyID,
+		ErrorCode: r.ErrorCode, StopContainers: r.StopContainers, Error: r.Error,
+	}
+	if r.CreatedAt != nil {
+		stored.CreatedAt = *r.CreatedAt
+	}
+	if r.ActivityID != "" {
+		stored.ActivityID = new(r.ActivityID)
+	}
+	return stored
 }
 
 func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
@@ -136,8 +154,7 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			item := get(r.VolumeName)
 			item.Count++
 			if item.LastBackup == nil {
-				status, code := observedBackupStatus(r.Status, r.ErrorCode, volume.BackupFormat(r.Format), r.SnapshotUnavailableAt)
-				item.LastBackup = &volume.BackupEntry{SnapshotUnavailableAt: r.SnapshotUnavailableAt, ID: r.ID, VolumeName: r.VolumeName, Status: status, Trigger: r.Trigger, Destination: volume.BackupDestination(r.Destination), Format: volume.BackupFormat(r.Format), LocalSnapshotID: r.LocalSnapshotID, Size: r.Size, ErrorCode: code, CreatedAt: r.CreatedAt.Format(time.RFC3339)}
+				item.LastBackup = new(entryInternal(r.backupInternal()))
 			}
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {
 				item.LastSuccessAt = r.CreatedAt

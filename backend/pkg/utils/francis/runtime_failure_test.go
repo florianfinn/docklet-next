@@ -69,3 +69,24 @@ func TestExpiredHostRegistrationFailsAppBeforeBlockedTeardown(t *testing.T) {
 	require.NotNil(t, reported, "actor-host loss reaches the application while actor teardown is still blocked")
 	require.True(t, errors.Is(reported, components.ErrHostUnregistered), "reported cause: %v", reported)
 }
+
+// A service failure before the host is published belongs to startup and is
+// never reported; after publication it is reported once, unless cancelled.
+func TestHostFailureReportsOnlyAfterPublicationAndOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	var reported []error
+	failure := &hostFailureInternal{ctx: ctx, report: func(err error) { reported = append(reported, err) }}
+	failure.fail(errors.New("before publication"))
+	require.Empty(t, reported, "a failure before publication is a start error")
+	failure.armed.Store(true)
+	first := errors.New("first")
+	failure.fail(first)
+	failure.fail(errors.New("second"))
+	require.Equal(t, []error{first}, reported)
+
+	cancelled := &hostFailureInternal{ctx: ctx, report: func(err error) { reported = append(reported, err) }}
+	cancelled.armed.Store(true)
+	cancel()
+	cancelled.fail(errors.New("after cancel"))
+	require.Equal(t, []error{first}, reported, "shutdown is not a failure")
+}

@@ -10,6 +10,9 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -67,9 +70,28 @@ func RemoteProblem(err error) *dto.Problem {
 	if dto.IsProblemReason(wire.Reason) {
 		problem.Reason = wire.Reason
 	}
-	problem.Volumes, problem.Hosts = wire.Volumes, wire.Hosts
+	problem.Volumes, problem.Hosts = remoteNamesInternal(wire.Volumes), remoteNamesInternal(wire.Hosts)
 	return problem
 }
+
+// remoteNamesInternal passes an agent's volume or host name list only when it
+// stays within display bounds; otherwise the refusal keeps its code without it.
+func remoteNamesInternal(names []string) []string {
+	if len(names) > remoteNamesMax {
+		return nil
+	}
+	for _, name := range names {
+		if name == "" || len(name) > remoteNameMaxBytes || !utf8.ValidString(name) || strings.ContainsFunc(name, func(r rune) bool { return !unicode.IsPrint(r) }) {
+			return nil
+		}
+	}
+	return names
+}
+
+const (
+	remoteNamesMax     = 256
+	remoteNameMaxBytes = 255
+)
 
 // RemoteJSON keeps the agent access verdict and typed backup refusals that
 // the shared proxy translation reports as generic errors.

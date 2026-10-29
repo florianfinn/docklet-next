@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"gorm.io/gorm"
 )
@@ -64,7 +65,7 @@ func entryInternal(entry *volume.Backup) volume.BackupEntry {
 		ActivityID: entry.ActivityID, ID: entry.ID, VolumeName: entry.VolumeName, Size: entry.Size,
 		CreatedAt: entry.CreatedAt.Format(time.RFC3339), Status: status, Trigger: entry.Trigger,
 		Destination: entry.Destination, Format: entry.Format, LocalSnapshotID: entry.LocalSnapshotID,
-		SnapshotUnavailableAt: entry.SnapshotUnavailableAt, PolicyID: entry.PolicyID, Error: entry.Error, ErrorCode: code, StopContainers: entry.StopContainers, Type: entry.Type,
+		SnapshotUnavailableAt: entry.SnapshotUnavailableAt, PolicyID: entry.PolicyID, Error: entry.Error, ErrorCode: code, StopContainers: entry.StopContainers, Type: backuptypes.ManagementTypeForPolicy(entry.PolicyID),
 	}
 }
 

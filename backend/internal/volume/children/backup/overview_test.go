@@ -72,3 +72,32 @@ func TestOverviewRediscoveryMissingVolumesAndHostMetadata(t *testing.T) {
 	require.True(t, removed.LastSuccessAt.Equal(now.Add(-time.Hour)))
 	require.Empty(t, started)
 }
+
+// The overview's latest backup is the same entry projection as every other
+// backup route; followed operations match it by activity ID.
+func TestOverviewLatestBackupMatchesEntryProjection(t *testing.T) {
+	started := []string{}
+	s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"Volumes": []mobyvolume.Volume{{Name: "data"}}}))
+	}), &started)
+	require.NoError(t, s.deps.DB.AutoMigrate(&checkSetting{}, &backuptarget.Target{}, &policies.VolumeBackupPolicy{}))
+	require.NoError(t, s.deps.DB.AutoMigrate(activity.Models()...))
+	activityID := "11111111-2222-4333-8444-555555555555"
+	stored := volume.Backup{
+		ID: "latest", VolumeName: "data", CreatedAt: time.Now().UTC().Truncate(time.Second), Status: "failed", Trigger: "manual",
+		Destination: "local", Format: volume.BackupFormatRustic, PolicyID: "policy", StopContainers: true,
+		ErrorCode: "volume.backup.restart-failed", Error: "volume.backup.restart-failed", ActivityID: &activityID,
+	}
+	require.NoError(t, s.deps.DB.Table("volume_backups").Create(&stored).Error)
+	result, err := s.Overview(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Volumes, 1)
+	latest := result.Volumes[0].LastBackup
+	require.NotNil(t, latest)
+	require.Equal(t, entryInternal(&stored), *latest)
+	require.True(t, latest.StopContainers)
+	require.Equal(t, &activityID, latest.ActivityID)
+	require.Equal(t, "policy", latest.PolicyID)
+	require.NotEmpty(t, latest.Type)
+	require.Empty(t, started)
+}
