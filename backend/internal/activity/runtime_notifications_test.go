@@ -61,6 +61,31 @@ func TestDeployNotificationSharesTerminalTransaction(t *testing.T) {
 		})
 	}
 }
+// A policy child is an update-project receipt with a policy binding; its failure
+// notifies once like a manual update, and a replayed completion adds nothing.
+func TestPolicyChildDeployFailureNotifiesOnce(t *testing.T) {
+	f := b1Fixture(t)
+	c, _ := policyCommand(t, f)
+	require.NotNil(t, c.Options.Lifecycle.Policy)
+	admitted, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err)
+	result := runtimeLocalResultInternal{state: "failed", code: dto.CodeRuntimeFailed, message: "Runtime failed", settledAt: f.store.now}
+	ctx := context.WithValue(t.Context(), gateRunContextKey{}, admitted.ActivityID)
+	for range 2 {
+		require.NoError(t, f.service.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
+			_, _, err := runtimeCompleteTxInternal(tx, now, b1Identity(t, c, admitted.ActivityID), result)
+			return err
+		}))
+	}
+	var rows []notificationoutbox.Row
+	require.NoError(t, f.store.svc.db.Find(&rows).Error)
+	require.Len(t, rows, 1)
+	require.Equal(t, "deploy_failed", rows[0].Event)
+	require.Equal(t, "deploy:0:"+admitted.ActivityID, rows[0].DedupKey)
+	require.Equal(t, "update-project", rows[0].Payload["operation"])
+	require.Equal(t, "runtime.failed", rows[0].Payload["reason"])
+}
+
 func TestDeployFailureOperationFilterAndIdempotentReplay(t *testing.T) {
 	f := b1Fixture(t)
 	for _, op := range []string{"deploy-project", "redeploy-project", "update-project", "restore-project", "restart-project"} {
