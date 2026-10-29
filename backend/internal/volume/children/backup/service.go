@@ -116,10 +116,8 @@ func NewService(deps Dependencies) *Service {
 		Activity:       deps.Activity,
 		AlreadyRunning: deps.AlreadyRunning,
 		LatestRun:      s.latestRunInternal,
-		CreateBackup: func(ctx context.Context, volumeName, policyID string) (*volume.Backup, error) {
-			return s.CreateBackup(ctx, volumeName, usertypes.SystemUser, backuptypes.VolumeBackupTriggerScheduled, volume.CreateBackupRequest{PolicyID: policyID})
-		},
-		Reconcile: s.ReconcileBackup,
+		CreateBackup:   s.scheduledBackupInternal,
+		Reconcile:      s.ReconcileBackup,
 	})
 	s.browser = browser.NewService(browser.Dependencies{
 		Docker:       deps.Docker,

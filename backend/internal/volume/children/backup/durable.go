@@ -50,6 +50,12 @@ func (s *Service) StartBackup(ctx context.Context, environmentID, volumeName str
 	return accepted, nil
 }
 
+// scheduledBackupInternal gives the scheduled activity and run history a stable code, never diagnostic text.
+func (s *Service) scheduledBackupInternal(ctx context.Context, volumeName, policyID string) (*volume.Backup, error) {
+	entry, err := s.CreateBackup(ctx, volumeName, usertypes.SystemUser, backuptypes.VolumeBackupTriggerScheduled, volume.CreateBackupRequest{PolicyID: policyID})
+	return entry, neutralBackupError(err, "volume.backup.interrupted")
+}
+
 func (s *Service) ReconcileBackup(ctx context.Context, previous scheduler.Run, volumeName string) (scheduler.Outcome, error) {
 	outcome := jobcontext.ConfirmedTarget(previous, volumeName)
 	if outcome.Status == scheduler.Succeeded {
@@ -86,7 +92,8 @@ func (s *Service) failDurableBackupInternal(ctx context.Context, _ string, paylo
 	if err != nil {
 		return err
 	}
-	err = s.deps.Store.Fail(ctx, entry.ID, runErr.Error())
-	activitylib.CompleteHandlerActivity(ctx, s.deps.Activity, command.ActivityID, "Volume backup created successfully", runErr)
+	public := neutralBackupError(runErr, "volume.backup.interrupted")
+	err = s.deps.Store.Fail(ctx, entry.ID, public.Error())
+	activitylib.CompleteHandlerActivity(ctx, s.deps.Activity, command.ActivityID, "Volume backup created successfully", public)
 	return err
 }
