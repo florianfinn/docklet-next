@@ -574,7 +574,7 @@
   "autoHeal": {
     "routes": [
       {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"e0d38d2a2a1060310e5fab7914fdd1f6d9ce2a14c7584b290f37fda3ab3fed95"},
-      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"22e37585b6aff1e12912f91013eca56cca44e57ce0ce3e31bf18c093f344378d"}
+      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"3fec03c59daaf5495b74eff89752f8990ad3ad3525c248d57fbd4fda912250e6"}
     ],
     "settings": {
       "additionalProperties": false,

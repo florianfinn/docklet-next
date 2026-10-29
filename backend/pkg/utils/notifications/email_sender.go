@@ -19,7 +19,7 @@ import (
 
 const (
 	defaultSMTPClientHost = "localhost"
-	defaultSMTPTimeout    = 10 * time.Second
+	defaultSMTPTimeout    = 15 * time.Second
 )
 
 type smtpBuildOptions struct {

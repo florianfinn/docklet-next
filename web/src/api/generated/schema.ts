@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 0a3b648196a7be88528c740081a2fd6700d0450d123fca4f1d92f0c543b23933
+// Revision: 875485dbee60e3900b671c59bcdac459074aaf97c097b8f8666bb2bfeca0c5ef
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9871,6 +9871,125 @@ export interface components {
             /** Format: int64 */
             unused: number;
         };
+        NotificationConfigDiscord: {
+            avatarUrl?: string;
+            events?: components["schemas"]["NotificationEventMap"];
+            token: string;
+            username?: string;
+            webhookId: string;
+        };
+        NotificationConfigEmail: {
+            authMode?: string;
+            events?: components["schemas"]["NotificationEventMap"];
+            fromAddress: string;
+            smtpHost: string;
+            smtpPassword: string;
+            /** Format: int64 */
+            smtpPort: number;
+            smtpUsername: string;
+            tlsMode: string;
+            toAddresses: string[] | null;
+        };
+        NotificationConfigGeneric: {
+            contentType?: string;
+            customHeaders?: {
+                [key: string]: string;
+            };
+            disableTls: boolean;
+            events?: components["schemas"]["NotificationEventMap"];
+            messageKey?: string;
+            method?: string;
+            payloadTemplate?: string;
+            successBodyContains?: string;
+            titleKey?: string;
+            webhookUrl: string;
+        };
+        NotificationConfigGoogleChat: {
+            events?: components["schemas"]["NotificationEventMap"];
+            webhookUrl: string;
+        };
+        NotificationConfigGotify: {
+            disableTls: boolean;
+            events?: components["schemas"]["NotificationEventMap"];
+            host: string;
+            insecureSkipVerify: boolean;
+            path?: string;
+            /** Format: int64 */
+            port?: number;
+            /** Format: int64 */
+            priority?: number;
+            title?: string;
+            token: string;
+            useHeader: boolean;
+        };
+        NotificationConfigMatrix: {
+            disableTlsVerification: boolean;
+            events?: components["schemas"]["NotificationEventMap"];
+            host: string;
+            password?: string;
+            /** Format: int64 */
+            port?: number;
+            rooms: string;
+            username?: string;
+        };
+        NotificationConfigNtfy: {
+            cache: boolean;
+            disableTls: boolean;
+            disableTlsVerification: boolean;
+            events?: components["schemas"]["NotificationEventMap"];
+            firebase: boolean;
+            host: string;
+            icon?: string;
+            password?: string;
+            /** Format: int64 */
+            port: number;
+            priority?: string;
+            tags?: string[] | null;
+            title?: string;
+            topic: string;
+            username?: string;
+        };
+        NotificationConfigPushover: {
+            devices?: string[] | null;
+            events?: components["schemas"]["NotificationEventMap"];
+            /** Format: int32 */
+            priority: number;
+            title?: string;
+            token: string;
+            user: string;
+        };
+        NotificationConfigSignal: {
+            disableTls: boolean;
+            events?: components["schemas"]["NotificationEventMap"];
+            host: string;
+            notifySelf?: boolean;
+            password?: string;
+            /** Format: int64 */
+            port: number;
+            recipients: string[] | null;
+            source: string;
+            token?: string;
+            user?: string;
+        };
+        NotificationConfigSlack: {
+            botName?: string;
+            channel?: string;
+            color?: string;
+            events?: components["schemas"]["NotificationEventMap"];
+            icon?: string;
+            threadTs?: string;
+            title?: string;
+            token: string;
+        };
+        NotificationConfigTelegram: {
+            botToken: string;
+            chatIds: string[] | null;
+            events?: components["schemas"]["NotificationEventMap"];
+            notification: boolean;
+            parseMode?: string;
+            preview: boolean;
+            title?: string;
+        };
         NotificationDispatchAutoHeal: {
             container: string;
             containerId: string;
@@ -9957,6 +10076,16 @@ export interface components {
             /** @enum {string} */
             outcome: "completed" | "partial" | "cancelled" | "failed" | "interrupted";
         };
+        NotificationEventMap: {
+            auto_heal?: boolean;
+            backup_failed?: boolean;
+            container_update?: boolean;
+            deploy_failed?: boolean;
+            host_offline?: boolean;
+            image_update?: boolean;
+            prune_report?: boolean;
+            vulnerability_found?: boolean;
+        };
         NotificationResponse: {
             /**
              * Format: uri
@@ -9966,7 +10095,7 @@ export interface components {
             readonly $schema?: string;
             config: {
                 [key: string]: unknown;
-            };
+            } | components["schemas"]["NotificationConfigDiscord"] | components["schemas"]["NotificationConfigEmail"] | components["schemas"]["NotificationConfigTelegram"] | components["schemas"]["NotificationConfigSignal"] | components["schemas"]["NotificationConfigSlack"] | components["schemas"]["NotificationConfigNtfy"] | components["schemas"]["NotificationConfigPushover"] | components["schemas"]["NotificationConfigGotify"] | components["schemas"]["NotificationConfigMatrix"] | components["schemas"]["NotificationConfigGoogleChat"] | components["schemas"]["NotificationConfigGeneric"];
             credentialsSet: string[] | null;
             enabled: boolean;
             /** Format: int64 */
@@ -9990,7 +10119,7 @@ export interface components {
             readonly $schema?: string;
             config: {
                 [key: string]: unknown;
-            };
+            } | components["schemas"]["NotificationConfigDiscord"] | components["schemas"]["NotificationConfigEmail"] | components["schemas"]["NotificationConfigTelegram"] | components["schemas"]["NotificationConfigSignal"] | components["schemas"]["NotificationConfigSlack"] | components["schemas"]["NotificationConfigNtfy"] | components["schemas"]["NotificationConfigPushover"] | components["schemas"]["NotificationConfigGotify"] | components["schemas"]["NotificationConfigMatrix"] | components["schemas"]["NotificationConfigGoogleChat"] | components["schemas"]["NotificationConfigGeneric"];
             enabled: boolean;
             provider: string;
         };
@@ -16622,6 +16751,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AutohealUpdate"];
+                "application/octet-stream": string;
             };
         };
         responses: {
@@ -30773,6 +30903,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NotificationDispatchRequest"];
+                "application/octet-stream": string;
             };
         };
         responses: {

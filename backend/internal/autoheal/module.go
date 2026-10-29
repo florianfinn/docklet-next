@@ -8,6 +8,7 @@ package autoheal
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -33,8 +34,9 @@ type getInput struct {
 	ID string `path:"id"`
 }
 type putInput struct {
-	ID   string `path:"id"`
-	Body dto.Update
+	RawBody []byte
+	ID      string `path:"id"`
+	Body    dto.Update
 }
 type output struct{ Body dto.Settings }
 
@@ -49,7 +51,7 @@ func (m *Module) RegisterRoutes(api huma.API) {
 		m = &Module{}
 	}
 	huma.Register(api, huma.Operation{OperationID: "get-auto-heal-settings", Method: http.MethodGet, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.get)
-	huma.Register(api, huma.Operation{OperationID: "update-auto-heal-settings", Method: http.MethodPut, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.put)
+	huma.Register(api, huma.Operation{OperationID: "update-auto-heal-settings", SkipValidateBody: true, Method: http.MethodPut, Path: "/environments/{id}/auto-heal", Tags: []string{"Auto Heal"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, m.put)
 }
 func (m *Module) get(ctx context.Context, in *getInput) (*output, error) {
 	if in.ID != "0" {
@@ -66,6 +68,11 @@ func (m *Module) get(ctx context.Context, in *getInput) (*output, error) {
 	return &output{Body: v}, nil
 }
 func (m *Module) put(ctx context.Context, in *putInput) (*output, error) {
+	if len(in.RawBody) > 0 {
+		if err := json.Unmarshal(in.RawBody, &in.Body, json.RejectUnknownMembers(true)); err != nil {
+			return nil, problem(&dto.Problem{Code: "autoheal.settings-invalid", Status: 400})
+		}
+	}
 	if err := in.Body.Validate(); err != nil {
 		return nil, problem(err)
 	}

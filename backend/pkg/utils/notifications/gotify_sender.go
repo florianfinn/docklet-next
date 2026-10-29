@@ -33,11 +33,7 @@ func BuildGotifyURL(config GotifyConfig) (string, error) {
 	}
 
 	host := config.Host
-	if config.Port > 0 {
-		u.Host = fmt.Sprintf("%s:%d", host, config.Port)
-	} else {
-		u.Host = host
-	}
+	u.Host = providerHost(host, config.Port)
 
 	path := config.Path
 	if path != "" && !strings.HasPrefix(path, "/") {

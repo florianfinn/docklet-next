@@ -7,8 +7,13 @@
 package notifications
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nicholas-fedor/shoutrrr"
 	shoutrrrTypes "github.com/nicholas-fedor/shoutrrr/pkg/types"
@@ -26,14 +31,44 @@ func SanitizeForEmail(text string) string {
 }
 
 func sendShoutrrrInternal(provider, destinationURL, message string, params *shoutrrrTypes.Params) error {
-	sender, err := shoutrrr.CreateSenderWithOptions(shoutrrrTypes.SenderOptions{}, destinationURL)
+	sender, err := shoutrrr.CreateSenderWithOptions(shoutrrrTypes.SenderOptions{HTTPClient: notificationHTTPClient}, destinationURL)
 	if err != nil {
 		return fmt.Errorf("failed to create shoutrrr %s sender: %w", provider, err)
 	}
-	for _, err := range sender.Send(message, params) {
-		if err != nil {
-			return fmt.Errorf("failed to send %s message via shoutrrr: %w", provider, err)
+	return waitDelivery(context.Background(), DeliveryTimeout, func() error {
+		for _, err := range sender.Send(message, params) {
+			if err != nil {
+				return fmt.Errorf("failed to send %s message via shoutrrr: %w", provider, err)
+			}
 		}
+		return nil
+	})
+}
+
+const DeliveryTimeout = 15 * time.Second
+
+var notificationHTTPClient = &http.Client{Timeout: DeliveryTimeout}
+
+// waitDelivery bounds caller ownership for SDKs without context-aware Send.
+func waitDelivery(ctx context.Context, timeout time.Duration, send func() error) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- send() }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return nil
+}
+
+func providerHost(host string, port int) string {
+	if port > 0 {
+		return net.JoinHostPort(host, strconv.Itoa(port))
+	}
+	if net.ParseIP(host) != nil && strings.Contains(host, ":") {
+		return "[" + host + "]"
+	}
+	return host
 }

@@ -8,6 +8,7 @@ package notification
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"strings"
@@ -67,8 +68,9 @@ type TestNotificationInput struct {
 }
 
 type DispatchNotificationInput struct {
-	APIKey string `header:"X-API-Key" doc:"Remote environment access token"`
-	Body   notification.DispatchRequest
+	APIKey  string `header:"X-API-Key" doc:"Remote environment access token"`
+	RawBody []byte
+	Body    notification.DispatchRequest
 }
 
 func normalizeNotificationTestType(testType string) string {
@@ -82,14 +84,29 @@ func isSupportedNotificationTestType(testType string) bool {
 }
 
 func (h *NotificationHandler) rejectIfAgentModeInternal() error {
-	if h.config != nil && h.config.AgentMode {
-		return huma.Error400BadRequest("notifications are managed on the Arcane manager")
+	if h.config != nil && (h.config.AgentMode || h.config.EdgeAgent) {
+		return &notification.Problem{Code: "notification.hub-only", Status: 400}
 	}
 	return nil
 }
 
+func (h *NotificationHandler) rejectHubRoute(id string) error {
+	if id != "0" {
+		return &notification.Problem{Code: "notification.hub-only", Status: 400}
+	}
+	return h.rejectIfAgentModeInternal()
+}
+func credentialsSet(s NotificationSettings) []string {
+	r := []string{}
+	for _, f := range notificationCredentialFieldsByProviderInternal[s.Provider] {
+		if v, _ := s.Config[f].(string); v != "" {
+			r = append(r, f)
+		}
+	}
+	return r
+}
 func (h *NotificationHandler) GetAllNotificationSettings(ctx context.Context, input *GetAllNotificationSettingsInput) (*GetAllNotificationSettingsOutput, error) {
-	if err := h.rejectIfAgentModeInternal(); err != nil {
+	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
 	settings, err := h.notificationService.GetAllSettings(ctx)
@@ -100,10 +117,11 @@ func (h *NotificationHandler) GetAllNotificationSettings(ctx context.Context, in
 	responses := make([]notification.Response, len(settings))
 	for i, setting := range settings {
 		responses[i] = notification.Response{
-			ID:       setting.ID,
-			Provider: notification.Provider(setting.Provider),
-			Enabled:  setting.Enabled,
-			Config:   base.JsonObject(RedactNotificationConfigCredentials(setting.Provider, setting.Config)),
+			ID:             setting.ID,
+			Provider:       notification.Provider(setting.Provider),
+			Enabled:        setting.Enabled,
+			Config:         base.JsonObject(RedactNotificationConfigCredentials(setting.Provider, setting.Config)),
+			CredentialsSet: credentialsSet(setting),
 		}
 	}
 
@@ -111,7 +129,7 @@ func (h *NotificationHandler) GetAllNotificationSettings(ctx context.Context, in
 }
 
 func (h *NotificationHandler) GetNotificationSettings(ctx context.Context, input *GetNotificationSettingsInput) (*GetNotificationSettingsOutput, error) {
-	if err := h.rejectIfAgentModeInternal(); err != nil {
+	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
 	provider := notifications.NotificationProvider(input.Provider)
@@ -122,17 +140,18 @@ func (h *NotificationHandler) GetNotificationSettings(ctx context.Context, input
 	}
 
 	response := notification.Response{
-		ID:       settings.ID,
-		Provider: notification.Provider(settings.Provider),
-		Enabled:  settings.Enabled,
-		Config:   base.JsonObject(RedactNotificationConfigCredentials(settings.Provider, settings.Config)),
+		ID:             settings.ID,
+		Provider:       notification.Provider(settings.Provider),
+		Enabled:        settings.Enabled,
+		Config:         base.JsonObject(RedactNotificationConfigCredentials(settings.Provider, settings.Config)),
+		CredentialsSet: credentialsSet(*settings),
 	}
 
 	return &GetNotificationSettingsOutput{Body: response}, nil
 }
 
 func (h *NotificationHandler) CreateOrUpdateNotificationSettings(ctx context.Context, input *CreateOrUpdateNotificationSettingsInput) (*CreateOrUpdateNotificationSettingsOutput, error) {
-	if err := h.rejectIfAgentModeInternal(); err != nil {
+	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
 	provider := notifications.NotificationProvider(input.Body.Provider)
@@ -147,6 +166,9 @@ func (h *NotificationHandler) CreateOrUpdateNotificationSettings(ctx context.Con
 		database.JSON(input.Body.Config),
 	)
 	if err != nil {
+		if p, ok := errors.AsType[*notification.Problem](err); ok {
+			return nil, p
+		}
 		apiErr := common.ToAPIError(err)
 		if apiErr.HTTPStatus() == http.StatusInternalServerError {
 			return nil, huma.Error500InternalServerError("Failed to update notification settings")
@@ -155,17 +177,18 @@ func (h *NotificationHandler) CreateOrUpdateNotificationSettings(ctx context.Con
 	}
 
 	response := notification.Response{
-		ID:       settings.ID,
-		Provider: notification.Provider(settings.Provider),
-		Enabled:  settings.Enabled,
-		Config:   base.JsonObject(RedactNotificationConfigCredentials(settings.Provider, settings.Config)),
+		ID:             settings.ID,
+		Provider:       notification.Provider(settings.Provider),
+		Enabled:        settings.Enabled,
+		Config:         base.JsonObject(RedactNotificationConfigCredentials(settings.Provider, settings.Config)),
+		CredentialsSet: credentialsSet(*settings),
 	}
 
 	return &CreateOrUpdateNotificationSettingsOutput{Body: response}, nil
 }
 
 func (h *NotificationHandler) DeleteNotificationSettings(ctx context.Context, input *DeleteNotificationSettingsInput) (*handlerutil.Out[base.MessageResponse], error) {
-	if err := h.rejectIfAgentModeInternal(); err != nil {
+	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
 	provider := notifications.NotificationProvider(input.Provider)
@@ -183,7 +206,7 @@ func (h *NotificationHandler) DeleteNotificationSettings(ctx context.Context, in
 }
 
 func (h *NotificationHandler) TestNotification(ctx context.Context, input *TestNotificationInput) (*handlerutil.Out[notification.TestResponse], error) {
-	if err := h.rejectIfAgentModeInternal(); err != nil {
+	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
 	provider := notifications.NotificationProvider(input.Provider)
@@ -192,16 +215,23 @@ func (h *NotificationHandler) TestNotification(ctx context.Context, input *TestN
 		return nil, huma.Error400BadRequest("invalid notification test type")
 	}
 
+	if _, loaded := h.notificationService.tests.LoadOrStore(provider, true); loaded {
+		return nil, &notification.Problem{Code: "notification.test-busy", Status: 409}
+	}
+	defer h.notificationService.tests.Delete(provider)
 	warning, err := h.notificationService.TestNotification(ctx, input.EnvironmentID, provider, testType)
+	code, reason := "notification.test-sent", ""
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to send test notification: " + err.Error())
+		code = "notification.test-failed"
+		reason = notifications.ClassifyDeliveryError(err)
 	}
 
 	return &handlerutil.Out[notification.TestResponse]{
 		Body: base.ApiResponse[notification.TestResponse]{
 			Success: true,
 			Data: notification.TestResponse{
-				Code: "notification.test-sent",
+				Code:    code,
+				Reason:  reason,
 				Warning: warning,
 			},
 		},
@@ -215,8 +245,16 @@ func (h *NotificationHandler) DispatchNotification(ctx context.Context, input *D
 	if strings.TrimSpace(input.APIKey) == "" {
 		return nil, huma.Error401Unauthorized("missing remote environment access token")
 	}
+	if len(input.RawBody) > 0 {
+		if err := json.Unmarshal(input.RawBody, &input.Body, json.RejectUnknownMembers(true)); err != nil {
+			return nil, dispatchInvalid()
+		}
+	}
 	dispatchResponse, err := h.notificationService.DispatchNotification(ctx, input.APIKey, input.Body)
 	if err != nil {
+		if p, ok := errors.AsType[*notification.Problem](err); ok {
+			return nil, p
+		}
 		if errors.Is(err, ErrUnsupportedDispatchKind) {
 			return nil, huma.Error400BadRequest("unsupported dispatch kind")
 		}

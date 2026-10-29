@@ -236,16 +236,16 @@ func notificationEventTypeForTestTypeInternal(testType string) notifications.Not
 // unsubscribed. Empty means real notifications would send.
 func (s *NotificationService) testNotificationWarningInternal(setting *NotificationSettings, testType string) string {
 	if !setting.Enabled {
-		return fmt.Sprintf("%s is disabled, so real notifications will not send", setting.Provider)
+		return "notification.target-disabled"
 	}
 	eventType := notificationEventTypeForTestTypeInternal(testType)
 	if eventType != "" && !s.isEventEnabled(setting.Config, eventType) {
-		return fmt.Sprintf("%s events are disabled for %s, so real notifications will not send", eventType, setting.Provider)
+		return "notification.target-disabled"
 	}
 	if eventType == "" && !slices.ContainsFunc(notifications.AllNotificationEventTypes, func(candidate notifications.NotificationEventType) bool {
 		return s.isEventEnabled(setting.Config, candidate)
 	}) {
-		return fmt.Sprintf("no events are subscribed for %s, so real notifications will not send", setting.Provider)
+		return "notification.target-disabled"
 	}
 	return ""
 }

@@ -11,6 +11,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/notification"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -46,8 +47,17 @@ func (m *Module) RegisterRoutes(api huma.API) {
 
 // RegisterNotifications registers notification endpoints.
 func RegisterNotifications(api huma.API, notificationSvc *NotificationService, cfg *config.Config) {
+	configRefs := []*huma.Schema{}
 	for _, t := range []reflect.Type{reflect.TypeFor[dto.ConfigDiscord](), reflect.TypeFor[dto.ConfigEmail](), reflect.TypeFor[dto.ConfigTelegram](), reflect.TypeFor[dto.ConfigSignal](), reflect.TypeFor[dto.ConfigSlack](), reflect.TypeFor[dto.ConfigNtfy](), reflect.TypeFor[dto.ConfigPushover](), reflect.TypeFor[dto.ConfigGotify](), reflect.TypeFor[dto.ConfigMatrix](), reflect.TypeFor[dto.ConfigGoogleChat](), reflect.TypeFor[dto.ConfigGeneric](), reflect.TypeFor[dto.Problem]()} {
-		api.OpenAPI().Components.Schemas.Schema(t, true, "")
+		ref := api.OpenAPI().Components.Schemas.Schema(t, true, "")
+		if t != reflect.TypeFor[dto.Problem]() {
+			configRefs = append(configRefs, ref)
+		}
+	}
+	for _, typ := range []reflect.Type{reflect.TypeFor[dto.Update](), reflect.TypeFor[dto.Response]()} {
+		ref := api.OpenAPI().Components.Schemas.Schema(typ, true, "")
+		name := strings.TrimPrefix(ref.Ref, "#/components/schemas/")
+		api.OpenAPI().Components.Schemas.Map()[name].Properties["config"].AnyOf = configRefs
 	}
 	h := &NotificationHandler{
 		notificationService: notificationSvc,
@@ -75,13 +85,14 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 	}, authz.PermNotificationsManage, h.GetNotificationSettings)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "create-or-update-notification-settings",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/notifications/settings",
-		Summary:     "Create or update notification settings",
-		Tags:        []string{"Notifications"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequireGlobalAdmin(api),
+		OperationID:      "create-or-update-notification-settings",
+		SkipValidateBody: true,
+		Method:           http.MethodPost,
+		Path:             "/environments/{id}/notifications/settings",
+		Summary:          "Create or update notification settings",
+		Tags:             []string{"Notifications"},
+		Security:         handlerutil.DefaultOperationSecurity(),
+		Middlewares:      middleware.RequireGlobalAdmin(api),
 	}, authz.PermNotificationsManage, h.CreateOrUpdateNotificationSettings)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
@@ -107,11 +118,12 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 	// Environment tokens are authenticated by ApiKeyAuth and revalidated by the
 	// handler. RBAC middleware cannot scope this route because it has no environment ID.
 	huma.Register(api, huma.Operation{
-		OperationID: "dispatch-notification",
-		Method:      http.MethodPost,
-		Path:        "/notifications/dispatch",
-		Summary:     "Dispatch notification from remote agent to manager",
-		Tags:        []string{"Notifications"},
-		Security:    []map[string][]string{{"ApiKeyAuth": {}}},
+		OperationID:      "dispatch-notification",
+		SkipValidateBody: true,
+		Method:           http.MethodPost,
+		Path:             "/notifications/dispatch",
+		Summary:          "Dispatch notification from remote agent to manager",
+		Tags:             []string{"Notifications"},
+		Security:         []map[string][]string{{"ApiKeyAuth": {}}},
 	}, h.DispatchNotification)
 }

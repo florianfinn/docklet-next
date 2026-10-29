@@ -30,7 +30,7 @@ func TestPolicyNotificationChannelEntryAndNeutralFailure(t *testing.T) {
 	require.Zero(t, delivered)
 	require.NotContains(t, err.Error(), "synthetic-private-provider-detail")
 	var events []event.Event
-	require.NoError(t, db.Where("type = ?", event.EventTypeNotificationSend).Find(&events).Error)
+	require.NoError(t, db.Where("type = ?", "notification.delivery-failed").Find(&events).Error)
 	require.Len(t, events, 1)
 	payload, err := json.Marshal(events[0])
 	require.NoError(t, err)

@@ -38,11 +38,7 @@ func BuildNtfyURL(config NtfyConfig) (string, error) {
 	}
 
 	// Set host and port
-	if config.Port > 0 {
-		u.Host = fmt.Sprintf("%s:%d", host, config.Port)
-	} else {
-		u.Host = host
-	}
+	u.Host = providerHost(host, config.Port)
 
 	// Set path (topic)
 	u.Path = "/" + config.Topic

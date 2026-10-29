@@ -35,11 +35,7 @@ func BuildMatrixURL(config MatrixConfig) (string, error) {
 
 	host := config.Host
 	// Set host and port
-	if config.Port > 0 {
-		u.Host = fmt.Sprintf("%s:%d", host, config.Port)
-	} else {
-		u.Host = host
-	}
+	u.Host = providerHost(host, config.Port)
 
 	// Add query parameters
 	q := u.Query()

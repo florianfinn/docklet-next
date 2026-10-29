@@ -318,6 +318,14 @@ func registerJobs(params registerJobsParams) error {
 			return err
 		}
 	}
+	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		if err := params.Scheduler.RegisterJob(&scheduler.NotificationDeliverJob{Service: params.Notification}); err != nil {
+			return err
+		}
+		if err := params.Scheduler.RegisterBusWatcher(&scheduler.NotificationDeliveryWake{Scheduler: params.Scheduler}, false); err != nil {
+			return err
+		}
+	}
 	hub := vulnerability.NewHubScans(params.DB, params.Settings, params.Environment, params.Vulnerability, params.Notification)
 	params.VulnerabilityScan.SetDispatcher(hub)
 	if err := registerVulnerabilityJobs(params.Scheduler, params.Config, params.VulnerabilityScan, params.VulnerabilityRisk, &scheduler.VulnerabilityNotifyJob{Hub: hub}); err != nil {

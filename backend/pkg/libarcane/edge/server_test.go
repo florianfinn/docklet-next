@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"github.com/florianfinn/docklet-next/types/notification"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -558,8 +559,8 @@ func TestIsExpectedTunnelReceiveError(t *testing.T) {
 func TestTunnelServer_HandleEventCallback(t *testing.T) {
 	called := make(chan struct{}, 1)
 	server := NewTunnelServerWithRegistry(GetRegistry(), nil, nil)
-	server.SetEventCallback(func(ctx context.Context, environmentID string, event *TunnelEvent) error {
-		assert.Equal(t, "env-edge", environmentID)
+	server.SetEventCallback(func(ctx context.Context, origin notification.DispatchOrigin, event *TunnelEvent) error {
+		assert.Equal(t, "env-edge", origin.EnvironmentID)
 		require.NotNil(t, event)
 		assert.Equal(t, "container.start", event.Type)
 		assert.Equal(t, "Container started", event.Title)

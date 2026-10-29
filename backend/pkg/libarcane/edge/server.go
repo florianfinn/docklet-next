@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/notification"
 	"io"
 	"log/slog"
 	"net/http"
@@ -59,7 +60,7 @@ type EnvironmentNameResolver func(ctx context.Context, environmentID string) (en
 type StatusUpdateCallback func(ctx context.Context, environmentID string, connected bool)
 
 // EventCallback is called when an edge agent publishes an event.
-type EventCallback func(ctx context.Context, environmentID string, event *TunnelEvent) error
+type EventCallback func(ctx context.Context, origin notification.DispatchOrigin, event *TunnelEvent) error
 
 // EnrollmentCallback is called after a successful manager-side mTLS enrollment
 // of an edge agent, allowing the host to record audit events or metrics.
@@ -594,10 +595,11 @@ func (s *TunnelServer) handleEvent(ctx context.Context, tunnel *AgentTunnel, msg
 	}
 
 	eventCopy := cloneTunnelEvent(msg.Event)
+	origin := notification.DispatchOrigin{EnvironmentID: tunnel.EnvironmentID, APIKeyID: tunnel.APIKeyID, TokenHash: tunnel.TokenHash, SessionID: tunnel.SessionID}
 	go func() {
 		eventCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
-		if err := s.eventCallback(eventCtx, tunnel.EnvironmentID, eventCopy); err != nil {
+		if err := s.eventCallback(eventCtx, origin, eventCopy); err != nil {
 			slog.WarnContext(eventCtx, "Failed to process edge event", "environmentId", tunnel.EnvironmentID, "type", eventCopy.Type, "error", err)
 		}
 	}()
