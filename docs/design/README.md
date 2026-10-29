@@ -25,6 +25,8 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Stack authoring and deployment](stack-authoring.md) | M7 create/save/label/deploy mapping, non-idempotent create, partial state and hub docker run conversion |
 | [Database baseline](database-baseline.md) | SQLite baseline contract, forward-only policy and historical integrity reference |
 | [Vulnerability scanning](vulnerability-scanning.md) | Local Docker scanner authority, host admission, retained findings, run evidence and agent v8 |
+| [Notification delivery](notifications.md) | Hub-owned delivery, credential boundaries, host ingress and availability |
+| [Auto Heal](auto-heal.md) | Per-host settings, ownership, durable restart attempts and silent recovery |
 | [Agent surface](agent-surface.md) | Agent and Edge agent module allowlist and host exposure |
 | [Edge threat review](edge-threat-review.md) | Assets, attacker positions and verdicts for the adopted Edge tunnel and agent mode |
 | [Host onboarding](host-onboarding.md) | Direct and Edge registration, token lifecycle, installer directories and permissions, hidden agent and stale hosts |

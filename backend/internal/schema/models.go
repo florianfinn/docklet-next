@@ -9,6 +9,7 @@ package schema
 import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
+	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
@@ -18,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
@@ -45,6 +47,7 @@ func Models() []any {
 		&environment.Environment{}, &event.Event{},
 		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},
 		&kv.KVEntry{}, &notification.NotificationSettings{},
+		&notificationoutbox.Row{}, &notificationoutbox.Availability{}, &autoheal.Restart{},
 		&project.Project{}, &project.ProjectTag{}, &lifecycle.Baseline{}, &lifecycle.Point{}, &lifecycle.Run{},
 		&registry.ContainerRegistry{}, &guard.Protection{},
 		&role.Role{}, &role.UserRoleAssignment{}, &role.ApiKeyPermission{},

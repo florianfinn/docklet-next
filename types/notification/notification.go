@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
 
 package notification
 
@@ -59,6 +59,7 @@ const (
 	DispatchKindVulnerabilityScan    DispatchKind = "vulnerability_scan"
 	DispatchKindPruneReport          DispatchKind = "prune_report"
 	DispatchKindAutoHeal             DispatchKind = "auto_heal"
+	DispatchKindBackupFailed         DispatchKind = "backup_failed"
 )
 
 type Update struct {
@@ -97,17 +98,19 @@ type Response struct {
 	// Config contains the provider-specific configuration.
 	//
 	// Required: true
-	Config base.JsonObject `json:"config"`
+	Config         base.JsonObject `json:"config"`
+	CredentialsSet []string        `json:"credentialsSet"`
 }
 
 // TestResponse is the result of a test notification send.
 type TestResponse struct {
 	// Message describes the test outcome.
-	Message string `json:"message"`
+	Code   string `json:"code" enum:"notification.test-sent,notification.test-failed"`
+	Reason string `json:"reason,omitempty" enum:"delivery-unreachable,delivery-rejected,delivery-auth,delivery-invalid"`
 
 	// Warning explains why a real notification of the tested kind would not
 	// send (provider disabled or event unsubscribed). Empty when none applies.
-	Warning string `json:"warning,omitempty"`
+	Warning string `json:"warning,omitempty" enum:"notification.target-disabled"`
 }
 
 type DispatchKind string
@@ -147,8 +150,12 @@ type DispatchPruneReport struct {
 }
 
 type DispatchAutoHeal struct {
-	ContainerName string `json:"containerName"`
-	ContainerID   string `json:"containerId"`
+	EventID       string `json:"eventId" maxLength:"64"`
+	Outcome       string `json:"outcome" enum:"restarted,restart-failed,limit-reached"`
+	Container     string `json:"container" maxLength:"128"`
+	Stack         string `json:"stack,omitempty" maxLength:"128"`
+	Restarts      int    `json:"restarts" minimum:"0" maximum:"100"`
+	WindowMinutes int    `json:"windowMinutes" minimum:"1" maximum:"1440"`
 }
 
 type DispatchVulnerabilityScan struct {
@@ -159,10 +166,19 @@ type DispatchVulnerabilityScan struct {
 	NewFindings []vulnerability.NewFinding `json:"newFindings" maxItems:"50"`
 }
 
+type DispatchBackupFailed struct {
+	EventID    string `json:"eventId" maxLength:"64"`
+	Operation  string `json:"operation" enum:"backup,restore"`
+	Volume     string `json:"volume" maxLength:"128"`
+	Reason     string `json:"reason"`
+	ActivityID string `json:"activityId,omitempty" format:"uuid"`
+}
+
 type DispatchRequest struct {
+	BackupFailed      *DispatchBackupFailed      `json:"backupFailed,omitempty"`
 	VulnerabilityScan *DispatchVulnerabilityScan `json:"vulnerabilityScan,omitempty"`
 
-	Kind                 DispatchKind                  `json:"kind"`
+	Kind                 DispatchKind                  `json:"kind" enum:"image_update,batch_image_update,container_update,batch_container_update,prune_report,auto_heal,backup_failed"`
 	ImageUpdate          *DispatchImageUpdate          `json:"imageUpdate,omitempty"`
 	BatchImageUpdate     *DispatchBatchImageUpdate     `json:"batchImageUpdate,omitempty"`
 	ContainerUpdate      *DispatchContainerUpdate      `json:"containerUpdate,omitempty"`

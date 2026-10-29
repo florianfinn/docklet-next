@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; notification and Auto Heal contracts and delivery for #296.
 
 package notifications
 
@@ -35,11 +35,7 @@ func BuildMatrixURL(config MatrixConfig) (string, error) {
 
 	host := config.Host
 	// Set host and port
-	if config.Port > 0 {
-		u.Host = fmt.Sprintf("%s:%d", host, config.Port)
-	} else {
-		u.Host = host
-	}
+	u.Host = providerHost(host, config.Port)
 
 	// Add query parameters
 	q := u.Query()

@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["GET /environments/{id}/auto-heal", "get-auto-heal-settings"],
+  ["PUT /environments/{id}/auto-heal", "update-auto-heal-settings"],
   ["GET /backup-targets", "list-backup-targets"],
   ["POST /backup-targets", "create-backup-target"],
   ["DELETE /backup-targets/{id}", "retire-backup-target"],

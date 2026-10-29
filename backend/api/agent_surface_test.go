@@ -26,7 +26,7 @@ const routeSnapshotHeader = "# Source: docklet-next/docs/design/core-adoption.md
 
 func TestAgentAndEdgeAgentRouteAllowlist(t *testing.T) {
 	wantModules := []string{
-		"activity", "container", "diagnostics", "health", "image", "image-update",
+		"activity", "autoheal", "container", "diagnostics", "health", "image", "image-update",
 		"job", "network", "port", "project", "registry", "runtime", "settings", "system", "updater", "upload",
 		"version", "volume", "vulnerability",
 	}

@@ -87,7 +87,7 @@ func (s *RuntimeService) SettleLocalStartup(ctx context.Context, current Runtime
 				}
 				message := "Runtime workflow interrupted; effects unverified"
 				snapshot, final, err = runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeLocalResultInternal{
-					state: "failed", code: activitytypes.CodeRuntimeInterrupted, message: message,
+					state: "failed", code: activitytypes.CodeRuntimeInterrupted, message: message, silentNotification: true,
 					errorText: &message, startedAt: copyPtrInternal(row.ExecutorStartedAt), settledAt: now,
 				})
 				return err

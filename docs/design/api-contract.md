@@ -223,3 +223,20 @@ only. Explicit snapshot reads and repository checks reconcile observations. Down
 activities remain discoverable through overview until streaming and confirmed helper
 cleanup finish. The synchronous delete route propagates request cancellation to its
 worker; accepted create/restore/check workers retain their application lifetime.
+
+Auto Heal outcome codes: `autoheal.restarted`, `autoheal.restart-failed`, `autoheal.limit-reached`, `autoheal.interrupted`, `notification.delivery-failed`.
+
+## Notification and Auto Heal foundation
+
+Contract v10/minimum v10 adds typed provider configuration components, the event
+map, `credentialsSet`, classified notification test results and host dispatch
+shapes. New delivery kinds are `backup_failed` and the v10 `auto_heal` shape;
+`deploy_failed` and availability are hub-owned. Legacy fan-out kinds retain their
+existing payloads without an `eventId` requirement.
+
+Auto Heal GET/PUT uses a dedicated typed contract on hub, Direct and Edge hosts.
+Validation returns a 400 `autoheal.settings-invalid` with a JSON-pointer field;
+environment management returns 409 `autoheal.settings-env-managed`. Generic
+settings reject Auto Heal keys before any partial write. Agent-access transport
+refusals retain their shared envelope. Notification settings/configuration
+failures and single-provider probe contention have typed problem responses.

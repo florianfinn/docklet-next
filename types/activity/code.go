@@ -10,6 +10,14 @@ package activity
 type Code string
 
 const (
+	CodeAutoHealRestarted          Code = "autoheal.restarted"
+	CodeAutoHealRestartFailed      Code = "autoheal.restart-failed"
+	CodeAutoHealLimitReached       Code = "autoheal.limit-reached"
+	CodeAutoHealInterrupted        Code = "autoheal.interrupted"
+	CodeNotificationDeliveryFailed Code = "notification.delivery-failed"
+)
+
+const (
 	CodeRunStarted                        Code = "run.started"
 	CodeRunJoined                         Code = "run.joined"
 	CodeRunFresh                          Code = "run.fresh"
@@ -223,6 +231,11 @@ func Values() []Code {
 		CodeEventWebhookDelete,
 		CodeEventWebhookTrigger,
 		CodeEventNotificationSend,
+		CodeAutoHealRestarted,
+		CodeAutoHealRestartFailed,
+		CodeAutoHealLimitReached,
+		CodeAutoHealInterrupted,
+		CodeNotificationDeliveryFailed,
 	}
 }
 

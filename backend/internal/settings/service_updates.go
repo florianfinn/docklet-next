@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.
 
 package settings
 
@@ -82,6 +82,9 @@ func (s *SettingsService) updateSettingValueNoRefreshInternal(ctx context.Contex
 // UpdateSettings publishes the refreshed snapshot before returning. Each
 // subscriber's effects remain ordered and may finish after this method returns.
 func (s *SettingsService) UpdateSettings(ctx context.Context, updates settings.Update) ([]SettingVariable, error) {
+	if AutoHealUpdateManaged(updates) {
+		return nil, common.Classify(common.ErrValidation, errors.New("settings.key-managed"))
+	}
 	if updates.VulnerabilityScanInterval != nil || updates.TrivyConcurrentScanContainers != nil || updates.TrivyServerEnabled != nil || updates.TrivyServerUrl != nil || updates.TrivyServerToken != nil || updates.TrivyConfig != nil || updates.TrivyIgnore != nil {
 		return nil, common.Classify(common.ErrValidation, errors.New("retired vulnerability setting"))
 	}

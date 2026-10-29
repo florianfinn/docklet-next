@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296.
 
 package settings
 
@@ -120,6 +120,7 @@ type Settings struct {
 	PruneNetworkUntil              SettingVariable `key:"pruneNetworkUntil" meta:"label=Network Age Filter;type=text;keywords=prune,networks,cleanup,maintenance,until,older,duration;category=internal;description=Duration threshold for scheduled network prune when mode is olderThan"`
 	PruneBuildCacheMode            SettingVariable `key:"pruneBuildCacheMode" meta:"label=Prune Build Cache;type=select;keywords=prune,build cache,cleanup,maintenance,mode,unused,all,older;category=internal;description=Select how build cache should be pruned when the scheduled prune job runs"`
 	PruneBuildCacheUntil           SettingVariable `key:"pruneBuildCacheUntil" meta:"label=Build Cache Age Filter;type=text;keywords=prune,build cache,cleanup,maintenance,until,older,duration;category=internal;description=Duration threshold for scheduled build cache prune when mode is olderThan"`
+	AutoHealExcludedStacks         SettingVariable `key:"autoHealExcludedStacks" meta:"label=Auto Heal Excluded Stacks;type=text;category=internal"`
 	AutoHealEnabled                SettingVariable `key:"autoHealEnabled" meta:"label=Auto Heal;type=boolean;keywords=auto,heal,health,restart,unhealthy,recovery,container,healthcheck;category=internal;description=Automatically restart containers that become unhealthy"`
 	AutoHealInterval               SettingVariable `key:"autoHealInterval" meta:"label=Auto Heal Interval;type=cron;keywords=auto,heal,interval,frequency,schedule,health,jobs;description=How often to check container health (cron expression)" catmeta:"id=jobschedule"`
 	AutoHealExcludedContainers     SettingVariable `key:"autoHealExcludedContainers" meta:"label=Auto Heal Excluded Containers;type=text;keywords=auto,heal,exclude,containers,ignore,skip,health;category=internal;description=Comma-separated list of containers to exclude from auto-heal"`

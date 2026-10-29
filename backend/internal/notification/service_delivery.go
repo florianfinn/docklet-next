@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; split existing delivery and operator probes from service.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; split existing delivery and operator probes from service; notification and Auto Heal contracts and delivery for #296.
 
 package notification
 
@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 )
 
 // SendBatchImageUpdateNotification dispatches a batched image-update notification
@@ -177,8 +178,7 @@ func (s *NotificationService) SendAutoHealNotification(ctx context.Context, cont
 		_, err := s.dispatchNotificationToManagerInternal(ctx, notification.DispatchRequest{
 			Kind: notification.DispatchKindAutoHeal,
 			AutoHeal: &notification.DispatchAutoHeal{
-				ContainerName: containerName,
-				ContainerID:   containerID,
+				EventID: "autoheal:" + uuid.New().String(), Outcome: "restarted", Container: containerName, Restarts: 1, WindowMinutes: 30,
 			},
 		})
 		return err
@@ -236,16 +236,16 @@ func notificationEventTypeForTestTypeInternal(testType string) notifications.Not
 // unsubscribed. Empty means real notifications would send.
 func (s *NotificationService) testNotificationWarningInternal(setting *NotificationSettings, testType string) string {
 	if !setting.Enabled {
-		return fmt.Sprintf("%s is disabled, so real notifications will not send", setting.Provider)
+		return "notification.target-disabled"
 	}
 	eventType := notificationEventTypeForTestTypeInternal(testType)
 	if eventType != "" && !s.isEventEnabled(setting.Config, eventType) {
-		return fmt.Sprintf("%s events are disabled for %s, so real notifications will not send", eventType, setting.Provider)
+		return "notification.target-disabled"
 	}
 	if eventType == "" && !slices.ContainsFunc(notifications.AllNotificationEventTypes, func(candidate notifications.NotificationEventType) bool {
 		return s.isEventEnabled(setting.Config, candidate)
 	}) {
-		return fmt.Sprintf("no events are subscribed for %s, so real notifications will not send", setting.Provider)
+		return "notification.target-disabled"
 	}
 	return ""
 }

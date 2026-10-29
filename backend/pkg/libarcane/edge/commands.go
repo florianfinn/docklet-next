@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.
 
 package edge
 
@@ -163,12 +163,8 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/jobs/{jobId}/runs/{runId}/ack", CommandName: "job.run.ack"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/jobs/{jobId}/restart", CommandName: "job.worker.restart"},
 
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/notifications/settings", CommandName: "notification.settings.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/notifications/settings/{provider}", CommandName: "notification.settings.get"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/notifications/settings", CommandName: "notification.settings.upsert"},
-	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/notifications/settings/{provider}", CommandName: "notification.settings.delete"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/notifications/test/{provider}", CommandName: "notification.test"},
-
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/auto-heal", CommandName: "auto_heal.settings.get"},
+	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/auto-heal", CommandName: "auto_heal.settings.update"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/dashboard", CommandName: "dashboard.snapshot"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/dashboard/action-items", CommandName: "dashboard.action_items"},
 

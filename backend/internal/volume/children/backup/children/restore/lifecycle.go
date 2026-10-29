@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"os"
 	"path/filepath"
 	"sync"
@@ -40,6 +41,7 @@ type LifecycleEffects struct {
 	PruneSafety func(context.Context, string) error
 }
 type Lifecycle struct {
+	Notify   func(context.Context, backupnotify.Run)
 	DB       *database.DB
 	Activity *activity.ActivityService
 	Effects  LifecycleEffects
@@ -123,6 +125,9 @@ func (l *Lifecycle) persist(ctx context.Context, run *Run) error {
 func (l *Lifecycle) persistTerminal(ctx context.Context, run *Run) {
 	for err := l.persist(ctx, run); err != nil; err = l.persist(ctx, run) {
 		time.Sleep(100 * time.Millisecond)
+	}
+	if l.Notify != nil {
+		l.Notify(ctx, backupnotify.Run{ID: run.ID, Operation: "restore", Volume: run.VolumeName, Status: run.Status, Reason: run.ErrorCode, ActivityID: run.ActivityID})
 	}
 }
 func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest) (err error) {

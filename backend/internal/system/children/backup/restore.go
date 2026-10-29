@@ -22,6 +22,7 @@ import (
 	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	volumebackup "github.com/florianfinn/docklet-next/backend/internal/volume/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -276,6 +277,9 @@ func finalizeRestoredDatabase(ctx context.Context, db *database.DB, cfg *config.
 		return ErrRestoreRecoveryRequired
 	}
 	if err := volumebackup.ResetRestoredHistory(ctx, db); err != nil {
+		return ErrRestoreRecoveryRequired
+	}
+	if err := notificationoutbox.ExpireRestored(ctx, db); err != nil {
 		return ErrRestoreRecoveryRequired
 	}
 	if err := revokeRestoredSessions(ctx, db); err != nil {

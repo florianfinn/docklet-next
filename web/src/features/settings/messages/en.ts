@@ -1,6 +1,23 @@
 // American English texts of hub settings and the profile page.
 
 export const enSettings = {
+  "notification.config-invalid": "Invalid notification settings",
+  "notification.hub-only": "Notifications are managed on the hub",
+  "notification.dispatch-invalid": "Invalid notification event",
+  "notification.dispatch-unsupported": "Unsupported notification event",
+  "notification.dispatch-stale": "Notification source changed",
+  "notification.test-busy": "A test is already running",
+  "notification.test-sent": "Test notification sent",
+  "notification.test-failed": "Test notification failed",
+  "notification.target-disabled": "Target is disabled",
+  "delivery-unreachable": "Target unreachable",
+  "delivery-rejected": "Target rejected the message",
+  "delivery-auth": "Target authentication failed",
+  "delivery-invalid": "Invalid delivery configuration",
+  "autoheal.settings-invalid": "Invalid Auto Heal settings",
+  "autoheal.settings-env-managed": "Auto Heal is managed by environment variables",
+  "settings.key-managed": "Use the dedicated settings form",
+
   liveScans: {
     title: "Scans",
     enabled: "Enable vulnerability scanning",

@@ -18,6 +18,7 @@ GET /app-version
 GET /environments/0/runtime-runs/{runId}
 GET /environments/{id}/activities
 GET /environments/{id}/activities/{activityId}
+GET /environments/{id}/auto-heal
 GET /environments/{id}/containers
 GET /environments/{id}/containers/counts
 GET /environments/{id}/containers/{containerId}
@@ -181,6 +182,7 @@ POST /environments/{id}/vulnerabilities/ignore/bulk
 POST /environments/{id}/vulnerabilities/scan
 POST /environments/{id}/vulnerabilities/unignore/bulk
 POST /settings/search
+PUT /environments/{id}/auto-heal
 PUT /environments/{id}/containers/{containerId}/auto-update
 PUT /environments/{id}/job-schedules
 PUT /environments/{id}/projects/{projectId}

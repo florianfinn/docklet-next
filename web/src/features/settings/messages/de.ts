@@ -2,6 +2,23 @@
 import type { enSettings } from "./en";
 
 export const deSettings: typeof enSettings = {
+  "notification.config-invalid": "Ungültige Benachrichtigungseinstellungen",
+  "notification.hub-only": "Benachrichtigungen werden im Hub verwaltet",
+  "notification.dispatch-invalid": "Ungültiges Benachrichtigungsereignis",
+  "notification.dispatch-unsupported": "Nicht unterstütztes Benachrichtigungsereignis",
+  "notification.dispatch-stale": "Benachrichtigungsquelle geändert",
+  "notification.test-busy": "Ein Test läuft bereits",
+  "notification.test-sent": "Testbenachrichtigung gesendet",
+  "notification.test-failed": "Testbenachrichtigung fehlgeschlagen",
+  "notification.target-disabled": "Ziel ist deaktiviert",
+  "delivery-unreachable": "Ziel nicht erreichbar",
+  "delivery-rejected": "Ziel hat die Nachricht abgelehnt",
+  "delivery-auth": "Authentifizierung beim Ziel fehlgeschlagen",
+  "delivery-invalid": "Ungültige Zustellkonfiguration",
+  "autoheal.settings-invalid": "Ungültige Auto-Heal-Einstellungen",
+  "autoheal.settings-env-managed": "Auto Heal wird durch Umgebungsvariablen verwaltet",
+  "settings.key-managed": "Das zugehörige Einstellungsformular verwenden",
+
   liveScans: {
     title: "Scans",
     enabled: "Schwachstellenscans aktivieren",

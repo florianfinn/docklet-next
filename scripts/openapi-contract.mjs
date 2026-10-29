@@ -80,7 +80,7 @@ export function run(mode) {
       if (index < 0 || !/"sha256": "[a-f0-9]{64}"/.test(lines[index]))
         throw new Error("missing api/openapi.json provenance record");
       lines[index] = lines[index].replace(/("sha256": ")[a-f0-9]{64}"/, `$1${digest}"`);
-      for (const path of ["web/src/api/generated/schema.ts", "types/contract/testdata/agent-hub-v9.json"]) {
+      for (const path of ["web/src/api/generated/schema.ts", "types/contract/testdata/agent-hub-v10.json"]) {
         const sidecar = lines.findIndex((line) => line.includes(`"${path}":`));
         if (sidecar < 0) throw new Error(`missing ${path} provenance record`);
         const hash = createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex");

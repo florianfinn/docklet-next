@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296
 
 package scheduler
 
@@ -11,21 +11,8 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"log/slog"
-	"slices"
-	"strings"
-	"sync"
-	"time"
-
-	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-	"go.getarcane.app/docker"
-	"go.getarcane.app/docker/compat"
-	kit "go.getarcane.app/kit/pkg"
-	"go.getarcane.app/sys/cgroup"
-	"golang.org/x/sync/errgroup"
-
+	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
@@ -35,7 +22,21 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
+	st "github.com/florianfinn/docklet-next/types/scheduler"
+	"github.com/google/uuid"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
+	"go.getarcane.app/docker"
+	"go.getarcane.app/docker/compat"
+	kit "go.getarcane.app/kit/pkg"
+	"go.getarcane.app/sys/cgroup"
+	"golang.org/x/sync/errgroup"
+	"log/slog"
+	"slices"
+	"strings"
+	"sync"
+	"time"
 )
 
 const (
@@ -45,153 +46,224 @@ const (
 	autoHealAdmissionScopeInternal = "auto-heal"
 )
 
-// restartRecord tracks restart timestamps for a single container.
 type autoHealPlanInternal struct {
 	Containers    []container.Summary `json:"containers"`
 	MaxRestarts   int                 `json:"maxRestarts"`
 	WindowMinutes int                 `json:"windowMinutes"`
 }
-
 type autoHealBaselineInternal struct {
 	StartedAt    string `json:"startedAt"`
 	RestartCount int    `json:"restartCount"`
 }
-
-type restartRecord struct {
-	timestamps []time.Time
+type AutoHealOptions struct {
+	DB     *database.DB
+	Config *config.Config
+	Busy   func(context.Context, container.InspectResponse) (bool, error)
+	Now    func() time.Time
 }
-
 type AutoHealJob struct {
 	dockerClientService *dockerInternal.DockerClientService
 	settingsService     *settings.SettingsService
-	eventService        *event.EventService
-	notificationService *notification.NotificationService
 	admissionGate       *runs.Admission
-
-	mu       sync.Mutex
-	restarts map[string]*restartRecord
-
-	selfIDOnce sync.Once
-	selfID     string
-
-	getDockerClient    func() (*client.Client, error)
-	listContainers     func(ctx context.Context, dockerClient *client.Client) ([]container.Summary, error)
-	inspectContainer   func(ctx context.Context, dockerClient *client.Client, containerID string) (container.InspectResponse, error)
-	restartContainer   func(ctx context.Context, dockerClient *client.Client, containerID string) error
-	getSelfContainerID func() (string, error)
+	store               *autoheal.Store
+	busy                func(context.Context, container.InspectResponse) (bool, error)
+	selfIDOnce          sync.Once
+	selfID              string
+	getDockerClient     func() (*client.Client, error)
+	listContainers      func(context.Context, *client.Client) ([]container.Summary, error)
+	inspectContainer    func(context.Context, *client.Client, string) (container.InspectResponse, error)
+	restartContainer    func(context.Context, *client.Client, string) error
+	getSelfContainerID  func() (string, error)
+	afterReserve        func()
 }
 
-func NewAutoHealJob(
-	dockerClientService *dockerInternal.DockerClientService,
-	settingsService *settings.SettingsService,
-	eventService *event.EventService,
-	notificationService *notification.NotificationService,
-	admissionGate *runs.Admission,
-) (*AutoHealJob, error) {
-	if admissionGate == nil {
-		return nil, errors.New("auto-heal admission gate unavailable")
+func NewAutoHealJob(d *dockerInternal.DockerClientService, s *settings.SettingsService, _ *event.EventService, n *notification.NotificationService, a *runs.Admission, options ...AutoHealOptions) (*AutoHealJob, error) {
+	if a == nil {
+		return nil, errors.New("auto-heal admission unavailable")
 	}
-	return &AutoHealJob{
-		dockerClientService: dockerClientService,
-		settingsService:     settingsService,
-		eventService:        eventService,
-		notificationService: notificationService,
-		admissionGate:       admissionGate,
-		restarts:            make(map[string]*restartRecord),
-	}, nil
+	j := &AutoHealJob{dockerClientService: d, settingsService: s, admissionGate: a}
+	if len(options) > 0 {
+		opt := options[0]
+		j.store = &autoheal.Store{DB: opt.DB, Config: opt.Config, Now: opt.Now, Settings: s}
+		j.busy = opt.Busy
+		if n != nil {
+			j.store.Dispatch = n.SendHostEvent
+		}
+	}
+	return j, nil
 }
-
-func (j *AutoHealJob) Name() string {
-	return AutoHealJobName
-}
-
+func (*AutoHealJob) Name() string { return AutoHealJobName }
 func (j *AutoHealJob) ShouldSchedule(ctx context.Context) bool {
 	return j.settingsService.GetBoolSetting(ctx, "autoHealEnabled", false)
 }
-
 func (j *AutoHealJob) Schedule(ctx context.Context) string {
 	schedule := cmp.Or(j.settingsService.GetStringSetting(ctx, "autoHealInterval", autoHealDefaultSchedule), autoHealDefaultSchedule)
-
-	parser := scheduleutil.Parser()
-	if _, err := parser.Parse(schedule); err != nil {
-		slog.WarnContext(ctx, "Invalid cron expression for auto-heal, using default", "invalidSchedule", schedule, "error", err)
+	if _, err := scheduleutil.Parser().Parse(schedule); err != nil {
 		return autoHealDefaultSchedule
 	}
-
 	return schedule
 }
-
-func (j *AutoHealJob) Run(ctx context.Context) (schedulertypes.Outcome, error) {
-	enabled := j.settingsService.GetBoolSetting(ctx, "autoHealEnabled", false)
-	if !enabled {
-		slog.DebugContext(ctx, "auto-heal disabled; skipping run")
-		return schedulertypes.Outcome{Status: schedulertypes.Skipped}, nil
+func healRunContext(ctx context.Context) context.Context {
+	if _, ok := jobcontext.Run(ctx); !ok {
+		return jobcontext.WithExecution(ctx, st.Run{ID: uuid.NewString(), JobID: AutoHealJobName}, nil)
 	}
-
-	lease, admitted, err := j.admissionGate.TryAcquire(ctx, schedulertypes.AdmissionKey{Scope: autoHealAdmissionScopeInternal})
+	return ctx
+}
+func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
+	ctx = healRunContext(ctx)
+	lease, admitted, err := j.admissionGate.TryAcquire(ctx, st.AdmissionKey{Scope: autoHealAdmissionScopeInternal})
 	if err != nil {
-		slog.ErrorContext(ctx, "auto-heal admission failed", "error", err)
-		return schedulertypes.Outcome{}, err
+		return st.Outcome{}, err
 	}
 	if !admitted {
-		slog.WarnContext(ctx, "auto-heal run still in progress; skipping overlapping run")
-		return schedulertypes.Outcome{Status: schedulertypes.Skipped}, nil
+		return st.Outcome{Status: st.Skipped}, nil
 	}
 	defer lease.Release(ctx)
-
-	dockerClient, err := j.getDockerClientInternal(ctx)
+	if j.store == nil || j.store.DB == nil {
+		return st.Outcome{}, errors.New("auto-heal durable store unavailable")
+	}
+	cli, err := j.getDockerClientInternal(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "auto-heal failed to get Docker client", "error", err)
-		return schedulertypes.Outcome{}, err
+		return st.Outcome{}, err
 	}
-
-	containerList, err := j.ListContainers(ctx, dockerClient)
+	if err = j.recover(ctx, cli); err != nil {
+		return st.Outcome{}, err
+	}
+	if !j.ShouldSchedule(ctx) {
+		return st.Outcome{Status: st.Skipped}, nil
+	}
+	rows, err := j.ListContainers(ctx, cli)
 	if err != nil {
-		slog.ErrorContext(ctx, "auto-heal failed to list containers", "error", err)
-		return schedulertypes.Outcome{}, err
+		return st.Outcome{}, err
 	}
-	containers := containerList
-
-	excludedContainers := j.parseExcludedContainers(ctx)
-	maxRestarts := j.settingsService.GetIntSetting(ctx, "autoHealMaxRestarts", 5)
-	restartWindowMinutes := j.settingsService.GetIntSetting(ctx, "autoHealRestartWindow", 30)
-	restartWindow := time.Duration(restartWindowMinutes) * time.Minute
-
-	selfID := j.selfContainerIDInternal(ctx)
-	candidates := j.filterCandidatesInternal(containers, excludedContainers, selfID)
-	frozen, err := json.Marshal(autoHealPlanInternal{Containers: candidates, MaxRestarts: maxRestarts, WindowMinutes: restartWindowMinutes})
+	candidates := j.filterCandidatesInternal(rows, j.parseExcludedContainers(ctx), j.selfContainerIDInternal(ctx))
+	plan := autoHealPlanInternal{Containers: candidates}
+	frozen, err := json.Marshal(plan)
 	if err != nil {
-		return schedulertypes.Outcome{}, err
+		return st.Outcome{}, err
 	}
-	if progressErr := jobcontext.Progress(ctx, schedulertypes.TargetOutcome{ResourceType: "heal_plan", ID: "auto-heal-plan", Status: schedulertypes.Succeeded, RecoveryData: frozen}); progressErr != nil {
-		return schedulertypes.Outcome{}, progressErr
+	if err = jobcontext.Progress(ctx, st.TargetOutcome{ResourceType: "heal_plan", ID: "auto-heal-plan", Status: st.Succeeded, RecoveryData: frozen}); err != nil {
+		return st.Outcome{}, err
 	}
-
+	outcome := st.Outcome{Status: st.Succeeded}
+	var mu sync.Mutex
 	g, groupCtx := errgroup.WithContext(ctx)
-	var resultMu sync.Mutex
-	outcome := schedulertypes.Outcome{Status: schedulertypes.Succeeded}
 	g.SetLimit(autoHealInspectConcurrency)
-
 	for _, candidate := range candidates {
-		g.Go(func() (workerErr error) {
-			defer utils.RecoverToError(&workerErr, "auto-heal worker")
-
-			target, processCandidateErr := j.processCandidateInternal(groupCtx, dockerClient, candidate, maxRestarts, restartWindow, restartWindowMinutes)
-			resultMu.Lock()
+		g.Go(func() error {
+			target, err := j.processCandidateInternal(groupCtx, cli, candidate, 0, 0, 0)
+			mu.Lock()
 			outcome.Targets = append(outcome.Targets, target)
-			if processCandidateErr != nil {
-				outcome.Status = schedulertypes.Partial
+			if err != nil {
+				outcome.Status = st.Partial
 			}
-			resultMu.Unlock()
-			if progressErr := jobcontext.Progress(groupCtx, target); progressErr != nil {
-				return progressErr
-			}
-			return nil
+			mu.Unlock()
+			return jobcontext.Progress(groupCtx, target)
 		})
 	}
-
 	err = g.Wait()
 	return outcome, err
+}
+func (j *AutoHealJob) recover(ctx context.Context, cli *client.Client) error {
+	return j.store.Recover(ctx, func(ctx context.Context, id string) (autoheal.Baseline, error) {
+		v, err := j.inspectContainerInternal(ctx, cli, id)
+		if err != nil {
+			return autoheal.Baseline{}, err
+		}
+		if v.State == nil || v.ID != id {
+			return autoheal.Baseline{}, errors.New("container unavailable")
+		}
+		return autoheal.Baseline{StartedAt: v.State.StartedAt, RestartCount: v.RestartCount, Restarting: v.State.Restarting}, nil
+	})
+}
+func targetForRestart(r *autoheal.Restart) st.TargetOutcome {
+	status := st.Failed
+	if r.Outcome == "restarted" {
+		status = st.Succeeded
+	}
+	if r.Outcome == "limit-reached" {
+		status = st.Skipped
+	}
+	return st.TargetOutcome{ResourceType: "container", ID: r.ContainerID, Status: status, Code: "autoheal." + r.Outcome}
+}
+func (j *AutoHealJob) processCandidateInternal(ctx context.Context, cli *client.Client, candidate container.Summary, _ int, _ time.Duration, _ int) (st.TargetOutcome, error) {
+	target := st.TargetOutcome{ResourceType: "container", ID: candidate.ID, Status: st.Skipped}
+	run, _ := jobcontext.Run(ctx)
+
+	v, err := j.inspectContainerInternal(ctx, cli, candidate.ID)
+	if err != nil {
+		return target, err
+	}
+	// Recheck identity, running state, healthcheck and current configuration immediately before reservation.
+	if v.ID != candidate.ID || v.State == nil || !v.State.Running || v.State.Restarting || v.State.Paused || v.State.Health == nil || v.State.Health.Status != container.Unhealthy || v.Config == nil || v.Config.Healthcheck == nil || len(v.Config.Healthcheck.Test) == 0 || v.Config.Healthcheck.Test[0] == "NONE" {
+		return target, nil
+	}
+	cfg, err := j.settingsService.AutoHealSettings(ctx)
+	if err != nil {
+		return target, err
+	}
+	name := strings.TrimPrefix(v.Name, "/")
+	if name == "" {
+		name = docker.ContainerNameFromNames(candidate.Names)
+	}
+	stack := v.Config.Labels["com.docker.compose.project"]
+	internal, _ := kit.ParseBool(v.Config.Labels[libarcane.InternalResourceLabel])
+	if !cfg.Enabled || internal || slices.Contains(cfg.ExcludedContainers, name) || slices.Contains(cfg.ExcludedStacks, stack) || (j.selfContainerIDInternal(ctx) != "" && strings.HasPrefix(strings.ToLower(v.ID), j.selfID)) {
+		return target, nil
+	}
+	if err := (autohealUpdate(cfg)).Validate(); err != nil {
+		return target, err
+	}
+	if j.busy == nil {
+		return target, errors.New("auto-heal ownership snapshot unavailable")
+	}
+	held, readErr := j.busy(ctx, v)
+	if held || readErr != nil {
+		target.Message = "skipped-busy"
+		return target, nil
+	}
+	r, restart, err := j.store.Reserve(ctx, run.ID, v.ID, name, stack, autoheal.Baseline{StartedAt: v.State.StartedAt, RestartCount: v.RestartCount}, cfg)
+	if err != nil {
+		return target, err
+	}
+	if r == nil {
+		return target, nil
+	}
+	if !restart {
+		if err := j.store.Project(ctx, r.ID, ctx.Value(autoHealReplayKey{}) != true); err != nil {
+			return target, err
+		}
+		return targetForRestart(r), nil
+	}
+	if j.afterReserve != nil {
+		j.afterReserve()
+	}
+	frozen, _ := json.Marshal(autoHealBaselineInternal{StartedAt: v.State.StartedAt, RestartCount: v.RestartCount})
+	target.Status = st.Running
+	target.RecoveryData = frozen
+	if err := jobcontext.Progress(ctx, target); err != nil {
+		return target, err
+	}
+	restartErr := j.restartContainerInternal(ctx, cli, v.ID)
+	outcome := "restarted"
+	if restartErr != nil {
+		outcome = "restart-failed"
+	}
+	if err := j.store.Settle(ctx, r.ID, outcome); err != nil {
+		return target, err
+	}
+	r.Outcome = outcome
+	if err := j.store.Project(ctx, r.ID, ctx.Value(autoHealReplayKey{}) != true); err != nil {
+		return target, err
+	}
+	target = targetForRestart(r)
+	if restartErr != nil {
+		return target, errors.New("autoheal.restart-failed")
+	}
+	return target, nil
+}
+func autohealUpdate(s autohealDTO.Settings) autohealDTO.Update {
+	return autohealDTO.Update{Enabled: s.Enabled, MaxRestarts: s.MaxRestarts, WindowMinutes: s.WindowMinutes, ExcludedStacks: s.ExcludedStacks, ExcludedContainers: s.ExcludedContainers}
 }
 
 // selfContainerIDInternal resolves and caches the ID (full 64-char or short
@@ -238,208 +310,6 @@ func (j *AutoHealJob) filterCandidatesInternal(containers []container.Summary, e
 	}
 
 	return candidates
-}
-
-func (j *AutoHealJob) processCandidateInternal(
-	ctx context.Context,
-	dockerClient *client.Client,
-	candidate container.Summary,
-	maxRestarts int,
-	restartWindow time.Duration,
-	restartWindowMinutes int,
-) (schedulertypes.TargetOutcome, error) {
-	containerID := candidate.ID
-	target := schedulertypes.TargetOutcome{ResourceType: "container", ID: containerID, Status: schedulertypes.Skipped}
-	if previous, ok := jobcontext.Run(ctx); ok {
-		for _, completed := range previous.Outcome.Targets {
-			if completed.ID == containerID && completed.Status == schedulertypes.Succeeded {
-				return completed, nil
-			}
-		}
-	}
-	containerName := docker.ContainerNameFromNames(candidate.Names)
-
-	// The daemon-side health filter already selected unhealthy containers; the
-	// inspect re-confirms right before restarting so a container that recovered
-	// (or was restarted by someone else) since the list isn't bounced again.
-	inspect, err := j.inspectContainerInternal(ctx, dockerClient, containerID)
-	if err != nil {
-		slog.WarnContext(ctx, "auto-heal failed to inspect container", "container", containerName, "error", err)
-		target.Status = schedulertypes.Failed
-		target.Message = err.Error()
-		return target, err
-	}
-
-	if inspect.State == nil || inspect.State.Health == nil {
-		return target, nil
-	}
-	if inspect.State.Health.Status != container.Unhealthy {
-		return target, nil
-	}
-
-	releaseSlot, reserved := j.reserveRestartSlotInternal(containerID, maxRestarts, restartWindow)
-	if !reserved {
-		slog.WarnContext(
-			ctx, "auto-heal restart-loop protection: skipping container",
-			"container", containerName,
-			"maxRestarts", maxRestarts,
-			"windowMinutes", restartWindowMinutes,
-		)
-		return target, nil
-	}
-
-	baseline, err := json.Marshal(autoHealBaselineInternal{StartedAt: inspect.State.StartedAt, RestartCount: inspect.RestartCount})
-	if err != nil {
-		releaseSlot()
-		return target, err
-	}
-	target.RecoveryData = baseline
-	target.Status = schedulertypes.Running
-	if progressErr := jobcontext.Progress(ctx, target); progressErr != nil {
-		releaseSlot()
-		return target, progressErr
-	}
-	if restartContainerErr := j.restartContainerInternal(ctx, dockerClient, containerID); restartContainerErr != nil {
-		releaseSlot()
-		slog.ErrorContext(ctx, "auto-heal failed to restart container", "container", containerName, "error", restartContainerErr)
-		target.Status = schedulertypes.Failed
-		target.Message = restartContainerErr.Error()
-		return target, restartContainerErr
-	}
-
-	j.postRestartActionsInternal(ctx, containerID, containerName)
-
-	slog.InfoContext(ctx, "auto-heal restarted unhealthy container", "container", containerName, "containerId", containerID)
-	target.Status = schedulertypes.Succeeded
-	return target, nil
-}
-
-func (j *AutoHealJob) postRestartActionsInternal(ctx context.Context, containerID, containerName string) {
-	if j.eventService != nil {
-		if err := j.eventService.LogContainerEvent(
-			ctx,
-			event.EventTypeContainerRestart,
-			containerID,
-			containerName,
-			"", // no user - system action
-			"system",
-			"",
-			database.JSON{"action": "auto-heal", "reason": "unhealthy"},
-		); err != nil {
-			slog.WarnContext(ctx, "auto-heal failed to log event", "container", containerName, "error", err)
-		}
-	}
-
-	if j.notificationService != nil {
-		if err := j.notificationService.SendAutoHealNotification(ctx, containerName, containerID); err != nil {
-			slog.WarnContext(ctx, "auto-heal failed to send notification", "container", containerName, "error", err)
-		}
-	}
-}
-
-func (j *AutoHealJob) Reschedule(ctx context.Context) error {
-	slog.InfoContext(ctx, "rescheduling auto-heal job in new scheduler; currently requires restart")
-	return nil
-}
-
-// pruneRecordLockedInternal prunes expired timestamps for containerID and drops
-// the entry entirely when nothing recent remains, so restarts does not grow
-// without bound as containers come and go. Callers must hold j.mu.
-func (j *AutoHealJob) pruneRecordLockedInternal(containerID string, cutoff time.Time) *restartRecord {
-	record, exists := j.restarts[containerID]
-	if !exists {
-		return nil
-	}
-
-	record.timestamps = j.pruneTimestamps(record.timestamps, cutoff)
-	if len(record.timestamps) == 0 {
-		delete(j.restarts, containerID)
-		return nil
-	}
-	return record
-}
-
-// reserveRestartSlotInternal atomically checks the rate limit and claims a slot.
-// Checking and recording separately let two workers inspecting the same
-// container both pass the check and restart it past the configured limit.
-//
-// The returned release undoes the reservation, so a restart that fails does not
-// consume a slot — matching the previous behaviour of only counting restarts
-// that actually happened.
-func (j *AutoHealJob) reserveRestartSlotInternal(containerID string, maxRestarts int, window time.Duration) (func(), bool) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	record := j.pruneRecordLockedInternal(containerID, time.Now().Add(-window))
-	if record != nil && len(record.timestamps) >= maxRestarts {
-		return nil, false
-	}
-	if record == nil {
-		record = &restartRecord{}
-		j.restarts[containerID] = record
-	}
-
-	reserved := time.Now()
-	record.timestamps = append(record.timestamps, reserved)
-
-	return func() { j.releaseRestartSlotInternal(containerID, reserved) }, true
-}
-
-func (j *AutoHealJob) releaseRestartSlotInternal(containerID string, reserved time.Time) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	record, exists := j.restarts[containerID]
-	if !exists {
-		return
-	}
-	for i, ts := range slices.Backward(record.timestamps) {
-		if ts.Equal(reserved) {
-			record.timestamps = append(record.timestamps[:i], record.timestamps[i+1:]...)
-			break
-		}
-	}
-	if len(record.timestamps) == 0 {
-		delete(j.restarts, containerID)
-	}
-}
-
-// canRestart checks if a container can be restarted within the rate limit.
-func (j *AutoHealJob) canRestart(containerID string, maxRestarts int, window time.Duration) bool {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	record := j.pruneRecordLockedInternal(containerID, time.Now().Add(-window))
-	if record == nil {
-		return true
-	}
-
-	return len(record.timestamps) < maxRestarts
-}
-
-// recordRestart records a restart timestamp for a container.
-func (j *AutoHealJob) recordRestart(containerID string) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	record, exists := j.restarts[containerID]
-	if !exists {
-		record = &restartRecord{}
-		j.restarts[containerID] = record
-	}
-
-	record.timestamps = append(record.timestamps, time.Now())
-}
-
-// pruneTimestamps removes timestamps older than the cutoff.
-func (j *AutoHealJob) pruneTimestamps(timestamps []time.Time, cutoff time.Time) []time.Time {
-	result := make([]time.Time, 0, len(timestamps))
-	for _, ts := range timestamps {
-		if ts.After(cutoff) {
-			result = append(result, ts)
-		}
-	}
-	return result
 }
 
 func (j *AutoHealJob) parseExcludedContainers(ctx context.Context) map[string]struct{} {
@@ -514,107 +384,56 @@ func (j *AutoHealJob) ListContainers(ctx context.Context, dockerClient *client.C
 	return containerList.Items, nil
 }
 
-// ResetRestartTracking clears all restart records (exported for testing).
-func (j *AutoHealJob) ResetRestartTracking() {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.restarts = make(map[string]*restartRecord)
-}
+type autoHealReplayKey struct{}
 
-// CanRestartExported exposes canRestart for testing.
-func (j *AutoHealJob) CanRestartExported(containerID string, maxRestarts int, window time.Duration) bool {
-	return j.canRestart(containerID, maxRestarts, window)
-}
-
-// RecordRestartExported exposes recordRestart for testing.
-func (j *AutoHealJob) RecordRestartExported(containerID string) {
-	j.recordRestart(containerID)
-}
-
-// RecordRestartAtExported records a restart at a specific time for testing.
-func (j *AutoHealJob) RecordRestartAtExported(containerID string, t time.Time) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	record, exists := j.restarts[containerID]
-	if !exists {
-		record = &restartRecord{}
-		j.restarts[containerID] = record
-	}
-
-	record.timestamps = append(record.timestamps, t)
-}
-
-func (j *AutoHealJob) Reconcile(ctx context.Context, previous schedulertypes.Run) (schedulertypes.Outcome, error) {
-	lease, admitted, err := j.admissionGate.TryAcquire(ctx, schedulertypes.AdmissionKey{Scope: autoHealAdmissionScopeInternal})
+func (j *AutoHealJob) Reconcile(ctx context.Context, previous st.Run) (st.Outcome, error) {
+	ctx = context.WithValue(ctx, autoHealReplayKey{}, true)
+	ctx = jobcontext.WithExecution(ctx, previous, nil)
+	lease, admitted, err := j.admissionGate.TryAcquire(ctx, st.AdmissionKey{Scope: autoHealAdmissionScopeInternal})
 	if err != nil {
-		return schedulertypes.Outcome{}, err
+		return st.Outcome{}, err
 	}
 	if !admitted {
-		return schedulertypes.Outcome{Status: schedulertypes.Failed, Message: "A container healing run already owns admission"}, nil
+		return st.Outcome{Status: st.Failed}, nil
 	}
 	defer lease.Release(ctx)
-	var plan autoHealPlanInternal
-	planned := false
-	for _, target := range previous.Outcome.Targets {
-		if target.ID == "auto-heal-plan" && len(target.RecoveryData) > 0 {
-			if unmarshalErr := json.Unmarshal(target.RecoveryData, &plan); unmarshalErr != nil {
-				return schedulertypes.Outcome{}, unmarshalErr
-			}
-			planned = true
-			break
-		}
+	if j.store == nil {
+		return st.Outcome{}, errors.New("auto-heal durable store unavailable")
 	}
-
-	dockerClient, err := j.getDockerClientInternal(ctx)
+	cli, err := j.getDockerClientInternal(ctx)
 	if err != nil {
-		return schedulertypes.Outcome{}, err
+		return st.Outcome{}, err
 	}
-	message, err := j.confirmRestartTargetsInternal(ctx, dockerClient, previous.Outcome.Targets)
-	if err != nil {
-		return schedulertypes.Outcome{}, err
+	if err = j.recover(ctx, cli); err != nil {
+		return st.Outcome{}, err
 	}
-	if message != "" {
-		return schedulertypes.Outcome{Status: schedulertypes.Failed, Message: message, Targets: previous.Outcome.Targets}, nil
-	}
-	if !planned {
-		return schedulertypes.Outcome{Status: schedulertypes.Succeeded, Targets: previous.Outcome.Targets}, nil
-	}
-	return j.resumeHealingPlanInternal(ctx, dockerClient, plan, previous)
-}
-
-func (j *AutoHealJob) confirmRestartTargetsInternal(ctx context.Context, dockerClient *client.Client, targets []schedulertypes.TargetOutcome) (string, error) {
-	message := ""
-	for index, target := range targets {
-		if target.Status == schedulertypes.Succeeded || target.Status == schedulertypes.Skipped {
+	for i, t := range previous.Outcome.Targets {
+		if t.ResourceType != "container" {
 			continue
 		}
-		var baseline autoHealBaselineInternal
-		if len(target.RecoveryData) == 0 || json.Unmarshal(target.RecoveryData, &baseline) != nil {
-			message = "A container restart has no persisted baseline"
-			break
+		if r, err := j.store.Lookup(ctx, previous.ID, t.ID); err != nil {
+			return st.Outcome{}, err
+		} else if r != nil {
+			previous.Outcome.Targets[i] = targetForRestart(r)
 		}
-		inspect, inspectErr := j.inspectContainerInternal(ctx, dockerClient, target.ID)
-		if inspectErr != nil || inspect.State == nil || inspect.State.Restarting || (inspect.State.StartedAt == baseline.StartedAt && inspect.RestartCount == baseline.RestartCount) {
-			message = "A container restart has an unconfirmed outcome"
-			break
-		}
-		target.Status = schedulertypes.Succeeded
-		target.Message = "Container restart confirmed after recovery"
-		if err := jobcontext.Progress(ctx, target); err != nil {
-			return "", err
-		}
-		targets[index] = target
 	}
-	return message, nil
+	var plan autoHealPlanInternal
+	for _, t := range previous.Outcome.Targets {
+		if t.ID == "auto-heal-plan" {
+			if err := json.Unmarshal(t.RecoveryData, &plan); err != nil {
+				return st.Outcome{}, err
+			}
+			break
+		}
+	}
+	return j.resumeHealingPlanInternal(ctx, cli, plan, previous)
 }
-
-func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, dockerClient *client.Client, plan autoHealPlanInternal, previous schedulertypes.Run) (schedulertypes.Outcome, error) {
-	outcome := schedulertypes.Outcome{Status: schedulertypes.Succeeded}
+func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, cli *client.Client, plan autoHealPlanInternal, previous st.Run) (st.Outcome, error) {
+	outcome := st.Outcome{Status: st.Succeeded, Targets: previous.Outcome.Targets}
 	for _, candidate := range plan.Containers {
 		attempted := false
-		for _, target := range previous.Outcome.Targets {
-			if target.ID == candidate.ID {
+		for _, t := range outcome.Targets {
+			if t.ID == candidate.ID {
 				attempted = true
 				break
 			}
@@ -622,17 +441,30 @@ func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, dockerClien
 		if attempted {
 			continue
 		}
-		target, err := j.processCandidateInternal(ctx, dockerClient, candidate, plan.MaxRestarts, time.Duration(plan.WindowMinutes)*time.Minute, plan.WindowMinutes)
-		if progressErr := jobcontext.Progress(ctx, target); progressErr != nil {
-			return schedulertypes.Outcome{}, progressErr
+		// Reservation may have committed before the scheduler target checkpoint.
+		if r, err := j.store.Lookup(ctx, previous.ID, candidate.ID); err != nil {
+			return st.Outcome{}, err
+		} else if r != nil {
+			target := targetForRestart(r)
+			outcome.Targets = append(outcome.Targets, target)
+			if err := jobcontext.Progress(ctx, target); err != nil {
+				return st.Outcome{}, err
+			}
+			continue
 		}
-		previous.Outcome.Targets = append(previous.Outcome.Targets, target)
+		target, err := j.processCandidateInternal(ctx, cli, candidate, 0, 0, 0)
 		if err != nil {
-			outcome.Status = schedulertypes.Failed
-			outcome.Message = err.Error()
-			break
+			outcome.Status = st.Partial
+		}
+		outcome.Targets = append(outcome.Targets, target)
+		if err := jobcontext.Progress(ctx, target); err != nil {
+			return st.Outcome{}, err
 		}
 	}
-	outcome.Targets = previous.Outcome.Targets
+	for _, target := range outcome.Targets {
+		if target.Status == st.Failed {
+			outcome.Status = st.Partial
+		}
+	}
 	return outcome, nil
 }

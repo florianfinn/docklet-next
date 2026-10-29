@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v9.json", import.meta.url);
+const fixtureURL = new URL("../types/contract/testdata/agent-hub-v10.json", import.meta.url);
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -127,8 +127,8 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
-  manifest.version = 9;
-  manifest.minimumAgentContractVersion = 9;
+  manifest.version = 10;
+  manifest.minimumAgentContractVersion = 10;
   const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
     .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
     .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
@@ -189,6 +189,12 @@ export function agentFixture(spec, fixture) {
     restoreStatus:202, policyLimit:1, targetAuthority:"UUID generation, preserved restored version counter", localRecovery:"verify before attach; never re-key",
     retiredWorkspaceOperation:"restore_file", retiredRoutes:["/backups/volumes/config","/backups/volumes/options","/backups/volumes/run"],
   };
+  manifest.autoHeal = {
+    routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["get-auto-heal-settings","update-auto-heal-settings"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
+    settings: schemas.AutohealSettings, update: schemas.AutohealUpdate,
+    edgeCommands:["auto_heal.settings.get","auto_heal.settings.update"],
+  };
+  manifest.notificationDispatch = { request:schemas.NotificationDispatchRequest, autoHeal:schemas.NotificationDispatchAutoHeal, backupFailed:schemas.NotificationDispatchBackupFailed, origin:"captured credential and Edge session; transaction rechecks binding", legacy:"direct fan-out, no eventId", hostEvents:"best effort; no agent outbox" };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }
 
