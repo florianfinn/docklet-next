@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
 
 package edge
 

@@ -42,7 +42,7 @@ func effectOriginGuard(inspect dockercontainer.InspectResponse) error {
 		return &dto.Problem{Code: "container.origin-locked", Status: 409, Origin: dto.OriginUnknown}
 	}
 	current, err := cgroup.CurrentContainerID()
-	_, compose := inspect.Config.Labels["com.docker.compose.project"]
+	compose := origin.HasComposeLabel(inspect.Config.Labels)
 	_, unraid := inspect.Config.Labels["net.unraid.docker.managed"]
 	if compose || unraid || labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, current, err) {
 		return &dto.Problem{Code: "container.origin-locked", Status: 409, Origin: origin.Detect(inspect.Config.Labels).Origin}

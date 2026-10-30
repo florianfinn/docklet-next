@@ -47,3 +47,20 @@ func TestStackStopModeDefaultEnumAndHubScope(t *testing.T) {
 		require.Equal(t, !cfg.AgentMode && !cfg.EdgeAgent, found)
 	}
 }
+
+func TestStackStopModeEnvironmentValueIsValidated(t *testing.T) {
+	ctx := t.Context()
+	require.False(t, validEnvSettingInternal(ctx, "stackStopMode", "STACK_STOP_MODE", "remove"))
+	require.True(t, validEnvSettingInternal(ctx, "stackStopMode", "STACK_STOP_MODE", `"stop"`))
+	require.True(t, validEnvSettingInternal(ctx, "toolsImage", "TOOLS_IMAGE", "anything"))
+	svc, err := newSettingsServiceForTestInternal(t, ctx, setupSettingsTestDB(t))
+	require.NoError(t, err)
+	t.Setenv("STACK_STOP_MODE", "remove")
+	loaded, err := svc.loadDatabaseConfigFromEnv(ctx, svc.db)
+	require.NoError(t, err)
+	require.Equal(t, "down", loaded.StackStopMode.Value, "an invalid environment value falls back to the default")
+	t.Setenv("STACK_STOP_MODE", "stop")
+	loaded, err = svc.loadDatabaseConfigFromEnv(ctx, svc.db)
+	require.NoError(t, err)
+	require.Equal(t, "stop", loaded.StackStopMode.Value)
+}

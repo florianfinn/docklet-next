@@ -45,7 +45,7 @@ func TestDetectOriginPresenceAndPrecedence(t *testing.T) {
 }
 func TestOriginOverlayIdentityAndConditionalMove(t *testing.T) {
 	s := fixture(t)
-	id := Identity{ID: "old", Name: "app", Labels: map[string]string{"com.docker.compose.service": "app"}}
+	id := Identity{ID: "old", Name: "app", Labels: map[string]string{"io.kubernetes.pod.name": "app"}}
 	require.NoError(t, s.Assign(t.Context(), "0", id, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: id.ID}, "operator"))
 	fields, err := s.Effective(t.Context(), "hub", id)
 	require.NoError(t, err)
@@ -73,10 +73,15 @@ func TestOriginPartialProjectStandaloneRefused(t *testing.T) {
 	require.Error(t, s.Assign(t.Context(), "0", id, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: id.ID}, "operator"))
 	require.NoError(t, s.Assign(t.Context(), "0", id, dto.OriginAssignment{Origin: dto.OriginUnraid, DockerID: id.ID}, "operator"))
 	require.Error(t, s.Guard(t.Context(), "hub", id))
+	// Any partial Compose label keeps standalone unavailable, not only the project key.
+	service := Identity{ID: "service-only", Name: "worker", Labels: map[string]string{"com.docker.compose.service": "worker"}}
+	require.Equal(t, dto.OriginUnknown, Detect(service.Labels).Origin)
+	require.Error(t, s.Assign(t.Context(), "0", service, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: service.ID}, "operator"))
+	require.NoError(t, s.Assign(t.Context(), "0", service, dto.OriginAssignment{Origin: dto.OriginUnraid, DockerID: service.ID}, "operator"))
 }
 func TestOriginConcurrentResetFencesAssignment(t *testing.T) {
 	s := fixture(t)
-	id := Identity{ID: "old", Name: "app", Labels: map[string]string{"com.docker.compose.service": "app"}}
+	id := Identity{ID: "old", Name: "app", Labels: map[string]string{"io.kubernetes.pod.name": "app"}}
 	request := dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: "old"}
 	require.NoError(t, s.Assign(t.Context(), "0", id, request, "operator"))
 	reading, release := make(chan struct{}), make(chan struct{})
@@ -98,7 +103,7 @@ func TestOriginConcurrentResetFencesAssignment(t *testing.T) {
 }
 func TestOriginOverlayListGroupAndDetail(t *testing.T) {
 	s := fixture(t)
-	id := Identity{ID: "old", Name: "app", Labels: map[string]string{"com.docker.compose.service": "app"}}
+	id := Identity{ID: "old", Name: "app", Labels: map[string]string{"io.kubernetes.pod.name": "app"}}
 	require.NoError(t, s.Assign(t.Context(), "0", id, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: "old"}, "operator"))
 	for _, body := range []string{`{"success":true,"data":[{"id":"external","names":["/app"],"origin":"unknown","labels":{"com.docker.compose.service":"app"}}]}`, `{"success":true,"data":{"id":"external","name":"app","origin":"unknown","labels":{"com.docker.compose.service":"app"}}}`} {
 		out, err := s.Overlay(t.Context(), "0", []byte(body))

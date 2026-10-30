@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop; coded run trace and service effects; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
+// Deviations: Functional cut: removed standalone build workshop; coded run trace and service effects; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
 
 package activity
 

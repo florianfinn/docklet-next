@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence.; M14 container and host operation contracts.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts.
 
 package project
 
@@ -225,9 +225,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		for i := range projectsArray {
 			metaGroup.Go(func() (workerErr error) {
 				defer utils.RecoverToError(&workerErr, "project metadata worker", "projectID", projectsArray[i].ID)
-				if len(result[i].RuntimeServices) == 0 {
-					metas[i] = s.ProjectMetadata(ctx, projectsArray[i], env)
-				}
+				metas[i] = s.ProjectMetadata(ctx, projectsArray[i], env)
 				return nil
 			})
 		}
@@ -248,7 +246,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 			result[i].Tags = tagsByProject[result[i].ID]
 		}
 		s.fillDefinitionServices(ctx, projectsArray, result, env)
-		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, result, true, env, true)
+		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, result, true, env)
 		slog.DebugContext(ctx, "Completed ListProjects request", "resultCount", len(result))
 		return result, paginationResp, nil
 	}
@@ -278,7 +276,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		items[i].Tags = tagsByProject[items[i].ID]
 	}
 	if updatesFilter != "" {
-		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, items, true, env, true)
+		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, items, true, env)
 		// Untracked compose projects only join an unfiltered-by-tag has_update view.
 		if strings.EqualFold(updatesFilter, "has_update") && strings.TrimSpace(params.Filters["tags"]) == "" {
 			if snapshot.Err != nil {
@@ -307,7 +305,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		pageDetails = append(pageDetails, result.Items[i])
 	}
 	if updatesFilter == "" {
-		s.enrichProjectsWithUpdateInfo(ctx, pageProjects, pageDetails, true, env, true)
+		s.enrichProjectsWithUpdateInfo(ctx, pageProjects, pageDetails, true, env)
 	}
 	metas := make([]projects.ArcaneComposeMetadata, len(pageProjects))
 	var metaGroup errgroup.Group
@@ -315,9 +313,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 	for i := range pageProjects {
 		metaGroup.Go(func() (workerErr error) {
 			defer utils.RecoverToError(&workerErr, "project metadata worker", "projectID", pageProjects[i].ID)
-			if len(pageDetails[i].RuntimeServices) == 0 {
-				metas[i] = s.ProjectMetadata(ctx, pageProjects[i], env)
-			}
+			metas[i] = s.ProjectMetadata(ctx, pageProjects[i], env)
 			return nil
 		})
 	}

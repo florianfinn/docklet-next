@@ -6,8 +6,6 @@
 
 package container
 
-import "github.com/florianfinn/docklet-next/types/containerregistry"
-
 // Origin is determined on the reading host and overlaid by the hub assignment.
 type Origin string
 type OriginSource string
@@ -45,10 +43,20 @@ type Problem struct {
 	Code   string `json:"code" enum:"container.origin-locked,container.recreate-recovered,container.recreate-ambiguous,runtime.idempotency-mismatch,update.path-retired,container.shell-invalid,container.shell-protocol,container.shell-unavailable,container.shell-orphaned,container.shell-not-running"`
 	Origin Origin `json:"origin,omitempty" enum:"compose,unraid,unknown,standalone"`
 	Status int    `json:"status"`
+	step   string
 }
 
 func (p *Problem) Error() string  { return p.Code }
 func (p *Problem) GetStatus() int { return p.Status }
+
+// RecreateFailure carries the failed recreate step as bounded evidence; it never
+// includes Docker error text, which may echo edit values.
+func RecreateFailure(code, step string) *Problem {
+	return &Problem{Code: code, Status: 409, step: step}
+}
+
+// Step names the recreate effect that failed, or "" when unknown.
+func (p *Problem) Step() string { return p.step }
 
 // ShellQuery is validated by the hub before any local or remote upgrade.
 type ShellQuery struct {
@@ -68,76 +76,4 @@ type ShellExit struct {
 	Type   string `json:"type" enum:"exit"`
 	Code   *int   `json:"code"`
 	Reason string `json:"reason"`
-}
-
-// Each form-owned section is a pointer: nil preserves the inspected value,
-// non-nil (even empty) replaces that section. Settings not represented here
-// (sysctls, ulimits, log drivers, devices, tmpfs, DNS, ...) always carry over
-// from the existing container untouched.
-type Edit struct {
-	// Name is the new container name.
-	//
-	// Required: false
-	Name *string `json:"name,omitempty"`
-
-	// Image reference to run.
-	//
-	// Required: false
-	Image *string `json:"image,omitempty"`
-
-	// WorkingDir is the working directory inside the container.
-	//
-	// Required: false
-	WorkingDir *string `json:"workingDir,omitempty"`
-
-	// User to run the container as.
-	//
-	// Required: false
-	User *string `json:"user,omitempty"`
-
-	// Command to run in the container.
-	//
-	// Required: false
-	Command *[]string `json:"command,omitempty"`
-
-	// Entrypoint for the container.
-	//
-	// Required: false
-	Entrypoint *[]string `json:"entrypoint,omitempty"`
-
-	// Environment variables for the container.
-	//
-	// Required: false
-	Environment *[]string `json:"environment,omitempty"`
-
-	// Labels to set on the container.
-	//
-	// Required: false
-	Labels *map[string]string `json:"labels,omitempty"`
-
-	// Healthcheck replaces the container healthcheck when set.
-	//
-	// Required: false
-	Healthcheck *HealthcheckCreate `json:"healthcheck,omitempty"`
-
-	// ClearHealthcheck reverts to the image-defined healthcheck.
-	//
-	// Required: false
-	ClearHealthcheck bool `json:"clearHealthcheck,omitempty"`
-
-	// HostConfig holds host-level configuration changes.
-	//
-	// Required: false
-	HostConfig *HostConfigEdit `json:"hostConfig,omitempty"`
-
-	// NetworkingConfig is the full desired network endpoint set. Nil preserves
-	// the existing attachments.
-	//
-	// Required: false
-	NetworkingConfig *NetworkingConfigCreate `json:"networkingConfig,omitempty"`
-
-	// Credentials for pulling images from private registries.
-	//
-	// Required: false
-	Credentials []containerregistry.Credential `json:"credentials,omitempty"`
 }

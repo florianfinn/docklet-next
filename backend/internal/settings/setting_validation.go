@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence.; M14 container and host operation contracts.
+// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts.
 
 package settings
 

@@ -23,6 +23,9 @@ import (
 	"go.getarcane.app/docker/compat"
 )
 
+// recreateEffectTimeout bounds the detached effect and compensation sequence.
+const recreateEffectTimeout = 5 * time.Minute
+
 type recreateUncertain struct{ cause error }
 
 func (e *recreateUncertain) Error() string          { return "container.recreate-ambiguous" }
@@ -40,11 +43,18 @@ func (s *ContainerService) saveRecreate(ctx context.Context, j *RecreateJournal,
 }
 func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client, old dockercontainer.InspectResponse, name string, config *dockercontainer.Config, host *dockercontainer.HostConfig, networks *network.NetworkingConfig, apiVersion string) (string, error) {
 	run := updaterDTO.ExecutionIdentityFromContext(ctx).RunID
+	// Cancellation and the run deadline are honoured only before the first
+	// journal write; afterwards the sequence and its compensation run detached.
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recreateEffectTimeout)
+	defer cancel()
 	j := &RecreateJournal{RunID: run, OldID: old.ID, OldName: strings.TrimPrefix(old.Name, "/"), BackupName: strings.TrimPrefix(old.Name, "/") + "-docklet-recreate-" + run, NewName: name, WasRunning: old.State != nil && old.State.Running, AutoRemove: old.HostConfig != nil && old.HostConfig.AutoRemove}
 	if err := s.saveRecreate(ctx, j, "intent-rename"); err != nil {
 		return "", err
 	}
-	fail := func(effectErr error) (string, error) {
+	fail := func(step string, effectErr error) (string, error) {
 		if ctx.Err() != nil {
 			return "", &recreateUncertain{cause: effectErr}
 		}
@@ -56,10 +66,10 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 			dto.RecordRecreateResult(ctx, *recovery.Result)
 			return recovery.Result.NewID, nil
 		}
-		return "", &dto.Problem{Code: recovery.Code, Status: 409}
+		return "", dto.RecreateFailure(recovery.Code, step)
 	}
 	if _, err := c.ContainerRename(ctx, j.OldID, client.ContainerRenameOptions{NewName: j.BackupName}); err != nil {
-		return fail(err)
+		return fail("rename", err)
 	}
 	if err := s.saveRecreate(ctx, j, "renamed"); err != nil {
 		return "", err
@@ -71,7 +81,7 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 			return "", err
 		}
 		if _, err := c.ContainerStop(ctx, j.OldID, client.ContainerStopOptions{Timeout: new(30)}); err != nil {
-			return fail(err)
+			return fail("stop", err)
 		}
 		if err := s.saveRecreate(ctx, j, "intent-create"); err != nil {
 			return "", err
@@ -91,7 +101,7 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	}
 	created, err := compat.ContainerCreateWithCompatibilityForAPIVersion(ctx, c, client.ContainerCreateOptions{Config: &copied, HostConfig: host, NetworkingConfig: networks, Name: name}, apiVersion)
 	if err != nil {
-		return fail(err)
+		return fail("create", err)
 	}
 	j.NewID = created.ID
 	if err := s.saveRecreate(ctx, j, "created"); err != nil {
@@ -103,14 +113,14 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 		}
 		if j.AutoRemove {
 			if _, err := c.ContainerStop(ctx, j.OldID, client.ContainerStopOptions{Timeout: new(30)}); err != nil {
-				return fail(err)
+				return fail("stop", err)
 			}
 			if err := s.saveRecreate(ctx, j, "intent-start"); err != nil {
 				return "", err
 			}
 		}
 		if _, err := c.ContainerStart(ctx, j.NewID, client.ContainerStartOptions{}); err != nil {
-			return fail(err)
+			return fail("start", err)
 		}
 		if err := s.saveRecreate(ctx, j, "started"); err != nil {
 			return "", err
@@ -121,7 +131,7 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	}
 	if !j.AutoRemove || !j.WasRunning {
 		if _, err := c.ContainerRemove(ctx, j.OldID, client.ContainerRemoveOptions{Force: true}); err != nil {
-			return fail(err)
+			return fail("remove", err)
 		}
 	}
 	if err := s.saveRecreate(ctx, j, "done"); err != nil {
@@ -252,7 +262,9 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	if old == nil && replacement == nil {
 		return s.ambiguousRecreate(ctx, j)
 	}
-	if old == nil && (j.AutoRemove || (j.Phase != "intent-remove-old" && j.Phase != "done")) {
+	// The original is expected to be gone only after removal began, or after an
+	// AutoRemove original was stopped before the replacement started.
+	if old == nil && j.Phase != "intent-remove-old" && j.Phase != "done" && (!j.AutoRemove || j.Phase != "started") {
 		return s.ambiguousRecreate(ctx, j)
 	}
 	if old != nil && (old.ID != j.OldID || (strings.TrimPrefix(old.Name, "/") != j.OldName && strings.TrimPrefix(old.Name, "/") != j.BackupName)) {
@@ -290,8 +302,12 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	if !j.WasRunning {
 		return s.finishRecoveredRecreate(ctx, c, j, old)
 	}
-	running := replacement.State != nil && replacement.State.Running
-	if (j.Phase == "intent-start" || j.Phase == "started" || j.Phase == "intent-remove-old" || j.Phase == "done") && running {
+	// After the observed start the replacement is kept as observed, even when a
+	// host or daemon restart stopped it. Only intent-start needs a running proof.
+	if j.Phase == "started" || j.Phase == "intent-remove-old" || j.Phase == "done" {
+		return s.finishRecoveredRecreate(ctx, c, j, old)
+	}
+	if j.Phase == "intent-start" && replacement.State != nil && replacement.State.Running {
 		return s.finishRecoveredRecreate(ctx, c, j, old)
 	}
 	return s.compensateRecreate(ctx, c, j, old, replacement)

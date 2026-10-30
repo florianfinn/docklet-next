@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; typed volume name conflicts on project update.; M14 container and host operation contracts.
+// Deviations: Local module namespace; typed volume name conflicts on project update; M14 container and host operation contracts.
 
 // Package project owns compose project persistence, lifecycle, discovery, and routes.
 package project

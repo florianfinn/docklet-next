@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
 
 package settings
 
@@ -251,7 +251,7 @@ func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, fiel
 
 	envVarName := strings.ToUpper(kit.SnakeCase(key))
 	envVal, ok, _ := utils.LookupEnvOrFile(envVarName)
-	if !ok {
+	if !ok || !validEnvSettingInternal(ctx, key, envVarName, envVal) {
 		return nil
 	}
 	envVal = kit.TrimQuotes(envVal)

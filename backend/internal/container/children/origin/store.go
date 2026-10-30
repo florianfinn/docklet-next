@@ -44,6 +44,17 @@ func locked(value dto.Origin) error {
 	return &dto.Problem{Code: "container.origin-locked", Status: 409, Origin: value}
 }
 
+// HasComposeLabel reports any Compose label. Partial Compose metadata keeps the
+// container locked: it can become Unraid or stay unknown, never standalone.
+func HasComposeLabel(labels map[string]string) bool {
+	for key := range labels {
+		if strings.HasPrefix(key, "com.docker.compose.") {
+			return true
+		}
+	}
+	return false
+}
+
 // Detect uses label presence for Unraid and incomplete Compose identities.
 func Detect(labels map[string]string) dto.OriginFields {
 	value := dto.OriginStandalone
@@ -111,7 +122,7 @@ func (s *Store) current(tx *gorm.DB, registration string) error {
 }
 func (s *Store) Assign(ctx context.Context, environment string, id Identity, request dto.OriginAssignment, actor string) error {
 	detected := Detect(id.Labels)
-	_, hasProject := id.Labels["com.docker.compose.project"]
+	hasProject := HasComposeLabel(id.Labels)
 	if id.ID != request.DockerID || detected.Origin != dto.OriginUnknown || (request.Origin != dto.OriginUnraid && request.Origin != dto.OriginStandalone) || (request.Origin == dto.OriginStandalone && hasProject) {
 		return locked(detected.Origin)
 	}
@@ -223,7 +234,7 @@ func (s *Store) AssignFresh(ctx context.Context, environment, containerID string
 		}
 	}
 	detected := Detect(identity.Labels)
-	_, hasProject := identity.Labels["com.docker.compose.project"]
+	hasProject := HasComposeLabel(identity.Labels)
 	if identity.ID != request.DockerID || detected.Origin != dto.OriginUnknown || (request.Origin != dto.OriginUnraid && request.Origin != dto.OriginStandalone) || (request.Origin == dto.OriginStandalone && hasProject) {
 		return locked(detected.Origin)
 	}

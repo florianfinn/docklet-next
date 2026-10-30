@@ -106,6 +106,17 @@ func (c *RuntimeRemoteCoordinator) Release(ctx context.Context, ref RuntimeRunRe
 		if (row.EnvironmentID == "0" && s.owners[row.RunID] != nil) || row.ExecutorSettledAt != nil || runtimeKnowledgeInternal(row).OutcomeState != activitytypes.RuntimeOutcomeUnknown || (row.EnvironmentID != "0" && *row.DispatchState == "pending") {
 			return &runtimeConflictInternal{}
 		}
+		// A local recreate stays held until its journal is resolved; release would
+		// hide a renamed or stopped original from startup recovery.
+		if row.EnvironmentID == "0" {
+			var unresolved int64
+			if err := tx.Table("container_recreate_journal").Where("run_id = ? AND phase NOT IN ('done','rolled-back','ambiguous')", row.RunID).Count(&unresolved).Error; err != nil {
+				return err
+			}
+			if unresolved > 0 {
+				return &runtimeConflictInternal{}
+			}
+		}
 		snapshot, final, err = runtimeHubDispositionTxInternal(tx, now, row, runtimeDispositionInternal{Disposition: "released", By: actor.ID, Reason: reason, ReleaseAcknowledged: true})
 		return err
 	})

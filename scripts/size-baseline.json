@@ -33,7 +33,7 @@
     "backend/pkg/libarcane/edge/tls.go": 1313,
     "backend/pkg/projects/env.go": 636,
     "backend/proto/tunnel/v1/tunnel.pb.go": 2285,
-    "types/container/container.go": 1893,
+    "types/container/container.go": 1822,
     "types/vulnerability/vulnerability.go": 811
   },
   "generated": [

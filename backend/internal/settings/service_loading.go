@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296; M14 stack stop mode override validation.
 
 package settings
 
@@ -106,7 +106,7 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 		// debug: log each env name checked and whether a value exists
 		// Match nonempty envOverride semantics: an empty tools image variable
 		// must not mask an explicit value synchronised from the hub.
-		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok && (key != "toolsImage" || val != "") {
+		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok && (key != "toolsImage" || val != "") && validEnvSettingInternal(ctx, key, envVarName, val) {
 			val = kit.TrimQuotes(val)
 			mask := "<empty>"
 			if val != "" {
@@ -193,4 +193,17 @@ func (s *SettingsService) IsEnvOverrideActive(key string) bool {
 	}
 
 	return false
+}
+
+// validEnvSettingInternal keeps an invalid stop mode from the environment out of
+// effective and persisted settings; the stored or default value applies instead.
+func validEnvSettingInternal(ctx context.Context, key, envVarName, value string) bool {
+	if key != "stackStopMode" {
+		return true
+	}
+	if err := validateSettingValueInternal(key, kit.TrimQuotes(value)); err != nil {
+		slog.WarnContext(ctx, "Ignoring invalid settings environment value", "env", envVarName, "error", err)
+		return false
+	}
+	return true
 }

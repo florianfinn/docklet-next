@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts.
 
 package project
 

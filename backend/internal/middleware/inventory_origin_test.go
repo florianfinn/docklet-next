@@ -33,7 +33,7 @@ func TestOriginOverlayRealDirectAndEdgeListAndDetail(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, db.Close()) })
 			store := &origin.Store{DB: db.DB, LocalRegistration: "example"}
-			require.NoError(t, store.Assign(t.Context(), "0", origin.Identity{ID: "old", Name: "app", Labels: map[string]string{"com.docker.compose.service": "app"}}, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: "old"}, "operator"))
+			require.NoError(t, store.Assign(t.Context(), "0", origin.Identity{ID: "old", Name: "app", Labels: map[string]string{"io.kubernetes.pod.name": "app"}}, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: "old"}, "operator"))
 			agent := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				row := `{"id":"external","name":"app","names":["/app"],"origin":"unknown","originSource":"detected","labels":{"com.docker.compose.service":"app"}}`

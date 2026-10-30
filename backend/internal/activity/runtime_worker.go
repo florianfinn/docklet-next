@@ -132,7 +132,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 		}
 		return
 	}
-	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, runtimeTimeInternal(s.activity.nowInternal()))
+	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, recreateResult != nil, runtimeTimeInternal(s.activity.nowInternal()))
 	owner.result.imageLifecycle = imageResult
 	owner.result.recreate = recreateResult
 	_, owner.err = s.settleOwnerInternal(owner)
@@ -205,13 +205,18 @@ func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executi
 	return execute && err == nil, err
 }
 
-func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, now time.Time) *runtimeLocalResultInternal {
+// A recreate past its first journal write runs detached; its own outcome (result
+// or recreate problem) wins over a later cancellation or run deadline.
+func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, recreated bool, now time.Time) *runtimeLocalResultInternal {
 	result := &runtimeLocalResultInternal{state: "success", code: activitytypes.CodeActivitySuccess,
 		outputLost: outputErr != nil, message: "Runtime workflow completed", settledAt: now, startedAt: copyPtrInternal(owner.startedAt)}
+	var problem *containerDTO.Problem
+	recreateProblem := errors.As(workflowErr, &problem) && (problem.Code == "container.recreate-recovered" || problem.Code == "container.recreate-ambiguous")
+	detached := (recreated && workflowErr == nil) || recreateProblem
 	switch {
-	case owner.cancelRequested:
+	case owner.cancelRequested && !detached:
 		result.state, result.code, result.message = "cancelled", activitytypes.CodeRuntimeCancelled, "Runtime workflow cancelled; effects unverified"
-	case owner.ctx.Err() != nil:
+	case owner.ctx.Err() != nil && !detached:
 		result.state, result.code, result.message = "failed", activitytypes.CodeRuntimeInterrupted, "Runtime workflow interrupted; effects unverified"
 		result.errorText = new(result.message)
 	case workflowErr != nil || outputErr != nil:
@@ -219,13 +224,13 @@ func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr e
 		// Persist bounded coded evidence, not arbitrary SDK errors containing secrets.
 		result.errorText = new(result.message)
 	}
-	if result.state == "failed" {
-		var problem *containerDTO.Problem
-		if errors.As(workflowErr, &problem) && (problem.Code == "container.recreate-recovered" || problem.Code == "container.recreate-ambiguous") {
-			result.code = activitytypes.Code(problem.Code)
-			result.message = problem.Code
-			result.errorText = new(problem.Code)
+	if result.state == "failed" && recreateProblem {
+		result.code = activitytypes.Code(problem.Code)
+		result.message = problem.Code
+		if step := problem.Step(); step != "" {
+			result.message = problem.Code + ": " + step + " failed"
 		}
+		result.errorText = new(result.message)
 	}
 	return result
 }

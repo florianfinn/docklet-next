@@ -105,6 +105,13 @@ func TestRecreateRecoveryDecisionTableAcrossProcesses(t *testing.T) {
 		{name: "started", phase: "started", old: true, oldName: "backup", new: true, running: true, wasRunning: true},
 		{name: "intent-remove-old", phase: "intent-remove-old", old: true, oldName: "backup", new: true, running: true, wasRunning: true},
 		{name: "old-removed", phase: "intent-remove-old", new: true, running: true, wasRunning: true},
+		// A host or daemon restart can stop a replacement after its observed start;
+		// recovery keeps it as observed and never starts or removes it.
+		{name: "started-replacement-stopped", phase: "started", old: true, oldName: "backup", new: true, wasRunning: true},
+		{name: "remove-old-replacement-stopped", phase: "intent-remove-old", old: true, oldName: "backup", new: true, wasRunning: true},
+		{name: "old-removed-replacement-stopped", phase: "intent-remove-old", new: true, wasRunning: true},
+		{name: "done-replacement-stopped", phase: "done", new: true, wasRunning: true},
+		{name: "auto-remove-after-start", phase: "started", new: true, running: true, wasRunning: true, autoRemove: true},
 		{name: "deliberately-stopped", phase: "created", old: true, oldName: "backup", new: true, wasRunning: false},
 		{name: "auto-remove-missing", phase: "intent-start", new: true, running: true, wasRunning: true, autoRemove: true, code: "container.recreate-ambiguous"},
 		{name: "both-missing-precedence", phase: "intent-remove-old", wasRunning: false, code: "container.recreate-ambiguous"},
@@ -166,7 +173,7 @@ func TestRecreateRecoveryDecisionTableAcrossProcesses(t *testing.T) {
 				require.Equal(t, "done", got.Phase)
 				require.False(t, oldPresent)
 				require.True(t, replacementPresent)
-				require.Equal(t, tc.wasRunning, replacement.Running)
+				require.Equal(t, tc.running, replacement.Running)
 			} else {
 				require.Equal(t, "failed", *row.ExecutorState)
 				require.Equal(t, tc.code, *row.ExecutorResultCode)

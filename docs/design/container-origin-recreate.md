@@ -15,8 +15,9 @@ admission. Shared contract and migration items are in
   off by default and can be shown per personal preference.
 - After an external recreate or name reuse, a manual origin needs confirmation
   again.
-- Unknown containers with partial Compose labels can be assigned Unraid or stay
-  unknown; standalone is not offered and editing stays locked with an
+- Unknown containers with partial Compose labels (any `com.docker.compose.*`
+  label without the complete project and service pair) can be assigned Unraid or
+  stay unknown; standalone is not offered and editing stays locked with an
   explanation. Compose sets complete labels, so partial labels never come from
   Compose itself. Reversible: narrowing the backend Compose veto for manually
   assigned containers would allow standalone assignment.
@@ -59,7 +60,8 @@ admission. Shared contract and migration items are in
    must equal the container ID read fresh from the host. `DELETE …/origin`
    returns to detection. Permission: `containers:edit` (administrators until
    M15). Assignment is allowed only when the detected origin is `unknown`, and
-   standalone only without a Compose project label.
+   standalone only without any `com.docker.compose.*` label. The effect
+   boundary guard applies the same rule.
 3. **Overlay**: one hub function sets `origin` and `originSource` (`manual`, or
    `unconfirmed` when the stored ID or name differs) on hub-local list and
    detail responses and, through the inventory middleware, on proxied Direct
@@ -131,11 +133,12 @@ admission. Shared contract and migration items are in
     | intent-rename or renamed | `old_id` named `backup_name`, no `new_id` | restore old | failed `container.recreate-recovered` |
     | intent-create or created | `new_id` unknown | find the container named `new_name`, created after `updated_at`, labelled with the run; found → use it as `new_id`; none → restore old | failed `container.recreate-recovered` |
     | created or intent-start | `new_id` not running | remove exactly `new_id`, restore old | failed `container.recreate-recovered` |
-    | intent-start or started | `new_id` running under `new_name` | continue as started | next row |
+    | intent-start | `new_id` running under `new_name` | continue as started | next row |
+    | started, intent-remove-old or done | `new_id` present, running or not | continue; its later run state is not the recreate's | next row |
     | started or intent-remove-old | `old_id` exists | remove `old_id` | succeeded |
     | intent-remove-old | `old_id` gone | none | succeeded |
     | any | `was_running=false` and the replacement created but deliberately not started | keep it stopped, remove old | succeeded |
-    | any | AutoRemove original gone, ID or name mismatch, a foreign container on a name, or both IDs missing | touch nothing | `ambiguous`, failed `container.recreate-ambiguous`, backup shown with a marker |
+    | any | AutoRemove original gone before `started`, ID or name mismatch, a foreign container on a name, or both IDs missing | touch nothing | `ambiguous`, failed `container.recreate-ambiguous`, backup shown with a marker |
 
     Compensation steps have their own intents (`comp-remove-new`,
     `comp-rename-old`, `comp-start-old`) and are re-evaluated idempotently by ID
@@ -144,7 +147,14 @@ admission. Shared contract and migration items are in
     that settlement. Recovery never repeats a pull or create. Journals stay
     until resolved; resolved rows are pruned after 7 days. AutoRemove containers
     interrupted mid-recreate end `ambiguous` and need manual cleanup (accepted
-    limit).
+    limit). An AutoRemove original that is gone after `started` was removed by
+    its own stop and the run succeeds.
+
+    Cancelling a run after its first journal intent does not abort the effect
+    sequence: it completes or compensates in-process within a bounded timeout
+    and the run settles with that outcome. A failed run names the failed step
+    (`container.recreate-recovered: create failed`). Releasing a host-local run
+    is refused while its journal is unresolved, so startup recovery still sees it.
 
 ## Web
 

@@ -28,7 +28,7 @@ func TestRecreateRealTransportsResultAndRemovedIDRetry(t *testing.T) {
 				env = activationRemote(t, hub, executor, mode)
 			}
 			daemon := newRecreateHTTP(t)
-			daemon.containers[runtimeContainerID] = recreateObserved{ID: runtimeContainerID, Name: "app", Labels: map[string]string{"com.docker.compose.service": "app"}, Running: true}
+			daemon.containers[runtimeContainerID] = recreateObserved{ID: runtimeContainerID, Name: "app", Labels: map[string]string{"io.kubernetes.pod.name": "app"}, Running: true}
 			executor.services.http.onCall = daemon.serve
 			registration := env
 			if env == "0" {
@@ -82,6 +82,39 @@ func TestRecreateRealTransportsResultAndRemovedIDRetry(t *testing.T) {
 			require.NoError(t, executor.services.db.First(&row, "run_id=?", run).Error)
 			require.NotNil(t, row.Result)
 			require.NotContains(t, string(response), "EXAMPLE=")
+		})
+	}
+}
+
+// A present-empty section replaces the inspected value on every transport and
+// keeps its own digest; absent preserves it.
+func TestRecreatePresentEmptySectionCrossesTransports(t *testing.T) {
+	for _, mode := range []string{"local", "direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			hub := activationApp(t, false, "")
+			executor, env := hub, "0"
+			if mode != "local" {
+				executor = activationApp(t, true, uuid.NewString())
+				env = activationRemote(t, hub, executor, mode)
+			}
+			daemon := newRecreateHTTP(t)
+			current := daemon.containers[runtimeContainerID]
+			current.Environment = []string{"EXAMPLE=old"}
+			daemon.containers[runtimeContainerID] = current
+			executor.services.http.onCall = daemon.serve
+			key := uuid.NewString()
+			path := "/api/environments/" + env + "/containers/" + runtimeContainerID + "/recreate"
+			status, response := activationCall(t, hub, path, key, "respond-async", []byte(`{"edit":{"environment":[]}}`))
+			require.Equal(t, 202, status, string(response))
+			run := activationRunID(t, response)
+			activationJoinRun(t, hub, executor, env, run)
+			replacement, ok := daemon.copy(recreateNewID)
+			require.True(t, ok)
+			require.Empty(t, replacement.Environment, "a present-empty section must clear the inspected value")
+			status, response = activationCall(t, hub, path, key, "respond-async", []byte(`{"edit":{}}`))
+			require.Equal(t, 409, status, string(response))
+			require.Contains(t, string(response), "runtime.idempotency-mismatch")
+			require.Equal(t, 1, daemon.counts()["create"])
 		})
 	}
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence.; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts.
 
 package project
 
@@ -51,7 +51,7 @@ import (
 )
 
 const (
-	maxConcurrentComposeReads = 4
+	maxConcurrentComposeReads = 8
 	// inferredServiceCountBatchSize bounds the number of placeholders in each update.
 	inferredServiceCountBatchSize = 200
 )

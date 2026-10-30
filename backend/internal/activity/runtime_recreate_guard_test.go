@@ -35,8 +35,8 @@ func TestRecreateFreshAdmissionOriginLocksAllTransports(t *testing.T) {
 			}{
 				{name: "compose", labels: map[string]string{"com.docker.compose.project": "example", "com.docker.compose.service": "app"}},
 				{name: "unraid", labels: map[string]string{"net.unraid.docker.managed": ""}},
-				{name: "unknown", labels: map[string]string{"com.docker.compose.service": "app"}},
-				{name: "unconfirmed", labels: map[string]string{"com.docker.compose.service": "app"}, manual: true},
+				{name: "unknown", labels: map[string]string{"io.kubernetes.pod.name": "app"}},
+				{name: "unconfirmed", labels: map[string]string{"io.kubernetes.pod.name": "app"}, manual: true},
 				{name: "self", labels: map[string]string{"com.getarcaneapp.arcane": "true"}},
 			} {
 				t.Run(tc.name, func(t *testing.T) {

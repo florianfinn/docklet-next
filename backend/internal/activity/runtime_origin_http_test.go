@@ -56,7 +56,7 @@ func TestOriginRemovalAndReregistrationCannotResurrectAssignment(t *testing.T) {
 	hub, executor := activationApp(t, false, ""), activationApp(t, true, uuid.NewString())
 	environment := activationRemote(t, hub, executor, "direct")
 	store := &origin.Store{DB: hub.services.db.DB, LocalRegistration: "hub"}
-	id := origin.Identity{ID: "old", Name: "app", Labels: map[string]string{"com.docker.compose.service": "app"}}
+	id := origin.Identity{ID: "old", Name: "app", Labels: map[string]string{"io.kubernetes.pod.name": "app"}}
 	require.NoError(t, store.Assign(t.Context(), environment, id, dto.OriginAssignment{Origin: dto.OriginStandalone, DockerID: "old"}, "operator"))
 	require.NoError(t, hub.env.DeleteEnvironment(t.Context(), environment, nil, nil))
 	replacement := activationApp(t, true, uuid.NewString())

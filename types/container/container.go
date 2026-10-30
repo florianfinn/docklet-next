@@ -1498,7 +1498,6 @@ type HostConfigEdit struct {
 	CPUShares *int64 `json:"cpuShares,omitempty"`
 }
 
-// Edit describes configuration changes to apply when recreating a container.
 // EditConfigNetwork describes one desired network attachment as shown in the
 // edit form.
 type EditConfigNetwork struct {
