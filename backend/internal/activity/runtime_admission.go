@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Durable-first admission, parent arbitration and atomic coded evidence.
+// Deviations: Durable-first admission, parent arbitration and atomic coded evidence; transactional host restart exclusion.
 
 package activity
 
@@ -82,6 +82,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 	var result RuntimeAdmissionResult
 	var found bool
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
+		if err := runtimeCheckRestartTx(tx, c.command.Store.EnvironmentID); err != nil {
+			return err
+		}
 		if err := runtimeTargetPresentTxInternal(tx, c.command.Store); err != nil {
 			return err
 		}

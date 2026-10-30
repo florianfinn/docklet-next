@@ -184,6 +184,7 @@ POST /environments/{id}/vulnerabilities/ignore/bulk
 POST /environments/{id}/vulnerabilities/scan
 POST /environments/{id}/vulnerabilities/unignore/bulk
 POST /settings/search
+POST /system/agent/restart
 PUT /environments/{id}/auto-heal
 PUT /environments/{id}/containers/{containerId}/auto-update
 PUT /environments/{id}/job-schedules
