@@ -14,7 +14,6 @@
     "backend/internal/imageupdate/service.go": 860,
     "backend/internal/imageupdate/service_test.go": 888,
     "backend/internal/notification/service.go": 931,
-    "backend/internal/project/handler.go": 1134,
     "backend/internal/project/service_test.go": 852,
     "backend/internal/registry/service.go": 876,
     "backend/internal/registry/service_test.go": 891,
