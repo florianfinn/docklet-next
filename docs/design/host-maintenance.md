@@ -91,6 +91,24 @@ hosts stays in [host onboarding](host-onboarding.md).
     resends. The reservation ends with the terminal state.
 11. Environment 0 has no restart action.
 
+## Persistence and check transport constraints
+
+The restart row must durably distinguish a received 202 from an unconfirmed
+send and retain the terminal code across history pruning and process restart.
+`sent` is committed before sending and therefore cannot prove acknowledgement.
+The reserved schema alone does not supply this distinction; hub restart intake
+stays unavailable until that persistence prerequisite is supplied. The
+agent-only receiver and runtime reservation guard do not depend on it.
+
+Credential revisions also advance when a credential field is resubmitted with
+an unchanged value. This conservatively supersedes any observation begun before
+the write, without exposing credential contents.
+
+The deliberate check endpoint uses the existing `resource_action` activity type.
+Its successful status is `online` or `standby-opened`, with a typed host problem
+or agent-access envelope on failure. This uses the existing string status field;
+connect/reconnect consumers share the same endpoint.
+
 ## Installation files
 
 12. Opening the sheet for an existing host is read-only: it shows Compose, env

@@ -120,12 +120,25 @@ assignment/reset remain hub-only. The retired edit route refuses with
 `update.path-retired`; headerless redeploy has the same refusal. Compose-child
 redeploy is also refused at the retained webhook effect boundary.
 
-`system.agent.restart` reserves POST `/api/system/agent/restart` in the Edge
-command registry. This foundation registers no answering agent restart route;
-host maintenance owns its implementation. Shell query and protocol v1 frame DTOs,
-restart states/codes and host availability codes are fingerprinted in advance;
-this does not enable their behavior. `/health` now includes the per-process
-`instanceId`. Migration 014 reserves credential revision and restart-request
-persistence for those owners. `stackStopMode` stays in environment 0 on the hub;
-agent settings responses omit it and remote or agent writes refuse before
-forwarding.
+`system.agent.restart` answers POST `/api/system/agent/restart` only in agent
+modes, through the allowlisted system module. The receiver resolves and inspects
+its own Docker container before returning 202 `{instanceId}`; missing self
+identity or an unavailable inspect returns 409 `agent.restart-unsupported` with
+no restart effect. After flushing the acknowledgement it waits one second, then
+restarts the inspected container. The hub host has no answering restart route.
+
+`/health` includes the per-process `instanceId`. Hub restart orchestration needs
+durable acknowledgement and terminal-code evidence in addition to the reserved
+restart row; the receiver alone does not enable the hub restart controller.
+Runtime intake checks active restart reservations in its admission transaction.
+
+Host projection, Edge dispatch and the availability observer share a 90-second
+application-heartbeat window. The 15-second sweeper closes only the scanned
+current session, with `edge.heartbeat-stale`; a healthy replacement survives.
+UI-disabled Auto Heal and generic settings writes emit 403
+`settings.ui-configuration-disabled`. All agent-refusal consumers share a bounded
+16 KiB classifier and retain a public 502 host-access envelope.
+
+Shell query and protocol v1 frame DTOs remain reserved for their behavior owner.
+`stackStopMode` stays in environment 0 on the hub; agent settings responses omit
+it and remote or agent writes refuse before forwarding.

@@ -287,6 +287,29 @@ selection and admission remains stack-scoped.
 The `x-docklet-container-host-v11` OpenAPI extension retains the shared shell,
 host-maintenance and availability DTOs before those behavior owners register
 their routes. It includes shell query/control/exit protocol v1, host name/colour,
-restart run states and typed problem codes. The agent restart path is reserved
-without an answering route. `/health` includes a UUID generated once per process;
+restart run states and typed problem codes. The agent-only POST `/api/system/agent/restart` now answers 202
+`{instanceId}` after resolving and inspecting self; unsupported receivers return
+409 `agent.restart-unsupported` before any restart effect. Hub orchestration
+requires durable acknowledgement and terminal-code persistence beyond the
+reserved row. `/health` includes a UUID generated once per process;
 `health.InstanceID()` exposes that same identity to host-maintenance wiring.
+
+
+Host edits validate trimmed names of 1–40 Unicode code points and
+case-insensitive uniqueness in the registration/rename write transaction.
+The optional colour is lowercase `#rrggbb` or null. Endpoint, API-key and
+access-token writes atomically increment `credential_revision`, including manual
+token replacement that retains the key ID. An unchanged value supplied again
+also advances the revision conservatively.
+
+The deliberate connection test uses `resource_action` activity history and
+returns `EnvironmentTest.status` `online` or `standby-opened`; offline returns
+502 `host.unreachable`. Typed agent refusals keep their host-access envelope.
+Periodic health checks use the service directly without creating user activities.
+
+For upstream 401/403, the shared bounded refusal classifier maps 403
+`settings.ui-configuration-disabled` to `agent.ui-configuration-disabled` and
+401/403 `agent.update-required` to the same code. Unknown, malformed or oversized
+bodies map to `agent.invalid-token`. These upstream refusals always return 502
+and cannot clear the browser's hub identity. Local compatibility-gate refusals
+retain the existing 409 `agent.update-required` response.
