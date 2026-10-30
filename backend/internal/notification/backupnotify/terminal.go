@@ -37,9 +37,10 @@ func SendDetached(ctx context.Context, wait time.Duration, send Dispatch, reques
 		wait = DispatchWait
 	}
 	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait)
+	// Only the waiter cancels, so a completed send is never reported as cancelled.
+	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		defer cancel()
 		defer func() {
 			if recover() != nil {
 				done <- errors.New("notification.dispatch-failed")
@@ -51,7 +52,12 @@ func SendDetached(ctx context.Context, wait time.Duration, send Dispatch, reques
 	case err := <-done:
 		return err
 	case <-sendCtx.Done():
-		return sendCtx.Err()
+		select {
+		case err := <-done:
+			return err
+		default:
+			return sendCtx.Err()
+		}
 	}
 }
 

@@ -61,6 +61,15 @@ func TestSendDetachedReturnsTheTransportResult(t *testing.T) {
 	}, dto.DispatchRequest{}))
 }
 
+func TestSendDetachedNeverReportsACompletedSendAsCancelled(t *testing.T) {
+	ok := func(context.Context, dto.DispatchRequest) error { return nil }
+	for range 200000 {
+		if err := SendDetached(t.Context(), time.Second, ok, dto.DispatchRequest{}); err != nil {
+			require.NoError(t, err)
+		}
+	}
+}
+
 func TestAgentBackupNoticeIsBoundedBehindABlockedTransport(t *testing.T) {
 	release, sent := make(chan struct{}), make(chan struct{}, 1)
 	n := Notifier{Agent: true, Dispatch: blockedSendInternal(release, sent), Wait: 50 * time.Millisecond}
