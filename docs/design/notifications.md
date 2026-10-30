@@ -31,7 +31,9 @@ interrupted deployment notifies. Work counts as interrupted when cancellation or
 shutdown arrives before its outcome is determined (the restore's last recovery
 effect, the Auto Heal Docker call, the deployment result classification after its
 output is captured, a backup before its terminal save); an outcome already
-determined is notified, also when shutdown interrupts saving or sending it.
+determined is notified, also when shutdown interrupts saving or sending it. An
+agent producer waits at most 30 seconds for that send; a transport that ignores
+the deadline finishes the send in the background.
 
 The hub delivery job claims rows with a compare-and-swap predicate. A five-minute
 lease allows recovery of abandoned sends. Every claim, including a reclaimed

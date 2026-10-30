@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
@@ -32,6 +33,8 @@ type Store struct {
 	Config   *config.Config
 	Dispatch func(context.Context, notificationDTO.DispatchRequest) error
 	Now      func() time.Time
+	// DispatchWait bounds the wait for an agent send; zero means backupnotify.DispatchWait.
+	DispatchWait time.Duration
 }
 type Baseline struct {
 	StartedAt    string
@@ -200,9 +203,7 @@ func (s *Store) Project(ctx context.Context, id uint, live bool) error {
 	}
 	if dispatch != nil && s.Dispatch != nil {
 		// The outcome is determined and projected; its send outlives a cancelled run, bounded.
-		sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		defer cancel()
-		if err := s.Dispatch(sendCtx, *dispatch); err != nil {
+		if err := backupnotify.SendDetached(ctx, s.DispatchWait, s.Dispatch, *dispatch); err != nil {
 			slog.WarnContext(ctx, "Auto Heal notification could not be dispatched", "code", "notification.dispatch-failed")
 		}
 		return nil
