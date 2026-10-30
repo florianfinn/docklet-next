@@ -7,8 +7,14 @@
 package schema
 
 import (
+	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
+	userDTO "github.com/florianfinn/docklet-next/types/user"
+	"github.com/google/uuid"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +28,10 @@ import (
 func TestContainerHost014UpgradeBothRoles(t *testing.T) {
 	for _, role := range []string{"hub", "agent"} {
 		t.Run(role, func(t *testing.T) {
+			initialize := database.Initialize
+			if role == "hub" {
+				initialize = database.InitializeHub
+			}
 			raw := sqlitestore.URL(filepath.Join(t.TempDir(), role+".db"))
 			path, err := sqlitestore.Path(raw)
 			require.NoError(t, err)
@@ -40,10 +50,10 @@ func TestContainerHost014UpgradeBothRoles(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.NoError(t, pool.Close())
-			db, err := database.Initialize(t.Context(), raw, database.MigrationOptions{})
+			db, err := initialize(t.Context(), raw, database.MigrationOptions{})
 			require.NoError(t, err)
 			require.NoError(t, db.Close())
-			db, err = database.Initialize(t.Context(), raw, database.MigrationOptions{})
+			db, err = initialize(t.Context(), raw, database.MigrationOptions{})
 			require.NoError(t, err)
 			defer db.Close()
 			var n int64
@@ -76,6 +86,7 @@ func TestContainerHost014UpgradeBothRoles(t *testing.T) {
 				require.NoError(t, db.Raw("SELECT count(*) FROM sqlite_master WHERE type='index' AND name=?", index).Scan(&n).Error)
 				require.EqualValues(t, 1, n, index)
 			}
+			admit014Operations(t, db)
 			var foreign []map[string]any
 			require.NoError(t, db.Raw("PRAGMA foreign_key_check").Scan(&foreign).Error)
 			require.Empty(t, foreign)
@@ -87,4 +98,38 @@ func nullable014(ok bool, value any) any {
 		return value
 	}
 	return nil
+}
+
+type resolver014 struct{}
+
+func (resolver014) ResolveRuntimeTarget(_ context.Context, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+	return activity.RuntimeResolvedTarget{Target: target}, nil
+}
+func admit014Operations(t *testing.T, db *database.DB) {
+	t.Helper()
+	service := activity.NewRuntimeService(activity.NewActivityService(db, nil), resolver014{})
+	generation, err := service.InitializeGeneration(t.Context())
+	require.NoError(t, err)
+	store := activity.RuntimeStoreBinding{StoreGeneration: generation, ExecutorGeneration: generation, ManagerID: "example-manager", RegistrationID: "example-registration", EnvironmentID: "0"}
+	_, err = activity.NewRuntimeHTTPService(service, activity.RuntimeHTTPPorts{ApplicationContext: t.Context(), Store: func(context.Context, string) (activity.RuntimeStoreBinding, error) { return store, nil }, PrepareTarget: resolver014{}.ResolveRuntimeTargetWithEnvironment, GuardContainer: func(context.Context, string, string) error { return nil }})
+	require.NoError(t, err)
+	for i, operation := range []activity.RuntimeOperation{activity.RuntimeRecreateContainer, activity.RuntimeRedeployContainer, activity.RuntimeStopProject} {
+		target := activity.RuntimeTarget{Kind: "container", ID: strings.Repeat(string(rune('a'+i)), 64)}
+		if operation == activity.RuntimeStopProject {
+			target = activity.RuntimeTarget{Kind: "stack", ID: "example-stack"}
+		}
+		command := activity.RuntimeCommand{Store: store, Key: uuid.NewString(), Actor: userDTO.Actor{ID: "example-owner", Username: "Operator"}, Operation: operation, Target: target}
+		if operation == activity.RuntimeRecreateContainer {
+			command.Options.Recreate = &containerDTO.Edit{}
+		}
+		admitted, err := service.Admit(t.Context(), command)
+		require.NoError(t, err)
+		var row activity.RuntimeReceipt
+		require.NoError(t, db.First(&row, "run_id=?", admitted.ActivityID).Error)
+		require.Equal(t, new(string(operation)), row.OperationID)
+		require.Equal(t, new(target.Kind), row.TargetKind)
+	}
+}
+func (r resolver014) ResolveRuntimeTargetWithEnvironment(ctx context.Context, _ string, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+	return r.ResolveRuntimeTarget(ctx, target)
 }

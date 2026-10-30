@@ -248,7 +248,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 			result[i].Tags = tagsByProject[result[i].ID]
 		}
 		s.fillDefinitionServices(ctx, projectsArray, result, env)
-		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, result, true, env)
+		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, result, true, env, true)
 		slog.DebugContext(ctx, "Completed ListProjects request", "resultCount", len(result))
 		return result, paginationResp, nil
 	}
@@ -278,7 +278,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		items[i].Tags = tagsByProject[items[i].ID]
 	}
 	if updatesFilter != "" {
-		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, items, true, env)
+		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, items, true, env, true)
 		// Untracked compose projects only join an unfiltered-by-tag has_update view.
 		if strings.EqualFold(updatesFilter, "has_update") && strings.TrimSpace(params.Filters["tags"]) == "" {
 			if snapshot.Err != nil {
@@ -307,7 +307,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		pageDetails = append(pageDetails, result.Items[i])
 	}
 	if updatesFilter == "" {
-		s.enrichProjectsWithUpdateInfo(ctx, pageProjects, pageDetails, true, env)
+		s.enrichProjectsWithUpdateInfo(ctx, pageProjects, pageDetails, true, env, true)
 	}
 	metas := make([]projects.ArcaneComposeMetadata, len(pageProjects))
 	var metaGroup errgroup.Group

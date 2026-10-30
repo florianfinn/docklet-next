@@ -128,6 +128,7 @@ POST /api/environments/:id/containers/:containerId/commit
 POST /api/environments/:id/containers/:containerId/edit
 POST /api/environments/:id/containers/:containerId/kill
 POST /api/environments/:id/containers/:containerId/pause
+POST /api/environments/:id/containers/:containerId/recreate
 POST /api/environments/:id/containers/:containerId/redeploy
 POST /api/environments/:id/containers/:containerId/restart
 POST /api/environments/:id/containers/:containerId/start
@@ -162,6 +163,7 @@ POST /api/environments/:id/projects/:projectId/down
 POST /api/environments/:id/projects/:projectId/pull
 POST /api/environments/:id/projects/:projectId/redeploy
 POST /api/environments/:id/projects/:projectId/restart
+POST /api/environments/:id/projects/:projectId/stop
 POST /api/environments/:id/projects/:projectId/unarchive
 POST /api/environments/:id/projects/:projectId/up
 POST /api/environments/:id/projects/:projectId/update-services

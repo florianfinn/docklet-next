@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.; M14 container and host operation contracts.
 
 package project
 
@@ -413,6 +413,7 @@ func TestConfiguredProjectUsesScheduledRuntimeChecks(t *testing.T) {
 			service.enrichProjectsWithUpdateInfo(ctx, []Project{proj}, list, true, nil)
 			require.Equal(t, tt.wantUpdate, list[0].UpdateInfo.HasUpdate)
 			for _, info := range []*projecttypes.UpdateInfo{detail.UpdateInfo, list[0].UpdateInfo} {
+				require.Contains(t, info.ServiceUpdates, "web", "configured update evidence must retain its per-service projection")
 				if tt.wantUpdate {
 					require.Equal(t, target, info.ServiceUpdates["web"].UpdateInfo.LatestVersion)
 				} else {

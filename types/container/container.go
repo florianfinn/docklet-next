@@ -838,7 +838,7 @@ type ResourceSample struct {
 
 // Summary represents a container summary.
 type Summary struct {
- OriginFields
+	OriginFields
 	// ID is the unique identifier of the container.
 	//
 	// Required: true
@@ -985,7 +985,7 @@ type SummaryGroup struct {
 
 // Details represents detailed container information.
 type Details struct {
- OriginFields
+	OriginFields
 	// ID is the unique identifier of the container.
 	//
 	// Required: true

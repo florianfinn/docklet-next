@@ -601,12 +601,14 @@ func (s *ProjectService) enrichProjectUpdateInfo(ctx context.Context, resp *proj
 	resp.UpdateInfo = buildUpdateInfoSummary(imageRefs, projectdetails.MergeProjectContainerUpdateInfo(updateInfoByRef, resp.RuntimeServices, scoped))
 }
 
+// Listing opts into runtimeOnly; configured update checks retain definition policy inputs.
 func (s *ProjectService) enrichProjectsWithUpdateInfo(
 	ctx context.Context,
 	projectsList []Project,
 	details []projecttypes.Details,
 	includeHidden bool,
 	env *projectMetadataEnv,
+	runtimeOnly ...bool,
 ) {
 	if len(projectsList) == 0 || len(details) == 0 {
 		return
@@ -631,7 +633,7 @@ func (s *ProjectService) enrichProjectsWithUpdateInfo(
 			if ctx.Err() != nil {
 				return nil
 			}
-			if len(details[i].RuntimeServices) > 0 && details[i].RuntimeServices[0].Status != projecttypes.ServiceNotCreated {
+			if len(runtimeOnly) > 0 && runtimeOnly[0] && len(details[i].RuntimeServices) > 0 && details[i].RuntimeServices[0].Status != projecttypes.ServiceNotCreated {
 				refsByIndex[i] = projects.ImageRefsFromRuntimeServices(details[i].RuntimeServices)
 				return nil
 			}

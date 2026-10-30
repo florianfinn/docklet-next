@@ -93,8 +93,9 @@ resolves each mapping when its endpoint and UI slice are implemented.
 
 ## Runtime lifecycle contract
 
-[Runtime control](runtime-control.md) defines the seven lifecycle operations:
-project deploy/down/restart/redeploy and container start/stop/restart. They share
+[Runtime control](runtime-control.md) defines receipt-backed lifecycle admission.
+Contract v11 includes project deploy/down/stop/restart/redeploy/update/restore and
+container start/stop/restart/recreate/redeploy. These twelve operations share
 one application-owned runtime with receipt-backed admission, exclusion,
 cancellation and settlement. Existing operation and activity-read permissions
 apply before admission, joins or conflict details. Generic activity writers
@@ -141,13 +142,12 @@ The trusted agent receiver registers execute/query/cancel and registration/targe
 metadata routes with the existing manager credential. Ordinary bearer,
 administrator and bootstrap credentials cannot grant receiver authority. Direct
 and Edge requests recheck agent access and compatibility; Edge has no Direct
-fallback. Numeric agent contract version and minimum are both 9. The fingerprint
-hashes the exact `types/contract/testdata/agent-hub-v9.json` bytes, retaining the
+fallback. Numeric agent contract version and minimum are both 11. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v11.json` bytes, retaining the
 historical fixtures and the accepted runtime, image and vulnerability surfaces.
 It includes volume backup routes, schemas, codes, upload reasons and transport
 limits, plus agent-only target sync metadata.
-Runtime update/restore activation remains gated on PR2a; policy/schedule/notify
-activation remains gated on PR2b. See [images and updates](images-updates.md).
+See [images and updates](images-updates.md) for update, restore and policy execution.
 The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
 exception. Existing health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
 shipped migrations remain unchanged.
@@ -168,11 +168,11 @@ callers creating events must send a listed code. A run status transition uses
 | Family | Codes |
 | --- | --- |
 | `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling`, `run.request-mismatch` |
-| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable` |
+| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable`, `runtime.idempotency-mismatch` |
 | `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
 | `deploy` | `deploy.pull` |
 | `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
-| `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error` |
+| `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error`, `container.origin-locked`, `container.recreate-recovered`, `container.recreate-ambiguous` |
 | `image` | `image.untag`, `image.import`, `image.prune`, `image.pull`, `image.load`, `image.tag`, `image.commit`, `image.delete`, `image.scan`, `image.error`, `image.vulnerability_scan` |
 | `volume` | `volume.prune`, `volume.create`, `volume.rename`, `volume.delete`, `volume.error`, `volume.file.create`, `volume.file.delete`, `volume.file.upload`, `volume.file.update`, `volume.workspace.update`, `volume.backup.create`, `volume.backup.delete`, `volume.backup.restore`, `volume.backup.restore_files`, `volume.backup.download`, `volume.backup.target.key_viewed` |
 | `network` | `network.prune`, `network.create`, `network.delete`, `network.connect`, `network.disconnect`, `network.error` |
@@ -241,3 +241,52 @@ environment management returns 409 `autoheal.settings-env-managed`. Generic
 settings reject Auto Heal keys before any partial write. Agent-access transport
 refusals retain their shared envelope. Notification settings/configuration
 failures and single-provider probe contention have typed problem responses.
+
+
+## Container and host operations contract v11
+
+Container summary and detail expose detected `origin` and `originSource`. The hub
+applies registration-bound manual assignments to local, Direct and Edge inventory
+responses. PUT/DELETE `…/containers/{containerId}/origin` use `containers:edit`;
+assignment checks a fresh Docker identity. External replacement or name reuse
+makes an assignment unconfirmed. Compose children, Unraid and protected-self
+containers remain locked at admission and at the Docker effect boundary.
+
+POST `…/containers/{containerId}/recreate` requires `{edit}`, an
+`Idempotency-Key` and `Prefer: respond-async`. Redeploy uses the same runtime
+contract without a body. Recreate edits are strictly decoded and bounded to
+64 KiB at both intake and receiver; absent pointer sections preserve inspected
+values, while supplied empty sections clear them. The semantic digest owns a deep
+copy, sorts maps and preserves array order. Changed edits under a retained key
+return `runtime.idempotency-mismatch`. The old synchronous edit route and
+headerless redeploy return 409 `update.path-retired`.
+
+Successful run snapshots and queries carry `result: {oldId,newId,oldName,newName}`.
+That result is owned by the compact receipt, survives activity-history clearing
+and process restart, and is returned when retrying the removed old ID with the
+original key. Terminal projection conditionally moves an existing manual origin
+assignment in the same transaction; a reset or removed registration cannot be
+recreated by a late result. Recreate and redeploy hold container scope and also
+exclude the parent stack and policy operations. Activity metadata carries changed
+field names only. Startup journal recovery precedes ordinary interruption
+settlement and never replays pull or create; uncertain Docker observations retain
+`container.recreate-ambiguous`, while restored originals use
+`container.recreate-recovered`.
+
+POST `…/projects/{projectId}/stop` accepts no options and stops the explicit full
+resolved service list. Down keeps removing containers. Both write stopped status
+only after success. Hub setting `stackStopMode` is `down` by default and accepts
+`down` or `stop`; it is read from environment 0 and never proxied to agents. Tracked
+stacks without containers expose resolved definition services as `not-created`;
+invalid definitions yield `definitionHint: definition-invalid` with no services.
+The dependency-aware cache follows includes, env inputs and standard overrides,
+with at most four concurrent Compose reads. Single-service restart remains
+`restart-project` with `restartServices: [service]`; its key includes the service
+selection and admission remains stack-scoped.
+
+The `x-docklet-container-host-v11` OpenAPI extension retains the shared shell,
+host-maintenance and availability DTOs before those behavior owners register
+their routes. It includes shell query/control/exit protocol v1, host name/colour,
+restart run states and typed problem codes. The agent restart path is reserved
+without an answering route. `/health` includes a UUID generated once per process;
+`health.InstanceID()` exposes that same identity to host-maintenance wiring.

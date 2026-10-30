@@ -51,7 +51,7 @@ have an explicit target checked against the running hub on both forwarding paths
 agents reject blank targets. No update/restore/policy/schedule capability is added
 by this PR1 boundary; PR2a/PR2b own that activation.
 
-Vulnerability scanning entered the agent contract at v8; the current minimum is v10. The hub feature veto
+Vulnerability scanning entered the agent contract at v8; the current minimum is v11. The hub feature veto
 covers local and remote vulnerability routes; agent feature-disabled and busy
 refusals remain typed. Host-wide runs are agent-owned evidence read through the
 run route. Agents refresh KEV/EPSS intelligence daily and register no local image
@@ -70,7 +70,7 @@ database restore, cancel the runtime context and are not treated as failures.
 
 ## Volume backup contract v9
 
-Volume backup requires contract v9; the current minimum is v10. Overview, repository metadata/check, restore
+Volume backup requires contract v9; the current minimum is v11. Overview, repository metadata/check, restore
 admissions and target host routes are part of the allowlisted volume module in
 both agent modes. Hub-only target CRUD and administrative key export are absent
 from agent registration. The target-set receiver is agent-only and accepts the
@@ -105,3 +105,27 @@ Auto Heal events use authenticated notification dispatch with captured credentia
 and session identity, strict payload validation and hub insertion deduplication.
 Older Auto Heal dispatch shapes are invalid. Shared agent-access refusals keep
 their stable status and code envelope on both transports.
+
+
+## Container and host operations contract v11
+
+Version and minimum are 11. The fingerprint includes the strict recreate edit,
+replacement result, origins, stop-project, stopped definition services, hub stop
+setting and the reserved host/shell vocabulary. Version 10 and mismatched
+fingerprints are update-required before ordinary Direct or Edge sends.
+
+Both agent modes register recreate/redeploy and stack stop through the existing
+runtime module and manager-authenticated execute/query transport. Origin
+assignment/reset remain hub-only. The retired edit route refuses with
+`update.path-retired`; headerless redeploy has the same refusal. Compose-child
+redeploy is also refused at the retained webhook effect boundary.
+
+`system.agent.restart` reserves POST `/api/system/agent/restart` in the Edge
+command registry. This foundation registers no answering agent restart route;
+host maintenance owns its implementation. Shell query and protocol v1 frame DTOs,
+restart states/codes and host availability codes are fingerprinted in advance;
+this does not enable their behavior. `/health` now includes the per-process
+`instanceId`. Migration 014 reserves credential revision and restart-request
+persistence for those owners. `stackStopMode` stays in environment 0 on the hub;
+agent settings responses omit it and remote or agent writes refuse before
+forwarding.

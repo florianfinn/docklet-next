@@ -45,17 +45,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 			cancelRuntime()
 		}
 	}()
-	containers.ConfigureOperations(db.DB, settings.GetSettingsConfig().InstanceID.Value, !cfg.AgentMode && !cfg.EdgeAgent, func(ctx context.Context, environment, id string) (origin.Identity, error) {
-		var response base.ApiResponse[containerDTO.Details]
-		err := environments.ProxyJSONRequest(ctx, environment, http.MethodGet, "/api/environments/0/containers/"+url.PathEscape(id), nil, &response)
-		if err != nil {
-			return origin.Identity{}, err
-		}
-		if !response.Success || response.Data.ID == "" {
-			return origin.Identity{}, activity.ErrRuntimeTransport
-		}
-		return origin.Identity{ID: response.Data.ID, Name: response.Data.Name, Labels: response.Data.Labels, Protected: response.Data.RedeployDisabled}, nil
-	}, environments.ReadSnapshots().Forget)
+
 	adapter := activity.NewRuntimeServiceAdapter(projects, containers)
 	var runtime *activity.RuntimeService
 	newSender := func(ctx context.Context, id string) (*activity.RuntimeSender, error) {
@@ -98,6 +88,17 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	if err != nil {
 		return runtimeResult{}, err
 	}
+	containers.ConfigureOperations(db.DB, settings.GetSettingsConfig().InstanceID.Value, !cfg.AgentMode && !cfg.EdgeAgent, func(ctx context.Context, environment, id string) (origin.Identity, error) {
+		var response base.ApiResponse[containerDTO.Details]
+		err := environments.ProxyJSONRequest(ctx, environment, http.MethodGet, "/api/environments/0/containers/"+url.PathEscape(id), nil, &response)
+		if err != nil {
+			return origin.Identity{}, err
+		}
+		if !response.Success || response.Data.ID == "" {
+			return origin.Identity{}, activity.ErrRuntimeTransport
+		}
+		return origin.Identity{ID: response.Data.ID, Name: response.Data.Name, Labels: response.Data.Labels, Protected: response.Data.RedeployDisabled}, nil
+	}, environments.ReadSnapshots().Forget)
 	local, err := runtime.LocalBinding(ctx, generation, settings.GetSettingsConfig().InstanceID.Value)
 	if err != nil {
 		return runtimeResult{}, err
