@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296; interruption is classified before the terminal save.
 
 package backup
 
@@ -50,8 +50,10 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 		status, code = activitytypes.StatusFailed, "backup.failed"
 		detail = &code
 	}
+	// The cancelled status marks interrupted work; a determined failure notifies even when
+	// shutdown arrives while it is saved.
 	if saveErr == nil && status != activitytypes.StatusCancelled {
-		s.notifier.Terminal(workCtx, backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
+		s.notifier.Terminal(context.WithoutCancel(workCtx), backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
 	}
 	var retentionErr error
 	if err == nil && saveErr == nil && run.Trigger == backuptypes.SystemBackupTriggerScheduled {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; interruption is read before the terminal save.
 
 package backup
 
@@ -39,11 +39,14 @@ func (s *Service) completeBackupInternal(ctx context.Context, entry *volume.Back
 		entry.Error = ""
 		entry.ErrorCode = ""
 	}
+	// Cancellation before the terminal save interrupted the backup; a determined outcome is
+	// notified even when shutdown arrives while it is saved.
+	interrupted := ctx.Err() != nil
 	// The owning worker remains admitted while terminal persistence is unavailable.
 	for saveErr := s.deps.Store.Save(context.WithoutCancel(ctx), entry); saveErr != nil; saveErr = s.deps.Store.Save(context.WithoutCancel(ctx), entry) {
 		time.Sleep(100 * time.Millisecond)
 	}
-	s.notifier.Terminal(ctx, backupnotify.Run{ID: entry.ID, Operation: "backup", Volume: entry.VolumeName, Status: entry.Status, Reason: entry.ErrorCode, ActivityID: backupnotify.ActivityID(entry.ActivityID), Suppress: entry.Trigger == backuptypes.VolumeBackupTriggerSafety})
+	s.notifier.Terminal(context.WithoutCancel(ctx), backupnotify.Run{ID: entry.ID, Operation: "backup", Volume: entry.VolumeName, Status: entry.Status, Reason: entry.ErrorCode, ActivityID: backupnotify.ActivityID(entry.ActivityID), Suppress: interrupted || entry.Trigger == backuptypes.VolumeBackupTriggerSafety})
 	if err == nil {
 		err = jobcontext.Progress(ctx, scheduler.TargetOutcome{ResourceType: "volume_backup", ID: entry.VolumeName, Status: scheduler.Succeeded})
 	}

@@ -27,7 +27,10 @@ idempotency key. Deployment inserts share the terminal receipt transaction;
 backup notices follow a successful live terminal save. Safety captures,
 retention-only failures, cancellation, shutdown or restart interruptions and
 startup/history repair remain silent; an administrator disposition of an
-interrupted deployment notifies.
+interrupted deployment notifies. Work counts as interrupted when cancellation or
+shutdown arrives before its outcome is determined (the restore's last recovery
+effect, the Auto Heal Docker call, the deployment executor result); an outcome
+already determined is notified even when shutdown interrupts saving it.
 
 The hub delivery job claims rows with a compare-and-swap predicate. A five-minute
 lease allows recovery of abandoned sends. Every claim, including a reclaimed

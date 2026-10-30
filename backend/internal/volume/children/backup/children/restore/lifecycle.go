@@ -123,13 +123,14 @@ func (l *Lifecycle) persist(ctx context.Context, run *Run) error {
 
 // Terminal persistence finishes before admission or activity ownership can end.
 // persistTerminal saves a terminal run with ctx and notifies. work is the restore's tracked work
-// context; when it was cancelled at any point up to the saved terminal state, the run stays silent.
+// context: cancelled before the outcome is saved, the run was interrupted and stays silent.
 func (l *Lifecycle) persistTerminal(ctx, work context.Context, run *Run) {
+	interrupted := work.Err() != nil
 	for err := l.persist(ctx, run); err != nil; err = l.persist(ctx, run) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if l.Notify != nil {
-		l.Notify(ctx, backupnotify.Run{ID: run.ID, Operation: "restore", Volume: run.VolumeName, Status: run.Status, Reason: run.ErrorCode, ActivityID: run.ActivityID, Suppress: work.Err() != nil})
+		l.Notify(ctx, backupnotify.Run{ID: run.ID, Operation: "restore", Volume: run.VolumeName, Status: run.Status, Reason: run.ErrorCode, ActivityID: run.ActivityID, Suppress: interrupted})
 	}
 }
 func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest) (err error) {
