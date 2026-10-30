@@ -52,7 +52,9 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	defer cancel()
 	j := &RecreateJournal{RunID: run, OldID: old.ID, OldName: strings.TrimPrefix(old.Name, "/"), BackupName: strings.TrimPrefix(old.Name, "/") + "-docklet-recreate-" + run, NewName: name, WasRunning: old.State != nil && old.State.Running, AutoRemove: old.HostConfig != nil && old.HostConfig.AutoRemove}
 	if err := s.saveRecreate(ctx, j, "intent-rename"); err != nil {
-		return "", err
+		// No effect ran yet, so this is an ordinary failure. The terminal
+		// transaction's journal check still holds the run if the row committed.
+		return "", fmt.Errorf("recreate journal: %w", errors.Unwrap(err))
 	}
 	fail := func(step string, effectErr error) (string, error) {
 		if ctx.Err() != nil {

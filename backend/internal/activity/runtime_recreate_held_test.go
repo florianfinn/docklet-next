@@ -7,6 +7,7 @@
 package activity_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -118,6 +119,60 @@ func TestRecreateUnreadableJournalRetainsResolvedOutcome(t *testing.T) {
 	require.Equal(t, "success", *row.ExecutorState)
 	require.NotNil(t, row.Result)
 	require.Equal(t, 1, daemon.counts()["create"])
+}
+
+// A refused first journal intent ran no effect: the run fails ordinarily and
+// releases its exclusion instead of being held without a recovery source.
+func TestRecreateFirstJournalIntentFailureIsOrdinary(t *testing.T) {
+	for _, operation := range []string{"recreate", "redeploy"} {
+		for _, mode := range []string{"local", "direct", "edge"} {
+			t.Run(operation+"/"+mode, func(t *testing.T) {
+				hub := activationApp(t, false, "")
+				executor, environment := hub, "0"
+				if mode != "local" {
+					executor = activationApp(t, true, uuid.NewString())
+					environment = activationRemote(t, hub, executor, mode)
+				}
+				daemon := newRecreateHTTP(t)
+				executor.services.http.onCall = daemon.serve
+				require.NoError(t, executor.services.db.Exec("CREATE TRIGGER fixture_journal_refusal BEFORE INSERT ON container_recreate_journal BEGIN SELECT RAISE(ABORT,'synthetic journal refusal'); END").Error)
+				path := "/api/environments/" + environment + "/containers/" + runtimeContainerID + "/" + operation
+				var request []byte
+				if operation == "recreate" {
+					request = []byte(`{"edit":{}}`)
+				}
+				status, body := activationCall(t, hub, path, uuid.NewString(), "respond-async", request)
+				require.Equal(t, 202, status, string(body))
+				run := activationRunID(t, body)
+				ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+				defer cancel()
+				if mode != "local" {
+					require.NoError(t, hub.remote.WaitDispatch(ctx, run))
+				}
+				require.NoError(t, executor.services.runtime.JoinLocal(ctx))
+				row := heldRecreateReceipt(t, executor, run)
+				require.NotNil(t, row.SettledAt, "a run without a journal is never held")
+				require.Equal(t, "failed", *row.ExecutorState)
+				counts := daemon.counts()
+				for _, effect := range []string{"rename", "stop", "create", "start", "remove"} {
+					require.Zero(t, counts[effect], effect)
+				}
+				if mode != "local" {
+					ref, found, err := hub.services.runtime.Reference(ctx, environment, run)
+					require.NoError(t, err)
+					require.True(t, found)
+					_, err = hub.remote.Refresh(ctx, ref)
+					require.NoError(t, err)
+				}
+				require.NoError(t, executor.services.db.Exec("DROP TRIGGER fixture_journal_refusal").Error)
+				status, body = activationCall(t, hub, path, uuid.NewString(), "respond-async", request)
+				require.Equal(t, 202, status, string(body))
+				next := activationRunID(t, body)
+				require.NotEqual(t, run, next, "the exclusion was released")
+				activationJoinRun(t, hub, executor, environment, next)
+			})
+		}
+	}
 }
 
 // A receipt held unknown by a live attempt is settled by the next process start

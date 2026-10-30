@@ -148,7 +148,8 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 }
 
 // Caller holds runningMu. Keep the existing per-activity commit/publish order.
-// Only a successful terminal COMMIT permits ownership and slot release.
+// Only a committed joined outcome permits ownership and slot release: terminal
+// settlement, or held unknown evidence that keeps the durable exclusion.
 func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activitytypes.RuntimeSnapshot, error) {
 	if owner.result == nil {
 		return activitytypes.RuntimeSnapshot{}, ErrRuntimeNotSettled

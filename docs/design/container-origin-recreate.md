@@ -157,7 +157,8 @@ admission. Shared contract and migration items are in
     still unresolved never settles terminally: when the bound expires or a
     recovery read or journal write fails, it stays held as unknown with its
     exclusion, like any unknown runtime outcome, and the next process start
-    recovers it from the journal before readiness. The journal check shares the
+    recovers it from the journal before readiness. A refused first intent ran no
+    effect, so that run fails ordinarily. The journal check shares the
     attempt's terminal transaction, so a failed read retains the joined result
     for the ordinary settlement retry instead of discarding it. Releasing a
     host-local run is refused while its journal is unresolved, so recovery still
