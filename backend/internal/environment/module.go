@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; hub-owned one-shot restart wiring.
 
 // Package environment owns environment persistence, remote runtime state, pairing,
 // synchronization, and its HTTP and stream surfaces.
@@ -65,6 +65,7 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 
 // RegisterEnvironments registers all environment management endpoints.
 func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
+	registerHostRestart(api, h)
 	huma.Register(api, huma.Operation{
 		OperationID: "discoverHub", Method: "GET", Path: "/hub/discovery",
 		Summary: "Inspect hub installation metadata and address candidates",

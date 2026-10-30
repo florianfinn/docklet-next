@@ -198,7 +198,7 @@ export function agentFixture(spec, fixture) {
   const names = ["OriginAssignment", "RecreateRequest", "RecreateResult", "ContainerProblem", "ShellQuery", "ShellResize", "ShellExit", "AgentRestartResponse", "AgentRestartRun", "HostProblem", "HealthResponse", "RuntimeOptions", "RuntimeSnapshot"];
   manifest.containerHostOperations = {
     routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item)
-      .filter(([,op])=>["assign-container-origin","reset-container-origin","recreate-container","redeploy-container","stop-project"].includes(op?.operationId))
+      .filter(([,op])=>["assign-container-origin","reset-container-origin","recreate-container","redeploy-container","stop-project","restartEnvironmentAgent","getEnvironmentAgentRestart"].includes(op?.operationId))
       .map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
     schemas: Object.fromEntries(names.map(name => {
       const key = [name, `Container${name}`, `Environment${name}`, `System${name}`, `Activity${name}`].find(key => schemas[key]);
@@ -213,7 +213,7 @@ export function agentFixture(spec, fixture) {
     settings: schemas.SettingsUpdate.properties.stackStopMode,
     stackStopMode: {values:["down","stop"], default:"down", environment:"0"},
     shell: {frameProtocolVersion:1, binary:"stdin/stdout", text:"resize/exit", closeCodes:[1000,1008], wsStart:"allowlisted", closeReasonTransport:true},
-    restart: {method:"POST", path:"/api/system/agent/restart", command:"system.agent.restart", route:"reserved; S2 registers behaviour"},
+    restart: {method:"POST", path:"/api/system/agent/restart", command:"system.agent.restart", route:"agent-only 202 after inspected self resolution; hub one-shot persisted observer", hubIntake:"POST /environments/{id}/agent/restart", hubRead:"GET /environments/{id}/agent/restarts/{runId}", recovery:"reserved interrupted; sent/awaiting observe without resend", acknowledgement:"durable acknowledged_at; response instance is evidence only"},
   };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }

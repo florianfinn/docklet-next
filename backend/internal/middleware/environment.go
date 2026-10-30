@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring.
 
 package middleware
 
@@ -652,6 +652,14 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 }
 
 func isManagementPathInternal(method, suffix string) bool {
+	if method == http.MethodPost && suffix == "/agent/restart" {
+		return true
+	}
+	partsRestart := strings.Split(suffix, "/")
+	if method == http.MethodGet && len(partsRestart) == 4 && partsRestart[0] == "" && partsRestart[1] == "agent" && partsRestart[2] == "restarts" && partsRestart[3] != "" {
+		return true
+	}
+
 	partsOrigin := strings.Split(strings.Trim(suffix, "/"), "/")
 	if len(partsOrigin) == 3 && partsOrigin[0] == "containers" && partsOrigin[2] == "origin" {
 		return true
