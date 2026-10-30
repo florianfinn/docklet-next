@@ -9,6 +9,7 @@ package api
 import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"reflect"
 	"strconv"
@@ -39,6 +40,9 @@ func imageErrorTransformer(ctx huma.Context, status string, value any) (any, err
 		return value, nil
 	}
 	if _, ok := value.(*imageDTO.OperationError); ok {
+		return value, nil
+	}
+	if _, ok := value.(*environmentDTO.HostProblem); ok {
 		return value, nil
 	}
 	problem := "image.usage-unavailable"
