@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original shared M14 schema registration guard.
+// Deviations: Original shared M14 schema registration guard; S2 agent restart receiver mode boundary.
 
 package api
 
@@ -40,7 +40,13 @@ func TestContainerHostM14RouteModes(t *testing.T) {
 				require.NotNil(t, paths[path], path)
 				require.NotNil(t, paths[path].Post, path)
 			}
-			require.Nil(t, paths["/system/agent/restart"], "S2 owns the reserved restart behaviour")
+			restart := paths["/system/agent/restart"]
+			if mode.hub {
+				require.Nil(t, restart)
+			} else {
+				require.NotNil(t, restart)
+				require.NotNil(t, restart.Post)
+			}
 		})
 	}
 }
