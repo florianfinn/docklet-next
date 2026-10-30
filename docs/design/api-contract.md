@@ -84,7 +84,7 @@ the mapping and its contract tests before that feature claims live data.
 | `UserUser`, `UserRoleAssignmentSummary` | `HubUser` | User rights need the agreed simple access projection. | Planned M15 Simple users with resource rights |
 | `NotificationResponse`, `NotificationUpdate`, `NotificationTestResponse` | `NotificationChannel`, `SettingsApi` | Typed provider configurations, `credentialsSet` and classified test codes give the UI channel kinds and safe status. | Contract v10; [notifications](notifications.md) |
 | `AutoHealSettings` | `AutoHealSettings` | Restart limits, exceptions and the environment-managed flag are a distinct persisted contract per host. | Contract v10; [Auto Heal](auto-heal.md) |
-| No service-widget DTO | Dashboard widget view models | Service polling, credentials and failure states have no wire contract yet. | Planned M16 Service widgets with real data |
+| No service-widget DTO | Dashboard widget view models | Service polling, credentials and failure states have no wire contract yet. | Planned M17 Dashboard, history and service widgets |
 
 The table records existing mismatches, not a promise that every listed API
 operation is ready for production use. Some schema types are nested Docker

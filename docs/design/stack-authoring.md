@@ -9,7 +9,8 @@ project routes and the [runtime control](runtime-control.md) admission without
 adding routes, migrations or wire vocabulary. Multi-file workspace editing
 belongs to M8 Storage and file workspace. Templates, Git repositories and GitOps
 stay removed (`api/removed-operations.json`). The GitHub/Docker Hub one-time
-import remains a demo function and is not offered by the production adapter.
+import remains a demo function and is not offered by the production adapter
+until M19 ([core adoption ledger](core-adoption.md#decision-ledger)).
 
 ## Operation mapping
 
