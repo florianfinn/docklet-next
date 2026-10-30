@@ -12,8 +12,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
-	"github.com/florianfinn/docklet-next/backend/internal/middleware"
-	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -300,44 +298,6 @@ func (h *EnvironmentHandler) DeleteEnvironment(ctx context.Context, input *Delet
 			Data: base.MessageResponse{
 				Message: "Environment deleted successfully",
 			},
-		},
-	}, nil
-}
-
-// TestConnection tests connectivity to an environment.
-func (h *EnvironmentHandler) TestConnection(ctx context.Context, input *TestConnectionInput) (*handlerutil.Out[environment.Test], error) {
-	var apiUrl *string
-	if input.Body != nil {
-		apiUrl = input.Body.ApiUrl
-	}
-	if apiUrl != nil {
-		permissions, ok := middleware.PermissionsFromContext(ctx)
-		if !ok || !permissions.Allows(authz.PermEnvironmentsUpdate, "") {
-			return nil, huma.Error403Forbidden("permission denied: " + authz.PermEnvironmentsUpdate)
-		}
-	}
-
-	status, err := h.environmentService.TestConnection(ctx, input.ID, apiUrl)
-	resp := environment.Test{Status: status}
-	if err != nil {
-		if apiUrl == nil {
-			resp.Message = new(err.Error())
-		} else {
-			apiErr := common.ToAPIError(err)
-			err = huma.NewError(apiErr.HTTPStatus(), apiErr.Message)
-		}
-		return &handlerutil.Out[environment.Test]{
-			Body: base.ApiResponse[environment.Test]{
-				Success: false,
-				Data:    resp,
-			},
-		}, err
-	}
-
-	return &handlerutil.Out[environment.Test]{
-		Body: base.ApiResponse[environment.Test]{
-			Success: true,
-			Data:    resp,
 		},
 	}, nil
 }
