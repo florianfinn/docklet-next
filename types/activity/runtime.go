@@ -6,6 +6,8 @@
 
 package activity
 
+import "github.com/florianfinn/docklet-next/types/container"
+
 // RuntimeOutcomeState describes receipt knowledge, independently of activity status.
 // Known describes workflow disposition, not verified Docker state or rollback.
 type RuntimeOutcomeState string
@@ -25,6 +27,7 @@ type RuntimeKnowledge struct {
 // RuntimeSnapshot requires flat receipt knowledge beside the activity projection.
 // A hub release may project failed while executor outcome remains unknown.
 type RuntimeSnapshot struct {
+	Result *container.RecreateResult `json:"result,omitempty"`
 	Activity
 	RuntimeKnowledge
 }

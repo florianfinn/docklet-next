@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v10.json", import.meta.url);
+const fixtureURL = new URL("../types/contract/testdata/agent-hub-v11.json", import.meta.url);
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -127,8 +127,8 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
-  manifest.version = 10;
-  manifest.minimumAgentContractVersion = 10;
+  manifest.version = 11;
+  manifest.minimumAgentContractVersion = 11;
   const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
     .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
     .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
@@ -195,6 +195,23 @@ export function agentFixture(spec, fixture) {
     edgeCommands:["auto_heal.settings.get","auto_heal.settings.update"],
   };
   manifest.notificationDispatch = { request:schemas.NotificationDispatchRequest, autoHeal:schemas.NotificationDispatchAutoHeal, backupFailed:schemas.NotificationDispatchBackupFailed, origin:"captured credential and Edge session; transaction rechecks binding", legacy:"direct fan-out, no eventId", hostEvents:"best effort; no agent outbox" };
+  const names = ["OriginAssignment", "RecreateRequest", "RecreateResult", "ContainerProblem", "ShellQuery", "ShellResize", "ShellExit", "AgentRestartResponse", "AgentRestartRun", "HostProblem", "HealthResponse", "RuntimeOptions", "RuntimeSnapshot"];
+  manifest.containerHostOperations = {
+    schemas: Object.fromEntries(names.map(name => {
+      const key = [name, `Container${name}`, `Environment${name}`, `System${name}`, `Activity${name}`].find(key => schemas[key]);
+      if (!schemas[key]) throw new Error(`missing M14 schema ${name}`);
+      return [key, schemas[key]];
+    })),
+    runtimeOperations: schemas.ActivityRuntimeExecutionEnvelope.properties.operation.enum,
+    origin: schemas.ContainerSummary.properties.origin,
+    originSource: schemas.ContainerSummary.properties.originSource,
+    stackServiceState: "not-created", stackHint: schemas.ProjectDetails.properties.definitionHint,
+    hostFields: {name: schemas.EnvironmentUpdate.properties.name, color: schemas.EnvironmentUpdate.properties.color, read: schemas.EnvironmentEnvironment.properties.color},
+    settings: schemas.SettingsUpdate.properties.stackStopMode,
+    stackStopMode: {values:["down","stop"], default:"down", environment:"0"},
+    shell: {frameProtocolVersion:1, binary:"stdin/stdout", text:"resize/exit", closeCodes:[1000,1008], wsStart:"allowlisted", closeReasonTransport:true},
+    restart: {method:"POST", path:"/api/system/agent/restart", command:"system.agent.restart", route:"reserved; S2 registers behaviour"},
+  };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }
 

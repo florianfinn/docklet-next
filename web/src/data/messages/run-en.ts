@@ -221,6 +221,42 @@ export const enRunMessages = {
 },
   // Activity and event codes of Auto Heal and notification delivery, keyed by the wire code path.
   codes: {
+    container: {
+      "origin-locked": "Container origin prevents this operation",
+      "recreate-recovered": "Recreate interrupted; original restored",
+      "recreate-ambiguous": "Recreate needs manual cleanup",
+      "shell-invalid": "Invalid shell or terminal size",
+      "shell-protocol": "Invalid terminal control message",
+      "shell-unavailable": "Shell unavailable",
+      "shell-orphaned": "Shell process may still be running",
+      "shell-not-running": "Container is not running",
+    },
+    runtime: {
+      "idempotency-mismatch": "This request key belongs to a different edit",
+    },
+    update: {
+      "path-retired": "Use the runtime operation",
+    },
+    agent: {
+      "restart-unsupported": "Agent restart unsupported",
+      "restart-superseded": "Agent restart superseded by host changes",
+      "restart-timeout": "Agent restart timed out",
+      "restart-unconfirmed": "Agent restart could not be confirmed",
+      "ui-configuration-disabled": "Settings on this host are managed through its environment",
+    },
+    host: {
+      "busy": "Host is busy",
+      "restarting": "Agent is restarting",
+      "name-invalid": "Enter a host name with 1–40 characters",
+      "name-taken": "Host name already exists",
+      "unreachable": "Host unreachable",
+    },
+    edge: {
+      "heartbeat-stale": "Agent heartbeat expired",
+    },
+    settings: {
+      "ui-configuration-disabled": "Settings are managed through the environment",
+    },
     autoheal: {
       "restarted": "Container restarted by Auto Heal",
       "restart-failed": "Auto Heal restart failed",

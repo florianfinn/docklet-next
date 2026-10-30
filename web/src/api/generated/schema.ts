@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: cd9f5a79c78df3883ffdcddf5032e3810e7a18de03dd67a08f08b9480809b89a
+// Revision: 88584836ce16e184cb46d7cbc059b38ae7b2f4e35e095fe0dd6d3b8b3276a3e2
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4957,7 +4957,7 @@ export interface components {
             attribution: components["schemas"]["ActivityRuntimeAttribution"];
             identity: components["schemas"]["ActivityRuntimeRunIdentity"];
             /** @enum {string} */
-            operation: "deploy-project" | "down-project" | "restart-project" | "redeploy-project" | "start-container" | "stop-container" | "restart-container" | "update-project" | "restore-project";
+            operation: "deploy-project" | "down-project" | "restart-project" | "redeploy-project" | "start-container" | "stop-container" | "restart-container" | "update-project" | "restore-project" | "stop-project" | "recreate-container" | "redeploy-container";
             options: components["schemas"]["ActivityRuntimeOptions"];
             target: components["schemas"]["ActivityRuntimeTarget"];
         };
@@ -5021,6 +5021,7 @@ export interface components {
         ActivityRuntimeOptions: {
             deploy: components["schemas"]["ProjectDeployOptions"];
             lifecycle?: components["schemas"]["UpdaterLifecycleIntent"];
+            recreate?: components["schemas"]["ContainerEdit"];
             restartServices: string[] | null;
         };
         ActivityRuntimeRecoveryEvidence: {
@@ -5081,6 +5082,7 @@ export interface components {
             resourceId?: string;
             resourceName?: string;
             resourceType?: string;
+            result?: components["schemas"]["ContainerRecreateResult"];
             sourceEnvironmentId?: string;
             sourceEnvironmentName?: string;
             /** Format: date-time */
@@ -7652,6 +7654,10 @@ export interface components {
             mounts: components["schemas"]["ContainerMount"][] | null;
             name: string;
             networkSettings: components["schemas"]["ContainerNetworkSettings"];
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
             redeployDisabled?: boolean;
             state: components["schemas"]["ContainerState"];
@@ -7888,6 +7894,11 @@ export interface components {
                 [key: string]: components["schemas"]["ContainerEndpointSettingsCreate"];
             };
         };
+        ContainerOriginAssignment: {
+            dockerId: string;
+            /** @enum {string} */
+            origin: "unraid" | "standalone";
+        };
         ContainerPort: {
             ip?: string;
             /** Format: int64 */
@@ -7900,9 +7911,26 @@ export interface components {
             hostIp?: string;
             hostPort?: string;
         };
+        ContainerProblem: {
+            /** @enum {string} */
+            code: "container.origin-locked" | "container.recreate-recovered" | "container.recreate-ambiguous" | "runtime.idempotency-mismatch" | "update.path-retired" | "container.shell-invalid" | "container.shell-protocol" | "container.shell-unavailable" | "container.shell-orphaned" | "container.shell-not-running";
+            /** @enum {string} */
+            origin?: "compose" | "unraid" | "unknown" | "standalone";
+            /** Format: int64 */
+            status: number;
+        };
         ContainerProcesses: {
             processes: (string[] | null)[] | null;
             titles: string[] | null;
+        };
+        ContainerRecreateRequest: {
+            edit: components["schemas"]["ContainerEdit"];
+        };
+        ContainerRecreateResult: {
+            newId: string;
+            newName: string;
+            oldId: string;
+            oldName: string;
         };
         ContainerResourceSample: {
             /** Format: double */
@@ -7918,6 +7946,32 @@ export interface components {
             /** Format: int64 */
             maximumRetryCount?: number;
             name?: string;
+        };
+        ContainerShellExit: {
+            /** Format: int64 */
+            code: number | null;
+            reason: string;
+            /** @enum {string} */
+            type: "exit";
+        };
+        ContainerShellQuery: {
+            /** Format: int64 */
+            cols?: number;
+            /** Format: int64 */
+            rows?: number;
+            /**
+             * @default auto
+             * @enum {string}
+             */
+            shell: "auto" | "sh" | "bash";
+        };
+        ContainerShellResize: {
+            /** Format: int64 */
+            cols: number;
+            /** Format: int64 */
+            rows: number;
+            /** @enum {string} */
+            type: "resize";
         };
         ContainerState: {
             /** Format: int64 */
@@ -7954,6 +8008,10 @@ export interface components {
             mounts: components["schemas"]["ContainerMount"][] | null;
             names: string[] | null;
             networkSettings: components["schemas"]["ContainerNetworkSettings"];
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
             redeployDisabled?: boolean;
             resourceSample?: components["schemas"]["ContainerResourceSample"];
@@ -8975,6 +9033,21 @@ export interface components {
             reportedAt: string;
             version: components["schemas"]["VersionInfo"];
         };
+        EnvironmentAgentRestartResponse: {
+            instanceId: string;
+        };
+        EnvironmentAgentRestartRun: {
+            code?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            deadline: string;
+            runId: string;
+            /** Format: date-time */
+            settledAt?: string;
+            /** @enum {string} */
+            state: "reserved" | "sent" | "awaiting" | "connected" | "failed" | "unknown";
+        };
         EnvironmentCreate: {
             /**
              * Format: uri
@@ -9002,6 +9075,7 @@ export interface components {
             agentReport?: components["schemas"]["EnvironmentAgentReport"];
             apiKey?: string;
             apiUrl: string;
+            color: string | null;
             connected?: boolean;
             /** Format: date-time */
             connectedAt?: string;
@@ -9023,6 +9097,12 @@ export interface components {
             lastSeen?: string;
             name?: string;
             status: string;
+        };
+        EnvironmentHostProblem: {
+            /** @enum {string} */
+            code: "agent.restart-unsupported" | "agent.restart-superseded" | "agent.restart-timeout" | "agent.restart-unconfirmed" | "host.busy" | "host.restarting" | "host.name-invalid" | "host.name-taken" | "host.unreachable" | "edge.heartbeat-stale" | "agent.ui-configuration-disabled" | "settings.ui-configuration-disabled";
+            /** Format: int64 */
+            status: number;
         };
         EnvironmentHubAddressCandidate: {
             id: string;
@@ -9066,6 +9146,7 @@ export interface components {
             readonly $schema?: string;
             accessToken?: string | null;
             apiUrl?: string | null;
+            color?: string | null;
             enabled?: boolean | null;
             name?: string | null;
             regenerateApiKey?: boolean | null;
@@ -9103,6 +9184,7 @@ export interface components {
             /** @description API key for pairing (only shown once during creation) */
             apiKey?: string;
             apiUrl: string;
+            color: string | null;
             connected?: boolean;
             /** Format: date-time */
             connectedAt?: string;
@@ -10202,6 +10284,8 @@ export interface components {
             composeProjectName?: string;
             configurationError?: components["schemas"]["ProjectConfigurationError"];
             createdAt: string;
+            /** @enum {string} */
+            definitionHint?: "definition-invalid";
             dirName?: string;
             envContent?: string;
             hasBuildDirective?: boolean;
@@ -11012,6 +11096,8 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
+            /** @enum {string|null} */
+            stackStopMode?: "down" | "stop" | null;
             /** @description Docker image reference; empty uses this environment's release default */
             toolsImage?: string | null;
             trivyConcurrentScanContainers?: string | null;
@@ -11149,6 +11235,7 @@ export interface components {
              * @example /api/schemas/SystemHealthResponse.json
              */
             readonly $schema?: string;
+            instanceId: string;
             status: string;
         };
         SystemPruneAllRequest: {

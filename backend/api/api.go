@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
 
 package api
 
@@ -336,6 +336,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	api.UseMiddleware(middleware.RejectInlineImageCredentials(api))
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
+	registerContainerHostSchemasInternal(api)
 
 	// Register all Huma handlers
 	registerHandlersInternal(api, deps, appCtx, cfg)
@@ -409,6 +410,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
+	registerContainerHostSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	registerImageSafetyErrors(api)

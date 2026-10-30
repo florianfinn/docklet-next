@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.; M14 container and host operation contracts.
 
 package project
 
@@ -443,6 +443,7 @@ type ConfigurationError struct {
 
 // Details contains detailed information about a project.
 type Details struct {
+	DefinitionHint string `json:"definitionHint,omitempty" enum:"definition-invalid"`
 	// ComposeProjectName is the recorded effective Compose label, falling back
 	// to the normalized stored name for legacy rows. It is not execution authority.
 	//

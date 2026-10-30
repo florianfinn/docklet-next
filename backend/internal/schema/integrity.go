@@ -18,6 +18,7 @@ import (
 var integrityFS embed.FS
 
 type columnRule struct {
+	Check   string  `json:"check"`
 	Table   string  `json:"table"`
 	Column  string  `json:"column"`
 	NotNull bool    `json:"notNull"`
@@ -130,6 +131,9 @@ func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
 		}
 		if value != nil {
 			def += " DEFAULT " + *value
+		}
+		if rule.Check != "" {
+			def += " " + rule.Check
 		}
 		definitions = append(definitions, def)
 	}

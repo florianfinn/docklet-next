@@ -221,6 +221,42 @@ export const deRunMessages = {
 },
   // Activity and event codes of Auto Heal and notification delivery, keyed by the wire code path.
   codes: {
+    container: {
+      "origin-locked": "Die Container-Herkunft verhindert diese Aktion",
+      "recreate-recovered": "Neuerstellung unterbrochen; Original wiederhergestellt",
+      "recreate-ambiguous": "Neuerstellung erfordert manuelle Bereinigung",
+      "shell-invalid": "Ungültige Shell oder Terminalgröße",
+      "shell-protocol": "Ungültige Terminal-Steuernachricht",
+      "shell-unavailable": "Shell nicht verfügbar",
+      "shell-orphaned": "Shell-Prozess läuft möglicherweise noch",
+      "shell-not-running": "Container läuft nicht",
+    },
+    runtime: {
+      "idempotency-mismatch": "Dieser Anfrageschlüssel gehört zu einer anderen Bearbeitung",
+    },
+    update: {
+      "path-retired": "Verwende die Laufzeitaktion",
+    },
+    agent: {
+      "restart-unsupported": "Agent-Neustart nicht unterstützt",
+      "restart-superseded": "Agent-Neustart durch Host-Änderungen überholt",
+      "restart-timeout": "Zeitüberschreitung beim Agent-Neustart",
+      "restart-unconfirmed": "Agent-Neustart konnte nicht bestätigt werden",
+      "ui-configuration-disabled": "Die Einstellungen dieses Hosts werden über seine Umgebung verwaltet",
+    },
+    host: {
+      "busy": "Host ist beschäftigt",
+      "restarting": "Agent wird neu gestartet",
+      "name-invalid": "Gib einen Host-Namen mit 1–40 Zeichen ein",
+      "name-taken": "Host-Name ist bereits vergeben",
+      "unreachable": "Host nicht erreichbar",
+    },
+    edge: {
+      "heartbeat-stale": "Agent-Heartbeat abgelaufen",
+    },
+    settings: {
+      "ui-configuration-disabled": "Einstellungen werden über die Umgebung verwaltet",
+    },
     autoheal: {
       "restarted": "Container durch Auto Heal neu gestartet",
       "restart-failed": "Auto-Heal-Neustart fehlgeschlagen",

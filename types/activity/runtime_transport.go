@@ -7,6 +7,7 @@
 package activity
 
 import (
+	"github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/project"
 	"github.com/florianfinn/docklet-next/types/updater"
 )
@@ -16,15 +17,18 @@ import (
 type RuntimeOperation string
 
 const (
-	RuntimeUpdateProject    RuntimeOperation = "update-project"
-	RuntimeRestoreProject   RuntimeOperation = "restore-project"
-	RuntimeDeployProject    RuntimeOperation = "deploy-project"
-	RuntimeDownProject      RuntimeOperation = "down-project"
-	RuntimeRestartProject   RuntimeOperation = "restart-project"
-	RuntimeRedeployProject  RuntimeOperation = "redeploy-project"
-	RuntimeStartContainer   RuntimeOperation = "start-container"
-	RuntimeStopContainer    RuntimeOperation = "stop-container"
-	RuntimeRestartContainer RuntimeOperation = "restart-container"
+	RuntimeUpdateProject     RuntimeOperation = "update-project"
+	RuntimeRestoreProject    RuntimeOperation = "restore-project"
+	RuntimeDeployProject     RuntimeOperation = "deploy-project"
+	RuntimeDownProject       RuntimeOperation = "down-project"
+	RuntimeStopProject       RuntimeOperation = "stop-project"
+	RuntimeRecreateContainer RuntimeOperation = "recreate-container"
+	RuntimeRedeployContainer RuntimeOperation = "redeploy-container"
+	RuntimeRestartProject    RuntimeOperation = "restart-project"
+	RuntimeRedeployProject   RuntimeOperation = "redeploy-project"
+	RuntimeStartContainer    RuntimeOperation = "start-container"
+	RuntimeStopContainer     RuntimeOperation = "stop-container"
+	RuntimeRestartContainer  RuntimeOperation = "restart-container"
 )
 
 // RuntimeTarget contains a canonical raw ID, not a browser host~ID or alias.
@@ -41,6 +45,7 @@ type RuntimeTarget struct {
 // sorted unique set; nil/empty means whole stack for restart only. Keep null
 // versus [] on the wire so an unsupported supplied option is not hidden.
 type RuntimeOptions struct {
+	Recreate        *container.Edit          `json:"recreate,omitempty"`
 	Lifecycle       *updater.LifecycleIntent `json:"lifecycle,omitempty"`
 	Deploy          *project.DeployOptions   `json:"deploy"`
 	RestartServices []string                 `json:"restartServices"`
@@ -79,7 +84,7 @@ type RuntimeAttribution struct {
 // These carriers alone enforce neither HTTP size limits nor unknown-field rules.
 type RuntimeExecutionEnvelope struct {
 	Identity    RuntimeRunIdentity `json:"identity"`
-	Operation   RuntimeOperation   `json:"operation" enum:"deploy-project,down-project,restart-project,redeploy-project,start-container,stop-container,restart-container,update-project,restore-project"`
+	Operation   RuntimeOperation   `json:"operation" enum:"deploy-project,down-project,restart-project,redeploy-project,start-container,stop-container,restart-container,update-project,restore-project,stop-project,recreate-container,redeploy-container"`
 	Target      RuntimeTarget      `json:"target"`
 	Options     RuntimeOptions     `json:"options"`
 	Attribution RuntimeAttribution `json:"attribution"`
