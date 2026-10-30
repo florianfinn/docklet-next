@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
 
 package settings
 
@@ -66,6 +66,7 @@ func DefaultSettingsConfig() *Settings {
 		VolumeHelperIdleTimeout:               SettingVariable{Value: "10"},
 		BaseServerURL:                         SettingVariable{Value: "http://localhost"},
 		SetupCompleted:                        SettingVariable{Value: "false"},
+		StackStopMode:                         SettingVariable{Value: "down"},
 		HubName:                               SettingVariable{Value: "Docklet"},
 		HubAddress:                            SettingVariable{Value: ""},
 		DomainURL:                             SettingVariable{Value: ""},

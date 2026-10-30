@@ -151,6 +151,14 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 		return err
 	case RuntimeDeployProject:
 		return a.projects.DeployProject(ctx, command.Target.ID, command.Actor, command.Options.Deploy)
+	case RuntimeStopProject:
+		port, ok := a.projects.(interface {
+			StopProject(context.Context, string, usertypes.Actor) error
+		})
+		if !ok {
+			return ErrRuntimeTransport
+		}
+		return port.StopProject(ctx, command.Target.ID, command.Actor)
 	case RuntimeDownProject:
 		return a.projects.DownProject(ctx, command.Target.ID, command.Actor)
 	case RuntimeRestartProject:

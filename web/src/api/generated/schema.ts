@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3567cded8877b0d71bd79fca557bd8ff128826f5abbe76132caf64e115aa620f
+// Revision: 679e23887872fb90237000d2ee37a384ef3867e172807e8628d0beda0e6b23f8
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -2784,6 +2784,26 @@ export interface paths {
         get: operations["get-project-runtime"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/projects/{projectId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop project containers
+         * @description Stop every service from the resolved Compose model without removing containers Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
+         */
+        post: operations["stop-project"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10386,7 +10406,8 @@ export interface components {
             ports?: string[] | null;
             redeployDisabled?: boolean;
             serviceConfig?: components["schemas"]["ServiceConfig"];
-            status: string;
+            /** @enum {string} */
+            status: "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead" | "stopped" | "unknown" | "not-created";
         };
         ProjectServiceUpdateInfo: {
             imageRef: string;
@@ -23705,6 +23726,104 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "stop-project": {
+        parameters: {
+            query?: {
+                /** @description Legacy restart service selection */
+                services?: string[] | null;
+            };
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };

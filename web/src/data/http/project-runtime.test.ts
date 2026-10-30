@@ -14,7 +14,7 @@ import wire from "./project-runtime.test-support";
 
 // Go's TestComposeNameRuntimeMembershipWire validates these actual serialized
 // list/detail fields for manual labels and unrefreshed current-file/env edits.
-const project: ProjectRow = { path: "/srv/projects/example-project", isArchived: false, createdAt: "", updatedAt: "", tags: [], ...wire };
+const project: ProjectRow = { path: "/srv/projects/example-project", isArchived: false, createdAt: "", updatedAt: "", tags: [], ...wire, runtimeServices: wire.runtimeServices as NonNullable<ProjectRow["runtimeServices"]> };
 const inventory = { stale: false } as InventoryObservation;
 const labels = { "com.docker.compose.project": "manual_p", "com.docker.compose.service": "app", "com.docker.compose.project.working_dir": project.path };
 const container: ContainerRow = { autoUpdateEnabled: false, origin: "compose", originSource: "detected", command: "serve", created: 0, ports: [{ privatePort: 8080, publicPort: 8080, type: "tcp" }], hostConfig: {},

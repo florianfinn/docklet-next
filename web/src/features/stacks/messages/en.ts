@@ -2,6 +2,8 @@
 
 export const enStacks = {
   inventory: { readError: "Inventory could not be read", mappingError: "Invalid inventory data", host: "{name}: {reason}.", asOf: "Stale values, as of {time}.", noSnapshot: "No retained values available yet.", updateRequired: "Agent update required", credentialRejected: "Agent token invalid", unavailable: "Host unreachable" },
+  serviceState: { "not-created": "Containers removed" },
+  definitionHint: { "definition-invalid": "The Compose definition could not be resolved." },
   title: "Stacks",
   description: "{scope} · stacks only. Run, Unraid and other containers without Compose are under Containers.",
   scopeAll: "All hosts combined",

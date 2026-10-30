@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence.; M14 container and host operation contracts.
 
 package project
 
@@ -58,18 +58,12 @@ func (s *ProjectService) DownProject(ctx context.Context, projectID string, user
 
 	proj, _, lerr := s.loadComposeProjectForProject(ctx, projectFromDb, nil)
 	if lerr != nil {
-		_ = s.updateProjectStatus(ctx, projectID, ProjectStatusRunning)
 		return fmt.Errorf("failed to load compose project: %w", lerr)
-	}
-
-	if updateProjectStatusErr := s.updateProjectStatus(ctx, projectID, ProjectStatusStopped); updateProjectStatusErr != nil {
-		return fmt.Errorf("failed to update project status to stopping: %w", updateProjectStatusErr)
 	}
 
 	defer s.eventService.BeginComposeSuppressionWindow(proj.Name)()
 
-	if composeDownErr := projects.ComposeDown(ctx, proj, false); composeDownErr != nil {
-		_ = s.updateProjectStatus(ctx, projectID, ProjectStatusRunning)
+	if composeDownErr := composeDownProject(ctx, proj, false); composeDownErr != nil {
 		return fmt.Errorf("failed to bring down project: %w", composeDownErr)
 	}
 
@@ -635,6 +629,10 @@ func (s *ProjectService) enrichProjectsWithUpdateInfo(
 	for i, proj := range projectsList {
 		g.Go(func() error {
 			if ctx.Err() != nil {
+				return nil
+			}
+			if len(details[i].RuntimeServices) > 0 && details[i].RuntimeServices[0].Status != projecttypes.ServiceNotCreated {
+				refsByIndex[i] = projects.ImageRefsFromRuntimeServices(details[i].RuntimeServices)
 				return nil
 			}
 			composeProject, err := s.getCachedComposeProject(ctx, &proj, env)

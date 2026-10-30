@@ -195,7 +195,7 @@ type RuntimeService struct {
 	// Status is the current status of the container (running, stopped, etc.).
 	//
 	// Required: true
-	Status string `json:"status"`
+	Status string `json:"status" enum:"created,running,paused,restarting,removing,exited,dead,stopped,unknown,not-created"`
 
 	// ContainerID is the Docker container ID.
 	//

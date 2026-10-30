@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
 
 package settings
 
@@ -150,6 +150,9 @@ func canAccessSettingsCategoryAtAnyScopeInternal(ps *authz.PermissionSet, catego
 }
 
 func (h *SettingsHandler) appendRuntimeSettingsInternal(settingsDto []settings.PublicSetting, includeAuthenticatedOnly bool) []settings.PublicSetting {
+	if h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent) {
+		settingsDto = withoutStackStopMode(settingsDto)
+	}
 	if !includeAuthenticatedOnly {
 		return settingsDto
 	}
@@ -265,7 +268,7 @@ func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInp
 			}
 			settingsDto = &filtered
 		}
-		return &GetSettingsOutput{Body: *settingsDto}, nil
+		return &GetSettingsOutput{Body: withoutStackStopMode(*settingsDto)}, nil
 	}
 
 	settingsList := h.settingsService.ListSettings(visibility)
@@ -280,6 +283,9 @@ func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInp
 
 // UpdateSettings updates settings for an environment.
 func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSettingsInput) (*handlerutil.Out[[]settings.SettingDto], error) {
+	if input.Body.StackStopMode != nil && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
+		return nil, huma.Error400BadRequest("stackStopMode is a hub-only setting")
+	}
 	if err := h.validateSettingsUpdateInput(ctx, input.Body); err != nil {
 		return nil, err
 	}
@@ -412,4 +418,14 @@ func (h *SettingsHandler) GetCategories(ctx context.Context, input *struct{}) (*
 	ps, _ := middleware.PermissionsFromContext(ctx)
 	categories := filterSettingsCategoriesInternal(ps, h.settingsSearchService.GetSettingsCategories())
 	return &GetCategoriesOutput{Body: categories}, nil
+}
+
+func withoutStackStopMode(values []settings.PublicSetting) []settings.PublicSetting {
+	out := make([]settings.PublicSetting, 0, len(values))
+	for _, setting := range values {
+		if setting.Key != "stackStopMode" {
+			out = append(out, setting)
+		}
+	}
+	return out
 }

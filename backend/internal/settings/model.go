@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296.; M14 container and host operation contracts.
 
 package settings
 
@@ -75,6 +75,7 @@ type Settings struct {
 	DiskUsagePath               SettingVariable `key:"diskUsagePath" meta:"label=Disk Usage Path;type=text;keywords=disk,usage,path,storage,folder,files;category=general;description=Path used for disk usage calculations"`
 	BaseServerURL               SettingVariable `key:"baseServerUrl" meta:"label=Base Server URL;type=text;keywords=base,url,server,domain,host,endpoint,address,link;category=general;description=Set the base URL for the application"`
 	SetupCompleted              SettingVariable `key:"setupCompleted" meta:"label=Setup Completed;type=boolean;category=internal;description=Whether first-run setup has finished"`
+	StackStopMode               SettingVariable `key:"stackStopMode,authrequired" meta:"label=Stack Stop Mode;type=select;category=general;description=Stop uses Compose down or stop"`
 	HubName                     SettingVariable `key:"hubName" meta:"label=Hub Name;type=text;category=general;description=Name displayed for this hub"`
 	HubAddress                  SettingVariable `key:"hubAddress" meta:"label=Hub Address;type=text;category=general;description=Address agents use to reach this hub"`
 	DomainURL                   SettingVariable `key:"domainUrl" meta:"label=Domain URL;type=text;category=general;description=Optional public hub URL"`

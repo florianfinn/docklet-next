@@ -7,6 +7,7 @@
 package api
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -15,5 +16,31 @@ func TestContainerHostContractSchemas(t *testing.T) {
 	api := SetupAPIForSpec()
 	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerProblem", "ContainerShellQuery", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem"} {
 		require.Contains(t, api.OpenAPI().Components.Schemas.Map(), name)
+	}
+}
+
+func TestContainerHostM14RouteModes(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		cfg  *config.Config
+		hub  bool
+	}{{"hub", &config.Config{}, true}, {"agent", &config.Config{AgentMode: true}, false}, {"edge", &config.Config{EdgeAgent: true}, false}} {
+		t.Run(mode.name, func(t *testing.T) {
+			api := setupAPIForSpecMode(mode.cfg)
+			paths := api.OpenAPI().Paths
+			origin := paths["/environments/{id}/containers/{containerId}/origin"]
+			if mode.hub {
+				require.NotNil(t, origin)
+				require.NotNil(t, origin.Put)
+				require.NotNil(t, origin.Delete)
+			} else {
+				require.Nil(t, origin)
+			}
+			for _, path := range []string{"/environments/{id}/containers/{containerId}/recreate", "/environments/{id}/containers/{containerId}/redeploy", "/environments/{id}/projects/{projectId}/stop"} {
+				require.NotNil(t, paths[path], path)
+				require.NotNil(t, paths[path].Post, path)
+			}
+			require.Nil(t, paths["/system/agent/restart"], "S2 owns the reserved restart behaviour")
+		})
 	}
 }

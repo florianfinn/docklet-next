@@ -30,7 +30,7 @@ describe("stored update observation", () => {
 });
 
 it("keeps per-service policy observations separate for a shared image reference", () => {
-  const services = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "db", image: "example:1.0.0", status: "running" }];
+  const services: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "db", image: "example:1.0.0", status: "running" }];
   const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 2, runningCount: 2, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices: services };
   const updateInfo: ProjectRow["updateInfo"] = { checkedImageCount: 2, errorCount: 0, hasUpdate: true, imageCount: 2, imagesNotPulled: 0, imagesWithUpdates: 1, status: "has_update", updateInfoByRef: { "example:1.0.0": observation("version") }, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, db: { imageRef: "example:1.0.0", updateInfo: observation("rebuild") } } };
   const mapped = mapStack({ ...row, updateInfo }, "host", [], { stale: false });

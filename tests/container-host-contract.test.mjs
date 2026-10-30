@@ -29,3 +29,18 @@ test("v11 contains every M14 code, shape and bilingual catalogue entry",()=>{
  assert.ok(read("backend/pkg/libarcane/edge/commands.go").includes('PathPattern: "/api/system/agent/restart", CommandName: "system.agent.restart"'));
  assert.equal(spec.paths["/system/agent/restart"],undefined,"S2 owns the behaviour");
 });
+
+test("stack stop, definition states and bilingual descriptions are in the v11 contract",()=>{
+ const spec=JSON.parse(read("api/openapi.json"));
+ const fixture=JSON.parse(read("types/contract/testdata/agent-hub-v11.json")).containerHostOperations;
+ assert.ok(fixture.runtimeOperations.includes("stop-project"));
+ assert.deepEqual(fixture.stackServiceState,spec.components.schemas.ProjectRuntimeService.properties.status);
+ assert.ok(fixture.stackServiceState.enum.includes("not-created"));
+ assert.ok(fixture.routes.some(route=>route.operationId==="stop-project"));
+ assert.deepEqual(fixture.settings.enum,["down","stop"]);
+ assert.deepEqual(fixture.stackStopMode,{values:["down","stop"],default:"down",environment:"0"});
+ for(const locale of ["en","de"]){
+  const catalogue=read(`web/src/features/stacks/messages/${locale}.ts`);
+  for(const code of ["not-created","definition-invalid"])assert.ok(catalogue.includes(`"${code}":`),`${locale}: ${code}`);
+ }
+});

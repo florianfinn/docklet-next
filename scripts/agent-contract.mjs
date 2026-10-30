@@ -208,7 +208,7 @@ export function agentFixture(spec, fixture) {
     runtimeOperations: schemas.ActivityRuntimeExecutionEnvelope.properties.operation.enum,
     origin: schemas.ContainerSummary.properties.origin,
     originSource: schemas.ContainerSummary.properties.originSource,
-    stackServiceState: "not-created", stackHint: schemas.ProjectDetails.properties.definitionHint,
+    stackServiceState: schemas.ProjectRuntimeService.properties.status, stackHint: schemas.ProjectDetails.properties.definitionHint,
     hostFields: {name: schemas.EnvironmentUpdate.properties.name, color: schemas.EnvironmentUpdate.properties.color, read: schemas.EnvironmentEnvironment.properties.color},
     settings: schemas.SettingsUpdate.properties.stackStopMode,
     stackStopMode: {values:["down","stop"], default:"down", environment:"0"},
