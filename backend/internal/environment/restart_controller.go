@@ -221,7 +221,7 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 			w.pending = &restartOutcome{state: "failed", code: "agent.restart-interrupted"}
 			return c.advance(ctx, w)
 		}
-		if !c.now().Before(w.row.Deadline) {
+		if w.prepared == nil && !c.now().Before(w.row.Deadline) {
 			w.pending = &restartOutcome{state: "failed", code: "host.unreachable"}
 			return c.advance(ctx, w)
 		}
@@ -270,6 +270,10 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 		return c.advance(ctx, w)
 	}
 	instance, err := c.service.restartInstance(ctx, *env)
+	if err == nil && instance != "" && instance != w.row.OldInstance {
+		// Capture the joined proof before any further binding I/O can fail.
+		w.pending = &restartOutcome{state: "connected", observedAt: c.now().UTC()}
+	}
 	if _, fenceErr := c.bound(ctx, w.row); fenceErr != nil {
 		var p *dto.HostProblem
 		if !errors.As(fenceErr, &p) {
@@ -278,10 +282,9 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 		w.pending = &restartOutcome{state: "failed", code: p.Code}
 		return c.advance(ctx, w)
 	}
-	if err != nil || instance == "" || instance == w.row.OldInstance {
+	if w.pending == nil {
 		return false, nil
 	}
-	w.pending = &restartOutcome{state: "connected", observedAt: c.now().UTC()}
 	return c.advance(ctx, w)
 }
 

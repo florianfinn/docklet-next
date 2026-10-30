@@ -101,7 +101,7 @@ func (s *EnvironmentService) sendAgentRestart(parent context.Context, env Enviro
 	if err != nil {
 		return nil, err
 	}
-	return s.proxy.Execute(ctx, target, http.MethodPost, "/api/system/agent/restart", nil)
+	return s.proxy.ExecuteRestart(ctx, target)
 }
 func restartUnsupported(response *remenv.Response) bool {
 	var p dto.HostProblem
