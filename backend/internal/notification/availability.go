@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; shared application-heartbeat observation clock.
 
 package notification
 
@@ -31,7 +31,7 @@ func (s *NotificationService) ObserveAvailability(ctx context.Context, now time.
 		ids = append(ids, row.ID)
 		p := envDTO.Environment{ID: row.ID, Name: row.Name, Enabled: row.Enabled, Status: row.Status, IsEdge: row.IsEdge}
 		if s.environmentSvc != nil {
-			s.environmentSvc.ApplyHostRuntimeState(ctx, &p)
+			s.environmentSvc.ApplyHostRuntimeStateAt(ctx, &p, now)
 		}
 		excluded := !row.Enabled || (row.LastSeen == nil && p.LastPollAt == nil && (p.Connected == nil || !*p.Connected))
 		if err := s.observeHost(ctx, now, row.ID, row.Name, p.Status, excluded); err != nil {

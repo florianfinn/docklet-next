@@ -192,6 +192,7 @@ POST /api/environments/:id/vulnerabilities/ignore/bulk
 POST /api/environments/:id/vulnerabilities/scan
 POST /api/environments/:id/vulnerabilities/unignore/bulk
 POST /api/settings/search
+POST /api/system/agent/restart
 PUT /api/environments/:id/auto-heal
 PUT /api/environments/:id/containers/:containerId/auto-update
 PUT /api/environments/:id/job-schedules

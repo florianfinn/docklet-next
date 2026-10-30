@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; application-heartbeat liveness and observer clock projection.
 
 package environment
 
@@ -19,6 +19,10 @@ import (
 // ApplyEnvironmentRuntimeState normalizes edge environment runtime status using
 // in-memory tunnel and poll registries without mutating persisted state.
 func ApplyEnvironmentRuntimeState(env *environment.Environment, expectedKey ...string) {
+	applyEnvironmentRuntimeStateAt(env, time.Now(), expectedKey...)
+}
+
+func applyEnvironmentRuntimeStateAt(env *environment.Environment, now time.Time, expectedKey ...string) {
 	if env == nil || !env.IsEdge {
 		return
 	}
@@ -34,7 +38,7 @@ func ApplyEnvironmentRuntimeState(env *environment.Environment, expectedKey ...s
 	env.EdgeAgentInstance = nil
 	env.EdgeCapabilities = nil
 
-	if pollState, ok := edge.GetPollRuntimeRegistry().Get(env.ID, time.Now()).Get(); ok {
+	if pollState, ok := edge.GetPollRuntimeRegistry().Get(env.ID, now).Get(); ok {
 		env.LastPollAt = pollState.LastPollAt
 	}
 
@@ -46,7 +50,7 @@ func ApplyEnvironmentRuntimeState(env *environment.Environment, expectedKey ...s
 			keyCurrent = tunnel.TokenHash == expectedKey[1]
 		}
 	}
-	if runtimeState, ok := edge.GetTunnelRuntimeState(env.ID).Get(); ok && keyCurrent {
+	if runtimeState, ok := edge.GetTunnelRuntimeStateAt(env.ID, now).Get(); ok && keyCurrent {
 		connected = true
 		env.Connected = &connected
 		if env.Status != string(EnvironmentStatusUpdateRequired) && env.Status != string(EnvironmentStatusPending) {
@@ -146,6 +150,11 @@ func (s *EnvironmentService) SyncRegistriesToRemoteEnvironments(ctx context.Cont
 
 // ApplyHostRuntimeState projects process-local reports without persisting stale data.
 func (s *EnvironmentService) ApplyHostRuntimeState(ctx context.Context, env *environment.Environment) {
+	s.ApplyHostRuntimeStateAt(ctx, env, time.Now())
+}
+
+// ApplyHostRuntimeStateAt shares the observer clock with the heartbeat predicate.
+func (s *EnvironmentService) ApplyHostRuntimeStateAt(ctx context.Context, env *environment.Environment, now time.Time) {
 	row, err := s.GetEnvironmentByID(ctx, env.ID)
 	if err != nil {
 		env.Status = string(EnvironmentStatusOffline)
@@ -159,7 +168,7 @@ func (s *EnvironmentService) ApplyHostRuntimeState(ctx context.Context, env *env
 	if row.AccessToken != nil {
 		tokenHash = edge.AgentTokenHash(*row.AccessToken)
 	}
-	ApplyEnvironmentRuntimeState(env, keyID, tokenHash)
+	applyEnvironmentRuntimeStateAt(env, now, keyID, tokenHash)
 	s.agentRuntime.mu.Lock()
 	report, ok := s.agentRuntime.reports[env.ID]
 	s.agentRuntime.mu.Unlock()

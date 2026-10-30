@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; bounded runtime response assembly and pending identity protection.
+// Deviations: Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
 
 package edge
 
@@ -277,7 +277,7 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 	}
 
 	if remenv.AgentAuthRejected(status) {
-		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
+		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": remenv.ClassifyAgentRefusal(status, respBody)})
 	}
 	responseHeaders := make(http.Header)
 	for k, v := range respHeaders {
@@ -344,7 +344,7 @@ func HasActiveTunnel(envID string) bool {
 // GetActiveTunnel returns the active tunnel for an environment, if one exists.
 func GetActiveTunnel(envID string) mo.Option[*AgentTunnel] {
 	tunnel, ok := GetRegistry().Get(envID).Get()
-	if !ok || tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+	if !ok || !TunnelLiveAt(tunnel, time.Now()) {
 		return mo.None[*AgentTunnel]()
 	}
 	return mo.Some(tunnel)
@@ -402,7 +402,7 @@ func DoRequest(ctx context.Context, envID, method, path string, body []byte) (in
 	if !ok {
 		return 0, nil, fmt.Errorf("no active tunnel for environment %s", envID)
 	}
-	if tunnel.Conn.IsClosed() {
+	if !TunnelLiveAt(tunnel, time.Now()) {
 		return 0, nil, fmt.Errorf("tunnel for environment %s is closed", envID)
 	}
 

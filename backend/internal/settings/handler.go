@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer.
 
 package settings
 
@@ -19,6 +19,7 @@ import (
 	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/category"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	searchtypes "github.com/florianfinn/docklet-next/types/search"
 	"github.com/florianfinn/docklet-next/types/settings"
 	"go.getarcane.app/kit/pkg"
@@ -283,6 +284,9 @@ func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInp
 
 // UpdateSettings updates settings for an environment.
 func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSettingsInput) (*handlerutil.Out[[]settings.SettingDto], error) {
+	if input.EnvironmentID == "0" && h.cfg != nil && h.cfg.UIConfigurationDisabled {
+		return nil, &environmentDTO.HostProblem{Code: "settings.ui-configuration-disabled", Status: 403}
+	}
 	if input.Body.StackStopMode != nil && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
 		return nil, huma.Error400BadRequest("stackStopMode is a hub-only setting")
 	}

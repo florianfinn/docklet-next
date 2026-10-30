@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps.
 
 package edge
 
@@ -39,11 +39,11 @@ import (
 
 const (
 	// TunnelStaleTimeout is how long before a tunnel is considered stale.
-	TunnelStaleTimeout = 2 * time.Minute
+	TunnelStaleTimeout = 90 * time.Second
 	// tunnelStaleSweepInterval is how often stale tunnels are reaped. The sweep
-	// is a backstop behind read-deadline liveness, so it runs well under
-	// TunnelStaleTimeout to keep the dead-but-selectable window short.
-	tunnelStaleSweepInterval = time.Minute
+	// enforces application progress on both transports, including ServeHTTP
+	// gRPC streams whose transport can remain alive without heartbeats.
+	tunnelStaleSweepInterval = 15 * time.Second
 	// streamDeliveryTimeout bounds per-message delivery wait to a pending consumer.
 	// This prevents silent data loss while avoiding indefinite blocking.
 	streamDeliveryTimeout = 5 * time.Second
@@ -522,7 +522,11 @@ func (s *TunnelServer) handleTunnelMessage(ctx context.Context, tunnel *AgentTun
 }
 
 func (s *TunnelServer) handleHeartbeat(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
-	tunnel.UpdateHeartbeat()
+	now := time.Now()
+	if s.cleanupSchedule != nil && s.cleanupSchedule.Now != nil {
+		now = s.cleanupSchedule.Now()
+	}
+	tunnel.updateHeartbeatAt(now)
 	ack := &TunnelMessage{
 		ID:   msg.ID,
 		Type: MessageTypeHeartbeatAck,
@@ -610,18 +614,28 @@ func (s *TunnelServer) StartCleanupLoop(ctx context.Context) {
 	defer s.cleanupDoneOnce.Do(func() { close(s.cleanupDone) })
 	ticker := time.NewTicker(tunnelStaleSweepInterval)
 	defer ticker.Stop()
+	ticks := ticker.C
+	if s.cleanupSchedule != nil && s.cleanupSchedule.Ticks != nil {
+		ticks = s.cleanupSchedule.Ticks
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			removed := s.registry.CleanupStale(ctx, TunnelStaleTimeout)
+		case now, ok := <-ticks:
+			if !ok {
+				return
+			}
+			removed := s.registry.CleanupStaleAt(ctx, TunnelStaleTimeout, now)
 			for _, tunnel := range removed {
 				s.updateConnectionStatusInternal(context.WithoutCancel(ctx), tunnel, false)
 			}
 			if len(removed) > 0 {
 				slog.InfoContext(ctx, "Cleaned up stale tunnels", "count", len(removed))
+			}
+			if s.cleanupSchedule != nil && s.cleanupSchedule.AfterSweep != nil {
+				s.cleanupSchedule.AfterSweep()
 			}
 		}
 	}

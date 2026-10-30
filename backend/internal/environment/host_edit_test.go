@@ -67,6 +67,7 @@ func TestHostNameRegistrationAndConcurrentRename(t *testing.T) {
 func TestHostColorHandlerAbsentNullAndInvalid(t *testing.T) {
 	f := newAgentFixture(t, "direct", version.Info{})
 	h := &EnvironmentHandler{environmentService: f.service}
+	defer h.background.Wait()
 	for _, tc := range []struct {
 		body  string
 		valid bool
@@ -109,6 +110,10 @@ func TestCredentialRevisionAllWritersAndRollback(t *testing.T) {
 		require.NoError(t, err)
 		revision++
 		require.Equal(t, revision, read().CredentialRevision)
+		if revision == 1 {
+			require.Equal(t, new("example"), read().ApiKeyID)
+			require.Equal(t, "http://agent.example.com", read().ApiUrl)
+		}
 	}
 	before := read()
 	_, err := f.service.UpdateEnvironment(t.Context(), f.id, map[string]any{"name": "", "access_token": "example"}, nil, nil)

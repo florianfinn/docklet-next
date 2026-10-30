@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation.
+// Deviations: Original host registration implementation; shared bounded agent refusal classification.
 
 package remenv
 
@@ -27,6 +27,9 @@ func AgentAccessFailure(err error) (int, string) {
 		return http.StatusConflict, "agent.update-required"
 	}
 	var status *StatusError
+	if errors.As(err, &status) && AgentAuthRejected(status.StatusCode) {
+		return http.StatusBadGateway, ClassifyAgentRefusal(status.StatusCode, status.Body)
+	}
 	if errors.Is(err, ErrAgentInvalidToken) || (errors.As(err, &status) && (AgentAuthRejected(status.StatusCode) || status.StatusCode == http.StatusForbidden)) {
 		return http.StatusBadGateway, "agent.invalid-token"
 	}

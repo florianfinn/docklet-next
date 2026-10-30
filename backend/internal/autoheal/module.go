@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; typed UI-configuration refusal producer.
 
 package autoheal
 
@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/autoheal"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	"net/http"
 	"reflect"
 )
@@ -100,7 +101,7 @@ func (m *Module) put(ctx context.Context, in *putInput) (*output, error) {
 		return &output{Body: *v}, nil
 	}
 	if m.config != nil && m.config.UIConfigurationDisabled {
-		return nil, huma.Error403Forbidden("Configuration is managed through the environment")
+		return nil, &environmentDTO.HostProblem{Code: "settings.ui-configuration-disabled", Status: 403}
 	}
 	v, err := m.settings.UpdateAutoHeal(ctx, body)
 	if err != nil {
