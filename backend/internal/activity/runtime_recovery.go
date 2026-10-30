@@ -109,11 +109,11 @@ func (c *RuntimeRemoteCoordinator) Release(ctx context.Context, ref RuntimeRunRe
 		// A local recreate stays held until its journal is resolved; release would
 		// hide a renamed or stopped original from startup recovery.
 		if row.EnvironmentID == "0" {
-			var unresolved int64
-			if err := tx.Table("container_recreate_journal").Where("run_id = ? AND phase NOT IN ('done','rolled-back','ambiguous')", row.RunID).Count(&unresolved).Error; err != nil {
+			unresolved, err := runtimeRecreateUnresolvedTxInternal(tx, row.RunID)
+			if err != nil {
 				return err
 			}
-			if unresolved > 0 {
+			if unresolved {
 				return &runtimeConflictInternal{}
 			}
 		}

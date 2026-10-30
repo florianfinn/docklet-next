@@ -78,8 +78,8 @@ admission. Shared contract and migration items are in
    `{origin}`.
 6. The executing host enforces the same rule at the effect boundary,
    independent of the caller: `RedeployContainer`, `EditContainer` and the
-   recreate core refuse a complete Compose identity or Compose project label, an
-   Unraid label or the protected-self container. This covers the retained
+   recreate core refuse any `com.docker.compose.*` label, an Unraid label or the
+   protected-self container. This covers the retained
    webhook caller; webhooks are removed in M20 without a further redesign.
 
 ## Recreate and redeploy through runtime admission
@@ -151,10 +151,15 @@ admission. Shared contract and migration items are in
     its own stop and the run succeeds.
 
     Cancelling a run after its first journal intent does not abort the effect
-    sequence: it completes or compensates in-process within a bounded timeout
+    sequence: it completes or compensates in-process within a five-minute bound
     and the run settles with that outcome. A failed run names the failed step
-    (`container.recreate-recovered: create failed`). Releasing a host-local run
-    is refused while its journal is unresolved, so startup recovery still sees it.
+    (`container.recreate-recovered: create failed`). A run whose journal is
+    still unresolved never settles terminally: when the bound expires or a
+    recovery read or journal write fails, it stays held as unknown and the
+    executor's maintenance loop retries recovery from the journal every 30
+    seconds, never for a run with a live attempt and never replaying a pull or
+    create. Releasing a host-local run is refused while its journal is
+    unresolved, so recovery still sees it.
 
 ## Web
 

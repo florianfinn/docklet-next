@@ -31,6 +31,9 @@ type recreateHTTP struct {
 	hold             string
 	entered, release chan struct{}
 	once             sync.Once
+	// inspectOutage fails this many inspects after the first failed effect.
+	inspectOutage int
+	outage        bool
 }
 
 const recreateNewID = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -84,7 +87,16 @@ func (d *recreateHTTP) serve(w http.ResponseWriter, r *http.Request) bool {
 	if len(parts) == 2 && parts[1] == "json" && r.Method == http.MethodGet {
 		d.mu.Lock()
 		value, ok := d.lookup(parts[0])
+		down := d.outage && d.inspectOutage > 0
+		if down {
+			d.inspectOutage--
+		}
 		d.mu.Unlock()
+		if down {
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(`{"message":"synthetic daemon outage"}`))
+			return true
+		}
 		if !ok {
 			w.WriteHeader(404)
 			_, _ = w.Write([]byte(`{"message":"not found"}`))
@@ -118,6 +130,9 @@ func (d *recreateHTTP) serve(w http.ResponseWriter, r *http.Request) bool {
 		<-d.release
 	}
 	if fail {
+		d.mu.Lock()
+		d.outage = true
+		d.mu.Unlock()
 		w.WriteHeader(500)
 		_, _ = w.Write([]byte(`{"message":"synthetic effect refusal"}`))
 		return true

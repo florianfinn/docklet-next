@@ -114,7 +114,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
 	var uncertain interface{ RuntimeUncertain() bool }
-	if errors.As(phaseErr, &uncertain) && uncertain.RuntimeUncertain() {
+	if (errors.As(phaseErr, &uncertain) && uncertain.RuntimeUncertain()) || s.recreateUnresolvedInternal(owner) {
 		owner.err = s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
 			if imageResult != nil {
 				if err := runtimeImageResultTx(tx, owner.id.RunID, imageResult); err != nil {
@@ -141,6 +141,16 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 			settled.RuntimeSettled(context.WithoutCancel(owner.ctx))
 		}
 	}
+}
+
+// An unresolved recreate journal is never settled terminally by the attempt;
+// an unreadable journal counts as unresolved.
+func (s *RuntimeService) recreateUnresolvedInternal(owner *runtimeOwnerInternal) bool {
+	if !runtimeRecreateOperation(owner.command.command.Operation) {
+		return false
+	}
+	unresolved, err := runtimeRecreateUnresolvedTxInternal(s.activity.db.WithContext(context.WithoutCancel(owner.ctx)), owner.id.RunID)
+	return err != nil || unresolved
 }
 
 // Every phase rereads durable cancellation under the same serialization used by

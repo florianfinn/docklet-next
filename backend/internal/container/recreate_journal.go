@@ -60,7 +60,9 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 		}
 		recovery, err := s.recoverRecreate(ctx, c, j)
 		if err != nil {
-			return "", err
+			// A failed recovery read is no outcome: the journal stays unresolved and
+			// the run stays held for the application-owned retry.
+			return "", &recreateUncertain{cause: err}
 		}
 		if recovery.Result != nil {
 			dto.RecordRecreateResult(ctx, *recovery.Result)
@@ -316,19 +318,8 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 // RecoverRecreates runs before generic startup settlement and admission. Only
 // unresolved local receipts are recovered; a write failure leaves them excluded.
 func (s *ContainerService) RecoverRecreates(ctx context.Context) ([]dto.RecreateRecovery, error) {
-	if s.operations == nil || s.operations.db == nil {
-		return nil, nil
-	}
-	var journals []RecreateJournal
-	err := s.operations.db.WithContext(ctx).Table("container_recreate_journal").Where("run_id IN (SELECT run_id FROM runtime_receipts WHERE environment_id='0' AND settled_at IS NULL)").Order("run_id").Find(&journals).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(journals) == 0 {
-		return nil, nil
-	}
-	c, err := s.dockerService.GetClient(ctx)
-	if err != nil {
+	journals, c, err := s.recreateJournalsInternal(ctx, "")
+	if err != nil || len(journals) == 0 {
 		return nil, err
 	}
 	results := make([]dto.RecreateRecovery, 0, len(journals))
@@ -340,6 +331,47 @@ func (s *ContainerService) RecoverRecreates(ctx context.Context) ([]dto.Recreate
 		results = append(results, result)
 	}
 	return results, nil
+}
+
+// RecoverUnownedRecreates resumes journals an uncertain live attempt left
+// unresolved. Runs reported by owned still have a live attempt and are skipped;
+// a failing journal stays held for the next call, each attempt is bounded.
+func (s *ContainerService) RecoverUnownedRecreates(ctx context.Context, owned func(string) bool) ([]dto.RecreateRecovery, error) {
+	journals, c, err := s.recreateJournalsInternal(ctx, " AND phase NOT IN ('done','rolled-back','ambiguous')")
+	if err != nil || len(journals) == 0 {
+		return nil, err
+	}
+	var results []dto.RecreateRecovery
+	var failures error
+	for i := range journals {
+		if owned(journals[i].RunID) {
+			continue
+		}
+		attempt, cancel := context.WithTimeout(ctx, recreateEffectTimeout)
+		result, err := s.recoverRecreate(attempt, c, &journals[i])
+		cancel()
+		if err != nil {
+			failures = errors.Join(failures, fmt.Errorf("recreate recovery %s: %w", journals[i].RunID, err))
+			continue
+		}
+		results = append(results, result)
+	}
+	return results, failures
+}
+func (s *ContainerService) recreateJournalsInternal(ctx context.Context, phase string) ([]RecreateJournal, *client.Client, error) {
+	if s.operations == nil || s.operations.db == nil {
+		return nil, nil, nil
+	}
+	var journals []RecreateJournal
+	err := s.operations.db.WithContext(ctx).Table("container_recreate_journal").Where("run_id IN (SELECT run_id FROM runtime_receipts WHERE environment_id='0' AND settled_at IS NULL)" + phase).Order("run_id").Find(&journals).Error
+	if err != nil || len(journals) == 0 {
+		return nil, nil, err
+	}
+	c, err := s.dockerService.GetClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return journals, c, nil
 }
 func (s *ContainerService) PruneRecreateJournals(ctx context.Context) error {
 	if s.operations == nil || s.operations.db == nil {

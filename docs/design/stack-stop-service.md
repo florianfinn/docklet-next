@@ -44,7 +44,9 @@ migration items are in [container and host operations](container-host-operations
    concurrent resolutions per listing page. Such services have state
    `not-created`. A resolution failure yields the stack row with hint
    `definition-invalid` and no services; the list request still succeeds. Rows
-   with containers keep the live projection and never read Compose. The web
+   with containers keep the live services projection; definition services
+   never replace it. Their existing Compose-backed metadata and update
+   enrichment is unchanged. The web
    shows `not-created` as stopped ("containers removed") and offers no
    container links or logs for those services.
 5. A single service restart maps `restartService(stackId, svc)` to
