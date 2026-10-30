@@ -3,7 +3,7 @@
 The accepted package is main `5a1c021284a9c458d18ac3aed25d7cb512709750`, the
 squash merge of the
 [M13 closing PR #306](https://github.com/florianfinn/docklet-next/pull/306).
-Its tree equals the reviewed feature head `80e4201a`.
+Its tree equals the merged feature head `80e4201a`.
 
 This file records sandbox acceptance. It is not a product release or a
 production deployment.
@@ -19,7 +19,7 @@ reviews from a different provider than its implementation.
 | #292, #294 | Shared agent access codes on proxied routes; test isolation of the volume usage cache | Passed with 2 nonblockers |
 | #296 | Notification outbox and hub delivery, live producers, Auto Heal per host, migration 013, agent contract v10 | Design review failed with 10 blockers and its delta verification with 6, both folded into the notes before implementation; step review passed with 10 nonblockers and 3 product questions |
 | #297 | Live Settings › Notifications and Settings › Auto Heal | R1 failed with 5 blockers, R2 with 1 blocker (write ownership across navigation), R3 passed |
-| #298 | Closing integration (#306) | Sol closing review passed with 1 nonblocker; Opus closing review failed with 1 blocker and 7 nonblockers; five verification rounds of the fix chain failed with 3, 2, 4 and 1 blockers, the fifth passed on `2e3c5498` |
+| #298 | Closing integration (#306) | Sol closing review passed with 1 nonblocker; Opus closing review failed with 1 blocker and 7 nonblockers; five verification rounds of the fix chain failed with 3, 2, 4 and 1 blockers, the fifth passed on `2e3c5498`. The minor send-result finding from that pass was fixed in `80e4201a` without another review round. |
 
 ## Defects found before acceptance
 
@@ -90,10 +90,10 @@ type:
   process restart;
 - the shared agent access codes on proxied routes, layout and translations.
 
-Two extra checks covered the closing fixes. A volume restore cancelled through
-the UI stayed silent on Direct and on Edge, while the failing-restore control
-notified once. Eight named regression tests of the closing fixes passed on the
-exact package.
+Two extra checks covered the closing fixes. A volume restore started through
+the UI and cancelled through the activity-cancel API stayed silent on Direct
+and Edge, while the failing-restore control notified once. Eight named
+regression tests of the closing fixes passed on the exact package.
 
 ## Result
 
