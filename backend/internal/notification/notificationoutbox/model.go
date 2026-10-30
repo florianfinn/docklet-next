@@ -29,7 +29,8 @@ type Row struct {
 
 func (Row) TableName() string { return "notification_outbox" }
 
-// Insert participates in the producer's transaction; callers own commit and wake.
+// Insert participates in the producer's transaction and wakes delivery before the caller
+// commits; a wake that runs before the commit is bounded by the one-minute delivery schedule.
 func Insert(tx *gorm.DB, row Row) error {
 	if row.ID == "" {
 		row.ID = uuid.New().String()

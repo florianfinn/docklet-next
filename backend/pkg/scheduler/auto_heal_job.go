@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296
+// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296; workers keep panic recovery
 
 package scheduler
 
@@ -22,6 +22,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/google/uuid"
@@ -156,7 +157,8 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 	g, groupCtx := errgroup.WithContext(ctx)
 	g.SetLimit(autoHealInspectConcurrency)
 	for _, candidate := range candidates {
-		g.Go(func() error {
+		g.Go(func() (workerErr error) {
+			defer utils.RecoverToError(&workerErr, "auto-heal worker")
 			target, err := j.processCandidateInternal(groupCtx, cli, candidate, 0, 0, 0)
 			mu.Lock()
 			outcome.Targets = append(outcome.Targets, target)

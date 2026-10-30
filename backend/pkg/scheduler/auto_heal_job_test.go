@@ -296,3 +296,9 @@ func TestAutoHealTerminalOutcomesUseDeclaredReasons(t *testing.T) {
 		require.Equal(t, outcome == "restarted", target.Status == st.Succeeded, outcome)
 	}
 }
+func TestAutoHealWorkerPanicFailsTheRunInsteadOfTheProcess(t *testing.T) {
+	j, _ := autoHealFixture(t)
+	j.restartContainer = func(context.Context, *client.Client, string) error { panic("controlled restart panic") }
+	_, err := j.Run(t.Context())
+	require.ErrorContains(t, err, "auto-heal worker panicked")
+}

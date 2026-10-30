@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; legacy reports are clamped, not refused.
 
 package notification
 
@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 	"uuid"
 )
 
@@ -28,7 +29,7 @@ var eventIDPattern = regexp.MustCompile(`^[A-Za-z0-9:_-]{1,64}$`)
 
 func dispatchInvalid() error { return &dto.Problem{Code: "notification.dispatch-invalid", Status: 400} }
 func dispatchStale() error   { return &dto.Problem{Code: "notification.dispatch-stale", Status: 409} }
-func validateDispatch(p dto.DispatchRequest) error {
+func validateDispatch(p *dto.DispatchRequest) error {
 	switch p.Kind {
 	case dto.DispatchKindBackupFailed:
 		v := p.BackupFailed
@@ -68,7 +69,7 @@ func validateDispatch(p dto.DispatchRequest) error {
 	default:
 		return &dto.Problem{Code: "notification.dispatch-unsupported", Status: 400}
 	}
-	pointers := reflect.ValueOf(p)
+	pointers := reflect.ValueOf(*p)
 	count := 0
 	for i := 0; i < pointers.NumField(); i++ {
 		if pointers.Field(i).Kind() == reflect.Pointer && !pointers.Field(i).IsNil() {
@@ -79,40 +80,81 @@ func validateDispatch(p dto.DispatchRequest) error {
 		return dispatchInvalid()
 	}
 
-	// Bound agent display facts and lists, including nested legacy report fields.
-	b, _ := json.Marshal(p)
-	var raw any
-	_ = json.Unmarshal(b, &raw)
-	var bounded func(any) bool
-	bounded = func(v any) bool {
-		switch x := v.(type) {
-		case string:
-			return len(x) <= 128 && !strings.ContainsFunc(x, unicode.IsControl)
-		case []any:
-			if len(x) > 256 {
-				return false
-			}
-			for _, v := range x {
-				if !bounded(v) {
-					return false
-				}
-			}
-		case map[string]any:
-			if len(x) > 256 {
-				return false
-			}
-			for k, v := range x {
-				if len(k) > 128 || !bounded(v) {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	if !bounded(raw) {
+	// Agent display facts stay bounded. Typed payloads are refused when a value is out of
+	// bounds; legacy reports are clamped so long Docker text or large lists still arrive.
+	legacy := p.Kind != dto.DispatchKindBackupFailed && p.Kind != dto.DispatchKindAutoHeal
+	b, err := json.Marshal(*p)
+	if err != nil {
 		return dispatchInvalid()
 	}
+	var raw any
+	if err = json.Unmarshal(b, &raw); err != nil {
+		return dispatchInvalid()
+	}
+	raw, ok := boundDispatchValue(raw, legacy)
+	if !ok {
+		return dispatchInvalid()
+	}
+	if legacy {
+		var clamped dto.DispatchRequest
+		if b, err = json.Marshal(raw); err != nil || json.Unmarshal(b, &clamped) != nil {
+			return dispatchInvalid()
+		}
+		*p = clamped
+	}
 	return nil
+}
+
+// boundDispatchValue checks strings (128 bytes, no control characters), lists and maps (256
+// entries) and map keys (128 bytes). With clamp, strings and lists are shortened instead.
+func boundDispatchValue(v any, clamp bool) (any, bool) {
+	switch x := v.(type) {
+	case string:
+		if len(x) <= 128 && !strings.ContainsFunc(x, unicode.IsControl) {
+			return x, true
+		}
+		if !clamp {
+			return nil, false
+		}
+		x = strings.Map(func(r rune) rune {
+			if unicode.IsControl(r) {
+				return ' '
+			}
+			return r
+		}, strings.ToValidUTF8(x, ""))
+		for len(x) > 128 {
+			_, size := utf8.DecodeLastRuneInString(x)
+			x = x[:len(x)-size]
+		}
+		return x, true
+	case []any:
+		if len(x) > 256 {
+			if !clamp {
+				return nil, false
+			}
+			x = x[:256]
+		}
+		for i := range x {
+			var ok bool
+			if x[i], ok = boundDispatchValue(x[i], clamp); !ok {
+				return nil, false
+			}
+		}
+		return x, true
+	case map[string]any:
+		if len(x) > 256 {
+			return nil, false
+		}
+		for k, item := range x {
+			bounded, ok := boundDispatchValue(item, clamp)
+			if len(k) > 128 || !ok {
+				return nil, false
+			}
+			x[k] = bounded
+		}
+		return x, true
+	}
+	return v, true
 }
 func originFor(env *environment.Environment) dto.DispatchOrigin {
 	o := dto.DispatchOrigin{EnvironmentID: env.ID}
@@ -127,7 +169,7 @@ func originFor(env *environment.Environment) dto.DispatchOrigin {
 
 // DispatchIngress accepts only the credential/session that actually received this event.
 func (s *NotificationService) DispatchIngress(ctx context.Context, o dto.DispatchOrigin, p dto.DispatchRequest) (dto.DispatchResponse, error) {
-	if err := validateDispatch(p); err != nil {
+	if err := validateDispatch(&p); err != nil {
 		return dto.DispatchResponse{}, err
 	}
 	if s.dispatchBarrier != nil {

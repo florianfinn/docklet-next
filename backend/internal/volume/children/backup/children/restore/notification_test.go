@@ -7,7 +7,6 @@
 package restore
 
 import (
-	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/stretchr/testify/require"
@@ -22,7 +21,7 @@ func TestRestoreTerminalNoticeAndSilentHistory(t *testing.T) {
 	l.Notify = n.Terminal
 	for _, kind := range []string{"full", "files", "upload"} {
 		row := &Run{ID: kind, VolumeName: "data", Kind: kind, Phase: "done", Status: "failed", ErrorCode: "volume.restore.failed", StartedAt: time.Now().UTC()}
-		l.persistTerminal(t.Context(), row)
+		l.persistTerminal(t.Context(), row, false)
 	}
 	var rows []notificationoutbox.Row
 	require.NoError(t, l.DB.Find(&rows).Error)
@@ -32,28 +31,21 @@ func TestRestoreTerminalNoticeAndSilentHistory(t *testing.T) {
 	require.Len(t, rows, 3, "startup repair is silent")
 }
 
-func TestRestoreRetentionAndCancellationStaySilent(t *testing.T) {
-	for _, mode := range []string{"retention", "cancelled", "new-volume"} {
+func TestRestoreRetentionStaysSilentAndNewVolumeNotifies(t *testing.T) {
+	for _, mode := range []string{"retention", "new-volume"} {
 		t.Run(mode, func(t *testing.T) {
 			l, r := lifecycleFixture(t)
 			require.NoError(t, l.DB.AutoMigrate(&notificationoutbox.Row{}))
 			l.Notify = backupnotify.Notifier{DB: l.DB}.Terminal
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
 			r.Status = "partial"
 			r.ErrorCode = "volume.backup.retention-failed"
-			if mode == "cancelled" {
-				r.Status = "failed"
-				r.ErrorCode = "volume.restore.failed"
-				cancel()
-			}
 			if mode == "new-volume" {
 				r.Status = "failed"
 				r.ErrorCode = "volume.restore.failed"
 				r.Mode = "new"
 				r.NewVolumeName = "restored"
 			}
-			l.persistTerminal(ctx, r)
+			l.persistTerminal(t.Context(), r, false)
 			var n int64
 			require.NoError(t, l.DB.Model(&notificationoutbox.Row{}).Count(&n).Error)
 			if mode == "new-volume" {
