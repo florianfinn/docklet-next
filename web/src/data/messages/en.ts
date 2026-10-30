@@ -37,6 +37,12 @@ export const enBackend = {
       "busy": "Another run holds this target. Inspect its status before trying again.",
       "cancelling": "The previous run is still being cancelled.",
     },
+    "autoheal": {
+      "interrupted": "The Auto Heal attempt was interrupted.",
+      "limit-reached": "The Auto Heal restart limit was reached.",
+      "restart-failed": "The Auto Heal restart failed.",
+      "restarted": "The container was restarted by Auto Heal.",
+    },
     "job": {
       "skipped": "This job is disabled or does not apply to this policy.",
     },

@@ -120,7 +120,12 @@ export function createDisconnectedAdapter(): DockletAdapter {
     saveSettings: unavailable,
     completeSetup: unavailable,
     testBackupTarget: unavailable,
-    testNotification: unavailable,
+    listNotificationTargets: unavailable,
+    saveNotificationTarget: unavailable,
+    deleteNotificationTarget: unavailable,
+    testNotificationTarget: unavailable,
+    getAutoHealSettings: unavailable,
+    saveAutoHealSettings: unavailable,
     setContainerAutoUpdate: unavailable,
   };
 }

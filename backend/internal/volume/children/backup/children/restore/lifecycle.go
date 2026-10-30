@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original persisted asynchronous restore lifecycle and inherited recovery ownership.
+// Deviations: Original persisted asynchronous restore lifecycle and inherited recovery ownership; cancelled runs stay silent.
 
 package restore
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"os"
 	"path/filepath"
 	"sync"
@@ -40,6 +41,7 @@ type LifecycleEffects struct {
 	PruneSafety func(context.Context, string) error
 }
 type Lifecycle struct {
+	Notify   func(context.Context, backupnotify.Run)
 	DB       *database.DB
 	Activity *activity.ActivityService
 	Effects  LifecycleEffects
@@ -86,7 +88,7 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 		run.Status = "failed"
 		run.ErrorCode = "volume.restore.interrupted-before-write"
 		run.FinishedAt = new(time.Now().UTC())
-		l.persistTerminal(ctx, run)
+		l.persistTerminal(ctx, ctx, run)
 		release()
 		return volume.RestoreOperation{}, dto.NewProblem(503, "volume.backup.engine-unavailable", nil)
 	}
@@ -95,7 +97,7 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 		run.Status = "failed"
 		run.ErrorCode = "volume.restore.interrupted-before-write"
 		run.FinishedAt = new(time.Now().UTC())
-		l.persistTerminal(ctx, run)
+		l.persistTerminal(ctx, workCtx, run)
 		release()
 		activitylib.CompleteHandlerActivity(workCtx, l.Activity, activityID, "", dto.NewProblem(500, "volume.restore.interrupted-before-write", err))
 		return volume.RestoreOperation{}, err
@@ -120,9 +122,16 @@ func (l *Lifecycle) persist(ctx context.Context, run *Run) error {
 }
 
 // Terminal persistence finishes before admission or activity ownership can end.
-func (l *Lifecycle) persistTerminal(ctx context.Context, run *Run) {
+// persistTerminal saves a terminal run with ctx and notifies. work is the restore's tracked work
+// context: cancelled before the outcome is saved, the run was interrupted and stays silent; a
+// determined outcome is notified even when ctx is cancelled while it is saved.
+func (l *Lifecycle) persistTerminal(ctx, work context.Context, run *Run) {
+	interrupted := work.Err() != nil
 	for err := l.persist(ctx, run); err != nil; err = l.persist(ctx, run) {
 		time.Sleep(100 * time.Millisecond)
+	}
+	if l.Notify != nil {
+		l.Notify(context.WithoutCancel(ctx), backupnotify.Run{ID: run.ID, Operation: "restore", Volume: run.VolumeName, Status: run.Status, Reason: run.ErrorCode, ActivityID: run.ActivityID, Suppress: interrupted})
 	}
 }
 func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest) (err error) {
@@ -196,7 +205,7 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 			}
 		}
 		run.FinishedAt = new(time.Now().UTC())
-		l.persistTerminal(settled, run)
+		l.persistTerminal(settled, ctx, run)
 		if err != nil {
 			var problem *dto.Problem
 			if errors.As(err, &problem) && problem.Code == run.ErrorCode {

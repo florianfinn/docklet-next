@@ -40,6 +40,20 @@ describe("live backup contract", () => {
     expect(backupErrorMessage(upload, t)).toContain(t("volumes.uploadReasons.expanded-too-large"));
     expect(backupErrorMessage(error, t)).not.toContain("PRIVATE"); expect(backupCodeKey("arbitrary.server.error")).toBeUndefined();
   });
+  it.each([
+    ["read", 502, "agent.invalid-token", "agent.invalid-token", "credentialRejected"],
+    ["read", 409, "agent.update-required", "agent.update-required", "updateRequired"],
+    ["read", 502, "agent.unavailable", "agent.unavailable", "unreachable"],
+    ["write", 502, "agent.invalid-token", "agent.invalid-token", "credentialRejected"],
+    ["write", 502, "agent.unavailable", "volume.outcome-unknown", undefined],
+  ] as const)("keeps the %s access refusal %i %s as its own translated code", async (kind, status, code, kept, text) => {
+    const f = backupFixture();
+    f.intercept(async () => Response.json({ success: false, code }, { status }));
+    const error = await (kind === "read" ? f.api.getBackupRepository("first") : f.api.checkBackupRepository("first")).catch((e: unknown) => e);
+    expect(error).toMatchObject({ outcome: { kind: "error", code: kept } });
+    const t = createTranslator({ locale: "de", messages: catalogs.de });
+    expect(backupErrorMessage(error, t)).toBe(t(text ? `common.commandErrors.${text}` : "volumes.errors.outcome-unknown"));
+  });
   it("reports busy with its running activity and never repeats the POST", async () => {
     const f = backupFixture(); f.state.fail = "/backups";
     await expect(f.api.runBackup("first~data")).rejects.toMatchObject({ problem: { code: "volume.backup.busy", activityId: "held" } });

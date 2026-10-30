@@ -15,7 +15,7 @@ const paths = [
   "/containers", "/containers/missing", "/images", "/volumes", "/volumes/missing",
   "/backups", "/networks", "/security", "/profile", "/setup", "/login",
   "/settings/general", "/settings/appearance", "/settings/activity", "/settings/hosts",
-  "/settings/notifications", "/settings/auth", "/missing", "/preview/unknown",
+  "/settings/notifications", "/settings/autoHeal", "/settings/auth", "/missing", "/preview/unknown",
 ];
 
 let routes: RouteObject[];

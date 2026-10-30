@@ -1,234 +1,213 @@
-import { useCapability } from "@/data/use-capability";
-import { ArrowLeft, BellRing, Link2, Mail, MessageCircle, Pencil, Plus, Send, Trash2, Webhook } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
+import { Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { CancelledError } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
+import { useNotificationTargets } from "@/data/notification-queries";
+import { useNotificationWrites } from "@/data/notification-writes";
+import { useConnectedSettings } from "@/data/queries";
+import { settingsErrorMessage } from "@/data/settings-error";
 import { useAdapter } from "@/data/use-adapter";
+import { isProvider, NOTIFICATION_PROVIDERS, type NotificationProvider, type NotificationTarget, type NotificationTargetInput, type NotificationTargetRow } from "@/domain/notifications";
 import { ActionPresentationPointer } from "@/features/activity/ActionPresentationSetting";
-import { CHANNEL_KINDS, notificationBaseUrl, NOTIFICATION_EVENTS, type ChannelKind, type HubSettings, type NotificationChannel, type NotificationEvent } from "@/domain/settings";
-import { required } from "@/domain/validation";
-import { TextField } from "@/shared/components/form-field";
+import { CapabilityGate } from "@/shared/components/capability-gate";
+import { ConfirmDialog } from "@/shared/components/confirm-dialog";
+import { QueryError } from "@/shared/components/page";
 import { ToneBadge } from "@/shared/components/tone";
-import { useAdapterText } from "@/data/use-adapter-text";
-import { draftId } from "@/shared/lib/ids";
+import { HelpTarget } from "@/shared/help/help-tooltip";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
-import { Checkbox } from "@/shared/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import { HelpLegend, HelpTarget } from "@/shared/help/help-tooltip";
-import { FieldSet } from "@/shared/ui/field";
-import { Label } from "@/shared/ui/label";
 import { Spinner } from "@/shared/ui/spinner";
 import { Switch } from "@/shared/ui/switch";
 
-import { SettingsForm } from "../SettingsForm";
-import { useSaveSettings } from "../use-save-settings";
-import { useSectionDraft } from "../use-section-draft";
+import { summary } from "../notifications/fields";
+import { NotificationDialog } from "../notifications/NotificationDialog";
+import { ProviderIcon } from "../notifications/ProviderIcon";
 
-function KindIcon({ kind }: { kind: ChannelKind }) {
-  if (kind === "email") return <Mail />;
-  if (kind === "generic") return <Webhook />;
-  if (kind === "ntfy" || kind === "pushover" || kind === "gotify") return <BellRing />;
-  return <MessageCircle />;
-}
-
-function ChannelDialog({ channel, onClose, onApply }: { channel: NotificationChannel | null; onClose: () => void; onApply: (c: NotificationChannel) => void }) {
-  const t = useTranslations("settings.notifications");
-  const tv = useTranslations("hosts.validation");
-  const [kind, setKind] = useState<ChannelKind | null>(channel?.kind ?? null);
-  const [draft, setDraft] = useState<NotificationChannel | null>(channel);
-  const [secret, setSecret] = useState("");
-  const [tried, setTried] = useState(false);
-  const choose = (k: ChannelKind) => {
-    setKind(k);
-    setDraft({ id: draftId("n"), kind: k, name: t(`kinds.${k}`), target: "", secretSet: false, enabled: true, events: ["deployFailed", "hostOffline", "backupFailed"] });
-  };
-  const toggleEvent = (e: NotificationEvent) => draft && setDraft({ ...draft, events: draft.events.includes(e) ? draft.events.filter((x) => x !== e) : [...draft.events, e] });
+export function NotificationsSection() {
+  const presentation = useConnectedSettings();
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-xl">
-        {!kind || !draft ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{t("chooseKind")}</DialogTitle>
-              <DialogDescription>{t("onlyConfigured")}</DialogDescription>
-            </DialogHeader>
-            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {CHANNEL_KINDS.map((k) => (
-                <li key={k}>
-                  <button type="button" onClick={() => choose(k)} className="lift flex w-full items-center gap-2.5 rounded-xl border bg-card/50 p-3 text-left text-sm outline-none hover:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                    <span className="text-primary-text [&_svg]:size-4" aria-hidden>
-                      <KindIcon kind={k} />
-                    </span>
-                    {t(`kinds.${k}`)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setTried(true);
-              if (required(draft.name) || required(draft.target)) return;
-              onApply({ ...draft, secretSet: draft.secretSet || secret.length > 0 });
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>{channel ? t("dialogEdit", { name: channel.name }) : t("dialogAdd", { kind: t(`kinds.${kind}`) })}</DialogTitle>
-              <DialogDescription>{t("secretDemo")}</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField id="ch-name" label={t("name")} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} error={tried && required(draft.name) ? tv("required") : undefined} />
-              <TextField id="ch-target" label={t(`targets.${kind}`)} value={draft.target} onChange={(target) => setDraft({ ...draft, target })} error={tried && required(draft.target) ? tv("required") : undefined} mono placeholder={kind === "email" ? "admin@example.com" : kind === "ntfy" || kind === "gotify" || kind === "generic" ? "https://notify.example.com/…" : ""} />
-            </div>
-            {kind !== "email" && kind !== "ntfy" && <TextField id="ch-secret" type="password" label={t("secret")} help="settingsNotifications.secret" value={secret} onChange={setSecret} description={draft.secretSet ? t("secretKeep") : t("secretDemo")} autoComplete="new-password" />}
-            <FieldSet className="gap-2">
-              <HelpLegend topic="settingsNotifications.events" className="mb-1">
-                {t("events")}
-              </HelpLegend>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {NOTIFICATION_EVENTS.map((e) => (
-                  <Label key={e} className="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm font-normal">
-                    <Checkbox checked={draft.events.includes(e)} onCheckedChange={() => toggleEvent(e)} />
-                    {t(`eventNames.${e}`)}
-                  </Label>
-                ))}
-              </div>
-            </FieldSet>
-            <DialogFooter className="gap-2 sm:justify-between">
-              {!channel ? (
-                <Button type="button" variant="ghost" onClick={() => setKind(null)}>
-                  <ArrowLeft data-icon="inline-start" />
-                  {t("back")}
-                </Button>
-              ) : (
-                <span />
-              )}
-              <Button type="submit">{t("apply")}</Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+    <div className="flex flex-col gap-5">
+      <CapabilityGate operation="listNotificationTargets">
+        <Targets />
+      </CapabilityGate>
+      {presentation.data && <ActionPresentationPointer value={presentation.data.activity.actionPresentation} />}
+    </div>
   );
 }
 
-/**
- * Only configured channels are listed; the channel kind is picked when adding
- * one. Below the hub form sits the browser-local presentation of major actions.
- */
-export function NotificationsSection({ settings }: { settings: HubSettings }) {
-  const t = useTranslations("settings");
-  const tn = useTranslations("settings.notifications");
-  const dt = useAdapterText();
+/** A dialog instance; results of an earlier generation never close or change a later one. */
+interface DialogState {
+  generation: number;
+  target?: NotificationTarget;
+}
+
+function Targets() {
+  const t = useTranslations("settings.notifications");
+  const ts = useTranslations("settings");
+  const all = useTranslations();
   const adapter = useAdapter();
-  const capability = useCapability("testNotification");
-  const save = useSaveSettings();
-  const { draft, setDraft, dirty, reset, commit } = useSectionDraft(settings.notifications);
-  const [editing, setEditing] = useState<NotificationChannel | "new" | null>(null);
-  const [testing, setTesting] = useState<string | null>(null);
-  if (!draft) return null;
-  const links = notificationBaseUrl(settings.general);
-  const update = (c: NotificationChannel) => setDraft(draft.some((x) => x.id === c.id) ? draft.map((x) => (x.id === c.id ? c : x)) : [...draft, c]);
+  const targets = useNotificationTargets();
+  const { pending, write } = useNotificationWrites();
+  const generations = useRef(0);
+  const [dialog, setDialog] = useState<DialogState>();
+  const [remove, setRemove] = useState<NotificationTargetRow>();
+  const [testing, setTesting] = useState<ReadonlySet<NotificationProvider>>(new Set());
+  const [error, setError] = useState<string>();
+  const rows = targets.data ?? [];
+  // Test feedback is owned by the mounted section and the target identity it was started for.
+  const live = useRef({ mounted: true, rows });
+  useEffect(() => {
+    const state = live.current;
+    state.mounted = true;
+    return () => { state.mounted = false; };
+  }, []);
+  useEffect(() => { live.current.rows = targets.data ?? []; }, [targets.data]);
+
+  const open = (target?: NotificationTarget) => setDialog({ generation: ++generations.current, target });
+  const close = (generation: number) => setDialog((current) => (current?.generation === generation ? undefined : current));
+  const busy = (provider: NotificationProvider, on: boolean) => setTesting((old) => { const next = new Set(old); if (on) next.add(provider); else next.delete(provider); return next; });
+
+  const used = new Set(rows.map((r) => r.provider));
+  const available = NOTIFICATION_PROVIDERS.filter((p) => !used.has(p) && !pending.has(p));
+
+  const toggle = async (target: NotificationTarget, enabled: boolean) => {
+    setError(undefined);
+    try {
+      await write(target.provider, () => adapter.saveNotificationTarget({ provider: target.provider, enabled, config: target.config, events: target.events }));
+    } catch (cause) {
+      if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
+    }
+  };
+  const test = async (target: NotificationTarget) => {
+    const { provider, id } = target;
+    busy(provider, true);
+    const kind = t(`kinds.${provider}`);
+    const current = () => live.current.mounted && live.current.rows.some((r) => r.id === id && r.provider === provider);
+    try {
+      const result = await adapter.testNotificationTarget(provider);
+      if (!current()) return;
+      if (result.code === "notification.test-sent") {
+        toast.success(`${kind}: ${all("settings.codes.notification.test-sent")}`);
+        if (result.warning) toast.warning(`${kind}: ${all("settings.codes.notification.target-disabled")}`);
+      } else {
+        const reason = result.reason ? all(`settings.codes.${result.reason}` as never) : "";
+        toast.error(`${kind}: ${all("settings.codes.notification.test-failed")}${reason ? ` – ${reason}` : ""}`);
+      }
+    } catch (cause) {
+      if (current() && !(cause instanceof CancelledError)) toast.error(settingsErrorMessage(cause, all));
+    } finally {
+      busy(provider, false);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-5">
-      <SettingsForm
-        title={t("sections.notifications")}
-        description={tn("onlyConfigured")}
-        dirty={dirty}
-        onDiscard={reset}
-        onSave={async () => {
-          await save("notifications", draft);
-          commit(draft);
-        }}
-      >
-        <p className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-card/40 p-3 text-xs text-muted-foreground">
-          <Link2 className="size-3.5 shrink-0" aria-hidden />
-          {tn("linkBase", { url: links.url, source: links.source })}
-          <Link to="/settings/general" className="text-primary-text hover:underline">
-            {tn("linkBaseEdit")}
-          </Link>
-        </p>
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">{tn("channels")}</h3>
-          <Button type="button" size="sm" variant="outline" onClick={() => setEditing("new")}>
-            <Plus data-icon="inline-start" />
-            {tn("add")}
-          </Button>
+    <section className="flex flex-col gap-4 rounded-xl border bg-card p-6" aria-labelledby="notifications-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="notifications-title" className="text-lg font-semibold">{ts("sections.notifications")}</h2>
+          <p className="text-sm text-muted-foreground">{t("onlyConfigured")}</p>
         </div>
-        {draft.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">{tn("empty")}</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {draft.map((c) => (
-              <li key={c.id} className={cn("flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3", !c.enabled && "opacity-70")}>
-                <span className="grid size-9 place-items-center rounded-xl bg-primary/12 text-primary-text [&_svg]:size-4">
-                  <KindIcon kind={c.kind} />
-                </span>
+        <Button type="button" variant="outline" disabled={!targets.data || available.length === 0} onClick={() => open()}>
+          <Plus data-icon="inline-start" />
+          {t("add")}
+        </Button>
+      </div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {targets.isError ? (
+        <QueryError error={targets.error} onRetry={() => void targets.refetch()} />
+      ) : targets.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">{t("loading")}</p>
+      ) : rows.length === 0 ? (
+        <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">{t("empty")}</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {rows.map((row) => {
+            if (row.kind === "unsupported") {
+              const label = isProvider(row.provider) ? t(`kinds.${row.provider}`) : row.provider || t("unknownKind");
+              return (
+                <li key={row.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed p-3">
+                  <span className="grid size-9 place-items-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-4"><ProviderIcon provider={row.provider} /></span>
+                  <div className="min-w-0 flex-1">
+                    <span className="break-all font-medium">{label}</span>
+                    <p className="text-xs text-muted-foreground">{t("unsupported")}</p>
+                  </div>
+                  {isProvider(row.provider) && (
+                    <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => setRemove(row)}>
+                      <Trash2 />
+                    </Button>
+                  )}
+                </li>
+              );
+            }
+            const label = t(`kinds.${row.provider}`);
+            const sending = testing.has(row.provider);
+            return (
+              <li key={row.id} className={cn("flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3", !row.enabled && "opacity-70")}>
+                <span className="grid size-9 place-items-center rounded-xl bg-primary/12 text-primary-text [&_svg]:size-4"><ProviderIcon provider={row.provider} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{c.name}</span>
-                    <ToneBadge tone="gray" className="h-5 px-1.5 text-[10.5px]">
-                      {tn(`kinds.${c.kind}`)}
-                    </ToneBadge>
+                    <span className="font-medium">{label}</span>
+                    {!row.enabled && <ToneBadge tone="gray" className="h-5 px-1.5 text-[10.5px]">{t("disabled")}</ToneBadge>}
                   </div>
-                  <div className="truncate font-mono text-[11.5px] text-muted-foreground">{c.target}</div>
+                  <div className="truncate font-mono text-[11.5px] text-muted-foreground">{summary(row.provider, row.config)}</div>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {c.events.map((e) => (
-                      <span key={e} className="rounded-md border px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
-                        {tn(`eventNames.${e}`)}
-                      </span>
+                    {row.events.length === 0 ? (
+                      <span className="text-[11px] text-muted-foreground">{t("noEvents")}</span>
+                    ) : row.events.map((e) => (
+                      <span key={e} className="rounded-md border px-1.5 py-0.5 text-[10.5px] text-muted-foreground">{t(`eventNames.${e}`)}</span>
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <Switch aria-label={`${tn("enabled")}: ${c.name}`} checked={c.enabled} onCheckedChange={(enabled) => update({ ...c, enabled })} />
+                {/* Narrow screens give the actions their own row so the summary and event badges keep the full width. */}
+                <div className="flex w-full items-center justify-end gap-1.5 sm:w-auto">
+                  <Switch aria-label={`${t("enabled")}: ${label}`} checked={row.enabled} disabled={pending.has(row.provider)} onCheckedChange={(enabled) => void toggle(row, enabled)} />
                   <HelpTarget topic="settingsNotifications.test">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={!capability.available || testing === c.id} title={capability.reason}
-                      onClick={async () => {
-                        setTesting(c.id);
-                        const r = await adapter.testNotification(c);
-                        setTesting(null);
-                        if (r.ok) toast.success(dt(r.message));
-                        else toast.error(dt(r.message));
-                      }}
-                    >
-                      {testing === c.id ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
-                      {testing === c.id ? tn("testing") : tn("test")}
+                    <Button type="button" size="sm" variant="ghost" disabled={sending} onClick={() => void test(row)}>
+                      {sending ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
+                      {sending ? t("testing") : t("test")}
                     </Button>
                   </HelpTarget>
-                  <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${tn("edit")}: ${c.name}`} onClick={() => setEditing(c)}>
+                  <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${t("edit")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => open(row)}>
                     <Pencil />
                   </Button>
-                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${tn("remove")}: ${c.name}`} onClick={() => setDraft(draft.filter((x) => x.id !== c.id))}>
+                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => setRemove(row)}>
                     <Trash2 />
                   </Button>
                 </div>
               </li>
-            ))}
-          </ul>
-        )}
-        {editing && (
-          <ChannelDialog
-            channel={editing === "new" ? null : editing}
-            onClose={() => setEditing(null)}
-            onApply={(c) => {
-              update(c);
-              setEditing(null);
-            }}
-          />
-        )}
-      </SettingsForm>
-      <ActionPresentationPointer value={settings.activity.actionPresentation} />
-    </div>
+            );
+          })}
+        </ul>
+      )}
+      {dialog && (
+        <NotificationDialog
+          key={dialog.generation}
+          target={dialog.target}
+          available={available}
+          save={(input: NotificationTargetInput) => write(input.provider, () => adapter.saveNotificationTarget(input))}
+          onClose={() => close(dialog.generation)}
+          onSaved={() => close(dialog.generation)}
+        />
+      )}
+      <ConfirmDialog
+        open={!!remove}
+        onOpenChange={(o) => !o && setRemove(undefined)}
+        title={t("removeTitle")}
+        description={t("removeHint")}
+        confirmLabel={t("remove")}
+        onConfirm={async () => {
+          const provider = remove?.provider;
+          if (!isProvider(provider)) return;
+          try {
+            await write(provider, () => adapter.deleteNotificationTarget(provider));
+          } catch (cause) {
+            if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
+            return false;
+          }
+        }}
+      />
+    </section>
   );
 }

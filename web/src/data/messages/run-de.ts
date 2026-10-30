@@ -219,6 +219,20 @@ export const deRunMessages = {
   "composeProject": "Compose-Projekt {p1}",
   "edgeVia": "Edge über {p1}"
 },
+  // Activity and event codes of Auto Heal and notification delivery, keyed by the wire code path.
+  codes: {
+    autoheal: {
+      "restarted": "Container durch Auto Heal neu gestartet",
+      "restart-failed": "Auto-Heal-Neustart fehlgeschlagen",
+      "limit-reached": "Auto-Heal-Neustartlimit erreicht",
+      "interrupted": "Auto-Heal-Versuch unterbrochen",
+    },
+    notification: {
+      "delivery-failed": "Benachrichtigung konnte nicht zugestellt werden",
+      "delivery-failed-via": "Benachrichtigung über {provider} fehlgeschlagen",
+      "delivery-failed-reason": "Benachrichtigung über {provider} fehlgeschlagen: {reason}",
+    },
+  },
   join: { dot: '{left} · {right}', dash: '{left} – {right}' },
   value: '{value}',
 };

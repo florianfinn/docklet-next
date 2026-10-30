@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.
 
 package settings
 
@@ -24,7 +24,7 @@ import (
 )
 
 func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *database.DB) (*Settings, error) {
-	if config.Load().UIConfigurationDisabled || config.Load().AgentMode {
+	if config.Load().UIConfigurationDisabled || config.Load().AgentMode || config.Load().EdgeAgent {
 		slog.DebugContext(
 			ctx,
 			"loadDatabaseSettingsInternal: using env path",

@@ -17,6 +17,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
+	arcanedocker "go.getarcane.app/docker"
 
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
@@ -31,7 +32,12 @@ func newVolumeServiceTestDockerClientInternal(t *testing.T, server *httptest.Ser
 		client.WithHTTPClient(server.Client()),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = dockerClient.Close() })
+	// Usage is cached per daemon host; a reused test port must not see a previous fake daemon.
+	arcanedocker.InvalidateVolumeUsageCache(dockerClient)
+	t.Cleanup(func() {
+		arcanedocker.InvalidateVolumeUsageCache(dockerClient)
+		_ = dockerClient.Close()
+	})
 	return dockerClient
 }
 

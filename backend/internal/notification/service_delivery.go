@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; split existing delivery and operator probes from service.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; split existing delivery and operator probes from service; notification and Auto Heal contracts and delivery for #296.
 
 package notification
 
@@ -171,47 +171,6 @@ func pruneResultHasChangesInternal(result *system.PruneAllResult) bool {
 		len(result.NetworksDeleted) > 0
 }
 
-// SendAutoHealNotification sends a notification when a container is auto-healed.
-func (s *NotificationService) SendAutoHealNotification(ctx context.Context, containerName, containerID string) error {
-	if s.config != nil && s.config.AgentMode {
-		_, err := s.dispatchNotificationToManagerInternal(ctx, notification.DispatchRequest{
-			Kind: notification.DispatchKindAutoHeal,
-			AutoHeal: &notification.DispatchAutoHeal{
-				ContainerName: containerName,
-				ContainerID:   containerID,
-			},
-		})
-		return err
-	}
-
-	target, err := s.resolveNotificationTargetInternal(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	return s.sendAutoHealNotificationForTargetInternal(ctx, target, containerName, containerID)
-}
-
-func (s *NotificationService) sendAutoHealNotificationForTargetInternal(ctx context.Context, target NotificationTarget, containerName, containerID string) error {
-	metadata := database.JSON{
-		"containerID": containerID,
-		"eventType":   string(notifications.NotificationEventAutoHeal),
-	}
-	content := s.templates.AutoHeal(target.EnvironmentName, containerName)
-	content.Vars = notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventAutoHeal)
-	_, err := s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventAutoHeal, containerName, metadata, func(
-		ctx context.Context,
-		provider notifications.NotificationProvider,
-		config database.JSON,
-	) (
-		bool,
-		error,
-	) {
-		return notifications.Deliver(ctx, provider, config, content)
-	})
-	return err
-}
-
 // --- Test notifications ---
 
 // notificationEventTypeForTestTypeInternal maps a test type to the event type a
@@ -236,16 +195,16 @@ func notificationEventTypeForTestTypeInternal(testType string) notifications.Not
 // unsubscribed. Empty means real notifications would send.
 func (s *NotificationService) testNotificationWarningInternal(setting *NotificationSettings, testType string) string {
 	if !setting.Enabled {
-		return fmt.Sprintf("%s is disabled, so real notifications will not send", setting.Provider)
+		return "notification.target-disabled"
 	}
 	eventType := notificationEventTypeForTestTypeInternal(testType)
 	if eventType != "" && !s.isEventEnabled(setting.Config, eventType) {
-		return fmt.Sprintf("%s events are disabled for %s, so real notifications will not send", eventType, setting.Provider)
+		return "notification.target-disabled"
 	}
 	if eventType == "" && !slices.ContainsFunc(notifications.AllNotificationEventTypes, func(candidate notifications.NotificationEventType) bool {
 		return s.isEventEnabled(setting.Config, candidate)
 	}) {
-		return fmt.Sprintf("no events are subscribed for %s, so real notifications will not send", setting.Provider)
+		return "notification.target-disabled"
 	}
 	return ""
 }

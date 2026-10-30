@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296.
 
 package settings
 
@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/category"
 	searchtypes "github.com/florianfinn/docklet-next/types/search"
@@ -291,6 +292,9 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 }
 
 func (h *SettingsHandler) validateSettingsUpdateInput(ctx context.Context, input settings.Update) error {
+	if AutoHealUpdateManaged(input) {
+		return &autohealDTO.Problem{Code: "settings.key-managed", Status: 400}
+	}
 	if input.SetupCompleted != nil && *input.SetupCompleted == "true" && (h.cfg == nil || h.cfg.SignInMode() == "local") {
 		userID, ok := middleware.GetUserIDFromContext(ctx)
 		if !ok {

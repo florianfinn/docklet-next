@@ -17,6 +17,7 @@ import { createHostsApi } from "./demo-hosts";
 import { createImagesApi } from "./demo-images";
 import { createNetworksApi, syncStackNetworks } from "./demo-networks";
 import { createSettingsApi } from "./demo-settings";
+import { createDemoNotifications } from "./demo-notifications";
 import { createVolumesApi } from "./demo-volumes";
 import { SEED_RUNS } from "./fixtures/events";
 import { simulateImport } from "./import-simulator";
@@ -149,6 +150,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     ...createVolumesApi(ctx),
     ...createNetworksApi(ctx),
     ...createSettingsApi(ctx),
+    ...createDemoNotifications(ctx),
 
     async listHosts() {
       const latency = simulationStore.get().latency;

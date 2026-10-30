@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories; notification and Auto Heal contracts and delivery for #296.
 
 package job
 
@@ -292,11 +292,10 @@ func (s *JobService) rescheduleAffectedJobInternal(ctx context.Context, jobID st
 		return fmt.Errorf("job %s has no runtime scheduler state", jobID)
 	}
 
+	// The scheduler installs every disabled conditional job without a schedule.
 	expectedSchedule := job.Schedule(rescheduleCtx)
-	if jobID == "vulnerability-scan" {
-		if conditional, ok := job.(scheduler.ConditionalJob); ok && !conditional.ShouldSchedule(rescheduleCtx) {
-			expectedSchedule = ""
-		}
+	if conditional, ok := job.(scheduler.ConditionalJob); ok && !conditional.ShouldSchedule(rescheduleCtx) {
+		expectedSchedule = ""
 	}
 	if runtimeState.Schedule != expectedSchedule {
 		return fmt.Errorf("job %s runtime schedule %q does not match requested schedule %q", jobID, runtimeState.Schedule, expectedSchedule)
@@ -489,7 +488,7 @@ func (s *JobService) ActivityID(run scheduler.Run) string {
 	}
 	visible := run.Trigger == "manual"
 	switch run.JobID {
-	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "vulnerability-scan":
+	case "auto-update", "auto-patch", "scheduled-prune", "vulnerability-scan":
 		visible = true
 	default:
 		visible = visible || strings.HasPrefix(run.JobID, "volume-backup:") || strings.HasPrefix(run.JobID, "system-backup:")

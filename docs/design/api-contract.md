@@ -82,8 +82,8 @@ the mapping and its contract tests before that feature claims live data.
 | `AuthAuthenticationResponse`, `AuthLogin`, `SettingsSettingDto` | `AuthSettings`, `HubSettings`, `SettingsApi` | Sign-in modes and settings categories need typed, server-backed UI preferences. | Planned M4 Identity, setup and hub settings |
 | `UserPreferences` | `HubSettings` | Personal preferences need a server-backed profile projection. | Planned M4 Identity, setup and hub settings |
 | `UserUser`, `UserRoleAssignmentSummary` | `HubUser` | User rights need the agreed simple access projection. | Planned M15 Simple users with resource rights |
-| `NotificationResponse`, `NotificationUpdate`, `NotificationTestResponse` | `NotificationChannel`, `SettingsApi` | Channel configuration and test results need UI channel kinds and safe status. | Planned M13 Notifications and Auto Heal |
-| No bounded Auto Heal DTO | `AutoHealSettings` | Restart limits and exceptions need a distinct persisted contract. | Planned M13 Notifications and Auto Heal |
+| `NotificationResponse`, `NotificationUpdate`, `NotificationTestResponse` | `NotificationChannel`, `SettingsApi` | Typed provider configurations, `credentialsSet` and classified test codes give the UI channel kinds and safe status. | Contract v10; [notifications](notifications.md) |
+| `AutoHealSettings` | `AutoHealSettings` | Restart limits, exceptions and the environment-managed flag are a distinct persisted contract per host. | Contract v10; [Auto Heal](auto-heal.md) |
 | No service-widget DTO | Dashboard widget view models | Service polling, credentials and failure states have no wire contract yet. | Planned M16 Service widgets with real data |
 
 The table records existing mismatches, not a promise that every listed API
@@ -223,3 +223,21 @@ only. Explicit snapshot reads and repository checks reconcile observations. Down
 activities remain discoverable through overview until streaming and confirmed helper
 cleanup finish. The synchronous delete route propagates request cancellation to its
 worker; accepted create/restore/check workers retain their application lifetime.
+
+Auto Heal outcome codes: `autoheal.restarted`, `autoheal.restart-failed`, `autoheal.limit-reached`, `autoheal.interrupted`.
+A failed target delivery writes the event code `notification.delivery-failed` with the provider and a classified reason.
+
+## Notification and Auto Heal foundation
+
+Contract v10/minimum v10 adds typed provider configuration components, the event
+map, `credentialsSet`, classified notification test results and host dispatch
+shapes. New delivery kinds are `backup_failed` and the v10 `auto_heal` shape;
+`deploy_failed` and availability are hub-owned. Legacy fan-out kinds retain their
+existing payloads without an `eventId` requirement.
+
+Auto Heal GET/PUT uses a dedicated typed contract on hub, Direct and Edge hosts.
+Validation returns a 400 `autoheal.settings-invalid` with a JSON-pointer field;
+environment management returns 409 `autoheal.settings-env-managed`. Generic
+settings reject Auto Heal keys before any partial write. Agent-access transport
+refusals retain their shared envelope. Notification settings/configuration
+failures and single-provider probe contention have typed problem responses.

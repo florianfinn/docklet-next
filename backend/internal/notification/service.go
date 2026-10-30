@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296.
 
 package notification
 
@@ -15,18 +15,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/florianfinn/docklet-next/types/notification"
-	"go.getarcane.app/kit/pkg"
-	"go.getarcane.app/sys/crypto"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
@@ -37,7 +34,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/validation"
 )
 
 var notificationCredentialFieldsByProviderInternal = map[notifications.NotificationProvider][]string{
@@ -80,12 +76,17 @@ var (
 )
 
 type NotificationService struct {
-	db             *database.DB
-	config         *config.Config
-	environmentSvc *environment.EnvironmentService
-	eventSvc       *event.EventService
-	templates      *templates.Service
-	httpClient     *http.Client
+	db                     *database.DB
+	config                 *config.Config
+	environmentSvc         *environment.EnvironmentService
+	eventSvc               *event.EventService
+	templates              *templates.Service
+	httpClient             *http.Client
+	settingsMu             sync.Mutex
+	tests                  sync.Map
+	dispatchSessionCurrent func(notification.DispatchOrigin) bool
+	dispatchBarrier        func()
+	beforeClaim            func()
 }
 
 type NotificationTarget struct {
@@ -245,12 +246,11 @@ func (s *NotificationService) DispatchNotification(ctx context.Context, accessTo
 		return notification.DispatchResponse{}, errors.New("notification dispatch is manager-only")
 	}
 
-	target, err := s.resolveNotificationTargetForAccessTokenInternal(ctx, accessToken)
+	env, err := s.environmentSvc.ResolveEnvironmentByAccessToken(ctx, accessToken)
 	if err != nil {
-		return notification.DispatchResponse{}, err
+		return notification.DispatchResponse{}, ErrUnauthorizedNotificationDispatch
 	}
-
-	return s.dispatchForTargetInternal(ctx, target, payload)
+	return s.DispatchIngress(ctx, originFor(env), payload)
 }
 
 // DispatchNotificationForEnvironment dispatches on behalf of an agent whose
@@ -338,205 +338,9 @@ func (s *NotificationService) dispatchForTargetInternal(ctx context.Context, tar
 		}
 		logManagerDispatchNotificationInternal(ctx, target, payload.Kind)
 		return dispatchResponse, s.sendPruneReportNotificationForTargetInternal(ctx, target, &payload.PruneReport.Result)
-	case notification.DispatchKindAutoHeal:
-		if payload.AutoHeal == nil {
-			return notification.DispatchResponse{}, errors.New("auto-heal payload is required")
-		}
-		logManagerDispatchNotificationInternal(ctx, target, payload.Kind)
-		return dispatchResponse, s.sendAutoHealNotificationForTargetInternal(ctx, target, payload.AutoHeal.ContainerName, payload.AutoHeal.ContainerID)
 	default:
 		return notification.DispatchResponse{}, fmt.Errorf("%s: %w", payload.Kind, ErrUnsupportedDispatchKind)
 	}
-}
-
-func (s *NotificationService) GetAllSettings(ctx context.Context) ([]NotificationSettings, error) {
-	var settings []NotificationSettings
-	if err := s.db.WithContext(ctx).Find(&settings).Error; err != nil {
-		return nil, fmt.Errorf("failed to get notification settings: %w", err)
-	}
-	return settings, nil
-}
-
-func (s *NotificationService) GetSettingsByProvider(ctx context.Context, provider notifications.NotificationProvider) (*NotificationSettings, error) {
-	var setting NotificationSettings
-	if err := s.db.WithContext(ctx).Where("provider = ?", provider).First(&setting).Error; err != nil {
-		return nil, err
-	}
-	return &setting, nil
-}
-
-func (s *NotificationService) CreateOrUpdateSettings(ctx context.Context, provider notifications.NotificationProvider, enabled bool, localConfig database.JSON) (*NotificationSettings, error) {
-	if provider == notifications.NotificationProviderGeneric {
-		genericConfig, decodeErr := notifications.DecodeConfig[notifications.GenericConfig](localConfig, "Generic")
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
-		// Shoutrrr renders the payload template internally at send time, so a
-		// broken template is validated here where the error surfaces against
-		// the user's own configuration instead of as an opaque send failure.
-		if validateErr := notifications.ValidateGenericPayloadTemplate(genericConfig); validateErr != nil {
-			return nil, common.Classify(common.ErrInvalidNotificationPayloadTemplate, validateErr)
-		}
-	}
-
-	var setting NotificationSettings
-
-	err := s.db.WithContext(ctx).Where("provider = ?", provider).First(&setting).Error
-	existingConfig := kit.Ternary(err == nil, setting.Config, database.JSON(nil))
-
-	encryptedConfig, encryptErr := encryptNotificationConfigCredentialsInternal(provider, localConfig, existingConfig)
-	if encryptErr != nil {
-		return nil, encryptErr
-	}
-	localConfig = encryptedConfig
-	if _, ok := localConfig["events"]; !ok {
-		if existingEvents, localOk := existingConfig["events"]; localOk {
-			localConfig["events"] = existingEvents
-		}
-	}
-
-	if err != nil {
-		setting = NotificationSettings{
-			Provider: provider,
-			Enabled:  enabled,
-			Config:   localConfig,
-		}
-		if createSettingsErr := s.db.WithContext(ctx).Create(&setting).Error; createSettingsErr != nil {
-			return nil, fmt.Errorf("failed to create notification settings: %w", createSettingsErr)
-		}
-	} else {
-		setting.Enabled = enabled
-		setting.Config = localConfig
-		if updateSettingsErr := s.db.WithContext(ctx).Save(&setting).Error; updateSettingsErr != nil {
-			return nil, fmt.Errorf("failed to update notification settings: %w", updateSettingsErr)
-		}
-	}
-
-	return &setting, nil
-}
-
-// RedactNotificationConfigCredentials returns a copy of config with provider credential fields blanked for API responses.
-func RedactNotificationConfigCredentials(provider notifications.NotificationProvider, localConfig database.JSON) database.JSON {
-	redacted := cloneNotificationConfigInternal(localConfig)
-	for _, field := range notificationCredentialFieldsByProviderInternal[provider] {
-		value, ok := redacted[field]
-		if !ok {
-			continue
-		}
-		if value == "" {
-			delete(redacted, field)
-			continue
-		}
-		redacted[field] = ""
-	}
-	return redacted
-}
-
-func encryptNotificationConfigCredentialsInternal(provider notifications.NotificationProvider, localConfig, existingConfig database.JSON) (database.JSON, error) {
-	encryptedConfig := cloneNotificationConfigInternal(localConfig)
-	preserveConfig := existingConfig
-	if provider == notifications.NotificationProviderSignal {
-		preserveConfig = signalCredentialPreservationConfigInternal(localConfig, existingConfig)
-	}
-	if provider == notifications.NotificationProviderEmail {
-		preserveConfig = emailCredentialPreservationConfigInternal(localConfig, existingConfig)
-	}
-	if targetField := notificationTargetFieldByProviderInternal[provider]; targetField != "" {
-		currentTarget, _ := existingConfig[targetField].(string)
-		nextTarget, _ := encryptedConfig[targetField].(string)
-		if strings.TrimSpace(nextTarget) == "" && strings.TrimSpace(currentTarget) != "" {
-			nextTarget = currentTarget
-			encryptedConfig[targetField] = currentTarget
-		}
-
-		storedCredentials := make(map[string]bool, len(notificationCredentialFieldsByProviderInternal[provider]))
-		updatedCredentials := make(map[string]bool, len(notificationCredentialFieldsByProviderInternal[provider]))
-		for _, field := range notificationCredentialFieldsByProviderInternal[provider] {
-			preservedValue, _ := preserveConfig[field].(string)
-			updatedValue, _ := encryptedConfig[field].(string)
-			storedCredentials[field] = preservedValue != ""
-			updatedCredentials[field] = updatedValue != ""
-		}
-
-		if err := validation.ValidateCredentialTargetChange(
-			targetField,
-			currentTarget,
-			new(nextTarget),
-			func(value string) string {
-				return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(value), "."))
-			},
-			storedCredentials,
-			updatedCredentials,
-		); err != nil {
-			return nil, err
-		}
-	}
-	for _, field := range notificationCredentialFieldsByProviderInternal[provider] {
-		value, _ := encryptedConfig[field].(string)
-		if value == "" {
-			if existingValue, ok := preserveConfig[field].(string); ok && existingValue != "" {
-				encryptedConfig[field] = existingValue
-			}
-			continue
-		}
-
-		encrypted, err := encryptNotificationCredentialInternal(value)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encrypt notification credential %q: %w", field, err)
-		}
-		encryptedConfig[field] = encrypted
-	}
-	return encryptedConfig, nil
-}
-
-func signalCredentialPreservationConfigInternal(localConfig, existingConfig database.JSON) database.JSON {
-	preserveConfig := cloneNotificationConfigInternal(existingConfig)
-	user, _ := localConfig["user"].(string)
-	password, _ := localConfig["password"].(string)
-	token, _ := localConfig["token"].(string)
-
-	if strings.TrimSpace(token) != "" {
-		delete(preserveConfig, "password")
-	}
-	if strings.TrimSpace(user) != "" || strings.TrimSpace(password) != "" {
-		delete(preserveConfig, "token")
-	}
-
-	return preserveConfig
-}
-
-func emailCredentialPreservationConfigInternal(localConfig, existingConfig database.JSON) database.JSON {
-	preserveConfig := cloneNotificationConfigInternal(existingConfig)
-	if authMode, _ := localConfig["authMode"].(string); authMode == string(notifications.EmailAuthModeNone) {
-		delete(preserveConfig, "smtpPassword")
-	}
-	return preserveConfig
-}
-
-func encryptNotificationCredentialInternal(value string) (string, error) {
-	if value == "" {
-		return "", nil
-	}
-	if _, err := crypto.Decrypt(value); err == nil {
-		return value, nil
-	}
-	return crypto.Encrypt(value)
-}
-
-func cloneNotificationConfigInternal(localConfig database.JSON) database.JSON {
-	if localConfig == nil {
-		return database.JSON{}
-	}
-	cloned := make(database.JSON, len(localConfig))
-	maps.Copy(cloned, localConfig)
-	return cloned
-}
-
-func (s *NotificationService) DeleteSettings(ctx context.Context, provider notifications.NotificationProvider) error {
-	if err := s.db.WithContext(ctx).Where("provider = ?", provider).Delete(&NotificationSettings{}).Error; err != nil {
-		return fmt.Errorf("failed to delete notification settings: %w", err)
-	}
-	return nil
 }
 
 func (s *NotificationService) isEventEnabled(localConfig database.JSON, eventType notifications.NotificationEventType) bool {
@@ -582,10 +386,15 @@ func (
 	eventMetadata["provider"] = string(provider)
 	eventMetadata["status"] = status
 
+	eventType := event.EventTypeNotificationSend
+	if errMsg != nil {
+		eventType = event.EventType("notification.delivery-failed")
+		eventMetadata["reason"] = *errMsg
+	}
 	resourceType := "notification"
 	providerName := string(provider)
 	req := event.CreateEventRequest{
-		Type:          event.EventTypeNotificationSend,
+		Type:          eventType,
 		Severity:      severity,
 		Title:         title,
 		Description:   description,
@@ -667,7 +476,7 @@ func (s *NotificationService) notifyEnabledProvidersInternal(
 		if sendErrs[i] == nil {
 			delivered++
 		}
-		status, errMsg := collectNotificationSendResultInternal(&errs, setting.Provider, policyDeliveryError(ctx, sendErrs[i]))
+		status, errMsg := collectNotificationSendResultInternal(&errs, setting.Provider, sendErrs[i])
 		s.logNotificationInternal(ctx, target.EnvironmentID, setting.Provider, logRef, status, errMsg, metadata)
 	}
 
@@ -682,7 +491,7 @@ func collectNotificationSendResultInternal(localErrors *[]string, provider notif
 		return "success", nil
 	}
 
-	msg := sendErr.Error()
+	msg := notifications.ClassifyDeliveryError(sendErr)
 	*localErrors = append(*localErrors, fmt.Sprintf("%s: %s", provider, msg))
 	return "failed", &msg
 }

@@ -21,14 +21,15 @@ import (
 // Frozen only after the executor and capture have actually joined. Settlement
 // retries reuse these executor times and codes; they never rerun work or drain.
 type runtimeLocalResultInternal struct {
-	imageLifecycle *updaterDTO.LifecycleResult
-	outputLost     bool
-	state          string
-	code           activitytypes.Code
-	message        string
-	errorText      *string
-	startedAt      *time.Time
-	settledAt      time.Time
+	silentNotification bool
+	imageLifecycle     *updaterDTO.LifecycleResult
+	outputLost         bool
+	state              string
+	code               activitytypes.Code
+	message            string
+	errorText          *string
+	startedAt          *time.Time
+	settledAt          time.Time
 }
 
 // Caller holds runningMu. Only accepted owners use this detached write budget.
@@ -121,6 +122,9 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		ActivityID: id.RunID, Level: level, Code: string(result.code), Message: result.message,
 		Payload: database.JSON{"actorId": *row.CallerID, "operation": *row.OperationID, "effectVerified": false}}
 	if err := tx.Create(final).Error; err != nil {
+		return empty, nil, err
+	}
+	if err := runtimeNotifyFailureTx(tx, now, row, string(result.code), result.silentNotification, false); err != nil {
 		return empty, nil, err
 	}
 	snapshot, err := runtimeSnapshotTxInternal(tx, row)

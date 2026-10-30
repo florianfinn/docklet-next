@@ -39,6 +39,7 @@ export const BACKUP_OPERATIONS = [
   "attachLocalBackupRecoveryKey",
 ] as const;
 type Operation = (typeof BACKUP_OPERATIONS)[number];
+const ACCESS_CODES = new Set(["agent.unavailable", "agent.invalid-token", "agent.update-required"]);
 interface Options {
   baseUrl: string;
   client: CsrfClient;
@@ -67,8 +68,11 @@ export function createBackups(options: Options) {
     const descriptor = await options.capability(operation, ref);
     if (!descriptor.available) throw unavailable(operation, ref, descriptor.disabledReasonCode);
   }
-  function problem(body: unknown, status: number): AdapterOutcomeError {
+  function problem(body: unknown, status: number, write = false): AdapterOutcomeError {
     const value = body && typeof body === "object" ? (body as Schema["BackupProblem"]) : undefined;
+    // Access refusals keep their code; an unreachable agent leaves a write's outcome open.
+    if (value && ACCESS_CODES.has(value.code) && !(write && (value.code as string) === "agent.unavailable"))
+      return new AdapterOutcomeError({ kind: "error", code: value.code, status });
     if (value && backupCodeKey(value.code))
       return new BackupError(
         {
@@ -107,7 +111,7 @@ export function createBackups(options: Options) {
     if (!result.ok) {
       const body: unknown = await result.json().catch(() => null);
       check();
-      throw problem(body, result.status);
+      throw problem(body, result.status, !!init.method && init.method !== "GET");
     }
     return { result, check };
   }

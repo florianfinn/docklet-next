@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; SQLite temp-file persistence fixture; notification and Auto Heal contracts and delivery for #296.
 
 package notification
 
@@ -30,7 +30,6 @@ import (
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
@@ -177,10 +176,9 @@ func TestNotificationService_DispatchNotification_UnsupportedKindReturnsSentinel
 	})
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, ErrUnsupportedDispatchKind)
-	unsupportedErr := ErrUnsupportedDispatchKind
-	require.ErrorIs(t, err, unsupportedErr)
-	require.Contains(t, err.Error(), "bogus_kind")
+	var problem *notification.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, "notification.dispatch-unsupported", problem.Code)
 }
 
 func TestNotificationService_DispatchNotification_LogsManagerDispatchForAgent(t *testing.T) {
@@ -549,7 +547,9 @@ func TestNotificationService_CreateOrUpdateSettingsRejectsTargetChangeWithStored
 		"port":  443,
 		"token": "",
 	})
-	require.ErrorIs(t, err, common.ErrValidation)
+	var problem *notification.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, "/config/host", problem.Field)
 
 	var stored NotificationSettings
 	require.NoError(t, db.WithContext(ctx).Where("provider = ?", notifications.NotificationProviderGotify).First(&stored).Error)
@@ -572,14 +572,16 @@ func TestNotificationService_CreateOrUpdateSettingsClearsEmailPasswordWhenAuthMo
 	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	_, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderEmail, true, database.JSON{
-		"smtpHost":     "smtp.example",
+		"smtpHost": "smtp.example",
+		"smtpPort": 587, "smtpUsername": "sender", "fromAddress": "sender@example.com", "toAddresses": []string{"reader@example.com"}, "tlsMode": "starttls",
 		"smtpPassword": "stale-password",
 		"authMode":     "auto",
 	})
 	require.NoError(t, err)
 
 	_, err = svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderEmail, true, database.JSON{
-		"smtpHost":     "smtp.example",
+		"smtpHost": "smtp.example",
+		"smtpPort": 587, "smtpUsername": "sender", "fromAddress": "sender@example.com", "toAddresses": []string{"reader@example.com"}, "tlsMode": "starttls",
 		"smtpPassword": "",
 		"authMode":     string(notifications.EmailAuthModeNone),
 	})
@@ -692,18 +694,18 @@ func TestNotificationService_NotifyEnabledProvidersInternal_SkipsFiltersAndAggre
 	require.ElementsMatch(t, []notifications.NotificationProvider{notifications.NotificationProviderGotify, notifications.NotificationProviderNtfy}, dispatched)
 	require.Equal(t, 1, delivered)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "notification errors: ntfy: boom")
+	require.Contains(t, err.Error(), "notification errors: ntfy: delivery-invalid")
 
 	// Each dispatched attempt lands in the event log.
 	var events []event.Event
-	require.NoError(t, db.WithContext(ctx).Where("type = ?", event.EventTypeNotificationSend).Order("created_at").Find(&events).Error)
+	require.NoError(t, db.WithContext(ctx).Where("type IN ?", []event.EventType{event.EventTypeNotificationSend, "notification.delivery-failed"}).Order("created_at").Find(&events).Error)
 	require.Len(t, events, 2)
 	require.Equal(t, event.EventSeveritySuccess, events[0].Severity)
 	require.Equal(t, "Notification sent via gotify", events[0].Title)
 	require.Equal(t, "loop-test", events[0].Description)
 	require.Equal(t, event.EventSeverityError, events[1].Severity)
 	require.Equal(t, "Notification failed via ntfy", events[1].Title)
-	require.Contains(t, events[1].Description, "boom")
+	require.Contains(t, events[1].Description, "delivery-invalid")
 
 	// Completed attempts persist even when cancellation ends the caller's wait.
 	sqlDB, err := db.DB.DB()

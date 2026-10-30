@@ -149,3 +149,33 @@ it("connects the production security route and Scans settings to HTTP producers"
   expect(screen.getByText(/Nächste Ausführung:/) !== null).toBe(true);
   expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/environments/0/jobs"))).toBe(true);
 });
+
+it("connects notification targets and per-host Auto Heal to HTTP producers without demo text", async () => {
+  const { securityFixture } = await import("./data/http/vulnerabilities.test-support");
+  const { default: targets } = await import("./data/http/testdata/notification-targets.json");
+  const f = securityFixture();
+  const base = f.fetcher.getMockImplementation()!;
+  const heal = { enabled: true, maxRestarts: 4, windowMinutes: 45, excludedStacks: ["web"], excludedContainers: [], managedByEnvironment: false };
+  const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
+  f.fetcher.mockImplementation(async (input, init) => {
+    const url = new URL(String(input), "https://hub.example.com");
+    if (url.pathname === "/api/capabilities") {
+      const body = await (await base(input, init)).json();
+      const ref = { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" };
+      body.data.push(...["listNotificationTargets", "saveNotificationTarget", "deleteNotificationTarget", "testNotificationTarget", "getAutoHealSettings", "saveAutoHealSettings"].map((operationId) => ({ operationId, available: true, resourceRef: ref })));
+      return json(body);
+    }
+    if (url.pathname === "/api/environments/0/notifications/settings") return json(targets);
+    if (url.pathname.endsWith("/auto-heal")) return json(heal);
+    return base(input, init);
+  });
+  const adapter = createAdapter({ fetch: f.fetcher as typeof fetch, eventSource: () => f.source });
+  const { router } = renderRoutes(routes, ["/settings/notifications"], adapter);
+  await screen.findByText("reader@example.com · mail.example.com");
+  expect(screen.getByRole("switch", { name: "Aktiv: ntfy" }).getAttribute("aria-checked")).toBe("false");
+  expect(screen.queryByText(/nicht bearbeiten kann|simuliert|alex@example\.com/) === null).toBe(true);
+  await act(() => router.navigate("/settings/autoHeal"));
+  const rows = await screen.findAllByText(/Höchstens 4 Neustarts je 45 min · 1 Stack und keine Container ausgenommen/);
+  expect(rows.length).toBeGreaterThan(0);
+  expect(document.body.textContent).not.toMatch(/Atlas|Delta|craft/);
+});

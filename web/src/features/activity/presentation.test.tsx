@@ -1,5 +1,5 @@
 import { renderStackDetail } from "@/data/message-code";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { IntlProvider } from "use-intl";
@@ -268,9 +268,11 @@ describe("presentation setting", () => {
   });
 
   it("summarises the hub value on the notifications page without its own draft", async () => {
+    // The section reads through the adapter; demo reads settle on real timers.
+    vi.useRealTimers();
     const adapter = createDemoAdapter();
-    const settings = await adapter.getSettings();
-    renderWithApp(<NotificationsSection settings={settings} />, adapter);
+    renderWithApp(<NotificationsSection />, adapter);
+    await waitFor(() => expect(document.querySelector('[data-slot="action-presentation-pointer"]') !== null).toBe(true));
     const pointer = document.querySelector<HTMLElement>('[data-slot="action-presentation-pointer"]')!;
     expect([pointer.textContent?.includes("Aktuell im Hub: Ablauffenster öffnen."), within(pointer).getByRole("link", { name: "Unter Aktivität ändern" }).getAttribute("href"), screen.queryByRole("radio", { name: "Nur Meldung" })]).toEqual([true, "/settings/activity", null]);
   });

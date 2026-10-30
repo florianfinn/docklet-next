@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296.
 
 package bootstrap
 
@@ -318,6 +318,20 @@ func registerJobs(params registerJobsParams) error {
 			return err
 		}
 	}
+	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		if err := params.Notification.ResetAvailability(params.AppCtx, time.Now().UTC()); err != nil {
+			return err
+		}
+		if err := params.Scheduler.RegisterJob(&scheduler.HostAvailabilityJob{Service: params.Notification}); err != nil {
+			return err
+		}
+		if err := params.Scheduler.RegisterJob(&scheduler.NotificationDeliverJob{Service: params.Notification}); err != nil {
+			return err
+		}
+		if err := params.Scheduler.RegisterBusWatcher(&scheduler.NotificationDeliveryWake{Scheduler: params.Scheduler}, false); err != nil {
+			return err
+		}
+	}
 	hub := vulnerability.NewHubScans(params.DB, params.Settings, params.Environment, params.Vulnerability, params.Notification)
 	params.VulnerabilityScan.SetDispatcher(hub)
 	if err := registerVulnerabilityJobs(params.Scheduler, params.Config, params.VulnerabilityScan, params.VulnerabilityRisk, &scheduler.VulnerabilityNotifyJob{Hub: hub}); err != nil {
@@ -493,7 +507,7 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 	}
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey}, params.VulnerabilityRisk)
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "imageAutoPatchEnabled", "imageAutoPatchInterval"}, params.AutoPatch)
-	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealMaxRestarts", "autoHealRestartWindow"}, params.AutoHeal)
+	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow"}, params.AutoHeal)
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

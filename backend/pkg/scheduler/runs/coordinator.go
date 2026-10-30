@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only local persistence.
+// Deviations: Local module namespace; SQLite-only local persistence; retried admission starts from the new run and startup repairs duplicated run IDs.
 
 // Package runs coordinates durable scheduler execution and recovery.
 package runs
@@ -116,7 +116,11 @@ func (q *Coordinator) Submit(ctx context.Context, request st.Request) (st.Run, e
 		RemoteOutcome:           remoteOutcome,
 	}
 	q.associateActivityInternal(&result)
+	created := result
 	err := q.mutateInternal(ctx, request.EnvironmentID, request.JobID, func(record *st.QueueRecord) error {
+		// A lost compare-and-swap reruns this callback; a run joined in an earlier
+		// attempt must never be appended as the new run.
+		result = created
 		if request.Trigger == "scheduled" || request.Trigger == "recovery" {
 			record.LastEnqueuedAt = now
 		}
@@ -233,7 +237,7 @@ func (q *Coordinator) Start(ctx, appCtx context.Context) error {
 		return fmt.Errorf("read startup job history: %w", err)
 	}
 	for _, record := range records {
-		changed := false
+		changed := dedupeRunsInternal(&record)
 		for _, run := range record.Runs {
 			if normalizeLegacyRunInternal(&run) {
 				changed = true
@@ -244,6 +248,7 @@ func (q *Coordinator) Start(ctx, appCtx context.Context) error {
 			continue
 		}
 		if mutateErr := q.mutateInternal(ctx, record.EnvironmentID, record.JobID, func(current *st.QueueRecord) error {
+			dedupeRunsInternal(current)
 			for i := range current.Runs {
 				normalizeLegacyRunInternal(&current.Runs[i])
 			}

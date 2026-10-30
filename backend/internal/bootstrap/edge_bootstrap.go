@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
 
 package bootstrap
 
@@ -64,8 +64,14 @@ func registerEdgeTunnelRoutes(
 		}
 	}
 
-	eventCallback := func(ctx context.Context, envID string, evt *edge.TunnelEvent) error {
-		return handleEdgeEventInternal(ctx, envID, evt, eventService, notificationService)
+	if notificationService != nil {
+		notificationService.SetDispatchSessionCurrent(func(o notificationdto.DispatchOrigin) bool {
+			t, ok := registry.Get(o.EnvironmentID).Get()
+			return ok && t.SessionID == o.SessionID && t.APIKeyID == o.APIKeyID && t.TokenHash == o.TokenHash
+		})
+	}
+	eventCallback := func(ctx context.Context, origin notificationdto.DispatchOrigin, evt *edge.TunnelEvent) error {
+		return handleEdgeOriginEventInternal(ctx, origin, evt, eventService, notificationService)
 	}
 
 	server := edge.NewTunnelServerWithRegistry(registry, resolver, statusCallback)
@@ -244,6 +250,10 @@ func createEdgeConnectionEvent(ctx context.Context, eventService *event.EventSer
 }
 
 func handleEdgeEventInternal(ctx context.Context, envID string, evt *edge.TunnelEvent, eventService *event.EventService, notificationService *notification.NotificationService) error {
+	return handleEdgeOriginEventInternal(ctx, notificationdto.DispatchOrigin{EnvironmentID: envID}, evt, eventService, notificationService)
+}
+func handleEdgeOriginEventInternal(ctx context.Context, origin notificationdto.DispatchOrigin, evt *edge.TunnelEvent, eventService *event.EventService, notificationService *notification.NotificationService) error {
+	envID := origin.EnvironmentID
 	if evt == nil {
 		return errors.New("event payload is required")
 	}
@@ -253,11 +263,17 @@ func handleEdgeEventInternal(ctx context.Context, envID string, evt *edge.Tunnel
 			return errors.New("notification service is not available for edge dispatch")
 		}
 		var payload notificationdto.DispatchRequest
-		if err := json.Unmarshal(evt.MetadataJSON, &payload); err != nil {
-			return fmt.Errorf("failed to decode edge notification dispatch payload: %w", err)
+		if err := json.Unmarshal(evt.MetadataJSON, &payload, json.RejectUnknownMembers(true)); err != nil {
+			return &notificationdto.Problem{Code: "notification.dispatch-invalid", Status: 400}
 		}
-		_, err := notificationService.DispatchNotificationForEnvironment(ctx, envID, payload)
+		_, err := notificationService.DispatchIngress(ctx, origin, payload)
 		if err != nil {
+			// Edge has no reply channel, so the dropped dispatch is logged with its code and kind.
+			code := "internal"
+			if problem, ok := errors.AsType[*notificationdto.Problem](err); ok {
+				code = problem.Code
+			}
+			slog.WarnContext(ctx, "edge notification dispatch dropped", "environmentId", envID, "kind", string(payload.Kind), "code", code)
 			return fmt.Errorf("failed to dispatch edge notification: %w", err)
 		}
 		return nil

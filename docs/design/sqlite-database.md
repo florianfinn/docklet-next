@@ -546,3 +546,17 @@ their own proof. Local-file locks do not support network volumes or multiple
 hubs; a later scale change requires another architecture decision. Future
 two-file restore can fail between swaps and therefore needs #32's marker and
 recovery design. No old-data compatibility or backup engine is promised here.
+
+
+## Notification and Auto Heal persistence
+
+Forward-only migration 013 applies to hub and agent databases. It adds the hub
+notification outbox and host availability table plus durable host Auto Heal
+restart rows. Outbox checks constrain event/status vocabulary, attempts, valid
+JSON and sending-lease coherence. Auto Heal checks constrain outcome vocabulary,
+baseline counts and attempting/settlement coherence; a unique run/container pair
+prevents repeated reservation after a scheduler checkpoint gap. Auto Heal IDs use
+SQLite AUTOINCREMENT so pruning cannot reuse projection identities. The migration
+hash is pinned. Existing notification settings and prior history are preserved.
+Restore expires unfinished hub delivery intent and clears availability timers;
+host recovery projects interrupted work without sending historical notices.

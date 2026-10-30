@@ -2,280 +2,297 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; Durable restart, final eligibility and real scheduler recovery evidence for issue #296.
 
 package scheduler
 
 import (
+	"bytes"
 	"context"
-	"sync/atomic"
-	"testing"
-	"time"
-
-	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
+	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
+	st "github.com/florianfinn/docklet-next/types/scheduler"
+	"github.com/google/uuid"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"log/slog"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
-func newTestAutoHealJob() *AutoHealJob {
-	return &AutoHealJob{
-		restarts: make(map[string]*restartRecord),
-	}
-}
-
-func TestAutoHeal_ListOptionsFilterUnhealthyAtDaemon(t *testing.T) {
-	opts := autoHealListOptionsInternal()
-	require.False(t, opts.All)
-	require.Equal(t, make(client.Filters).Add("health", string(container.Unhealthy)), opts.Filters)
-}
-
-func TestAutoHeal_FilterCandidates_SkipsSelfContainer(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	selfFullID := "407163929c492b5c4b01a3981f5de4774c37aa8300bd214b4d62412a3dc56468"
-	containers := []container.Summary{
-		{ID: selfFullID, Names: []string{"/arcane"}},
-		{ID: "aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999", Names: []string{"/other"}},
-	}
-
-	// Hostname-based detection yields the short 12-char ID.
-	candidates := job.filterCandidatesInternal(containers, nil, selfFullID[:12])
-	require.Len(t, candidates, 1)
-	require.Equal(t, "/other", candidates[0].Names[0])
-
-	// cgroup/mountinfo-based detection yields the full ID.
-	candidates = job.filterCandidatesInternal(containers, nil, selfFullID)
-	require.Len(t, candidates, 1)
-	require.Equal(t, "/other", candidates[0].Names[0])
-
-	// Outside Docker no self ID is detected and the guard is a no-op.
-	candidates = job.filterCandidatesInternal(containers, nil, "")
-	require.Len(t, candidates, 2)
-}
-
-func TestAutoHeal_CanRestart_UnderLimit(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	// No restarts recorded yet — should be allowed
-	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-
-	// Record 4 restarts (under limit of 5)
-	for range 4 {
-		job.RecordRestartExported("container-1")
-	}
-
-	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-}
-
-func TestAutoHeal_CanRestart_AtLimit(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	// Record exactly 5 restarts (at limit)
-	for range 5 {
-		job.RecordRestartExported("container-1")
-	}
-
-	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-}
-
-func TestAutoHeal_CanRestart_WindowExpiry(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	// Record 5 restarts 31 minutes ago (outside window)
-	oldTime := time.Now().Add(-31 * time.Minute)
-	for range 5 {
-		job.RecordRestartAtExported("container-1", oldTime)
-	}
-
-	// Should be allowed because all timestamps are outside the 30-minute window
-	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-}
-
-func TestAutoHeal_CanRestart_MixedTimestamps(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	// Record 3 old restarts (outside window)
-	oldTime := time.Now().Add(-31 * time.Minute)
-	for range 3 {
-		job.RecordRestartAtExported("container-1", oldTime)
-	}
-
-	// Record 4 recent restarts (inside window)
-	for range 4 {
-		job.RecordRestartExported("container-1")
-	}
-
-	// Should still be allowed (only 4 recent, limit is 5)
-	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-
-	// Add one more recent restart
-	job.RecordRestartExported("container-1")
-
-	// Now should be blocked (5 recent)
-	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-}
-
-func TestAutoHeal_CanRestart_DifferentContainers(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	// Fill up container-1
-	for range 5 {
-		job.RecordRestartExported("container-1")
-	}
-
-	// container-1 should be blocked
-	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-
-	// container-2 should still be allowed
-	require.True(t, job.CanRestartExported("container-2", 5, 30*time.Minute))
-}
-
-func TestAutoHeal_Schedule_Default(t *testing.T) {
-	job := newTestAutoHealJob()
-	// Without a settings service, Schedule would panic.
-	// We test the Name() method directly.
-	require.Equal(t, "auto-heal", job.Name())
-}
-
-func TestAutoHeal_ShouldSchedule(t *testing.T) {
-	ctx := t.Context()
-	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
-	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
+func autoHealFixture(t *testing.T) (*AutoHealJob, *database.DB) {
+	t.Helper()
+	db, s, _ := setupSchedulerStateServicesInternal(t)
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
+	require.NoError(t, db.AutoMigrate(&autoheal.Restart{}, &event.Event{}, &notificationoutbox.Row{}))
+	pool, err := db.DB.DB()
 	require.NoError(t, err)
-
-	require.False(t, job.ShouldSchedule(ctx))
-
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
-	require.True(t, job.ShouldSchedule(ctx))
-}
-
-func TestAutoHeal_ResetRestartTracking(t *testing.T) {
-	job := newTestAutoHealJob()
-
-	// Fill up container-1
-	for range 5 {
-		job.RecordRestartExported("container-1")
+	pool.SetMaxOpenConns(1)
+	require.NoError(t, s.SetBoolSetting(t.Context(), "autoHealEnabled", true))
+	j, err := NewAutoHealJob(nil, s, nil, nil, newTestAdmissionGateInternal(t), AutoHealOptions{DB: db, Busy: func(context.Context, container.InspectResponse) (bool, error) { return false, nil }})
+	require.NoError(t, err)
+	j.getDockerClient = func() (*client.Client, error) { return nil, nil }
+	j.getSelfContainerID = func() (string, error) { return "", nil }
+	j.listContainers = func(context.Context, *client.Client) ([]container.Summary, error) {
+		return []container.Summary{{ID: "container", Names: []string{"/web"}}}, nil
 	}
-	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-
-	// Reset tracking
-	job.ResetRestartTracking()
-
-	// Should be allowed again
-	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
-}
-
-func TestAutoHeal_Run_UsesBoundedConcurrency(t *testing.T) {
-	ctx := t.Context()
-
-	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}))
-
-	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, &database.DB{DB: db})
-	require.NoError(t, err)
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
-	require.NoError(t, settingsSvc.SetStringSetting(ctx, "autoHealExcludedContainers", "skip-me"))
-
-	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
-	require.NoError(t, err)
-	job.getDockerClient = func() (*client.Client, error) { return nil, nil }
-	job.listContainers = func(ctx context.Context, dockerClient *client.Client) ([]container.Summary, error) {
-		return []container.Summary{
-			{ID: "c1", Names: []string{"/one"}},
-			{ID: "c2", Names: []string{"/two"}},
-			{ID: "c3", Names: []string{"/three"}},
-			{ID: "c4", Names: []string{"/four"}},
-			{ID: "c5", Names: []string{"/five"}},
-			{ID: "c6", Names: []string{"/six"}},
-			{ID: "skip", Names: []string{"/skip-me"}},
-		}, nil
+	j.inspectContainer = func(_ context.Context, _ *client.Client, id string) (container.InspectResponse, error) {
+		return healInspect(id), nil
 	}
-
-	var current atomic.Int32
-	var maxConcurrent atomic.Int32
-	var restarts atomic.Int32
-
-	job.inspectContainer = func(ctx context.Context, dockerClient *client.Client, containerID string) (container.InspectResponse, error) {
-		active := current.Add(1)
+	j.restartContainer = func(context.Context, *client.Client, string) error { return nil }
+	return j, db
+}
+func healInspect(id string) container.InspectResponse {
+	return container.InspectResponse{ID: id, Name: "/web", Config: &container.Config{Labels: map[string]string{"com.docker.compose.project": "app"}, Healthcheck: &container.HealthConfig{Test: []string{"CMD", "true"}}}, State: &container.State{Running: true, Health: &container.Health{Status: container.Unhealthy}, StartedAt: "before"}}
+}
+func TestAutoHealFinalEligibilityUsesCurrentIdentitySettingsAndHealth(t *testing.T) {
+	for _, kind := range []string{"stopped", "restarting", "paused", "healthy", "replaced", "no-healthcheck", "excluded-stack", "excluded-name", "disabled", "busy", "read-error"} {
+		t.Run(kind, func(t *testing.T) {
+			j, db := autoHealFixture(t)
+			var calls atomic.Int32
+			j.restartContainer = func(context.Context, *client.Client, string) error { calls.Add(1); return nil }
+			j.inspectContainer = func(context.Context, *client.Client, string) (container.InspectResponse, error) {
+				v := healInspect("container")
+				switch kind {
+				case "stopped":
+					v.State.Running = false
+				case "restarting":
+					v.State.Restarting = true
+				case "paused":
+					v.State.Paused = true
+				case "healthy":
+					v.State.Health.Status = container.Healthy
+				case "replaced":
+					v.ID = "replacement"
+				case "no-healthcheck":
+					v.Config.Healthcheck = nil
+				case "excluded-stack":
+					require.NoError(t, j.settingsService.SetStringSetting(t.Context(), "autoHealExcludedStacks", "app"))
+				case "excluded-name":
+					require.NoError(t, j.settingsService.SetStringSetting(t.Context(), "autoHealExcludedContainers", "web"))
+				case "disabled":
+					require.NoError(t, j.settingsService.SetBoolSetting(t.Context(), "autoHealEnabled", false))
+				}
+				return v, nil
+			}
+			if kind == "busy" {
+				j.busy = func(context.Context, container.InspectResponse) (bool, error) { return true, nil }
+			}
+			if kind == "read-error" {
+				j.busy = func(context.Context, container.InspectResponse) (bool, error) {
+					return false, errors.New("read failed")
+				}
+			}
+			_, err := j.Run(t.Context())
+			require.NoError(t, err)
+			require.Zero(t, calls.Load())
+			var n int64
+			require.NoError(t, db.Model(&autoheal.Restart{}).Count(&n).Error)
+			require.Zero(t, n)
+		})
+	}
+}
+func TestAutoHealFailedRestartIsDurableAndProjected(t *testing.T) {
+	j, db := autoHealFixture(t)
+	j.restartContainer = func(context.Context, *client.Client, string) error { return errors.New("controlled Docker failure") }
+	outcome, err := j.Run(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, st.Partial, outcome.Status)
+	var row autoheal.Restart
+	require.NoError(t, db.First(&row).Error)
+	require.Equal(t, "restart-failed", row.Outcome)
+	require.NotNil(t, row.ProjectedAt)
+	var a activity.Activity
+	require.NoError(t, db.First(&a).Error)
+	require.Equal(t, "autoheal.restart-failed", a.MessageCode)
+	var n int64
+	require.NoError(t, db.Model(&notificationoutbox.Row{}).Count(&n).Error)
+	require.EqualValues(t, 1, n)
+}
+func TestAutoHealRecoveryClosesReservationCheckpointGapThroughScheduler(t *testing.T) {
+	for _, effect := range []string{"before-docker", "after-docker", "still-restarting"} {
+		t.Run(effect, func(t *testing.T) {
+			j, db := autoHealFixture(t)
+			runtime := francistest.New(t)
+			q := runs.New(runtime.Service(), time.UTC)
+			require.NoError(t, q.Register(runtime))
+			francistest.Start(t, runtime)
+			run, err := q.Submit(t.Context(), st.Request{JobID: j.Name(), RunID: uuid.NewString(), Trigger: "scheduled"})
+			require.NoError(t, err)
+			require.NoError(t, q.UpdateRun(t.Context(), run, func(r *st.Run) error { r.Status = st.Running; return nil }))
+			var calls atomic.Int32
+			j.restartContainer = func(context.Context, *client.Client, string) error { calls.Add(1); return nil }
+			// Freeze the real plan, then fail its first target checkpoint after the reservation committed.
+			ctx := jobcontext.WithExecution(t.Context(), run, func(target st.TargetOutcome) error {
+				if target.ResourceType == "container" {
+					return errors.New("checkpoint unavailable")
+				}
+				return q.UpdateRun(t.Context(), run, func(r *st.Run) error { r.Outcome.Targets = append(r.Outcome.Targets, target); return nil })
+			})
+			_, err = j.Run(ctx)
+			require.Error(t, err)
+			require.Zero(t, calls.Load())
+			var reserved autoheal.Restart
+			require.NoError(t, db.First(&reserved).Error)
+			require.Equal(t, "attempting", reserved.Outcome)
+			require.Equal(t, run.ID, reserved.RunID)
+			j.inspectContainer = func(context.Context, *client.Client, string) (container.InspectResponse, error) {
+				v := healInspect("container")
+				if effect != "before-docker" {
+					v.State.StartedAt = "after"
+				}
+				if effect == "still-restarting" {
+					v.State.Restarting = true
+				}
+				v.State.Health.Status = container.Healthy
+				return v, nil
+			}
+			recovered := make(chan st.Outcome, 1)
+			q.SetExecutor(func(context.Context, st.Run) (st.Outcome, error) {
+				t.Error("interrupted run replayed through ordinary execution")
+				return st.Outcome{}, nil
+			}, func(ctx context.Context, r st.Run) (st.Outcome, error) {
+				o, e := j.Reconcile(ctx, r)
+				recovered <- o
+				return o, e
+			})
+			require.NoError(t, q.Start(t.Context(), t.Context()))
+			q.Activate()
+			defer q.Stop(context.WithoutCancel(t.Context()))
+			var o st.Outcome
+			select {
+			case o = <-recovered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("scheduler did not reconcile the reserved candidate")
+			}
+			require.Zero(t, calls.Load())
+			require.NoError(t, db.First(&reserved, reserved.ID).Error)
+			want := "interrupted"
+			status := st.Failed
+			if effect == "after-docker" {
+				want = "restarted"
+				status = st.Succeeded
+			}
+			require.Equal(t, want, reserved.Outcome)
+			found := false
+			for _, target := range o.Targets {
+				if target.ID == "container" {
+					found = true
+					require.Equal(t, status, target.Status)
+				}
+			}
+			require.True(t, found, "recovery appends the target missing from scheduler progress")
+			var n int64
+			require.NoError(t, db.Model(&activity.Activity{}).Count(&n).Error)
+			require.EqualValues(t, 1, n)
+			require.NoError(t, db.Model(&notificationoutbox.Row{}).Count(&n).Error)
+			require.Zero(t, n, "recovered outcomes never notify")
+		})
+	}
+}
+func TestAutoHealUsesBoundedInspectionConcurrency(t *testing.T) {
+	j, _ := autoHealFixture(t)
+	j.listContainers = func(context.Context, *client.Client) ([]container.Summary, error) {
+		return []container.Summary{{ID: "1"}, {ID: "2"}, {ID: "3"}, {ID: "4"}, {ID: "5"}}, nil
+	}
+	entered := make(chan struct{}, 5)
+	release := make(chan struct{})
+	var current, max atomic.Int32
+	j.inspectContainer = func(_ context.Context, _ *client.Client, id string) (container.InspectResponse, error) {
+		n := current.Add(1)
 		for {
-			maxSeen := maxConcurrent.Load()
-			if active <= maxSeen || maxConcurrent.CompareAndSwap(maxSeen, active) {
+			m := max.Load()
+			if n <= m || max.CompareAndSwap(m, n) {
 				break
 			}
 		}
-		defer current.Add(-1)
-
-		time.Sleep(40 * time.Millisecond)
-
-		switch containerID {
-		case "c5":
-			return container.InspectResponse{State: &container.State{}}, nil
-		case "c6":
-			return container.InspectResponse{State: &container.State{Health: &container.Health{Status: container.Healthy}}}, nil
-		default:
-			return container.InspectResponse{State: &container.State{Health: &container.Health{Status: container.Unhealthy}}}, nil
-		}
+		entered <- struct{}{}
+		<-release
+		current.Add(-1)
+		return healInspect(id), nil
 	}
-	job.restartContainer = func(ctx context.Context, dockerClient *client.Client, containerID string) error {
-		restarts.Add(1)
-		return nil
+	done := make(chan error, 1)
+	go func() { _, err := j.Run(t.Context()); done <- err }()
+	for range 4 {
+		<-entered
 	}
-
-	_, runErr1 := job.Run(ctx)
-	require.NoError(t, runErr1)
-
-	require.Greater(t, maxConcurrent.Load(), int32(1))
-	require.LessOrEqual(t, maxConcurrent.Load(), int32(autoHealInspectConcurrency))
-	require.Equal(t, int32(4), restarts.Load())
+	require.EqualValues(t, 4, max.Load())
+	close(release)
+	require.NoError(t, <-done)
+	require.LessOrEqual(t, max.Load(), int32(4))
+}
+func TestAutoHealListAndSelfExclusion(t *testing.T) {
+	opts := autoHealListOptionsInternal()
+	require.False(t, opts.All)
+	require.Equal(t, make(client.Filters).Add("health", string(container.Unhealthy)), opts.Filters)
+	j := &AutoHealJob{}
+	rows := j.filterCandidatesInternal([]container.Summary{{ID: "self123", Names: []string{"/hub"}}, {ID: "other", Names: []string{"/web"}}}, nil, "self")
+	require.Len(t, rows, 1)
+	require.Equal(t, "other", rows[0].ID)
 }
 
-func TestAutoHealJob_OverlappingRunIsSkippedInternal(t *testing.T) {
-	ctx := t.Context()
-	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
-
-	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
-	require.NoError(t, err)
-	job.getDockerClient = func() (*client.Client, error) { return nil, nil }
-	started := make(chan struct{}, 1)
-	release := make(chan struct{})
+func TestAutoHealOutOfContractSettingsFailClosedVisibly(t *testing.T) {
+	j, db := autoHealFixture(t)
+	require.NoError(t, j.settingsService.SetStringSetting(t.Context(), "autoHealMaxRestarts", "20"))
 	var calls atomic.Int32
-	job.listContainers = func(context.Context, *client.Client) ([]container.Summary, error) {
-		calls.Add(1)
-		select {
-		case started <- struct{}{}:
-		default:
-		}
-		<-release
-		return nil, nil
+	j.restartContainer = func(context.Context, *client.Client, string) error { calls.Add(1); return nil }
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	_, err := j.Run(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, calls.Load())
+	var n int64
+	require.NoError(t, db.Model(&autoheal.Restart{}).Count(&n).Error)
+	require.Zero(t, n)
+	require.Equal(t, 1, strings.Count(logs.String(), "auto-heal settings outside the typed contract"))
+	require.Contains(t, logs.String(), "field=/maxRestarts")
+}
+func TestAutoHealScheduledRunsSettleAndHealTheNextContainer(t *testing.T) {
+	j, db := autoHealFixture(t)
+	runtime := francistest.New(t)
+	q := runs.New(runtime.Service(), time.UTC)
+	require.NoError(t, q.Register(runtime))
+	francistest.Start(t, runtime)
+	var current atomic.Value
+	j.listContainers = func(context.Context, *client.Client) ([]container.Summary, error) {
+		return []container.Summary{{ID: current.Load().(string), Names: []string{"/web"}}}, nil
 	}
-
-	firstDone := make(chan struct{})
-	go func() {
-		_, runErr2 := job.Run(ctx)
-		if runErr2 != nil {
-			t.Errorf("first auto heal job run failed: %v", runErr2)
-			close(firstDone)
-			return
-		}
-		close(firstDone)
-	}()
-	<-started
-
-	_, runErr3 := job.Run(ctx)
-	require.NoError(t, runErr3)
-	require.Equal(t, int32(1), calls.Load())
-
-	close(release)
-	select {
-	case <-firstDone:
-	case <-time.After(time.Second):
-		require.FailNow(t, "first auto-heal run did not finish")
+	q.SetExecutor(func(ctx context.Context, _ st.Run) (st.Outcome, error) { return j.Run(ctx) }, func(ctx context.Context, r st.Run) (st.Outcome, error) { return j.Reconcile(ctx, r) })
+	require.NoError(t, q.Start(t.Context(), t.Context()))
+	q.Activate()
+	defer q.Stop(context.WithoutCancel(t.Context()))
+	for _, id := range []string{"first", "second"} {
+		current.Store(id)
+		run, err := q.Submit(t.Context(), st.Request{JobID: j.Name(), RunID: uuid.NewString(), Trigger: "scheduled"})
+		require.NoError(t, err)
+		var settled st.Run
+		require.Eventually(t, func() bool {
+			settled, err = q.Get(t.Context(), run.EnvironmentID, run.JobID, run.ID)
+			return err == nil && settled.Status == st.Succeeded
+		}, 5*time.Second, 20*time.Millisecond, "scheduled run %s did not settle", id)
+		require.Len(t, settled.Outcome.Targets, 1)
+		require.Equal(t, "autoheal.restarted", settled.Outcome.Targets[0].Code)
+	}
+	var restarted int64
+	require.NoError(t, db.Model(&autoheal.Restart{}).Where("outcome = ?", "restarted").Count(&restarted).Error)
+	require.EqualValues(t, 2, restarted)
+}
+func TestAutoHealTerminalOutcomesUseDeclaredReasons(t *testing.T) {
+	for _, outcome := range []string{"restarted", "restart-failed", "interrupted", "limit-reached", "attempting", ""} {
+		target := targetForRestart(&autoheal.Restart{ContainerID: "container", Outcome: outcome})
+		require.NoError(t, st.Outcome{Targets: []st.TargetOutcome{target}}.ValidateReasons(), outcome)
+		require.Equal(t, outcome == "restarted", target.Status == st.Succeeded, outcome)
 	}
 }

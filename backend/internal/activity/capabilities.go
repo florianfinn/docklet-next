@@ -2,12 +2,13 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297.
 package activity
 
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -36,7 +37,7 @@ var adapterOperationIDs = []string{
 	"runStackCommand", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
-	"subscribeMetrics", "testNotification", "updateHost", "uploadFile",
+	"subscribeMetrics", "updateHost", "uploadFile",
 	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
@@ -46,8 +47,8 @@ type GetCapabilitiesInput struct {
 }
 
 func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Descriptor {
-	result := make([]capability.Descriptor, 0, len(adapterOperationIDs)+len(backupOperationIDs))
-	for _, operationID := range append(append([]string(nil), adapterOperationIDs...), backupOperationIDs...) {
+	result := make([]capability.Descriptor, 0, len(adapterOperationIDs)+len(backupOperationIDs)+len(settingsOperationIDs))
+	for _, operationID := range slices.Concat(adapterOperationIDs, backupOperationIDs, settingsOperationIDs) {
 		descriptor := capability.Descriptor{OperationID: operationID, ResourceRef: ref}
 		switch operationID {
 		case "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges":
@@ -242,6 +243,13 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			}
 		case "setBackupPolicy", "runBackup", "restoreBackup", "restoreBackupFiles", "browseBackup", "downloadBackup", "deleteBackup", "uploadRestore", "getBackupOverview", "listBackupOverviews", "getBackupRepository", "checkBackupRepository", "listBackupTargets", "createBackupTarget", "updateBackupTarget", "deleteBackupTarget", "testBackupTarget", "getBackupTargetReferences", "getBackupRecoveryKey", "attachLocalBackupRecoveryKey":
 			descriptors[i].Available = backupCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
+			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "listNotificationTargets", "saveNotificationTarget", "deleteNotificationTarget", "testNotificationTarget", "getAutoHealSettings", "saveAutoHealSettings":
+			descriptors[i].Available = settingsCapabilityAllowedInternal(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""
 			} else {

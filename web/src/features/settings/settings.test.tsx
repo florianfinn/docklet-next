@@ -121,20 +121,19 @@ describe("hub settings", () => {
     }
   });
 
-  it("adds a notification channel chosen at add time and tests it without sending", async () => {
+  it("adds a channel target chosen at add time, keeps its secret write-only and tests it", async () => {
     const adapter = createDemoAdapter();
     renderRoutes(routes, ["/settings/notifications"], adapter);
-    await screen.findByText("Admin-Mail");
-    expect(screen.queryByText("Gotify-Kanal") === null).toBe(true);
-    await userEvent.click(screen.getByRole("button", { name: "Kanal hinzufügen" }));
-    await userEvent.click(screen.getByRole("button", { name: "Gotify" }));
-    await userEvent.type(screen.getByLabelText("Server-Adresse"), "https://gotify.example.com");
-    await userEvent.click(screen.getByRole("button", { name: "Übernehmen" }));
+    await screen.findByText("alex@example.com · mail.example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Ziel hinzufügen" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Gotify" }));
+    await userEvent.type(screen.getByLabelText("Server"), "gotify.example.com");
+    await userEvent.type(screen.getByLabelText("Token"), "demo-token");
     await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    await waitFor(async () => expect((await adapter.getSettings()).notifications.map((c) => c.kind)).toEqual(["email", "ntfy", "gotify"]));
-    const gotify = (await adapter.getSettings()).notifications.find((c) => c.kind === "gotify");
-    expect(gotify?.target).toBe("https://gotify.example.com");
-    const result = await adapter.testNotification(gotify!);
-    expect(result.ok && result.message.includes("nichts wurde versendet")).toBe(true);
+    await waitFor(async () => expect((await adapter.listNotificationTargets()).map((t) => t.provider)).toEqual(["email", "ntfy", "gotify"]));
+    const gotify = (await adapter.listNotificationTargets()).find((t) => t.provider === "gotify");
+    expect(gotify?.kind === "target" ? [gotify.config.token, gotify.credentialsSet, gotify.events] : undefined).toEqual(["", ["token"], ["deployFailed", "hostOffline", "backupFailed", "autoHeal"]]);
+    expect((await adapter.testNotificationTarget("gotify")).code).toBe("notification.test-sent");
+    expect(screen.queryByRole("dialog") === null).toBe(true);
   });
 });

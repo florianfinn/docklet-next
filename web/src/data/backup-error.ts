@@ -32,10 +32,16 @@ export function backupCodeKey(
     : undefined;
 }
 
+const ACCESS_KEYS = {
+  "agent.unavailable": "common.commandErrors.unreachable",
+  "agent.invalid-token": "common.commandErrors.credentialRejected",
+  "agent.update-required": "common.commandErrors.updateRequired",
+} as const;
+
 /** Server detail/title/error are deliberately never carried into user feedback. */
 export function backupErrorMessage(error: unknown, translate: ReturnType<typeof useTranslations>): string {
   const code = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.code : undefined;
-  const key = backupCodeKey(code) ?? (code === "volume.outcome-unknown" ? "volumes.errors.outcome-unknown" : undefined);
+  const key = backupCodeKey(code) ?? (code === "volume.outcome-unknown" ? "volumes.errors.outcome-unknown" : code && code in ACCESS_KEYS ? ACCESS_KEYS[code as keyof typeof ACCESS_KEYS] : undefined);
   const reason = error instanceof BackupError ? error.problem.reason : undefined;
   return [
     translate(key ?? "common.commandErrors.failed"),

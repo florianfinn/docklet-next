@@ -1,5 +1,24 @@
 {
   "columns": [
+    {"table":"notification_outbox","column":"id","notNull":true},
+    {"table":"notification_outbox","column":"event","notNull":true},
+    {"table":"notification_outbox","column":"environment_id","notNull":true},
+    {"table":"notification_outbox","column":"dedup_key","notNull":true},
+    {"table":"notification_outbox","column":"payload","notNull":true},
+    {"table":"notification_outbox","column":"status","notNull":true},
+    {"table":"notification_outbox","column":"attempts","notNull":true,"default":"0"},
+    {"table":"notification_outbox","column":"created_at","notNull":true},
+    {"table":"host_availability_notifications","column":"environment_id","notNull":true},
+    {"table":"host_availability_notifications","column":"offline_since","notNull":true},
+    {"table":"auto_heal_restarts","column":"run_id","notNull":true},
+    {"table":"auto_heal_restarts","column":"container_id","notNull":true},
+    {"table":"auto_heal_restarts","column":"container_name","notNull":true},
+    {"table":"auto_heal_restarts","column":"stack","notNull":true},
+    {"table":"auto_heal_restarts","column":"started_at","notNull":true},
+    {"table":"auto_heal_restarts","column":"baseline_started_at","notNull":true},
+    {"table":"auto_heal_restarts","column":"baseline_restart_count","notNull":true},
+    {"table":"auto_heal_restarts","column":"outcome","notNull":true},
+
     {"table":"vulnerability_scan_notifications","column":"registration_id","notNull":true},
     {"table":"vulnerability_scan_notifications","column":"activity_id","notNull":true},
     {"table":"vulnerability_scan_notifications","column":"created_at","notNull":true},
@@ -281,6 +300,9 @@
     {"table": "webhooks", "column": "token_prefix", "notNull": true}
   ],
   "constraints": {
+    "notification_outbox": ["CHECK (event IN ('deploy_failed','backup_failed','host_offline','auto_heal'))", "CHECK (status IN ('pending','sending','sent','failed','unconfigured','expired'))", "CHECK (attempts >= 0)", "CHECK ((status='sending') = (lease_until IS NOT NULL))"],
+    "auto_heal_restarts": ["CHECK (baseline_restart_count >= 0)", "CHECK (outcome IN ('attempting','restarted','restart-failed','interrupted','limit-reached'))", "CHECK ((outcome='attempting') = (settled_at IS NULL))"],
+
     "volume_restore_runs": ["CHECK (kind IN ('full','files','upload'))", "CHECK (phase IN ('preparing','writing','done'))", "CHECK (status IN ('running','succeeded','failed','partial'))", "CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))", "CHECK (mode IN ('replace','new'))"],
     "volume_backups": ["CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))"],
     "backup_targets": ["CHECK (kind IN ('local','mount','smb','nfs'))", "CHECK ((kind IN ('smb','nfs')) = (host_id IS NULL))"],
@@ -321,6 +343,7 @@
     "system_backup_policies": ["CHECK (retention_count >= 1)"]
   },
   "indexes": [
+    "CREATE INDEX idx_notification_outbox_delivery ON notification_outbox (status,created_at);",
     "CREATE UNIQUE INDEX idx_volume_backup_policies_single_volume ON volume_backup_policies (volume_name)",
     "CREATE UNIQUE INDEX idx_backup_targets_active_name ON backup_targets (name) WHERE retired_at IS NULL",
     "CREATE INDEX idx_vulnerability_scan_notifications_status ON vulnerability_scan_notifications (status,created_at);",

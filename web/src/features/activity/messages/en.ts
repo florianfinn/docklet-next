@@ -70,6 +70,7 @@ export const enActivity = {
     pull: "Image pull",
     prune: "Cleanup",
     "agent-restart": "Agent restart",
+    "auto-heal": "Auto Heal restart",
   },
   dismiss: "Close notice",
   notices: {

@@ -27,6 +27,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 import { UpdateUnavailable } from "@/shared/components/updates/live-state";
 import { useImageError } from "@/features/images/use-image-error";
+import { NotificationsPointer } from "../notifications/NotificationsPointer";
 
 function ScheduleDialog({ hostId, value, close, saved }: { hostId: string; value: UpdateSchedules; close: () => void; saved: () => void }) {
   const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), action = useUpdateAction(`${hostId}:${value.registrationId}:${value.revision}`);
@@ -66,5 +67,5 @@ export function HostUpdateSettings({ hostId, name }: { hostId: string; name: str
 }
 export function LiveUpdatesSection() {
   const hosts = useHosts(), stacks = useStacks(), t = useTranslations("common.stackUpdates");
-  return <div className="flex flex-col gap-4"><h2 id={UPDATE_CHECK_ANCHOR}>{t("schedules")}</h2>{hosts.data?.map((h) => <HostUpdateSettings key={h.id} hostId={h.id} name={h.name} />)}<h2 id={UPDATE_POLICIES_ANCHOR}>{t("policy")}</h2>{stacks.data?.map((s) => <Link key={s.id} to={`/stacks/${encodeURIComponent(s.id)}`}>{s.name}</Link>)}</div>;
+  return <div className="flex flex-col gap-4"><h2 id={UPDATE_CHECK_ANCHOR}>{t("schedules")}</h2><NotificationsPointer />{hosts.data?.map((h) => <HostUpdateSettings key={h.id} hostId={h.id} name={h.name} />)}<h2 id={UPDATE_POLICIES_ANCHOR}>{t("policy")}</h2>{stacks.data?.map((s) => <Link key={s.id} to={`/stacks/${encodeURIComponent(s.id)}`}>{s.name}</Link>)}</div>;
 }
