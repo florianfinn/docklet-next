@@ -14,13 +14,18 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/base"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"go.uber.org/fx"
+	"net/url"
 )
 
 type runtimeResult struct {
@@ -32,7 +37,7 @@ type runtimeResult struct {
 }
 
 func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activity.ActivityService, projects *project.ProjectService, containers *container.ContainerService,
-	environments *environment.EnvironmentService, settings *settings.SettingsService, cfg *config.Config, client *http.Client, tunnels *edge.TunnelRegistry) (runtimeResult, error) {
+	environments *environment.EnvironmentService, settings *settings.SettingsService, cfg *config.Config, client *http.Client, tunnels *edge.TunnelRegistry, db *database.DB) (runtimeResult, error) {
 	runtimeCtx, cancelRuntime := context.WithCancel(ctx)
 	constructed := false
 	defer func() {
@@ -40,6 +45,17 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 			cancelRuntime()
 		}
 	}()
+	containers.ConfigureOperations(db.DB, settings.GetSettingsConfig().InstanceID.Value, !cfg.AgentMode && !cfg.EdgeAgent, func(ctx context.Context, environment, id string) (origin.Identity, error) {
+		var response base.ApiResponse[containerDTO.Details]
+		err := environments.ProxyJSONRequest(ctx, environment, http.MethodGet, "/api/environments/0/containers/"+url.PathEscape(id), nil, &response)
+		if err != nil {
+			return origin.Identity{}, err
+		}
+		if !response.Success || response.Data.ID == "" {
+			return origin.Identity{}, activity.ErrRuntimeTransport
+		}
+		return origin.Identity{ID: response.Data.ID, Name: response.Data.Name, Labels: response.Data.Labels, Protected: response.Data.RedeployDisabled}, nil
+	}, environments.ReadSnapshots().Forget)
 	adapter := activity.NewRuntimeServiceAdapter(projects, containers)
 	var runtime *activity.RuntimeService
 	newSender := func(ctx context.Context, id string) (*activity.RuntimeSender, error) {
@@ -73,7 +89,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 			return activity.RuntimeResolvedTarget{}, err
 		}
 		metadata, err := sender.Resolve(ctx, activitytypes.RuntimeTargetRequest{Registration: identity, Target: target})
-		return activity.RuntimeResolvedTarget{Target: metadata.Target, ComposeManaged: metadata.ComposeManaged}, err
+		return activity.RuntimeResolvedTarget{Target: metadata.Target, ComposeManaged: metadata.ComposeManaged, Origin: metadata.Origin, ComposeProjectLabel: metadata.ComposeProjectLabel, Protected: metadata.Protected}, err
 	}
 	runtime = activity.NewRuntimeService(service, activity.RuntimeResolverFunc(func(ctx context.Context, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
 		return resolve(ctx, activity.RuntimeEnvironmentFromContext(ctx), target)
@@ -99,7 +115,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	if err != nil {
 		return runtimeResult{}, err
 	}
-	httpService, err := activity.NewRuntimeHTTPService(runtime, activity.RuntimeHTTPPorts{ApplicationContext: runtimeCtx, Agent: cfg.AgentMode,
+	httpService, err := activity.NewRuntimeHTTPService(runtime, activity.RuntimeHTTPPorts{ApplicationContext: runtimeCtx, Agent: cfg.AgentMode, GuardContainer: containers.GuardRuntimeOrigin,
 		PrepareLifecycle: func(ctx context.Context, id string, target activity.RuntimeTarget, store activity.RuntimeStoreBinding, request updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error) {
 			if id == "0" {
 				return adapter.PrepareImageLifecycle(ctx, target.ID, store.RegistrationID, request)

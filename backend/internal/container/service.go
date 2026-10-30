@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory.; M14 container and host operation contracts.
 
 package container
 
@@ -44,6 +44,7 @@ import (
 )
 
 type ContainerService struct {
+	operations      *containerOperations
 	dockerService   *dockerInternal.DockerClientService
 	eventService    *event.EventService
 	imageService    *image.ImageService
@@ -657,6 +658,9 @@ func (s *ContainerService) RedeployContainer(ctx context.Context, containerID st
 	}
 
 	containerInfo := containerJSON.Container
+	if err := effectOriginGuard(containerInfo); err != nil {
+		return "", err
+	}
 	if containerInfo.Config == nil {
 		err = errors.New("container config is nil")
 		s.eventService.LogErrorEvent(ctx, event.EventTypeContainerError, "container", containerID, "", user.ID, user.Username, "0", err, database.JSON{
@@ -678,18 +682,6 @@ func (s *ContainerService) RedeployContainer(ctx context.Context, containerID st
 			"step":   "self_redeploy_blocked",
 		})
 		return "", err
-	}
-
-	// If this container belongs to a known compose project, redeploy through the
-	// compose-aware path so that compose file changes (healthchecks, env, etc.) and
-	// the project's include/project_directory/env-file context are honored. The
-	// standalone Docker-API path below only clones the existing container config
-	// from the daemon and would silently ignore any compose edits.
-	if newID, handled, composeErr := s.tryRedeployViaComposeProjectInternal(ctx, containerInfo, containerID, containerName, user); handled {
-		if composeErr != nil {
-			return "", composeErr
-		}
-		return newID, nil
 	}
 
 	if imageName != "" {
@@ -736,6 +728,9 @@ func (
 	string,
 	error,
 ) {
+	if err := effectOriginGuard(containerInfo); err != nil {
+		return "", err
+	}
 	containerID := containerInfo.ID
 	containerName := strings.TrimPrefix(containerInfo.Name, "/")
 	wasRunning := containerInfo.State != nil && containerInfo.State.Running

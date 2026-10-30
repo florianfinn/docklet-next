@@ -10,7 +10,10 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
+	"go.getarcane.app/sys/cgroup"
+	"go.getarcane.app/updater/labels"
 	"io"
 	"strings"
 
@@ -78,7 +81,10 @@ func (a *RuntimeServiceAdapter) ResolveRuntimeTarget(ctx context.Context, target
 		if inspect == nil || inspect.ID != target.ID || inspect.Config == nil {
 			return RuntimeResolvedTarget{}, errors.New("container inspection identity unavailable")
 		}
-		resolved := RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "container", ID: inspect.ID}}
+		fields := origin.Detect(inspect.Config.Labels)
+		currentID, currentErr := cgroup.CurrentContainerID()
+		_, hasProject := inspect.Config.Labels["com.docker.compose.project"]
+		resolved := RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "container", ID: inspect.ID}, Origin: &fields, ComposeProjectLabel: hasProject, Protected: labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, currentID, currentErr)}
 		if name := strings.TrimPrefix(inspect.Name, "/"); name != "" {
 			resolved.Target.Name = &name
 		}

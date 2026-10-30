@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M14 container and host operation contracts.
 
 package container
 
@@ -165,6 +165,9 @@ func (h *ContainerHandler) ListContainers(ctx context.Context, input *ListContai
 		return nil, huma.Error500InternalServerError("Failed to list containers: " + err.Error())
 	}
 
+	if err := h.containerService.overlayLocal(ctx, &result); err != nil {
+		return nil, huma.Error503ServiceUnavailable("Origin overlay unavailable")
+	}
 	return &ListContainersOutput{
 		Body: ContainerPaginatedResponse{
 			Success:               true,
@@ -459,6 +462,9 @@ func (h *ContainerHandler) GetContainer(ctx context.Context, input *GetContainer
 		return nil, huma.Error404NotFound("Failed to retrieve container: " + err.Error())
 	}
 
+	if err := h.containerService.overlayLocal(ctx, &details); err != nil {
+		return nil, huma.Error503ServiceUnavailable("Origin overlay unavailable")
+	}
 	return &handlerutil.Out[container.Details]{
 		Body: base.ApiResponse[container.Details]{
 			Success: true,

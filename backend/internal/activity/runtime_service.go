@@ -15,14 +15,18 @@ import (
 
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	containertypes "github.com/florianfinn/docklet-next/types/container"
 	"gorm.io/gorm"
 )
 
 // RuntimeResolvedTarget is current identity evidence, not inventory cache data.
 // ComposeManaged without a persisted parent is an admission refusal.
 type RuntimeResolvedTarget struct {
-	Target         RuntimeTarget
-	ComposeManaged bool
+	Origin              *containertypes.OriginFields
+	ComposeProjectLabel bool
+	Protected           bool
+	Target              RuntimeTarget
+	ComposeManaged      bool
 }
 
 type RuntimeTargetResolver interface {

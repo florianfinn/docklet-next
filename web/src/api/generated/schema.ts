@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 88584836ce16e184cb46d7cbc059b38ae7b2f4e35e095fe0dd6d3b8b3276a3e2
+// Revision: b76892f841cd4876ae955018a1d2691ef327492db610f522c57211fb6778d2ca
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1326,6 +1326,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/containers/{containerId}/origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["assign-container-origin"];
+        post?: never;
+        delete: operations["reset-container-origin"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5108,7 +5124,10 @@ export interface components {
              */
             readonly $schema?: string;
             composeManaged: boolean;
+            composeProjectLabel?: boolean;
             lifecycle?: components["schemas"]["UpdaterLifecycleIntent"];
+            origin?: components["schemas"]["ContainerOriginFields"];
+            protected?: boolean;
             target: components["schemas"]["ActivityRuntimeTarget"];
         };
         ActivityRuntimeTargetRequest: {
@@ -7895,9 +7914,27 @@ export interface components {
             };
         };
         ContainerOriginAssignment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerOriginAssignment.json
+             */
+            readonly $schema?: string;
             dockerId: string;
             /** @enum {string} */
             origin: "unraid" | "standalone";
+        };
+        ContainerOriginFields: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerOriginFields.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
         };
         ContainerPort: {
             ip?: string;
@@ -17388,6 +17425,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "assign-container-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerOriginAssignment"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerOriginFields"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-container-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerOriginFields"];
+                };
             };
             /** @description Error */
             default: {

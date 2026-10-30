@@ -92,7 +92,7 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 	var httpService *activity.RuntimeHTTPService
 	var receiver *activity.RuntimeReceiver
 	var remote *activity.RuntimeRemoteCoordinator
-	app := fx.New(fx.NopLogger, fx.Supply(local, f.projects, f.containers, environments, f.settings, cfg, client, registry),
+	app := fx.New(fx.NopLogger, fx.Supply(f.db, local, f.projects, f.containers, environments, f.settings, cfg, client, registry),
 		fx.Provide(func() context.Context { return t.Context() }), di.RuntimeOptions, fx.Populate(&runtime, &httpService, &receiver, &remote))
 	require.NoError(t, app.Err())
 	activity.UseImmediateRuntimeReconcileScheduleForTest(remote)

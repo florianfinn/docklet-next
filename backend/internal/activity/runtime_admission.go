@@ -50,6 +50,15 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	if err := ctx.Err(); err != nil {
 		return RuntimeAdmissionResult{}, err
 	}
+	if string(command.Operation) == "recreate-container" || string(command.Operation) == "redeploy-container" {
+		h := s.activity.runtimeHTTP
+		if h == nil || h.ports.GuardContainer == nil {
+			return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "container.origin-locked"}
+		}
+		if err := h.ports.GuardContainer(ctx, command.Store.EnvironmentID, resolved.Target.ID); err != nil {
+			return RuntimeAdmissionResult{}, err
+		}
+	}
 	if resolved.ComposeManaged && resolved.Target.ParentProjectID == nil {
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: string(activitytypes.CodeRuntimeParentUnresolved)}
 	}

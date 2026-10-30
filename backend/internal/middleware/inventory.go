@@ -54,6 +54,14 @@ func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, fo
 	observed := ""
 	reason := ""
 	if capture.status == http.StatusOK && valid && envelope.Success {
+		if m.originOverlay != nil && len(parts) > 0 && parts[0] == "containers" {
+			body, err := m.originOverlay(c.Request().Context(), hostID, capture.body.Bytes())
+			if err != nil {
+				return err
+			}
+			capture.body.Reset()
+			capture.body.Write(body)
+		}
 		value := m.snapshots.Put(key, capture.body.Bytes())
 		observed = value.ObservedAt.Format(time.RFC3339Nano)
 	} else if valid && (envelope.Code == "agent.unavailable" || envelope.Code == "agent.invalid-token" || envelope.Code == "agent.update-required") {
@@ -105,5 +113,5 @@ func inventorySuffix(suffix string, parts []string) bool {
 	case "/containers", "/projects", "/images", "/volumes", "/networks", "/ports", "/networks/topology", "/dashboard":
 		return true
 	}
-	return len(parts) == 2 && (parts[0] == "projects" || parts[0] == "networks" || parts[0] == "volumes")
+	return len(parts) == 2 && (parts[0] == "containers" || parts[0] == "projects" || parts[0] == "networks" || parts[0] == "volumes")
 }

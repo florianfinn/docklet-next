@@ -283,7 +283,7 @@
       "UpdaterBaselineStatus": {"sha256":"bdbe4d57839547f011b0ba4b5e32ec4c17ef474714adcb6c3f213e6db8d3bddc"},
       "ActivityRuntimeOptions": {"sha256":"a42b06ecdfa22707e96d3a9bc07ca860db7a8eeb5701b6711a7da30266ce63a5"},
       "ActivityRuntimeTargetRequest": {"sha256":"712c5ed295d4baed3976e93f520786bd5fd4b3387f2a69abe22428a4bfd6355b"},
-      "ActivityRuntimeTargetMetadata": {"sha256":"5ce176d5300f3f1bd0a8cc94afeae2ad44deff1d6878db90d538a046faa2899b"}
+      "ActivityRuntimeTargetMetadata": {"sha256":"9cddd953974b3410def985c81132bdf0e0ed6c4fb1ebf3ee3526f34c8968917d"}
     },
     "edgeRoutes": [
       {"method":"POST","path":"/api/environments/{id}/updater/projects/{projectId}/check","command":"updater.project.check"},
@@ -699,6 +699,13 @@
       "ContainerOriginAssignment": {
         "additionalProperties": false,
         "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["/api/schemas/ContainerOriginAssignment.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
           "dockerId": {"maxLength":256,"minLength":1,"type":"string"},
           "origin": {
             "enum": ["unraid","standalone"],

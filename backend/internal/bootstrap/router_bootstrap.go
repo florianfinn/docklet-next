@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation.; M14 container and host operation contracts.
 
 package bootstrap
 
@@ -323,7 +323,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
 		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
-		}, InventoryPending: deps.Environment.Service().InventoryPending},
+		}, OriginOverlay: deps.Container.Service().OverlayInventory, InventoryPending: deps.Environment.Service().InventoryPending},
 	)
 	apiGroup.Use(envProxyMiddleware)
 

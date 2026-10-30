@@ -25,6 +25,7 @@ import (
 // RuntimeHTTPPorts are trusted construction ports; no browser execution envelope
 // can select an executor, registration, storage generation or actor.
 type RuntimeHTTPPorts struct {
+	GuardContainer     func(context.Context, string, string) error
 	ApplicationContext context.Context
 	Agent              bool
 	Store              func(context.Context, string) (RuntimeStoreBinding, error)

@@ -496,8 +496,8 @@ var routeModules = []routeModule{
 	{"volume", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
 		d.Volume.RegisterRoutes(api, c, cfg)
 	}},
-	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
-		d.Container.RegisterRoutes(api, c)
+	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
+		d.Container.RegisterRoutes(api, c, cfg)
 	}},
 	{"port", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		port.RegisterPorts(api, d.Port)
