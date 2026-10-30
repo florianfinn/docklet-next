@@ -81,81 +81,113 @@ func validateDispatch(p *dto.DispatchRequest) error {
 	}
 
 	// Agent display facts stay bounded. Typed payloads are refused when a value is out of
-	// bounds; legacy reports are clamped so long Docker text or large lists still arrive.
-	legacy := p.Kind != dto.DispatchKindBackupFailed && p.Kind != dto.DispatchKindAutoHeal
+	// bounds; legacy reports are clamped in place so long Docker text or large lists still arrive.
+	if p.Kind != dto.DispatchKindBackupFailed && p.Kind != dto.DispatchKindAutoHeal {
+		clampLegacyValue(reflect.ValueOf(p).Elem())
+	}
 	b, err := json.Marshal(*p)
 	if err != nil {
 		return dispatchInvalid()
 	}
 	var raw any
-	if err = json.Unmarshal(b, &raw); err != nil {
+	if err = json.Unmarshal(b, &raw); err != nil || !boundedDispatchValue(raw) {
 		return dispatchInvalid()
-	}
-	raw, ok := boundDispatchValue(raw, legacy)
-	if !ok {
-		return dispatchInvalid()
-	}
-	if legacy {
-		var clamped dto.DispatchRequest
-		if b, err = json.Marshal(raw); err != nil || json.Unmarshal(b, &clamped) != nil {
-			return dispatchInvalid()
-		}
-		*p = clamped
 	}
 	return nil
 }
 
-// boundDispatchValue checks strings (128 bytes, no control characters), lists and maps (256
-// entries) and map keys (128 bytes). With clamp, strings and lists are shortened instead.
-func boundDispatchValue(v any, clamp bool) (any, bool) {
+// boundedDispatchValue checks strings (128 bytes, no control characters), lists and maps (256
+// entries) and map keys (128 bytes).
+func boundedDispatchValue(v any) bool {
 	switch x := v.(type) {
 	case string:
-		if len(x) <= 128 && !strings.ContainsFunc(x, unicode.IsControl) {
-			return x, true
-		}
-		if !clamp {
-			return nil, false
-		}
-		x = strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) {
-				return ' '
-			}
-			return r
-		}, strings.ToValidUTF8(x, ""))
-		for len(x) > 128 {
-			_, size := utf8.DecodeLastRuneInString(x)
-			x = x[:len(x)-size]
-		}
-		return x, true
+		return len(x) <= 128 && !strings.ContainsFunc(x, unicode.IsControl)
 	case []any:
 		if len(x) > 256 {
-			if !clamp {
-				return nil, false
-			}
-			x = x[:256]
+			return false
 		}
-		for i := range x {
-			var ok bool
-			if x[i], ok = boundDispatchValue(x[i], clamp); !ok {
-				return nil, false
+		for _, item := range x {
+			if !boundedDispatchValue(item) {
+				return false
 			}
 		}
-		return x, true
 	case map[string]any:
 		if len(x) > 256 {
-			return nil, false
+			return false
 		}
 		for k, item := range x {
-			bounded, ok := boundDispatchValue(item, clamp)
-			if len(k) > 128 || !ok {
-				return nil, false
+			if len(k) > 128 || !boundedDispatchValue(item) {
+				return false
 			}
-			x[k] = bounded
 		}
-		return x, true
 	}
-	return v, true
+	return true
 }
+
+// clampLegacyValue shortens strings and lists of a typed legacy report in place; numbers and
+// other values keep their exact wire form. Oversized maps and keys are left for the bound check.
+func clampLegacyValue(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			clampLegacyValue(v.Elem())
+		}
+	case reflect.Interface:
+		if !v.IsNil() && v.CanSet() {
+			c := reflect.New(v.Elem().Type()).Elem()
+			c.Set(v.Elem())
+			clampLegacyValue(c)
+			v.Set(c)
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if f := v.Field(i); f.CanSet() {
+				clampLegacyValue(f)
+			}
+		}
+	case reflect.Slice:
+		if v.Len() > 256 && v.CanSet() {
+			v.Set(v.Slice(0, 256))
+		}
+		for i := range v.Len() {
+			clampLegacyValue(v.Index(i))
+		}
+	case reflect.Array:
+		for i := range v.Len() {
+			clampLegacyValue(v.Index(i))
+		}
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			c := reflect.New(v.Type().Elem()).Elem()
+			c.Set(v.MapIndex(k))
+			clampLegacyValue(c)
+			v.SetMapIndex(k, c)
+		}
+	case reflect.String:
+		if v.CanSet() {
+			v.SetString(clampDisplayString(v.String()))
+		}
+	}
+}
+
+// clampDisplayString replaces control characters and cuts to 128 bytes on a rune boundary.
+func clampDisplayString(x string) string {
+	if len(x) <= 128 && !strings.ContainsFunc(x, unicode.IsControl) {
+		return x
+	}
+	x = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, strings.ToValidUTF8(x, ""))
+	for len(x) > 128 {
+		_, size := utf8.DecodeLastRuneInString(x)
+		x = x[:len(x)-size]
+	}
+	return x
+}
+
 func originFor(env *environment.Environment) dto.DispatchOrigin {
 	o := dto.DispatchOrigin{EnvironmentID: env.ID}
 	if env.ApiKeyID != nil {

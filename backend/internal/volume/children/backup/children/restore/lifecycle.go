@@ -88,7 +88,7 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 		run.Status = "failed"
 		run.ErrorCode = "volume.restore.interrupted-before-write"
 		run.FinishedAt = new(time.Now().UTC())
-		l.persistTerminal(ctx, run, false)
+		l.persistTerminal(ctx, ctx, run)
 		release()
 		return volume.RestoreOperation{}, dto.NewProblem(503, "volume.backup.engine-unavailable", nil)
 	}
@@ -97,7 +97,7 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 		run.Status = "failed"
 		run.ErrorCode = "volume.restore.interrupted-before-write"
 		run.FinishedAt = new(time.Now().UTC())
-		l.persistTerminal(ctx, run, false)
+		l.persistTerminal(ctx, workCtx, run)
 		release()
 		activitylib.CompleteHandlerActivity(workCtx, l.Activity, activityID, "", dto.NewProblem(500, "volume.restore.interrupted-before-write", err))
 		return volume.RestoreOperation{}, err
@@ -122,14 +122,14 @@ func (l *Lifecycle) persist(ctx context.Context, run *Run) error {
 }
 
 // Terminal persistence finishes before admission or activity ownership can end.
-// persistTerminal saves a terminal run and notifies; cancelled marks a run whose work was
-// cancelled or interrupted, which stays silent even when saved with a detached context.
-func (l *Lifecycle) persistTerminal(ctx context.Context, run *Run, cancelled bool) {
+// persistTerminal saves a terminal run with ctx and notifies. work is the restore's tracked work
+// context; when it was cancelled at any point up to the saved terminal state, the run stays silent.
+func (l *Lifecycle) persistTerminal(ctx, work context.Context, run *Run) {
 	for err := l.persist(ctx, run); err != nil; err = l.persist(ctx, run) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if l.Notify != nil {
-		l.Notify(ctx, backupnotify.Run{ID: run.ID, Operation: "restore", Volume: run.VolumeName, Status: run.Status, Reason: run.ErrorCode, ActivityID: run.ActivityID, Suppress: cancelled})
+		l.Notify(ctx, backupnotify.Run{ID: run.ID, Operation: "restore", Volume: run.VolumeName, Status: run.Status, Reason: run.ErrorCode, ActivityID: run.ActivityID, Suppress: work.Err() != nil})
 	}
 }
 func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest) (err error) {
@@ -150,7 +150,6 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 		if run.InputPath != "" {
 			_ = os.RemoveAll(filepath.Dir(run.InputPath))
 		}
-		cancelled := ctx.Err() != nil
 		settled := context.WithoutCancel(ctx)
 		if writeSucceeded {
 			restart := ownContainers(run)
@@ -204,7 +203,7 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 			}
 		}
 		run.FinishedAt = new(time.Now().UTC())
-		l.persistTerminal(settled, run, cancelled)
+		l.persistTerminal(settled, ctx, run)
 		if err != nil {
 			var problem *dto.Problem
 			if errors.As(err, &problem) && problem.Code == run.ErrorCode {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296; workers keep panic recovery
+// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296; workers keep panic recovery and cancelled attempts are interrupted
 
 package scheduler
 
@@ -170,6 +170,10 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 		})
 	}
 	err = g.Wait()
+	if err != nil {
+		// A worker error, including a recovered panic, fails the run; the scheduler keeps a set status.
+		outcome.Status = st.Failed
+	}
 	return outcome, err
 }
 func (j *AutoHealJob) recover(ctx context.Context, cli *client.Client) error {
@@ -260,6 +264,10 @@ func (j *AutoHealJob) processCandidateInternal(ctx context.Context, cli *client.
 	outcome := "restarted"
 	if restartErr != nil {
 		outcome = "restart-failed"
+		// Shutdown or cancellation interrupts the attempt: it still counts, but projects silently.
+		if ctx.Err() != nil {
+			outcome = "interrupted"
+		}
 	}
 	if err := j.store.Settle(ctx, r.ID, outcome); err != nil {
 		return target, err
@@ -270,7 +278,7 @@ func (j *AutoHealJob) processCandidateInternal(ctx context.Context, cli *client.
 	}
 	target = targetForRestart(r)
 	if restartErr != nil {
-		return target, errors.New("autoheal.restart-failed")
+		return target, errors.New("autoheal." + outcome)
 	}
 	return target, nil
 }

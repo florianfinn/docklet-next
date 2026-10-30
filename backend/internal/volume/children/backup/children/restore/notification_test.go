@@ -21,7 +21,7 @@ func TestRestoreTerminalNoticeAndSilentHistory(t *testing.T) {
 	l.Notify = n.Terminal
 	for _, kind := range []string{"full", "files", "upload"} {
 		row := &Run{ID: kind, VolumeName: "data", Kind: kind, Phase: "done", Status: "failed", ErrorCode: "volume.restore.failed", StartedAt: time.Now().UTC()}
-		l.persistTerminal(t.Context(), row, false)
+		l.persistTerminal(t.Context(), t.Context(), row)
 	}
 	var rows []notificationoutbox.Row
 	require.NoError(t, l.DB.Find(&rows).Error)
@@ -45,7 +45,7 @@ func TestRestoreRetentionStaysSilentAndNewVolumeNotifies(t *testing.T) {
 				r.Mode = "new"
 				r.NewVolumeName = "restored"
 			}
-			l.persistTerminal(t.Context(), r, false)
+			l.persistTerminal(t.Context(), t.Context(), r)
 			var n int64
 			require.NoError(t, l.DB.Model(&notificationoutbox.Row{}).Count(&n).Error)
 			if mode == "new-volume" {

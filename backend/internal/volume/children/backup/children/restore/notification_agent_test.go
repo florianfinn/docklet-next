@@ -38,7 +38,7 @@ func TestLiveAgentRestoreFailureDispatchesAfterTerminalSave(t *testing.T) {
 				row.Mode = "new"
 				row.NewVolumeName = "restored-data"
 			}
-			l.persistTerminal(t.Context(), row, false)
+			l.persistTerminal(t.Context(), t.Context(), row)
 			require.Equal(t, 1, calls)
 			var n int64
 			require.NoError(t, l.DB.Model(&notificationoutbox.Row{}).Count(&n).Error)
