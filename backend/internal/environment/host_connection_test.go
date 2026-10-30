@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/activity"
@@ -135,5 +137,20 @@ func TestConnectionStandbyOpenedResult(t *testing.T) {
 	out, err := h.TestConnection(t.Context(), &TestConnectionInput{ID: f.id})
 	require.NoError(t, err)
 	require.Equal(t, "standby-opened", out.Body.Data.Status)
+	require.Equal(t, dto.StatusSuccess, a.status)
+}
+
+func TestConnectionCustomURLDoesNotClaimStandbyOpened(t *testing.T) {
+	f := newAgentFixture(t, "edge", version.Info{})
+	edge.GetRegistry().Unregister(f.id)
+	edge.GetPollRuntimeRegistry().Update(f.id, time.Hour, time.Now())
+	a := &connectionActivity{}
+	h := &EnvironmentHandler{environmentService: f.service, activityService: a}
+	ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())
+	out, err := h.TestConnection(ctx, &TestConnectionInput{ID: f.id, Body: &hostDTO.TestConnectionRequest{ApiUrl: new("https://agent.example.com")}})
+	require.NoError(t, err)
+	require.Equal(t, "online", out.Body.Data.Status)
+	require.False(t, edge.HasActiveTunnel(f.id), "a custom URL probe does not open the saved Edge tunnel")
+	require.Equal(t, 1, a.started)
 	require.Equal(t, dto.StatusSuccess, a.status)
 }

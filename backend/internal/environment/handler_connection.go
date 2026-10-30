@@ -65,7 +65,7 @@ func (h *EnvironmentHandler) TestConnection(ctx context.Context, input *TestConn
 	case status != "online":
 		failure = hostProblem("host.unreachable", 502)
 	}
-	if failure == nil && projected.Status == string(EnvironmentStatusStandby) {
+	if failure == nil && apiURL == nil && projected.Status == string(EnvironmentStatusStandby) {
 		status = "standby-opened"
 	}
 	if runID != "" {
