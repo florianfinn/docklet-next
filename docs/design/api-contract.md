@@ -289,9 +289,14 @@ host-maintenance and availability DTOs before those behavior owners register
 their routes. It includes shell query/control/exit protocol v1, host name/colour,
 restart run states and typed problem codes. The agent-only POST `/api/system/agent/restart` now answers 202
 `{instanceId}` after resolving and inspecting self; unsupported receivers return
-409 `agent.restart-unsupported` before any restart effect. Hub orchestration
-requires durable acknowledgement and terminal-code persistence beyond the
-reserved row. `/health` includes a UUID generated once per process;
+409 `agent.restart-unsupported` before any restart effect. The hub-only POST
+`/environments/{id}/agent/restart` returns 202 with `AgentRestartRun`; GET
+`/environments/{id}/agent/restarts/{runId}` reads its durable state and code.
+Reservation excludes all runtime intake in the same SQLite write transaction.
+`sent` commits before the single POST; `awaiting` persists received
+acknowledgement separately. Recovery never resends: an unsent reservation settles
+`agent.restart-interrupted`, while sent runs observe until the stored deadline.
+Terminal codes survive history pruning and process restart. `/health` includes a UUID generated once per process;
 `health.InstanceID()` exposes that same identity to host-maintenance wiring.
 
 
@@ -313,3 +318,9 @@ For upstream 401/403, the shared bounded refusal classifier maps 403
 bodies map to `agent.invalid-token`. These upstream refusals always return 502
 and cannot clear the browser's hub identity. Local compatibility-gate refusals
 retain the existing 409 `agent.update-required` response.
+
+Host refusal declarations include `EnvironmentHostProblem` on host mutation,
+check/reconnect, agent settings and runtime admission errors. The final image API
+pass preserves both this schema and the typed error body. A policy child refused
+by restart admission persists `host.restarting` in the shared reason vocabulary
+instead of a generic persistence error. Contract version 11 remains the boundary.

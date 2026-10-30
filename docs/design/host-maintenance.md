@@ -56,7 +56,9 @@ hosts stays in [host onboarding](host-onboarding.md).
 
 5. Hub table `agent_restart_requests`: `run_id`, `environment_id`,
    `registration_id`, `credential_revision`, `old_instance`, `state` ∈
-   {reserved, sent, awaiting, connected, failed, unknown}, timestamps.
+   {reserved, sent, awaiting, connected, failed, unknown}, timestamps, nullable
+   `acknowledged_at` and terminal `code`. Failed and unknown rows require a code;
+   connected rows have none. Acknowledgement requires a committed `sent_at`.
 6. **Reservation**: in one hub transaction the restart intake checks that the
    environment has no unsettled runtime receipt and no active restart, then
    inserts the `reserved` row. Every runtime intake (HTTP, policy jobs,
@@ -71,12 +73,16 @@ hosts stays in [host onboarding](host-onboarding.md).
 8. **Credential revision**: `environments.credential_revision` increases in the
    same transaction as any change of access token, API key or endpoint,
    including a manual token replacement that keeps the key ID. Before sending,
-   the hub reads the agent's `instanceId` through an authenticated health call
-   (Direct) or the current tunnel session (Edge) and commits it as
+   the hub reads a stable `instanceId` around a fresh compatibility check and
+   authenticated system-health HEAD (Direct), or uses the current authenticated
+   tunnel session (Edge), and commits it as
    `old_instance` with the current revision; without that evidence the restart
-   is refused (`host.unreachable`). The hub sends exactly once: `sent` is
+   is refused (`host.unreachable`). The hub sends at most once: `sent` is
    committed before sending, and nothing is replayed after errors or a hub
-   restart. A lost 202 leaves the state `awaiting`.
+   restart. A received 202 commits `awaiting` with `acknowledged_at`; a send
+   error without a response commits `awaiting` without acknowledgement. The
+   response instance is evidence only. A definitive 409
+   `agent.restart-unsupported` settles failed with that code.
 9. **Completion proof**, fenced by an unchanged `registration_id` and
    `credential_revision` on every observation and again in the settlement
    transaction: on Edge a new tunnel session whose agent instance differs from
@@ -87,18 +93,28 @@ hosts stays in [host onboarding](host-onboarding.md).
    `agent.restart-superseded`. Late responses of the old instance are ignored.
 10. **Deadline** 3 min: failed `agent.restart-timeout` if the 202 arrived,
     otherwise unknown `agent.restart-unconfirmed`. After a hub restart, startup
-    recovery keeps waiting until the deadline with the stored tuple and never
-    resends. The reservation ends with the terminal state.
+    recovery settles an unsent `reserved` row as failed
+    `agent.restart-interrupted`; `sent` and `awaiting` resume observation until
+    the stored deadline and never resend. The reservation ends with the terminal
+    commit. Terminal states and codes are immutable.
 11. Environment 0 has no restart action.
 
 ## Persistence and check transport constraints
 
-The restart row must durably distinguish a received 202 from an unconfirmed
-send and retain the terminal code across history pruning and process restart.
-`sent` is committed before sending and therefore cannot prove acknowledgement.
-The reserved schema alone does not supply this distinction; hub restart intake
-stays unavailable until that persistence prerequisite is supplied. The
-agent-only receiver and runtime reservation guard do not depend on it.
+POST `/environments/{id}/agent/restart` returns a durable restart run with 202;
+GET `/environments/{id}/agent/restarts/{runId}` exposes its state, deadline and
+terminal code. Both routes stay on the hub. Environment 0 refuses restart, and
+an incompatible agent is refused before reservation or a restart POST.
+
+The row durably distinguishes received acknowledgement from an unconfirmed
+send, independently of activity-history retention. Write failures retain joined
+preparation, acknowledgement and observations for retry; the settling transaction
+rechecks registration and credential revision. Proof observed before the deadline
+survives a later persistence retry, while a later credential edit still supersedes
+it. An ambiguous committed `sent` write is observed without sending again. An
+unclaimed reservation is recovered as interrupted; intake and recovery share the
+worker handoff lock. Controller work belongs to application lifetime and is joined
+before the database closes.
 
 Credential revisions also advance when a credential field is resubmitted with
 an unchanged value. This conservatively supersedes any observation begun before
@@ -135,7 +151,8 @@ connect/reconnect consumers share the same endpoint.
   acceptance verifies this on a real version 10 agent.
 
 Codes: `agent.restart-unsupported`, `agent.restart-superseded`,
-`agent.restart-timeout`, `agent.restart-unconfirmed`, `host.busy`,
+`agent.restart-timeout`, `agent.restart-unconfirmed`,
+`agent.restart-interrupted`, `host.busy`,
 `host.restarting`, `host.name-invalid`, `host.name-taken`, `host.unreachable`
 and the `/health` `instanceId`.
 

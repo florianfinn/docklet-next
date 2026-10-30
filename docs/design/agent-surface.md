@@ -127,10 +127,23 @@ identity or an unavailable inspect returns 409 `agent.restart-unsupported` with
 no restart effect. After flushing the acknowledgement it waits one second, then
 restarts the inspected container. The hub host has no answering restart route.
 
-`/health` includes the per-process `instanceId`. Hub restart orchestration needs
-durable acknowledgement and terminal-code evidence in addition to the reserved
-restart row; the receiver alone does not enable the hub restart controller.
-Runtime intake checks active restart reservations in its admission transaction.
+`/health` includes the per-process `instanceId`. The hub reserves a durable
+restart run, commits `sent` before one POST, and persists acknowledgement and
+terminal codes. Direct completion requires stable instance reads around fresh
+compatibility and authenticated system-health checks. Edge completion requires a
+current authenticated session with a different instance; reconnecting the same
+process never completes. Every observation and settling transaction checks the
+registration and credential revision. Runtime intake checks active restart
+reservations in its admission transaction, including policy children.
+
+After hub restart, `reserved` settles `agent.restart-interrupted`; `sent` and
+`awaiting` resume observation without another POST. Deadline results distinguish
+acknowledged `agent.restart-timeout` from unacknowledged
+`agent.restart-unconfirmed`. The hub-only POST
+`/environments/{id}/agent/restart` and GET
+`/environments/{id}/agent/restarts/{runId}` expose compact run truth independently
+of activity pruning. Joined outcomes survive failed writes; exclusion ends only
+with the terminal commit.
 
 Host projection, Edge dispatch and the availability observer share a 90-second
 application-heartbeat window. The 15-second sweeper closes only the scanned
