@@ -22,6 +22,9 @@ import (
 // Frozen only after the executor and capture have actually joined. Settlement
 // retries reuse these executor times and codes; they never rerun work or drain.
 type runtimeLocalResultInternal struct {
+	// held records unknown executor evidence and keeps the run excluded for
+	// startup recovery; it is retried like a terminal result until committed.
+	held               bool
 	recovered          bool
 	recreate           *containerDTO.RecreateResult
 	silentNotification bool
@@ -155,7 +158,31 @@ func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activ
 	defer lock.Unlock()
 	var snapshot activitytypes.RuntimeSnapshot
 	var final *ActivityMessage
+	held := owner.result.held
 	err := s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
+		held = owner.result.held
+		// The journal check shares the terminal transaction: a failed read retains
+		// the joined result, an unresolved journal turns it into held evidence.
+		if !held && runtimeRecreateOperation(owner.command.command.Operation) {
+			unresolved, err := runtimeRecreateUnresolvedTxInternal(tx, owner.id.RunID)
+			if err != nil {
+				return err
+			}
+			held = unresolved
+		}
+		if held {
+			if owner.result.imageLifecycle != nil {
+				if err := runtimeImageResultTx(tx, owner.id.RunID, owner.result.imageLifecycle); err != nil {
+					return err
+				}
+			}
+			row, err := runtimeEvidenceTxInternal(tx, now, owner.id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: owner.result.startedAt})
+			if err != nil {
+				return err
+			}
+			snapshot, err = runtimeSnapshotTxInternal(tx, row)
+			return err
+		}
 		var err error
 		snapshot, final, err = runtimeCompleteTxInternal(tx, now, owner.id, *owner.result)
 		return err
@@ -163,6 +190,7 @@ func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activ
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, err
 	}
+	owner.result.held = held
 	if final != nil {
 		s.activity.publishMessageInternal(snapshot.EnvironmentID, snapshot.Type, activityMessageToDTOInternal(final))
 		s.activity.publishActivityInternal(snapshot.Activity)

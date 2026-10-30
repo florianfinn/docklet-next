@@ -2,14 +2,13 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Application-owned storage-only settlement retries and compact cleanup; M14 recreate recovery retries.
+// Deviations: Application-owned storage-only settlement retries and compact cleanup.
 
 package activity
 
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 )
 
@@ -19,18 +18,13 @@ func (s *RuntimeService) RunMaintenance(ctx context.Context) error {
 	return s.runMaintenanceInternal(ctx, time.Second, time.Hour)
 }
 
-// runtimeRecreateRetryEvery paces Docker reads for held, unresolved recreates.
-const runtimeRecreateRetryEvery = 30 * time.Second
-
 func (s *RuntimeService) runMaintenanceInternal(ctx context.Context, retryEvery, pruneEvery time.Duration) error {
 	if err := s.checkInternal(); err != nil {
 		return err
 	}
 	retry := time.NewTicker(retryEvery)
-	recreate := time.NewTicker(runtimeRecreateRetryEvery)
 	prune := time.NewTicker(pruneEvery)
 	defer retry.Stop()
-	defer recreate.Stop()
 	defer prune.Stop()
 	for {
 		select {
@@ -38,10 +32,6 @@ func (s *RuntimeService) runMaintenanceInternal(ctx context.Context, retryEvery,
 			return nil
 		case <-retry.C:
 			_ = s.retryRetainedInternal(ctx)
-		case <-recreate.C:
-			if err := s.RetryRecreateRecovery(ctx); err != nil && ctx.Err() == nil {
-				slog.WarnContext(ctx, "Recreate recovery deferred", "error", err)
-			}
 		case <-prune.C:
 			_, _ = s.activity.pruneRuntimeInternal(ctx, runtimePruneCapInternal)
 		}

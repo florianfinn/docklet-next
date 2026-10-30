@@ -36,6 +36,8 @@ func runtimeRecreateResultTx(tx *gorm.DB, row *RuntimeReceipt, result *dto.Recre
 	row.Result = new(string(body))
 	return origin.Move(tx, row.RegistrationID, result)
 }
+
+// An unresolved recreate journal means the effect outcome is unknown.
 func runtimeRecreateUnresolvedTxInternal(tx *gorm.DB, run string) (bool, error) {
 	var unresolved int64
 	err := tx.Table("container_recreate_journal").Where("run_id = ? AND phase NOT IN ('done','rolled-back','ambiguous')", run).Count(&unresolved).Error
@@ -54,59 +56,19 @@ func runtimeRecreateResult(row *RuntimeReceipt) (*dto.RecreateResult, error) {
 
 // Recreate recovery commits before generic interruption can release an exclusion.
 func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
-	port := s.recreatePortInternal()
-	if port == nil {
+	adapter, ok := s.localExecution.Executor.(*RuntimeServiceAdapter)
+	if !ok {
+		return nil
+	}
+	port, ok := adapter.containers.(runtimeContainerRecreatePort)
+	if !ok {
 		return nil
 	}
 	results, err := port.RecoverRecreates(ctx)
 	if err != nil {
 		return err
 	}
-	if err := s.settleRecoveredRecreatesInternal(ctx, results); err != nil {
-		return err
-	}
-	return port.PruneRecreateJournals(ctx)
-}
-
-// RetryRecreateRecovery resumes journals whose live attempt ended uncertain
-// (bound expired, recovery read or journal write failed). Runs with a live owner
-// are skipped; a failure leaves the run held for the next maintenance attempt.
-func (s *RuntimeService) RetryRecreateRecovery(ctx context.Context) error {
-	port := s.recreatePortInternal()
-	if port == nil {
-		return nil
-	}
-	s.activity.runningMu.Lock()
-	paused := s.storagePaused
-	s.activity.runningMu.Unlock()
-	if paused {
-		return nil
-	}
-	results, failures := port.RecoverUnownedRecreates(ctx, func(run string) bool {
-		s.activity.runningMu.Lock()
-		defer s.activity.runningMu.Unlock()
-		_, live := s.owners[run]
-		return live || s.storagePaused
-	})
-	return errors.Join(failures, s.settleRecoveredRecreatesInternal(ctx, results))
-}
-func (s *RuntimeService) recreatePortInternal() runtimeContainerRecreatePort {
-	if s.localExecution == nil {
-		return nil
-	}
-	adapter, ok := s.localExecution.Executor.(*RuntimeServiceAdapter)
-	if !ok {
-		return nil
-	}
-	port, _ := adapter.containers.(runtimeContainerRecreatePort)
-	return port
-}
-func (s *RuntimeService) settleRecoveredRecreatesInternal(ctx context.Context, results []dto.RecreateRecovery) error {
 	for _, recovered := range results {
-		lock := s.activity.publishLockInternal(recovered.RunID)
-		lock.Lock()
-		var snapshot activityDTO.RuntimeSnapshot
-		var final *ActivityMessage
 		ctx := context.WithValue(ctx, gateRunContextKey{}, recovered.RunID)
 		err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
 			var row RuntimeReceipt
@@ -126,20 +88,14 @@ func (s *RuntimeService) settleRecoveredRecreatesInternal(ctx context.Context, r
 			if state == "failed" {
 				result.errorText = new(string(code))
 			}
-			var err error
-			snapshot, final, err = runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
+			_, _, err := runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
 			return err
 		})
-		lock.Unlock()
 		if err != nil {
 			return err
 		}
-		if final != nil {
-			s.activity.publishMessageInternal(snapshot.EnvironmentID, snapshot.Type, activityMessageToDTOInternal(final))
-			s.activity.publishActivityInternal(snapshot.Activity)
-		}
 	}
-	return nil
+	return port.PruneRecreateJournals(ctx)
 }
 
 // Clearing history cannot remove the compact authority required to project a

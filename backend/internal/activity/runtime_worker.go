@@ -114,43 +114,20 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
 	var uncertain interface{ RuntimeUncertain() bool }
-	if (errors.As(phaseErr, &uncertain) && uncertain.RuntimeUncertain()) || s.recreateUnresolvedInternal(owner) {
-		owner.err = s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
-			if imageResult != nil {
-				if err := runtimeImageResultTx(tx, owner.id.RunID, imageResult); err != nil {
-					return err
-				}
-			}
-			_, err := runtimeEvidenceTxInternal(tx, now, owner.id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: owner.startedAt})
-			return err
-		})
-		if owner.err == nil {
-			delete(s.owners, owner.id.RunID)
-			owner.cancel(nil)
-			owner.deadlineCancel()
-			s.activity.releaseSlotInternal(owner.id.RunID)
-		}
+	if errors.As(phaseErr, &uncertain) && uncertain.RuntimeUncertain() {
+		owner.result = &runtimeLocalResultInternal{held: true, startedAt: copyPtrInternal(owner.startedAt), imageLifecycle: imageResult}
+		_, owner.err = s.settleOwnerInternal(owner)
 		return
 	}
 	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, recreateResult != nil, runtimeTimeInternal(s.activity.nowInternal()))
 	owner.result.imageLifecycle = imageResult
 	owner.result.recreate = recreateResult
 	_, owner.err = s.settleOwnerInternal(owner)
-	if owner.err == nil {
+	if owner.err == nil && !owner.result.held {
 		if settled, ok := s.localExecution.Executor.(interface{ RuntimeSettled(context.Context) }); ok {
 			settled.RuntimeSettled(context.WithoutCancel(owner.ctx))
 		}
 	}
-}
-
-// An unresolved recreate journal is never settled terminally by the attempt;
-// an unreadable journal counts as unresolved.
-func (s *RuntimeService) recreateUnresolvedInternal(owner *runtimeOwnerInternal) bool {
-	if !runtimeRecreateOperation(owner.command.command.Operation) {
-		return false
-	}
-	unresolved, err := runtimeRecreateUnresolvedTxInternal(s.activity.db.WithContext(context.WithoutCancel(owner.ctx)), owner.id.RunID)
-	return err != nil || unresolved
 }
 
 // Every phase rereads durable cancellation under the same serialization used by

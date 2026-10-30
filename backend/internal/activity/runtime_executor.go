@@ -213,6 +213,5 @@ type runtimeContainerRecreatePort interface {
 	EditContainer(context.Context, string, containerDTO.Edit, usertypes.Actor) (string, error)
 	RedeployContainer(context.Context, string, usertypes.Actor) (string, error)
 	RecoverRecreates(context.Context) ([]containerDTO.RecreateRecovery, error)
-	RecoverUnownedRecreates(context.Context, func(string) bool) ([]containerDTO.RecreateRecovery, error)
 	PruneRecreateJournals(context.Context) error
 }
