@@ -265,12 +265,12 @@
     "targetKinds": ["project"],
     "routes": [
       {"method":"GET","path":"/environments/{id}/updater/projects/{projectId}/baseline","operationId":"get-update-baseline","sha256":"272a23db153b9a580ea95c0e47611421104bec1ed6f2f5a2e5b28bc5691594a4"},
-      {"method":"POST","path":"/environments/{id}/updater/projects/{projectId}/update","operationId":"update-project-images","sha256":"48da79944df3ba2ebf28a46a9fea8e458a75e6c97ead8e6a127e9f5fd10c1e3c"},
+      {"method":"POST","path":"/environments/{id}/updater/projects/{projectId}/update","operationId":"update-project-images","sha256":"56994d85f22affe57e9e852964d5159679a43dac0a9ef976b26cbdff857d0295"},
       {"method":"GET","path":"/environments/{id}/updater/restore-points","operationId":"list-host-restore-points","sha256":"860a516a25b0d8f2abecce3c5c7e5ef37425a546b92f9100f67281787953b1fe"},
       {"method":"DELETE","path":"/environments/{id}/updater/restore-points/{pointId}","operationId":"delete-host-restore-point","sha256":"489cf1bd6cda7cb5dd6f9f76037a8b76c9df295b2d39a6033f71bf4938fdaed5"},
       {"method":"GET","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points","operationId":"list-restore-points","sha256":"e7aa68e1badc68c3cbb648f9b11c2dc3b441245df30c111280ccb6c6c35a9a25"},
       {"method":"DELETE","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}","operationId":"delete-restore-point","sha256":"d94ec5225f6e44479df8aaa2f427f143f7e1d7eeaec5e7cc7cd98ae52ce097b9"},
-      {"method":"POST","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore","operationId":"restore-update","sha256":"92d5f6dd0245a3a3441c086a28a3c7f531415c94d11d4baa2c3f19d6c7df3239"}
+      {"method":"POST","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore","operationId":"restore-update","sha256":"3e193923d20791d64973d3646a35993218b4e95109ee1ca94903126e582bd811"}
     ],
     "schemas": {
       "UpdaterLifecycleRequest": {"sha256":"b4d8a19a85ffe9b3007138541f73aeae4663a616e873966ef66d3d9c10035d48"},
@@ -328,18 +328,18 @@
       {"method":"GET","path":"/environments/{id}/updater/system-image-hints","operationId":"get-system-image-hints","sha256":"94bf1f565355dcbb220628d67337a85953e15130fed6b31f616f75a15a3d4d48"}
     ],
     "schemas": {
-      "ProjectUpdateInfo": {"sha256":"b17e674b9db2298f286acde726c6fe4ccb27b78848de031ad63b8bc1222888b7"},
-      "UpdaterAutoUpdatePolicy": {"sha256":"4468a15922ca0c6bb1bd96c8205430434dc482dda1795e5547022494bda28394"},
+      "ProjectUpdateInfo": {"sha256":"8f99e228bbcd498350eb7d1f111e39633f5873b58d75032d050203eceb1c814f"},
+      "UpdaterAutoUpdatePolicy": {"sha256":"b1718c4573f69263cf2d6913daa324984d52eb2bc488b72bfb8425ba39d1cb82"},
       "UpdaterUpdatePolicyInput": {"sha256":"9aa0631c54ad53ca36cd096885acc27a92e2322e2add7bbc7a62ca50b96443e7"},
       "UpdaterUpdateCandidate": {"sha256":"fa66965e30135bf2893054b3ef364624d48e3e7e855c05b83f692bf9f27aaa7a"},
       "UpdaterUpdateScheduleConfig": {"sha256":"9ceab30f6a316e514750dfc300cec4b6265962c161b3b0c77d847907cfdcfcf0"},
       "UpdaterUpdateScheduleInput": {"sha256":"042121fb8cac41e0e063eae2e184988525a4fa0947cec955a8961a867b0516a2"},
       "JobscheduleConfig": {"sha256":"23a7234d30089bddfec1e1c54d930f4bda6ff18f0c017f2f4584a10c3a6e1dcf"},
       "JobscheduleUpdate": {"sha256":"aa0bd775c121a870f849c2201f770b20fe58f4497ac1c54f1b384f432a16cf1e"},
-      "JobscheduleJobStatus": {"sha256":"aa9f65c8a2c61b2590f25636b7e5361454a40f914d5dc59370158dc74a44b744"},
-      "SchedulerOutcome": {"sha256":"5f34a35ac0b222f3dc1d356aeea5342a8616717939512f05c9645d1b3738ba20"},
-      "SchedulerTargetOutcome": {"sha256":"7d8d53325bf7dcc5ce3d9cac0c52f56b9fb252d7e0deddf780d9fcb994711263"},
-      "UpdaterSystemImageHint": {"sha256":"6944b1e674ce9703f077c6543efb1496954f0e25910e200579bd5c9a26c48745"},
+      "JobscheduleJobStatus": {"sha256":"7ec87789e513cba0030dfb8dff7ee40d37e01318f0f2d460577783db06605e32"},
+      "SchedulerOutcome": {"sha256":"b968526e14814c1444b6863f07a9bfbbdb04b3c8a80da39fce925353e263772d"},
+      "SchedulerTargetOutcome": {"sha256":"436231d08741c3d478bcc6ca12bc2a3d967defe3483bce2973bb61832c247a79"},
+      "UpdaterSystemImageHint": {"sha256":"5ced230b10edb443b5de0cf90d7f4d04ac9bcc280ce23d68e99b28f70f742bfb"},
       "UpdaterSystemImageHints": {"sha256":"1d1b3c851b9360e8d781cb08ec30c9a6b62f314546b27178072ef74dd80294ef"},
       "VersionInfo": {"sha256":"5291d2f09c3fd953fccf20c069d078fce17e963c280581f7324768fd71698712"}
     },
@@ -573,8 +573,8 @@
   },
   "autoHeal": {
     "routes": [
-      {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"b928d3c8d5f4327a8582451789d94464ad848642bacbbe29cba8a787486221d4"},
-      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"b282cd04488df9cca074ce6f8477c2edb03db18ff2a3b48b1e7b13ff18117225"}
+      {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"27983ecb7621f734a0396619a7b0b42716d02adbaa6cf0aed210d43d790ced97"},
+      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"11dcbe9f54167bcb26775075f13bf55241cf1f758973b2a804da99d58d3366eb"}
     ],
     "settings": {
       "additionalProperties": false,
@@ -698,9 +698,9 @@
     "routes": [
       {"method":"DELETE","path":"/environments/{id}/containers/{containerId}/origin","operationId":"reset-container-origin","sha256":"4b1e3c1fc5377cc3d2b0b567a64305fa6bca9ea182156ca0530cecc76dca0ceb"},
       {"method":"PUT","path":"/environments/{id}/containers/{containerId}/origin","operationId":"assign-container-origin","sha256":"dfa1831222d8379dd131b12de52381128be6a1ad3361ed65a5a6a0ced801a49f"},
-      {"method":"POST","path":"/environments/{id}/containers/{containerId}/recreate","operationId":"recreate-container","sha256":"20325acea83896b2d4a1b44a6287898474196af171a5192a56d4d083b908b12e"},
-      {"method":"POST","path":"/environments/{id}/containers/{containerId}/redeploy","operationId":"redeploy-container","sha256":"0f61f9e08a00ef41a93d42030a8fc475cd4ca7c1782e856af5b9ce3eaa663e30"},
-      {"method":"POST","path":"/environments/{id}/projects/{projectId}/stop","operationId":"stop-project","sha256":"3d15966b646858e0de124817573d953cf1027420344b708f3ba78d0aeb97f89d"}
+      {"method":"POST","path":"/environments/{id}/containers/{containerId}/recreate","operationId":"recreate-container","sha256":"9a2b7960cb91ac78f7481bb48925a32498bb7ddef0c1df5de68acd6731e1056e"},
+      {"method":"POST","path":"/environments/{id}/containers/{containerId}/redeploy","operationId":"redeploy-container","sha256":"57f998f0a3cb94f61ca298fc4dfb104bfdbdb5254d27c4037ea9007bc1f0ea21"},
+      {"method":"POST","path":"/environments/{id}/projects/{projectId}/stop","operationId":"stop-project","sha256":"fb83604e98e6dc12737a0abdbe0f396fcd63a714547ec584bab5f57d10c7097d"}
     ],
     "schemas": {
       "ContainerOriginAssignment": {
@@ -828,7 +828,7 @@
         "additionalProperties": false,
         "properties": {
           "code": {
-            "enum": ["agent.restart-unsupported","agent.restart-superseded","agent.restart-timeout","agent.restart-unconfirmed","host.busy","host.restarting","host.name-invalid","host.name-taken","host.unreachable","edge.heartbeat-stale","agent.ui-configuration-disabled","settings.ui-configuration-disabled"],
+            "enum": ["agent.restart-unsupported","agent.restart-superseded","agent.restart-timeout","agent.restart-unconfirmed","agent.restart-interrupted","host.busy","host.restarting","host.name-invalid","host.name-taken","host.unreachable","edge.heartbeat-stale","agent.ui-configuration-disabled","settings.ui-configuration-disabled"],
             "type": "string"
           },
           "status": {"format":"int64","type":"integer"}

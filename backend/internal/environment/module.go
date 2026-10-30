@@ -231,4 +231,21 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 		Security:    handlerutil.DefaultOperationSecurity(),
 		Middlewares: middleware.RequirePermission(api, authz.PermEnvironmentsPair),
 	}, h.DownloadEdgeMTLSCA)
+	for _, item := range []struct {
+		path     string
+		method   string
+		statuses []string
+	}{
+		{"/environments", "POST", []string{"400", "409"}},
+		{"/environments/{id}", "PUT", []string{"400", "409"}},
+		{"/environments/{id}/test", "POST", []string{"502"}},
+	} {
+		path := api.OpenAPI().Paths[item.path]
+		op := path.Post
+		if item.method == "PUT" {
+			op = path.Put
+		}
+		handlerutil.HostProblemResponses(api, op, item.statuses...)
+	}
+
 }

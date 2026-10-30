@@ -12,5 +12,5 @@
   "sqlite/011_vulnerability_notifications.sql": "a8c887b2e5254ddeea1fade74d401ca009cf3569e205f93e0328f9fa60536369",
   "sqlite/012_volume_backup_lifecycle.sql": "56b090eebdd21109bc97548b17eab2eded39c3fa585a373d2862b717e94e4254",
   "sqlite/013_notifications_auto_heal.sql": "7243770613547b4785451281343ff88091b7f81dbd1f97168d16838f9d87f328",
-  "sqlite/014_container_host_operations.sql": "aae47c4fb3fd3c19f1d90a096dd06337b298880b35dd5b21608b2afd512e2537"
+  "sqlite/014_container_host_operations.sql": "20e41700aca7a5f53780ed33c138366b7708139c208c0222c3640e54ef0359db"
 }

@@ -241,6 +241,7 @@ export const enRunMessages = {
       "restart-unsupported": "Agent restart unsupported",
       "restart-superseded": "Agent restart superseded by host changes",
       "restart-timeout": "Agent restart timed out",
+      "restart-interrupted": "Agent restart was interrupted before sending",
       "restart-unconfirmed": "Agent restart could not be confirmed",
       "ui-configuration-disabled": "Settings on this host are managed through its environment",
     },

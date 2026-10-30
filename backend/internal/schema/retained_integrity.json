@@ -485,7 +485,11 @@
     ],
     "agent_restart_requests": [
       "CHECK (state IN ('reserved','sent','awaiting','connected','failed','unknown'))",
-      "CHECK ((state IN ('connected','failed','unknown')) = (settled_at IS NOT NULL))"
+      "CHECK ((state IN ('connected','failed','unknown')) = (settled_at IS NOT NULL))",
+      "CHECK ((state IN ('failed','unknown')) = (code IS NOT NULL))",
+      "CHECK (state <> 'unknown' OR code = 'agent.restart-unconfirmed')",
+      "CHECK (state <> 'failed' OR code IN ('agent.restart-superseded','agent.restart-timeout','agent.restart-unsupported','agent.restart-interrupted','host.unreachable'))",
+      "CHECK (acknowledged_at IS NULL OR sent_at IS NOT NULL)"
     ]
   },
   "indexes": [

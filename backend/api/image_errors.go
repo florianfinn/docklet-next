@@ -97,7 +97,11 @@ func registerImageSafetyErrors(api huma.API) {
 				if upgrade || jobs || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") {
 					errorSchema = &huma.Schema{OneOf: []*huma.Schema{errorSchema, api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}
 				}
+				prior := op.Responses[status]
 				op.Responses[status] = &huma.Response{Description: "Typed neutral image or registry failure", Content: map[string]*huma.MediaType{"application/json": {Schema: errorSchema}}}
+				if prior != nil && prior.Content["application/problem+json"] != nil {
+					op.Responses[status].Content["application/problem+json"] = prior.Content["application/problem+json"]
+				}
 			}
 		}
 	}

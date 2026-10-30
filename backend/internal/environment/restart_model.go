@@ -19,6 +19,8 @@ type AgentRestartRequest struct {
 	CreatedAt          time.Time `gorm:"not null"`
 	UpdatedAt          time.Time `gorm:"not null"`
 	SentAt             *time.Time
+	AcknowledgedAt     *time.Time
+	Code               *string
 	Deadline           time.Time `gorm:"not null"`
 	SettledAt          *time.Time
 }

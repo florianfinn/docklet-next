@@ -63,6 +63,7 @@ func (m *Module) RegisterRoutes(api huma.API) {
 		for _, status := range []string{"400", "403", "409", "502"} {
 			op.Responses[status] = &huma.Response{Description: "Auto Heal or framework refusal", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{failureSchema, genericSchema}}}}}
 		}
+		handlerutil.HostProblemResponses(api, op, "400", "403", "409", "502")
 	}
 }
 func (m *Module) get(ctx context.Context, in *getInput) (*output, error) {

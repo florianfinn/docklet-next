@@ -88,6 +88,8 @@ func RegisterSettings(api huma.API, settingsService *SettingsService, settingsSe
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermSettingsWrite, h.UpdateSettings)
 
+	handlerutil.HostProblemResponses(api, api.OpenAPI().Paths["/environments/{id}/settings"].Put, "403")
+
 	// Top-level settings endpoints (not environment-scoped)
 	huma.Register(api, huma.Operation{
 		OperationID: "search-settings",

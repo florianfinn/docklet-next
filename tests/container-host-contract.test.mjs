@@ -44,3 +44,16 @@ test("stack stop, definition states and bilingual descriptions are in the v11 co
   for(const code of ["not-created","definition-invalid"])assert.ok(catalogue.includes(`"${code}":`),`${locale}: ${code}`);
  }
 });
+
+test("typed host refusals are declared on every affected hub operation",()=>{
+ const spec=JSON.parse(read("api/openapi.json"));
+ const expected=["get-auto-heal-settings","update-auto-heal-settings","update-settings","createEnvironment","updateEnvironment","testConnection"];
+ for(const item of Object.values(spec.paths)) for(const op of Object.values(item)) {
+  if(expected.includes(op?.operationId) || op?.responses?.["202"]?.description?.startsWith("New admission only")) {
+   assert.ok(JSON.stringify(op.responses).includes("#/components/schemas/EnvironmentHostProblem"),op.operationId);
+  }
+ }
+ for(const id of expected) assert.ok(Object.values(spec.paths).some(item=>Object.values(item).some(op=>op?.operationId===id)),id);
+ assert.ok(spec.components.schemas.EnvironmentHostProblem.properties.code.enum.includes("agent.restart-interrupted"));
+ assert.ok(spec.components.schemas.UpdaterAutoUpdatePolicy.properties.code.enum.includes("host.restarting"));
+});

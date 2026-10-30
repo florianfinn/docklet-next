@@ -18,6 +18,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/health"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/environment"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/sys/cgroup"
@@ -43,6 +44,7 @@ func (h *agentRestartHandler) register(api huma.API) {
 		OperationID: "restart-agent", Method: "POST", Path: "/system/agent/restart", DefaultStatus: 202,
 		Summary: "Restart the agent container", Tags: []string{"System"},
 	}, authz.PermSystemUpgrade, h.restart)
+	handlerutil.HostProblemResponses(api, api.OpenAPI().Paths["/system/agent/restart"].Post, "409")
 }
 
 func waitAgentRestart(ctx context.Context, delay time.Duration) bool {

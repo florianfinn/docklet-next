@@ -9,6 +9,7 @@ package activity
 import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
@@ -37,6 +38,7 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 	if runtimeRecreateOperation(operation) {
 		op.Responses["409"].Content["application/json"].Schema.OneOf = append(op.Responses["409"].Content["application/json"].Schema.OneOf, schema(reflect.TypeFor[containerDTO.Problem]()))
 	}
+	handlerutil.HostProblemResponses(api, op, "409")
 	op.Responses["410"] = &huma.Response{Description: "Removed registration; runtime.target-removed never dispatches", Content: map[string]*huma.MediaType{"application/json": {Schema: schema(reflect.TypeFor[common.APIError]())}}}
 	for _, status := range []int{408, 500, 503, 504} {
 		op.Responses[strconv.Itoa(status)] = &huma.Response{Description: "Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{schema(reflect.TypeFor[activitytypes.RuntimeFailureResponse]()), schema(reflect.TypeFor[huma.ErrorModel]()), schema(reflect.TypeFor[common.APIError]())}}}}}

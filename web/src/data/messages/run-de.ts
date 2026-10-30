@@ -241,6 +241,7 @@ export const deRunMessages = {
       "restart-unsupported": "Agent-Neustart nicht unterstützt",
       "restart-superseded": "Agent-Neustart durch Host-Änderungen überholt",
       "restart-timeout": "Zeitüberschreitung beim Agent-Neustart",
+      "restart-interrupted": "Agent-Neustart wurde vor dem Senden unterbrochen",
       "restart-unconfirmed": "Agent-Neustart konnte nicht bestätigt werden",
       "ui-configuration-disabled": "Die Einstellungen dieses Hosts werden über seine Umgebung verwaltet",
     },
