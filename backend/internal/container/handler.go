@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"net/netip"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	dockercontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/samber/mo"
-	"go.getarcane.app/docker/types"
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -702,67 +700,7 @@ func (h *ContainerHandler) CommitContainer(ctx context.Context, input *CommitCon
 }
 
 func (h *ContainerHandler) RedeployContainer(ctx context.Context, input *ContainerActionInput) (*handlerutil.Out[container.Details], error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	activityID, runtimeCtx := activitylib.StartHandlerActivity(
-		runtimeCtx,
-		h.activityService,
-		input.EnvironmentID,
-		activitytypes.TypeContainerRedeploy,
-		"container",
-		input.ContainerID,
-		h.containerActivityNameInternal(
-			runtimeCtx,
-			input.ContainerID,
-		),
-		user,
-		"Starting redeploy",
-		"Container redeploy requested",
-		database.JSON{
-			"containerID": input.ContainerID,
-		},
-		true,
-	)
-	activitylib.AwaitHandlerActivitySlot(runtimeCtx, h.activityService, activityID, input.EnvironmentID)
-	activityWriter := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, io.Discard, "Redeploying container")
-	redeployCtx := context.WithValue(runtimeCtx, types.ProgressWriterKey{}, activityWriter)
-	newContainerID, err := h.containerService.RedeployContainer(redeployCtx, input.ContainerID, *user)
-	if err != nil {
-		activitylib.FlushWriter(activityWriter)
-		activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Container redeploy failed", err)
-		return nil, huma.Error500InternalServerError("Failed to redeploy container: " + err.Error())
-	}
-	activitylib.FlushWriter(activityWriter)
-	activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Container redeployed", nil)
-
-	// Fetch full container details to return (consistent with other endpoints)
-	details, inspectErr := h.containerService.GetContainerDetails(runtimeCtx, newContainerID)
-	if inspectErr == nil {
-		details.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-
-		return &handlerutil.Out[container.Details]{
-			Body: base.ApiResponse[container.Details]{
-				Success: true,
-				Data:    details,
-			},
-		}, nil
-	}
-
-	// Container was redeployed successfully, but we couldn't fetch full details.
-	// Return minimal response with just the ID so frontend can still navigate.
-	return &handlerutil.Out[container.Details]{
-		Body: base.ApiResponse[container.Details]{
-			Success: true,
-			Data: container.Details{
-				ID:         newContainerID,
-				ActivityID: mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer(),
-			},
-		},
-	}, nil
+	return nil, &container.Problem{Code: "update.path-retired", Status: 409}
 }
 
 func (h *ContainerHandler) GetContainerEditConfig(ctx context.Context, input *GetContainerEditConfigInput) (*handlerutil.Out[container.EditConfig], error) {
@@ -791,67 +729,7 @@ func editContainerHTTPErrorInternal(err error) error {
 }
 
 func (h *ContainerHandler) EditContainer(ctx context.Context, input *EditContainerInput) (*handlerutil.Out[container.Details], error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	activityID, runtimeCtx := activitylib.StartHandlerActivity(
-		runtimeCtx,
-		h.activityService,
-		input.EnvironmentID,
-		activitytypes.TypeContainerEdit,
-		"container",
-		input.ContainerID,
-		h.containerActivityNameInternal(
-			runtimeCtx,
-			input.ContainerID,
-		),
-		user,
-		"Starting edit",
-		"Container edit requested",
-		database.JSON{
-			"containerID": input.ContainerID,
-		},
-		true,
-	)
-	activitylib.AwaitHandlerActivitySlot(runtimeCtx, h.activityService, activityID, input.EnvironmentID)
-	activityWriter := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, io.Discard, "Editing container")
-	editCtx := context.WithValue(runtimeCtx, types.ProgressWriterKey{}, activityWriter)
-	newContainerID, err := h.containerService.EditContainer(editCtx, input.ContainerID, input.Body, *user)
-	if err != nil {
-		activitylib.FlushWriter(activityWriter)
-		activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Container edit failed", err)
-		return nil, editContainerHTTPErrorInternal(err)
-	}
-	activitylib.FlushWriter(activityWriter)
-	activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Container edited", nil)
-
-	// Fetch full container details to return (consistent with redeploy)
-	details, inspectErr := h.containerService.GetContainerDetails(runtimeCtx, newContainerID)
-	if inspectErr == nil {
-		details.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-
-		return &handlerutil.Out[container.Details]{
-			Body: base.ApiResponse[container.Details]{
-				Success: true,
-				Data:    details,
-			},
-		}, nil
-	}
-
-	// Container was recreated successfully, but we couldn't fetch full details.
-	// Return minimal response with just the ID so frontend can still navigate.
-	return &handlerutil.Out[container.Details]{
-		Body: base.ApiResponse[container.Details]{
-			Success: true,
-			Data: container.Details{
-				ID:         newContainerID,
-				ActivityID: mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer(),
-			},
-		},
-	}, nil
+	return nil, &container.Problem{Code: "update.path-retired", Status: 409}
 }
 
 func (h *ContainerHandler) DeleteContainer(ctx context.Context, input *DeleteContainerInput) (*handlerutil.Out[base.MessageResponse], error) {

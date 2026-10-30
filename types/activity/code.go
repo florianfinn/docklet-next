@@ -10,6 +10,10 @@ package activity
 type Code string
 
 const (
+	CodeContainerRecreateRecovered Code = "container.recreate-recovered"
+	CodeContainerRecreateAmbiguous Code = "container.recreate-ambiguous"
+	CodeContainerOriginLocked      Code = "container.origin-locked"
+	CodeRuntimeIdempotencyMismatch Code = "runtime.idempotency-mismatch"
 	CodeAutoHealRestarted          Code = "autoheal.restarted"
 	CodeAutoHealRestartFailed      Code = "autoheal.restart-failed"
 	CodeAutoHealLimitReached       Code = "autoheal.limit-reached"
@@ -121,6 +125,7 @@ const (
 // Values is the complete wire catalogue used by the API contract.
 func Values() []Code {
 	return []Code{
+		CodeContainerRecreateRecovered, CodeContainerRecreateAmbiguous, CodeContainerOriginLocked, CodeRuntimeIdempotencyMismatch,
 		CodeRunRequestMismatch,
 		CodeRuntimeOutcomeUnknown,
 		CodeRuntimeInterrupted,

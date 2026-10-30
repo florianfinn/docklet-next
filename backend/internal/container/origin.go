@@ -152,3 +152,10 @@ func (s *ContainerService) GuardRuntimeOrigin(ctx context.Context, environment, 
 	}
 	return s.OriginGuard(ctx, environment, identity)
 }
+
+func (s *ContainerService) RuntimeSettled(ctx context.Context) {
+	if s.operations != nil && s.operations.origins != nil && s.operations.origins.Invalidate != nil {
+		s.operations.origins.Invalidate("0")
+	}
+	_ = s.PruneRecreateJournals(ctx)
+}

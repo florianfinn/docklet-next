@@ -12,6 +12,11 @@ import "context"
 // Matching abandoned workflows settle interrupted; unmatched local ownership
 // remains unknown and held for explicit administrator recovery, never execution.
 func (s *RuntimeService) InitializeLocalStartup(ctx context.Context, binding RuntimeStoreBinding) error {
+	if s.localExecution != nil {
+		if err := s.recoverRecreatesStartup(ctx); err != nil {
+			return err
+		}
+	}
 	if _, err := s.SettleLocalStartup(ctx, binding); err != nil {
 		return err
 	}

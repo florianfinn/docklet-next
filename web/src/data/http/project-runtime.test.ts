@@ -17,7 +17,7 @@ import wire from "./project-runtime.test-support";
 const project: ProjectRow = { path: "/srv/projects/example-project", isArchived: false, createdAt: "", updatedAt: "", tags: [], ...wire };
 const inventory = { stale: false } as InventoryObservation;
 const labels = { "com.docker.compose.project": "manual_p", "com.docker.compose.service": "app", "com.docker.compose.project.working_dir": project.path };
-const container: ContainerRow = { autoUpdateEnabled: false, command: "serve", created: 0, ports: [{ privatePort: 8080, publicPort: 8080, type: "tcp" }], hostConfig: {},
+const container: ContainerRow = { autoUpdateEnabled: false, origin: "compose", originSource: "detected", command: "serve", created: 0, ports: [{ privatePort: 8080, publicPort: 8080, type: "tcp" }], hostConfig: {},
   mounts: [{ type: "volume", name: "manual_p_data", destination: "/data", rw: true }], networkSettings: { networks: { manual_p_default: {} } },
   id: "c-fallback", names: ["/manual_p-app-1"], state: "running", status: "Up", image: "registry.example.com/app:1", imageId: "sha256:example", labels };
 const volume: components["schemas"]["VolumeVolume"] = { id: "manual_p_data", name: "manual_p_data", driver: "local", containers: [], inUse: false, options: {}, scope: "local", mountpoint: "/srv/data", size: 0, createdAt: "", labels: { ...labels, "com.docker.compose.volume": "data" } };

@@ -15,6 +15,7 @@ import (
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"gorm.io/gorm"
 )
@@ -94,6 +95,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	}
 	var outputErr error
 	var imageResult *updaterDTO.LifecycleResult
+	var recreateResult *containerDTO.RecreateResult
 	if execute && phaseErr == nil && owner.ctx.Err() == nil {
 		output, err := s.captureInternal(owner.ctx, owner.id.RunID)
 		if err != nil {
@@ -103,6 +105,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 			command := owner.command.command
 			command.ProposedRunID = owner.id.RunID
 			execution := updaterDTO.WithResultSink(owner.ctx, func(result updaterDTO.LifecycleResult) { owned := result; imageResult = &owned })
+			execution = containerDTO.WithRecreateResultSink(execution, func(result containerDTO.RecreateResult) { owned := result; recreateResult = &owned })
 			phaseErr = s.localExecution.Executor.ExecuteRuntime(execution, command, output)
 			outputErr = runtimeCaptureFailureInternal(output, phaseErr)
 			outputErr = errors.Join(outputErr, runtimeFinishOutputInternal(owner.ctx, output))
@@ -131,6 +134,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	}
 	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, runtimeTimeInternal(s.activity.nowInternal()))
 	owner.result.imageLifecycle = imageResult
+	owner.result.recreate = recreateResult
 	_, owner.err = s.settleOwnerInternal(owner)
 	if owner.err == nil {
 		if settled, ok := s.localExecution.Executor.(interface{ RuntimeSettled(context.Context) }); ok {
@@ -214,6 +218,14 @@ func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr e
 		result.state, result.code, result.message = "failed", activitytypes.CodeRuntimeFailed, "Runtime workflow or output failed; effects unverified"
 		// Persist bounded coded evidence, not arbitrary SDK errors containing secrets.
 		result.errorText = new(result.message)
+	}
+	if result.state == "failed" {
+		var problem *containerDTO.Problem
+		if errors.As(workflowErr, &problem) && (problem.Code == "container.recreate-recovered" || problem.Code == "container.recreate-ambiguous") {
+			result.code = activitytypes.Code(problem.Code)
+			result.message = problem.Code
+			result.errorText = new(problem.Code)
+		}
 	}
 	return result
 }

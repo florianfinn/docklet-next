@@ -197,6 +197,9 @@ export function agentFixture(spec, fixture) {
   manifest.notificationDispatch = { request:schemas.NotificationDispatchRequest, autoHeal:schemas.NotificationDispatchAutoHeal, backupFailed:schemas.NotificationDispatchBackupFailed, origin:"captured credential and Edge session; transaction rechecks binding", legacy:"direct fan-out, no eventId", hostEvents:"best effort; no agent outbox" };
   const names = ["OriginAssignment", "RecreateRequest", "RecreateResult", "ContainerProblem", "ShellQuery", "ShellResize", "ShellExit", "AgentRestartResponse", "AgentRestartRun", "HostProblem", "HealthResponse", "RuntimeOptions", "RuntimeSnapshot"];
   manifest.containerHostOperations = {
+    routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item)
+      .filter(([,op])=>["assign-container-origin","reset-container-origin","recreate-container","redeploy-container","stop-project"].includes(op?.operationId))
+      .map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
     schemas: Object.fromEntries(names.map(name => {
       const key = [name, `Container${name}`, `Environment${name}`, `System${name}`, `Activity${name}`].find(key => schemas[key]);
       if (!schemas[key]) throw new Error(`missing M14 schema ${name}`);

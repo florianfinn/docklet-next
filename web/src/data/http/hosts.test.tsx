@@ -18,7 +18,7 @@ import { mapHost } from "./hosts";
 type Environment = components["schemas"]["EnvironmentEnvironment"];
 const at = "2026-10-17T12:00:00Z";
 const row: Environment = {
-  id: "example-host", name: "Example host", apiUrl: "http://agent.example.com:3552", enabled: true, status: "online", isEdge: false, lastSeen: at,
+  id: "example-host", name: "Example host", color: null, apiUrl: "http://agent.example.com:3552", enabled: true, status: "online", isEdge: false, lastSeen: at,
 };
 const info: components["schemas"]["VersionInfo"] = {
   agentContractVersion: 3, agentContractFingerprint: "example", minimumAgentContractVersion: 3, toolsImageOverride: false,

@@ -115,7 +115,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	if err != nil {
 		return runtimeResult{}, err
 	}
-	httpService, err := activity.NewRuntimeHTTPService(runtime, activity.RuntimeHTTPPorts{ApplicationContext: runtimeCtx, Agent: cfg.AgentMode, GuardContainer: containers.GuardRuntimeOrigin,
+	httpService, err := activity.NewRuntimeHTTPService(runtime, activity.RuntimeHTTPPorts{ApplicationContext: runtimeCtx, Agent: cfg.AgentMode, GuardContainer: containers.GuardRuntimeOrigin, InvalidateInventory: environments.ReadSnapshots().Forget,
 		PrepareLifecycle: func(ctx context.Context, id string, target activity.RuntimeTarget, store activity.RuntimeStoreBinding, request updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error) {
 			if id == "0" {
 				return adapter.PrepareImageLifecycle(ctx, target.ID, store.RegistrationID, request)

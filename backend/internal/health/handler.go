@@ -18,6 +18,9 @@ import (
 // processInstanceID is generated once per process, independently of database identity.
 var processInstanceID = uuid.NewString()
 
+// InstanceID is the process identity shared by health and agent restart observations.
+func InstanceID() string { return processInstanceID }
+
 // healthHandler reports UP only while live reports the application lifecycle as running.
 type healthHandler struct{ live func() bool }
 

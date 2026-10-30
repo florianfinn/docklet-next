@@ -127,6 +127,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				if err != nil {
 					return err
 				}
+				if c.command.Operation == RuntimeRecreateContainer {
+					if err := tx.Model(&Activity{}).Where("id=?", row.RunID).UpdateColumn("metadata", database.JSON{"changedFields": runtimeRecreateFields(c.command.Options)}).Error; err != nil {
+						return err
+					}
+				}
 				if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
 					return err
 				}

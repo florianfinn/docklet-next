@@ -7,7 +7,9 @@
 package activity_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -45,6 +47,8 @@ type remoteIntegration struct {
 	executeCalls  atomic.Int32
 	accessCalls   atomic.Int32
 	loseAck       atomic.Bool
+	dropTerminal  atomic.Bool
+	lostTerminal  atomic.Int32
 	accessMu      sync.Mutex
 	executeCancel context.CancelFunc
 	tunnels       *edge.TunnelRegistry
@@ -88,6 +92,22 @@ func newRemoteIntegration(t *testing.T, isEdge bool, customize ...func(*runtimeS
 			if cancel != nil {
 				cancel()
 			}
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/runtime-runs/") && f.dropTerminal.Load() {
+			capture := &remoteCapturedResponse{ResponseWriter: w, header: make(http.Header)}
+			receiverHandler.ServeHTTP(capture, r)
+			var result activitytypes.RuntimeExecutionOutcome
+			if json.Unmarshal(capture.body.Bytes(), &result) == nil && result.State == activitytypes.RuntimeAnswerTerminal {
+				f.lostTerminal.Add(1)
+				w.WriteHeader(503)
+				return
+			}
+			for name, values := range capture.header {
+				w.Header()[name] = values
+			}
+			w.WriteHeader(capture.status)
+			_, _ = w.Write(capture.body.Bytes())
 			return
 		}
 		receiverHandler.ServeHTTP(w, r)
@@ -334,3 +354,24 @@ func TestRuntimeRemoteActualPrecommitCancellationFencesWithoutEffects(t *testing
 }
 
 func (f *remoteIntegration) senderEndpoint() string { return f.endpoint }
+
+type remoteCapturedResponse struct {
+	http.ResponseWriter
+	header http.Header
+	body   bytes.Buffer
+	status int
+}
+
+func (w *remoteCapturedResponse) Header() http.Header { return w.header }
+func (w *remoteCapturedResponse) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+}
+func (w *remoteCapturedResponse) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.status = 200
+	}
+	return w.body.Write(body)
+}
+func (w *remoteCapturedResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }

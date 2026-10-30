@@ -189,15 +189,8 @@ func RegisterContainers(
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermImagesCommit, h.CommitContainer)
 
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "redeploy-container",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/containers/{containerId}/redeploy",
-		Summary:     "Redeploy container",
-		Description: "Pull latest image and recreate container",
-		Tags:        []string{"Containers"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermContainersRedeploy, h.RedeployContainer)
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeRedeployContainer, huma.Operation{OperationID: "redeploy-container", Method: http.MethodPost, Path: "/environments/{id}/containers/{containerId}/redeploy", Tags: []string{"Containers"}, Security: handlerutil.DefaultOperationSecurity()})
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeRecreateContainer, huma.Operation{OperationID: "recreate-container", Method: http.MethodPost, Path: "/environments/{id}/containers/{containerId}/recreate", Tags: []string{"Containers"}, Security: handlerutil.DefaultOperationSecurity()})
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "generate-compose",
@@ -221,6 +214,7 @@ func RegisterContainers(
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "edit-container",
+		Deprecated:  true,
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/containers/{containerId}/edit",
 		Summary:     "Edit container",

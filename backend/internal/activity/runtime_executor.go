@@ -17,6 +17,7 @@ import (
 	"io"
 	"strings"
 
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	mobycontainer "github.com/moby/moby/api/types/container"
@@ -129,6 +130,9 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 		!runtimeEqualInternal(resolved.Target.ParentProjectID, command.Target.ParentProjectID) {
 		return &RuntimeTargetError{Code: "runtime.target-changed"}
 	}
+	if command.Target.Kind == "container" && command.Target.Name != nil && (resolved.Target.Name == nil || *command.Target.Name != *resolved.Target.Name) {
+		return &RuntimeTargetError{Code: "runtime.target-changed"}
+	}
 	if command.Target.Kind == "stack" && (command.Target.Name == nil || resolved.Target.Name == nil || *resolved.Target.Name != *command.Target.Name) {
 		return &RuntimeTargetError{Code: "runtime.target-changed"}
 	}
@@ -153,6 +157,17 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 		return a.projects.RestartProject(ctx, command.Target.ID, command.Options.RestartServices, command.Actor)
 	case RuntimeRedeployProject:
 		return a.projects.RedeployProject(ctx, command.Target.ID, command.Actor, command.Options.Deploy)
+	case RuntimeRecreateContainer, RuntimeRedeployContainer:
+		port, ok := a.containers.(runtimeContainerRecreatePort)
+		if !ok {
+			return ErrRuntimeTransport
+		}
+		if command.Operation == RuntimeRecreateContainer {
+			_, err := port.EditContainer(ctx, command.Target.ID, *command.Options.Recreate, command.Actor)
+			return err
+		}
+		_, err := port.RedeployContainer(ctx, command.Target.ID, command.Actor)
+		return err
 	case RuntimeStartContainer:
 		return a.containers.StartContainer(ctx, command.Target.ID, command.Actor)
 	case RuntimeStopContainer:
@@ -178,7 +193,17 @@ func (a *RuntimeServiceAdapter) PrepareImageLifecycle(ctx context.Context, id, r
 	return port.PrepareImageLifecycle(ctx, id, registration, request)
 }
 func (a *RuntimeServiceAdapter) RuntimeSettled(ctx context.Context) {
+	if port, ok := a.containers.(interface{ RuntimeSettled(context.Context) }); ok {
+		port.RuntimeSettled(ctx)
+	}
 	if port, ok := a.projects.(runtimeImageLifecyclePort); ok {
 		_ = port.ReconcileImageLifecycle(ctx)
 	}
+}
+
+type runtimeContainerRecreatePort interface {
+	EditContainer(context.Context, string, containerDTO.Edit, usertypes.Actor) (string, error)
+	RedeployContainer(context.Context, string, usertypes.Actor) (string, error)
+	RecoverRecreates(context.Context) ([]containerDTO.RecreateRecovery, error)
+	PruneRecreateJournals(context.Context) error
 }

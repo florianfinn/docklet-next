@@ -19,7 +19,7 @@ import { HostSettingsDialog } from "./HostSettingsDialog";
 import { ConnectStep } from "./onboarding/ConnectSteps";
 import { freshDraft } from "./onboarding/onboarding-draft";
 
-const host = mapHost({ id: "example", name: "Example", apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
+const host = mapHost({ id: "example", name: "Example", color: null, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
 const draft = freshDraft({ projectDir: "/srv/projects", installDir: "/srv/agent", connection: "direct", puid: "", pgid: "", detectSocketGroup: true }, []);
 
 afterEach(() => { setAppLocale("de"); vi.restoreAllMocks(); });

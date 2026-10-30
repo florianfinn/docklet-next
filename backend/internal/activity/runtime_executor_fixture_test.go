@@ -7,6 +7,7 @@
 package activity_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -108,6 +109,7 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 		volume = &copy
 	}
 	f.mu.Unlock()
+	r.Body = io.NopCloser(bytes.NewReader(body))
 	if onCall != nil && onCall(w, r) {
 		return
 	}

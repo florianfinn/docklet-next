@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: b76892f841cd4876ae955018a1d2691ef327492db610f522c57211fb6778d2ca
+// Revision: 3567cded8877b0d71bd79fca557bd8ff128826f5abbe76132caf64e115aa620f
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1262,6 +1262,7 @@ export interface paths {
         put?: never;
         /**
          * Edit container
+         * @deprecated
          * @description Apply configuration changes and recreate the container
          */
         post: operations["edit-container"];
@@ -1384,6 +1385,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/containers/{containerId}/recreate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
+        post: operations["recreate-container"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/containers/{containerId}/redeploy": {
         parameters: {
             query?: never;
@@ -1393,10 +1411,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Redeploy container
-         * @description Pull latest image and recreate container
-         */
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
         post: operations["redeploy-container"];
         delete?: never;
         options?: never;
@@ -4827,7 +4842,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4865,7 +4880,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4907,7 +4922,7 @@ export interface components {
         ActivityMessage: {
             activityId: string;
             /** @enum {string} */
-            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            code?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             /** Format: date-time */
             createdAt: string;
             id: string;
@@ -5087,7 +5102,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -5148,7 +5163,7 @@ export interface components {
         };
         ActivityStepTraceEntry: {
             /** @enum {string} */
-            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            code?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             /** Format: date-time */
             endedAt?: string;
             id: string;
@@ -17573,36 +17588,192 @@ export interface operations {
             };
         };
     };
-    "redeploy-container": {
+    "recreate-container": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerRecreateRequest"];
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseContainerDetails"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    "redeploy-container": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };

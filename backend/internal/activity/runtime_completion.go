@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -21,6 +22,8 @@ import (
 // Frozen only after the executor and capture have actually joined. Settlement
 // retries reuse these executor times and codes; they never rerun work or drain.
 type runtimeLocalResultInternal struct {
+	recovered          bool
+	recreate           *containerDTO.RecreateResult
 	silentNotification bool
 	imageLifecycle     *updaterDTO.LifecycleResult
 	outputLost         bool
@@ -62,23 +65,30 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	switch *row.ExecutorState {
+	case "unknown":
+		if !result.recovered || row.OperationID == nil || !runtimeRecreateOperation(RuntimeOperation(*row.OperationID)) {
+			return empty, nil, &runtimeConflictInternal{}
+		}
 	case "pending", "accepted", "executing", "success", "failed", "cancelled":
 	default:
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	valid := (result.state == "success" && result.code == activitytypes.CodeActivitySuccess) ||
 		(result.state == "cancelled" && result.code == activitytypes.CodeRuntimeCancelled) ||
-		(result.state == "failed" && (result.code == activitytypes.CodeRuntimeFailed || result.code == activitytypes.CodeRuntimeInterrupted))
+		(result.state == "failed" && (result.code == activitytypes.CodeRuntimeFailed || result.code == activitytypes.CodeRuntimeInterrupted || result.code == "container.recreate-recovered" || result.code == "container.recreate-ambiguous"))
 	if !valid || result.settledAt.IsZero() || result.message == "" {
 		return empty, nil, errRuntimeInvalidInternal
 	}
 	wasTerminal := row.ExecutorSettledAt != nil
-	if result.state == "success" && !wasTerminal && *row.ExecutorState != "executing" {
+	if result.state == "success" && !wasTerminal && *row.ExecutorState != "executing" && !result.recovered {
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	row, err = runtimeEvidenceTxInternal(tx, now, id, runtimeEvidenceInternal{State: result.state, ResultCode: new(string(result.code)),
 		Error: result.errorText, StartedAt: result.startedAt, SettledAt: new(result.settledAt)})
 	if err != nil {
+		return empty, nil, err
+	}
+	if err := runtimeRecreateResultTx(tx, row, result.recreate); err != nil {
 		return empty, nil, err
 	}
 	if result.imageLifecycle != nil {
@@ -91,7 +101,7 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		return snapshot, nil, err
 	}
 	var model Activity
-	if err := tx.First(&model, "id = ? AND environment_id = ?", id.RunID, id.EnvironmentID).Error; err != nil {
+	if err := runtimeEnsureActivityTx(tx, row, &model); err != nil {
 		return empty, nil, err
 	}
 	if !gatedWriterAllowedInternal(tx.Statement.Context, &model) {

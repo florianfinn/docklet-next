@@ -18,6 +18,7 @@ import (
 
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
@@ -730,6 +731,9 @@ func (
 ) {
 	if err := effectOriginGuard(containerInfo); err != nil {
 		return "", err
+	}
+	if updaterDTO.ExecutionIdentityFromContext(ctx).RunID != "" {
+		return s.recreateDurable(ctx, dockerClient, containerInfo, newName, newConfig, newHostConfig, networkingConfig, apiVersion)
 	}
 	containerID := containerInfo.ID
 	containerName := strings.TrimPrefix(containerInfo.Name, "/")
