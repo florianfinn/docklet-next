@@ -48,7 +48,7 @@ func TestEdgeCreationWithAPIKeyRemainsAvailable(t *testing.T) {
 	f := newAgentFixture(t, "direct", version.Info{})
 	keys := apikey.NewApiKeyService(f.service.db, user.NewUserService(f.service.db, nil, nil), nil)
 	h := &EnvironmentHandler{environmentService: f.service, apiKeyService: keys}
-	out, err := h.createEnvironmentWithApiKeyInternal(t.Context(), &Environment{ApiUrl: "edge://example", IsEdge: true, Enabled: true}, &usertypes.Actor{ID: "operator", Username: "operator"})
+	out, err := h.createEnvironmentWithApiKeyInternal(t.Context(), &Environment{Name: "New edge", ApiUrl: "edge://example", IsEdge: true, Enabled: true}, &usertypes.Actor{ID: "operator", Username: "operator"})
 	require.NoError(t, err)
 	require.NotNil(t, out.Body.Data.ApiKey)
 	env, err := f.service.GetEnvironmentByID(t.Context(), out.Body.Data.ID)

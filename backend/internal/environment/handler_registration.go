@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; typed host edit validation.
 
 package environment
 
@@ -65,7 +65,11 @@ func (h *EnvironmentHandler) createEnvironmentWithApiKeyInternal(ctx context.Con
 
 	created, err := h.environmentService.CreateEnvironment(ctx, env, &user.ID, &user.Username)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to create environment: " + err.Error())
+		var problem *environment.HostProblem
+		if errors.As(err, &problem) {
+			return nil, problem
+		}
+		return nil, huma.Error500InternalServerError("Failed to create environment")
 	}
 
 	// Generate API key for environment
@@ -125,7 +129,11 @@ func (h *EnvironmentHandler) createEnvironmentLegacyInternal(ctx context.Context
 
 	created, err := h.environmentService.CreateEnvironment(ctx, env, &user.ID, &user.Username)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to create environment: " + err.Error())
+		var problem *environment.HostProblem
+		if errors.As(err, &problem) {
+			return nil, problem
+		}
+		return nil, huma.Error500InternalServerError("Failed to create environment")
 	}
 
 	// Registry delivery is detached from the request and gated by agent compatibility.
@@ -178,6 +186,15 @@ func (h *EnvironmentHandler) GetEnvironment(ctx context.Context, input *GetEnvir
 // UpdateEnvironment updates an environment.
 func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *UpdateEnvironmentInput) (*handlerutil.Out[environment.Environment], error) {
 	isLocalEnv := input.ID == localDockerEnvironmentID
+	if input.Body.Color != nil {
+		var value any
+		if *input.Body.Color != nil {
+			value = **input.Body.Color
+		}
+		if err := validateHostColor(value); err != nil {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+	}
 	updates := h.buildUpdateMapInternal(&input.Body, isLocalEnv)
 
 	h.handleEnvironmentPairingInternal(ctx, input.ID, &input.Body, updates, isLocalEnv)
@@ -190,6 +207,10 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 	}
 	updated, updateErr := h.environmentService.UpdateEnvironment(ctx, input.ID, updates, userID, username)
 	if updateErr != nil {
+		var problem *environment.HostProblem
+		if errors.As(updateErr, &problem) {
+			return nil, problem
+		}
 		apiErr := common.ToAPIError(updateErr)
 		if apiErr.HTTPStatus() == http.StatusInternalServerError {
 			return nil, huma.Error500InternalServerError("Failed to update environment")
@@ -388,6 +409,12 @@ func (h *EnvironmentHandler) SyncEnvironment(ctx context.Context, input *SyncEnv
 
 func (h *EnvironmentHandler) buildUpdateMapInternal(req *environment.Update, isLocalEnv bool) map[string]any {
 	updates := map[string]any{}
+	if req.Color != nil {
+		updates["color"] = nil
+		if *req.Color != nil {
+			updates["color"] = **req.Color
+		}
+	}
 
 	if !isLocalEnv {
 		if req.ApiUrl != nil {

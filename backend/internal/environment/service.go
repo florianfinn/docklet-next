@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.
 
 package environment
 
@@ -210,7 +210,7 @@ func (s *EnvironmentService) EnsureLocalEnvironment(ctx context.Context, appUrl 
 	if err == nil {
 		// Local environment already exists, ensure ApiUrl matches current appUrl
 		if existingEnv.ApiUrl != appUrl {
-			if updateLocalURLErr := s.db.WithContext(ctx).Model(&existingEnv).Update("api_url", appUrl).Error; updateLocalURLErr != nil {
+			if updateLocalURLErr := s.db.WithContext(ctx).Model(&existingEnv).Updates(map[string]any{"api_url": appUrl, "credential_revision": gorm.Expr("credential_revision + 1")}).Error; updateLocalURLErr != nil {
 				return fmt.Errorf("failed to update local environment api url: %w", updateLocalURLErr)
 			}
 			s.invalidateEnvironmentCacheInternal(LocalEnvironmentID)
@@ -259,7 +259,12 @@ func (s *EnvironmentService) CreateEnvironment(ctx context.Context, env *Environ
 	env.CreatedAt = now
 	env.UpdatedAt = new(now)
 
-	if err := s.db.WithContext(ctx).Create(env).Error; err != nil {
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := validateHostName(tx, env.ID, env.Name); err != nil {
+			return err
+		}
+		return tx.Create(env).Error
+	}); err != nil {
 		return nil, fmt.Errorf("failed to create environment: %w", err)
 	}
 
@@ -337,7 +342,15 @@ func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, u
 
 	updates["updated_at"] = new(time.Now())
 
-	if updateEnvironmentErr := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; updateEnvironmentErr != nil {
+	fenceCredentialUpdate(updates)
+	if updateEnvironmentErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if name, ok := updates["name"].(string); ok {
+			if err := validateHostName(tx, id, name); err != nil {
+				return err
+			}
+		}
+		return tx.Model(&Environment{}).Where("id = ?", id).Updates(updates).Error
+	}); updateEnvironmentErr != nil {
 		return nil, fmt.Errorf("failed to update environment: %w", updateEnvironmentErr)
 	}
 	s.invalidateEnvironmentCacheInternal(id)
@@ -515,6 +528,7 @@ func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, n
 		"status":       string(EnvironmentStatusPending),
 	}
 
+	fenceCredentialUpdate(updates)
 	result := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", envID).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update environment with new API key: %w", result.Error)
