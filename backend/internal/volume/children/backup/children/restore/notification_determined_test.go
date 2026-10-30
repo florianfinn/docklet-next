@@ -107,7 +107,8 @@ func TestRestoreEarlySitesAndPanicFollowTheWorkCancellation(t *testing.T) {
 					}
 					var n int64
 					require.NoError(t, l.DB.Model(&notificationoutbox.Row{}).Count(&n).Error)
-					if cancelled {
+					// The initial failure is determined before its save; link and panic cancel first.
+					if cancelled && stage != "initial" {
 						require.Zero(t, n)
 						require.Zero(t, calls)
 					} else if agent {

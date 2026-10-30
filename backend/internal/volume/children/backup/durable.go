@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split durable execution helpers; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split durable execution helpers; M12 persisted volume lifecycle and legacy restore cut.; a failed activity link completes with the tracked work context.
 
 package backup
 
@@ -34,7 +34,7 @@ func (s *Service) StartBackup(ctx context.Context, environmentID, volumeName str
 	}
 	entry.ActivityID = &activityID
 	if err = s.deps.Store.Save(ctx, entry); err != nil {
-		err = s.completeBackupInternal(owner.ctx, entry, err)
+		err = s.completeBackupInternal(workCtx, entry, err)
 		owner.Release(ctx)
 		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "", neutralBackupError(err, "volume.backup.interrupted"))
 		return volume.BackupEntry{}, err

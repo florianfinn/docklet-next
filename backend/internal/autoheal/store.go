@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; determined agent outcomes are sent with a bounded detached context.
 
 package autoheal
 
@@ -199,7 +199,10 @@ func (s *Store) Project(ctx context.Context, id uint, live bool) error {
 		return err
 	}
 	if dispatch != nil && s.Dispatch != nil {
-		if err := s.Dispatch(ctx, *dispatch); err != nil {
+		// The outcome is determined and projected; its send outlives a cancelled run, bounded.
+		sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if err := s.Dispatch(sendCtx, *dispatch); err != nil {
 			slog.WarnContext(ctx, "Auto Heal notification could not be dispatched", "code", "notification.dispatch-failed")
 		}
 		return nil
