@@ -39,6 +39,9 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
       if (!enabled) return;
       const offDemand = registerReadConsumer(adapter.subscribeChanges, "events", () => client.getQueryCache().find({ queryKey: queryKeys.events, exact: true })?.isActive() ?? false);
       const offChanges = adapter.subscribeChanges((topics) => {
+        if (topics.some((topic) => topic === "containers" || topic === "stacks" || topic === "hosts")) {
+          void client.invalidateQueries({ queryKey: ["capability"] });
+        }
         for (const topic of new Set(topics)) {
           for (const key of TOPIC_KEYS[topic]) void client.invalidateQueries({ queryKey: key });
         }
