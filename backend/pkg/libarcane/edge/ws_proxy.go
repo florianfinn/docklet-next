@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; retain browser cookies at the hub boundary; session-bound viewer lifetime and durable validation.
+// Deviations: Local module namespace; retain browser cookies at the hub boundary; session-bound viewer lifetime and durable validation; preserve upstream close metadata and terminal exit delivery.
 
 package edge
 
@@ -51,15 +51,34 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 		return nil
 	}
 	defer func() { _ = clientWS.CloseNow() }()
+	terminal := wshub.IsTerminalRequest(req)
+	relay := wshub.NewTerminalRelay(ctx, clientWS, terminal)
+	ctx = wshub.WithTerminalRelay(ctx, relay)
+	if terminal {
+		defer relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
+	}
+	viewerCtx, viewerCancel := context.WithCancel(ctx)
+	defer viewerCancel()
+
 	// Client frames are forwarded into tunnel messages capped at
 	// maxGRPCTunnelMessageSize; allow the same size here instead of
 	// coder/websocket's 32KB default.
 	clientWS.SetReadLimit(maxGRPCTunnelMessageSize)
 
 	streamID := uuid.New().String()
-	streamCtx, cancel := context.WithCancel(ctx)
+	streamParent := viewerCtx
+	if terminal {
+		streamParent = context.WithoutCancel(viewerCtx)
+	}
+	streamCtx, cancel := context.WithCancel(streamParent)
 	defer cancel()
-	lease, err := sessionlife.Register(streamCtx, func() { cancel(); _ = clientWS.CloseNow() })
+	lease, err := sessionlife.Register(viewerCtx, func() {
+		viewerCancel()
+		if !terminal {
+			cancel()
+			_ = clientWS.CloseNow()
+		}
+	})
 	if err != nil {
 		return nil
 	}
@@ -97,7 +116,10 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	// Goroutine to read from client and send to agent
 	go forwardClientToAgent(ctx, streamCtx, clientWS, tunnel, streamID, clientDoneCh)
 
-	forwardAgentToClient(ctx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
+	forwardAgentToClient(viewerCtx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
+	if terminal {
+		relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
+	}
 	cancel()
 	_ = clientWS.CloseNow()
 	<-clientDoneCh
@@ -145,6 +167,8 @@ func forwardAgentToClient(ctx, streamCtx context.Context, clientWS *websocket.Co
 		select {
 		case <-streamCtx.Done():
 			return
+		case <-ctx.Done():
+			return
 		case <-tunnel.done:
 			return
 		case <-pending.failureCh:
@@ -185,15 +209,11 @@ func handleAgentMessage(ctx, streamCtx context.Context, clientWS *websocket.Conn
 		return false, writeWebSocketData(streamCtx, clientWS, msg)
 	case MessageTypeWebSocketClose, MessageTypeStreamClose, MessageTypeStreamEnd:
 		slog.DebugContext(ctx, "Agent closed WebSocket stream", "streamId", streamID, "error", msg.Error)
-		status, reason := websocket.StatusNormalClosure, msg.Error
-		if reason != "" {
-			status = websocket.StatusInternalError
-			if len(reason) > 123 {
-				reason = reason[:123]
-			}
-		}
-		if err := clientWS.Close(status, reason); err != nil {
-			slog.DebugContext(ctx, "Failed to close client WebSocket", "streamId", streamID, "status", int(status), "error", err)
+		status, reason := decodeStreamClose(msg.Error)
+		if relay := wshub.Relay(ctx); relay != nil {
+			relay.Finish(status, reason)
+		} else {
+			_ = clientWS.Close(status, reason)
 		}
 		return true, nil
 	case MessageTypeRequest,
@@ -227,6 +247,9 @@ func writeWebSocketData(streamCtx context.Context, clientWS *websocket.Conn, msg
 	}
 	wctx, cancel := context.WithTimeout(streamCtx, tunnelWSDataWriteWait)
 	defer cancel()
+	if relay := wshub.Relay(streamCtx); relay != nil {
+		return relay.Write(wctx, msgType, msg.Body)
+	}
 	return clientWS.Write(wctx, msgType, msg.Body)
 }
 

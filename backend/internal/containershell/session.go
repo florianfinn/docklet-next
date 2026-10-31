@@ -99,6 +99,9 @@ func (r *Registry) Accept(ctx context.Context, values url.Values, actor *user.Ac
 			return ctx, nil, err
 		}
 		h.activityID = entry.ID
+		if tracker, ok := r.activity.(activitylib.Tracker); ok {
+			h.ctx = tracker.Track(h.ctx, h.activityID)
+		}
 	}
 	r.mu.Lock()
 	r.handles[h] = struct{}{}
@@ -195,3 +198,6 @@ func (r *Registry) CloseByUser(userID string) {
 		h.Close()
 	}
 }
+
+// ActiveCount reports registered handles, including sessions still joining cleanup.
+func (r *Registry) ActiveCount() int { r.mu.Lock(); defer r.mu.Unlock(); return len(r.handles) }

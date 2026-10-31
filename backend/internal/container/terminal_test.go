@@ -19,12 +19,19 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	dto "github.com/florianfinn/docklet-next/types/container"
+	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
+	"net/url"
+	"path/filepath"
 )
 
 type shellDocker struct {
@@ -98,7 +105,7 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 	}
 }
-func shellFixture(t *testing.T, fixture *shellDocker, query dto.ShellQuery) (*websocket.Conn, <-chan struct{}) {
+func shellFixture(t *testing.T, fixture *shellDocker, query dto.ShellQuery, sessions ...*containershell.Registry) (*websocket.Conn, <-chan struct{}) {
 	t.Helper()
 	fixture.running.Store(true)
 	fixture.tick = make(chan time.Time, 1)
@@ -122,6 +129,14 @@ func shellFixture(t *testing.T, fixture *shellDocker, query dto.ShellQuery) (*we
 			tick := fixture.tick
 			return sessionlife.Cadence{C: tick, Stop: func() {}}
 		})
+		if len(sessions) > 0 {
+			bound, h, err := sessions[0].Accept(ctx, url.Values{}, &user.Actor{ID: "example-user"}, "example-host", "example")
+			if err != nil {
+				return
+			}
+			defer h.Release()
+			ctx = bound
+		}
 		svc.ServeTerminal(ctx, conn, "example", query)
 	}))
 	t.Cleanup(server.Close)
@@ -237,4 +252,25 @@ func TestShellCommandSelection(t *testing.T) {
 			<-done
 		})
 	}
+}
+
+func TestShellOrphanRecordedWithoutContent(t *testing.T) {
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "shell.db")), database.MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	sessions := containershell.New(activity.NewActivityService(db, nil))
+	f := &shellDocker{orphan: true}
+	conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "auto"}, sessions)
+	readShell(t, conn)
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"invalid"}`)))
+	require.Equal(t, "container.shell-orphaned", readShellExit(t, conn).Reason)
+	_, _, _ = conn.Read(t.Context())
+	<-done
+	var entries []activity.Activity
+	require.NoError(t, db.Find(&entries).Error)
+	require.Len(t, entries, 1)
+	require.Equal(t, "container.shell-orphaned", entries[0].LatestMessage)
+	require.NotNil(t, entries[0].EndedAt)
+	require.Equal(t, "example-user", *entries[0].StartedByUserID)
+	require.Empty(t, entries[0].Output)
 }

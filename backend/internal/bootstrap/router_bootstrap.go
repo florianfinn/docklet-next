@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring.
 
 package bootstrap
 
@@ -194,6 +194,7 @@ type RouterParams struct {
 	HandlerDeps    api.HandlerDeps
 	AuthMiddleware *auth.AuthMiddleware
 	TunnelRegistry *edge.TunnelRegistry
+	ShellSessions  *containershell.Registry `optional:"true"`
 }
 
 // newEchoInternal builds the Echo instance with path parameter values
@@ -310,7 +311,10 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 	var shellSessions *containershell.Registry
 	if hubMode {
-		shellSessions = containershell.New(deps.Activity.Service(), ctx)
+		shellSessions = p.ShellSessions
+		if shellSessions == nil {
+			shellSessions = containershell.New(deps.Activity.Service(), ctx)
+		}
 	}
 	envProxyMiddleware := middleware.NewEnvProxyMiddlewareWithParamAndRegistry(
 		types.LocalDockerEnvironmentID,

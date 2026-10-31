@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; extracted focused request, stream and recorder ownership
+// Deviations: Local module namespace; extracted focused request, stream and recorder ownership; validate legacy stream commands and preserve close metadata and stream handle identity.
 
 package edge
 
@@ -21,10 +21,9 @@ import (
 )
 
 func (c *TunnelClient) handleWebSocketStart(ctx context.Context, conn TunnelConnection, msg *TunnelMessage, workers *sync.WaitGroup) {
-	if msg.Command == "" {
-		if commandName, ok := ResolveEdgeCommandName(http.MethodGet, msg.Path, true).Get(); ok {
-			msg.Command = commandName
-		}
+	if !ValidateEdgeCommand(msg.Command, http.MethodGet, msg.Path, true) {
+		c.sendStreamCloseMessage(conn, msg.ID, "unsupported edge stream")
+		return
 	}
 	streamID := msg.ID
 	slog.DebugContext(ctx, "Starting WebSocket stream", "streamId", streamID, "path", msg.Path)
@@ -198,7 +197,7 @@ func (c *TunnelClient) closeWebSocketStream(streamID string, stream *activeWSStr
 
 	stream.cancel()
 	_ = stream.ws.CloseNow()
-	c.activeStreams.Delete(streamID)
+	c.activeStreams.CompareAndDelete(streamID, stream)
 }
 
 // closeAllStreams tears down every active WebSocket stream. It is called when
@@ -229,7 +228,7 @@ func (c *TunnelClient) startLocalWebSocketReadLoop(ctx, streamCtx context.Contex
 			if !wshub.IsExpectedClose(err) {
 				slog.DebugContext(ctx, "Local WebSocket read error", "error", err)
 			}
-			c.sendWebSocketClose(stream.conn, streamID)
+			c.sendStreamCloseMessage(stream.conn, streamID, encodeStreamClose(err))
 			return
 		}
 
