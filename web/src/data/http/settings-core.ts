@@ -25,7 +25,7 @@ function boolean(values: CoreSettings, key: string): boolean {
   return value === "true";
 }
 
-export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "saveSettings"> {
+export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
@@ -63,6 +63,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         setupCompleted: "true",
       });
     },
+    getStackStopMode: () => readStackStopMode(baseUrl, client),
     async getConnectedSettings() {
       const values = await read();
       const linkBase = field(values, "linkBase");

@@ -254,6 +254,8 @@ export interface ImagesApi {
 export interface SettingsApi {
   getSetupStatus(): Promise<boolean>;
   getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;
+  /** Reads only the hub stop mode, the value a stack Stop dispatches by. */
+  getStackStopMode?(): Promise<"down" | "stop">;
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */

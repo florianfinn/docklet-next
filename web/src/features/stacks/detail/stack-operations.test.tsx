@@ -87,6 +87,7 @@ it("W6 exposes the other explicit stop action in the stack menu", async () => {
   const adapter = createDemoAdapter(); const stack = renderStackDetail(await adapter.getStack("media"), "de");
   const settings = await adapter.getConnectedSettings();
   vi.spyOn(adapter, "getConnectedSettings").mockResolvedValue({ ...settings, general: { ...settings.general, stackStopMode: "stop" } });
+  adapter.getStackStopMode = async () => "stop";
   const run = vi.spyOn(adapter, "runStackCommand").mockResolvedValue("down-run");
   renderWithApp(<StackMenuFixture stack={stack} />, adapter);
   await userEvent.click(screen.getByRole("button", { name: "Actions" }));
@@ -96,7 +97,7 @@ it("W6 exposes the other explicit stop action in the stack menu", async () => {
 
 it("W6 fails closed when the hub stop mode cannot be read and offers both explicit actions", async () => {
   const adapter = createDemoAdapter(); const stack = renderStackDetail(await adapter.getStack("media"), "de");
-  vi.spyOn(adapter, "getConnectedSettings").mockRejectedValue(new Error("settings.read.403"));
+  adapter.getStackStopMode = () => Promise.reject(new Error("settings.read.403"));
   const run = vi.spyOn(adapter, "runStackCommand").mockResolvedValue("stop-run");
   renderWithApp(<StackMenuFixture stack={stack} />, adapter);
   await userEvent.click(screen.getByRole("button", { name: "Actions" }));
@@ -105,4 +106,17 @@ it("W6 fails closed when the hub stop mode cannot be read and offers both explic
   expect(screen.queryByRole("menuitem", { name: "Herunterfahren (Container entfernen)" }) !== null).toBe(true);
   await userEvent.click(screen.getByRole("menuitem", { name: "Container stoppen" }));
   await waitFor(() => expect(run).toHaveBeenCalledExactlyOnceWith(stack.id, "stop-containers"));
+});
+
+it("W6 an unrelated settings failure does not block Stop", async () => {
+  const adapter = createDemoAdapter(); const stack = renderStackDetail(await adapter.getStack("media"), "de");
+  vi.spyOn(adapter, "getConnectedSettings").mockRejectedValue(new Error("settings.invalid.linkBase"));
+  adapter.getStackStopMode = async () => "down";
+  const run = vi.spyOn(adapter, "runStackCommand").mockResolvedValue("stop-run");
+  renderWithApp(<StackMenuFixture stack={stack} />, adapter);
+  await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+  const stop = await screen.findByRole("menuitem", { name: "Stoppen" });
+  await waitFor(() => expect(stop.getAttribute("aria-disabled") === "true").toBe(false));
+  await userEvent.click(stop);
+  await waitFor(() => expect(run).toHaveBeenCalledExactlyOnceWith(stack.id, "stop"));
 });
