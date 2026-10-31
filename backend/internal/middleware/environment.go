@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	containertypes "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
@@ -31,6 +32,7 @@ import (
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -80,6 +82,7 @@ type AuthValidator func(ctx context.Context, c *echo.Context) (*authz.Permission
 
 // EnvironmentMiddleware proxies requests for remote environments to their respective agents.
 type EnvironmentMiddleware struct {
+	shellSessions *containershell.Registry
 	localID       string
 	paramName     string
 	resolver      EnvResolver
@@ -128,6 +131,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.shellSessions = options[0].ShellSessions
 		m.vulnerabilityEnabled = options[0].VulnerabilityEnabled
 		m.vulnerabilityIgnoreUnfixed = options[0].VulnerabilityIgnoreUnfixed
 		m.pointHolds = options[0].PointHolds
@@ -254,6 +258,19 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			"success": false,
 			"data":    map[string]any{"error": "You don't have permission to perform this action on this environment"},
 		})
+	}
+
+	if strings.HasPrefix(suffix, "/ws/containers/") && strings.HasSuffix(suffix, "/terminal") && m.shellSessions != nil {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		ctx, handle, err := m.shellSessions.Accept(c.Request().Context(), c.QueryParams(), user, envID, parts[2])
+		if err != nil {
+			if problem, ok := err.(*containertypes.Problem); ok {
+				return c.JSON(problem.Status, problem)
+			}
+			return c.JSON(503, map[string]any{"code": "container.shell-unavailable", "status": 503})
+		}
+		defer handle.Release()
+		c.SetRequest(c.Request().WithContext(ctx))
 	}
 
 	if list, point := pointRoute(suffix); (list || point != "") && !perms.IsGlobalAdmin() {
@@ -977,18 +994,4 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 		edge.CopyBodyWithFlush(w, resp.Body)
 	}
 	return nil
-}
-
-// EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
-type EnvironmentProxySecurity struct {
-	VulnerabilityEnabled       func(context.Context) bool
-	VulnerabilityIgnoreUnfixed func() bool
-	PointHolds                 PointHoldReader
-	PointAccess                PointAccessReader
-	OriginOverlay              func(context.Context, string, []byte) ([]byte, error)
-	Snapshots                  *hoststate.Store
-	InventoryPending           func(context.Context, string) (bool, error)
-	HTTPClient                 *http.Client
-	ProxyIdentityHeader        string
-	AgentAccess                remenv.AgentAccessCheck
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
@@ -39,6 +40,7 @@ var defaultWebSocketMetrics = wshub.NewWebSocketMetrics()
 // WebSocketHandler consolidates all WebSocket and streaming endpoints.
 // REST endpoints are handled by Huma handlers.
 type WebSocketHandler struct {
+	shellSessions       *containershell.Registry
 	projectService      *project.ProjectService
 	containerService    *container.ContainerService
 	systemService       *system.SystemService
@@ -86,6 +88,7 @@ func NewWebSocketHandler(
 	diagnosticsService *diagnostics.DiagnosticsService,
 	authMiddleware *auth.AuthMiddleware,
 	cfg *config.Config,
+	shellSessions ...*containershell.Registry,
 ) {
 	handler := &WebSocketHandler{
 		projectService:     projectService,
@@ -100,6 +103,9 @@ func NewWebSocketHandler(
 			WithTTL(5 * time.Minute).
 			Build(),
 		checkWSOrigin: middleware.WebSocketOriginValidator(cfg, authMiddleware.ValidateNonCookieCredential),
+	}
+	if len(shellSessions) > 0 {
+		handler.shellSessions = shellSessions[0]
 	}
 	if systemService != nil {
 		handler.maintenance = systemService.BackupMaintenanceGate()

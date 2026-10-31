@@ -11,6 +11,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/types/user"
 	"io"
 	"log/slog"
 	"net/http"
@@ -44,6 +47,22 @@ func (h *WebSocketHandler) ContainerExec(c *echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "error": "Container ID is required"})
 	}
 
+	if _, err := containershell.ParseQuery(c.QueryParams()); err != nil {
+		return c.JSON(400, map[string]any{"code": "container.shell-invalid", "status": 400})
+	}
+	if h.shellSessions != nil {
+		authenticatedUser, _ := c.Get(string(middleware.ContextKeyCurrentUser)).(user.ActorProvider)
+		var actor *user.Actor
+		if authenticatedUser != nil {
+			actor = authenticatedUser.Actor()
+		}
+		ctx, handle, err := h.shellSessions.Accept(c.Request().Context(), c.QueryParams(), actor, c.Param("id"), containerID)
+		if err != nil {
+			return c.JSON(503, map[string]any{"code": "container.shell-unavailable", "status": 503})
+		}
+		defer handle.Release()
+		c.SetRequest(c.Request().WithContext(ctx))
+	}
 	shell := cmp.Or(c.QueryParam("shell"), "/bin/sh")
 
 	conn, unregister, ok := h.acceptWSInternal(c, systemtypes.WSKindContainerExec, containerID)

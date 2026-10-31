@@ -31,6 +31,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -307,6 +308,10 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	if hubMode {
 		inventorySnapshots = deps.Environment.Service().ReadSnapshots()
 	}
+	var shellSessions *containershell.Registry
+	if hubMode {
+		shellSessions = containershell.New(deps.Activity.Service())
+	}
 	envProxyMiddleware := middleware.NewEnvProxyMiddlewareWithParamAndRegistry(
 		types.LocalDockerEnvironmentID,
 		"id",
@@ -317,7 +322,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
-		middleware.EnvironmentProxySecurity{VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
+		middleware.EnvironmentProxySecurity{ShellSessions: shellSessions, VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
 			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
 		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
@@ -343,7 +348,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 
 	// Remaining echo handlers (WebSocket/streaming)
-	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg)
+	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg, shellSessions)
 
 	// Register edge tunnel endpoint for manager to accept agent connections
 	// This is only registered when NOT in agent mode (i.e., running as manager)
