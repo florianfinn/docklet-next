@@ -8,12 +8,13 @@ package environment
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -90,34 +91,39 @@ func calleeName(call *ast.CallExpr) string {
 }
 
 // hostWriterScan holds what one function body binds: Environment values and query
-// variables scoped to the host table. Inference is syntactic and per function.
+// variables scoped to the host table. Inference is syntactic and per function;
+// constant values come from go/types.
 type hostWriterScan struct {
-	consts  map[string]string // package string constants
+	info    *types.Info
 	envs    map[string]bool
 	queries map[string]bool
 }
 
+// text returns the value of a constant string expression: literals, concatenations and
+// constants of the package at any scope, as the type checker evaluates them.
 func (s *hostWriterScan) text(e ast.Expr) (string, bool) {
-	switch v := e.(type) {
-	case *ast.BasicLit:
-		if v.Kind == token.STRING {
-			text, err := strconv.Unquote(v.Value)
-			return text, err == nil
-		}
-	case *ast.Ident:
-		text, ok := s.consts[v.Name]
-		return text, ok
-	case *ast.BinaryExpr:
-		if v.Op != token.ADD {
-			return "", false
-		}
-		left, lok := s.text(v.X)
-		right, rok := s.text(v.Y)
-		return left + right, lok && rok
-	case *ast.ParenExpr:
-		return s.text(v.X)
+	if tv, ok := s.info.Types[e]; ok && tv.Value != nil && tv.Value.Kind() == constant.String {
+		return constant.StringVal(tv.Value), true
 	}
 	return "", false
+}
+
+// hostStubImporter gives every import an empty package, so a package type-checks without
+// its dependencies; constants of the package itself still evaluate.
+type hostStubImporter struct{}
+
+func (hostStubImporter) Import(path string) (*types.Package, error) {
+	pkg := types.NewPackage(path, filepath.Base(path))
+	pkg.MarkComplete()
+	return pkg, nil
+}
+
+// hostConstantInfo type-checks one package with stub imports, ignoring type errors.
+func hostConstantInfo(fset *token.FileSet, files []*ast.File) *types.Info {
+	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
+	conf := types.Config{Importer: hostStubImporter{}, Error: func(error) {}}
+	_, _ = conf.Check(files[0].Name.Name, fset, files, info)
+	return info
 }
 
 func (s *hostWriterScan) isEnv(e ast.Expr) bool {
@@ -260,8 +266,7 @@ func fieldList(list *ast.FieldList) []*ast.Field {
 }
 
 // statusRefs counts status references in a writer body: constant string expressions
-// (literals, same-package constants and their concatenations, folded as one) naming
-// status, and Status fields or keys.
+// (each folded as one) naming status, and Status fields or keys.
 func (s *hostWriterScan) statusRefs(body ast.Node) int {
 	refs := 0
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -273,14 +278,11 @@ func (s *hostWriterScan) statusRefs(body ast.Node) int {
 		if !ok {
 			return true
 		}
-		switch expr.(type) {
-		case *ast.BasicLit, *ast.Ident, *ast.BinaryExpr, *ast.ParenExpr:
-			if text, ok := s.text(expr); ok {
-				if hostStatusWord.MatchString(text) {
-					refs++
-				}
-				return false
+		if text, ok := s.text(expr); ok {
+			if hostStatusWord.MatchString(text) {
+				refs++
 			}
+			return false
 		}
 		return true
 	})
@@ -289,8 +291,8 @@ func (s *hostWriterScan) statusRefs(body ast.Node) int {
 
 // hostTableWriterFuncs maps "file:Receiver.Func" (or "file:var" for package-level function
 // literals) to its status reference count for each writer of the environments table.
-func hostTableWriterFuncs(file string, src *ast.File, consts map[string]string) map[string]int {
-	scan := &hostWriterScan{consts: consts}
+func hostTableWriterFuncs(file string, src *ast.File, info *types.Info) map[string]int {
+	scan := &hostWriterScan{info: info}
 	found := map[string]int{}
 	for _, decl := range src.Decls {
 		switch d := decl.(type) {
@@ -332,42 +334,6 @@ func hostTableWriterFuncs(file string, src *ast.File, consts map[string]string) 
 	return found
 }
 
-// packageStringConsts resolves string constants declared anywhere in the files of one
-// package, including concatenations and aliases of other constants.
-func packageStringConsts(files []*ast.File) map[string]string {
-	exprs := map[string]ast.Expr{}
-	for _, file := range files {
-		ast.Inspect(file, func(n ast.Node) bool {
-			decl, ok := n.(*ast.GenDecl)
-			if !ok || decl.Tok != token.CONST {
-				return true
-			}
-			for _, spec := range decl.Specs {
-				vs := spec.(*ast.ValueSpec)
-				for i, name := range vs.Names {
-					if i < len(vs.Values) {
-						exprs[name.Name] = vs.Values[i]
-					}
-				}
-			}
-			return true
-		})
-	}
-	scan := &hostWriterScan{consts: map[string]string{}}
-	for changed := true; changed; {
-		changed = false
-		for name, expr := range exprs {
-			if _, done := scan.consts[name]; done {
-				continue
-			}
-			if text, ok := scan.text(expr); ok {
-				scan.consts[name], changed = text, true
-			}
-		}
-	}
-	return scan.consts
-}
-
 func TestHostTableWritersAreTheReviewedSet(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
@@ -401,9 +367,9 @@ func TestHostTableWritersAreTheReviewedSet(t *testing.T) {
 		for _, src := range files {
 			list = append(list, src)
 		}
-		consts := packageStringConsts(list)
+		info := hostConstantInfo(fset, list)
 		for rel, src := range files {
-			for name, refs := range hostTableWriterFuncs(rel, src, consts) {
+			for name, refs := range hostTableWriterFuncs(rel, src, info) {
 				found[name] = refs
 			}
 		}
@@ -413,9 +379,10 @@ func TestHostTableWritersAreTheReviewedSet(t *testing.T) {
 
 func scanHostWriterFixture(t *testing.T, src string) map[string]int {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "other.go", src, parser.SkipObjectResolution)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "other.go", src, parser.SkipObjectResolution)
 	require.NoError(t, err)
-	return hostTableWriterFuncs("internal/other/other.go", file, packageStringConsts([]*ast.File{file}))
+	return hostTableWriterFuncs("internal/other/other.go", file, hostConstantInfo(fset, []*ast.File{file}))
 }
 
 // The guard recognises the ordinary forms of a host table write, in any package.
@@ -458,6 +425,41 @@ func TestHostTableWriterGuardRecognisesWriteForms(t *testing.T) {
 	require.Equal(t, map[string]int{"internal/other/other.go:reset": 1}, literal)
 	reads := scanHostWriterFixture(t, "package other\nfunc (s *Service) read() {\ndb.Model(&Environment{}).Where(\"status = ?\", id).First(&env)\ndb.Model(&Run{}).Updates(map[string]any{\"status\": \"done\"})\ndb.Exec(\"UPDATE runs SET status = 'done'\")\n}\n")
 	require.Empty(t, reads)
+}
+
+// Constants resolve as the compiler binds them: lexical scope, implicitly repeated
+// expressions, iota, typed constants and conversions; another function's constant of the
+// same name never decides.
+func TestHostTableWriterGuardResolvesConstantScopes(t *testing.T) {
+	// Expected counts include a status literal of a local declaration and each use of it.
+	cases := map[string]struct {
+		src  string
+		refs int
+	}{
+		"implicit sql": {
+			"const (\nbaseSQL = \"UPDATE environments \" + \"SET status = ? WHERE id = ?\"\nresetSQL\n)\n" +
+				"func (s *Service) write() { db.Exec(resetSQL, \"pending\", id) }\n", 1},
+		"implicit key": {
+			"const (\nbaseColumn = \"sta\" + \"tus\"\ncolumn\n)\n" +
+				"func (s *Service) write() { db.Table(\"environments\").UpdateColumn(column, \"pending\") }\n", 1},
+		"local sql": {
+			"func (s *Service) write() { const query = \"UPDATE environments \" + \"SET status = ? WHERE id = ?\"; db.Exec(query, \"pending\", id) }\n" +
+				"func (s *Service) read() { const query = \"SELECT 1\"; db.Raw(query) }\n", 2},
+		"shadowed key": {
+			"const column = \"sta\" + \"tus\"\nfunc (s *Service) other() { const column = \"color\"; _ = column }\n" +
+				"func (s *Service) write() { db.Model(&Environment{}).Where(\"id = ?\", id).Update(column, \"pending\") }\n", 1},
+		"typed conversion": {
+			"type column string\nconst (\nfirst column = \"sta\" + \"tus\"\nsecond\n)\nconst third = string(second)\n" +
+				"func (s *Service) write() { db.Table(\"environments\").UpdateColumn(third, \"pending\") }\n", 1},
+		"inner block": {
+			"func (s *Service) write() { const column = \"color\"; { const column = \"status\"; db.Table(\"environments\").UpdateColumn(column, \"pending\") } }\n", 2},
+	}
+	for name, c := range cases {
+		found := scanHostWriterFixture(t, "package other\n"+c.src)
+		require.Equal(t, map[string]int{"internal/other/other.go:Service.write": c.refs}, found, name)
+	}
+	outer := scanHostWriterFixture(t, "package other\nfunc (s *Service) write() { const column = \"color\"; { const column = \"status\" }; db.Table(\"environments\").UpdateColumn(column, \"x\") }\n")
+	require.Equal(t, map[string]int{"internal/other/other.go:Service.write": 1}, outer, "the outer use resolves to the outer constant")
 }
 
 // A status reference added inside an already reviewed writer changes its pinned count.
