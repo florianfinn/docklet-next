@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton } from "@/shared/ui/sidebar";
 
 /** Status groups of the menu design: problems after online, each sorted by name. */
-const STATUS_ORDER: HostStatus[] = ["online", "offline", "pending"];
+const STATUS_ORDER: HostStatus[] = ["online", "standby", "offline", "pending", "update-required", "token-rejected"];
 
 interface FilterModel {
   hosts: Host[];
@@ -187,8 +187,8 @@ function GroupedList({ m }: { m: FilterModel }) {
       </div>
       {groups.map((g) => (
         <div key={g.status} role="group" aria-label={`${t("title")}: ${tc(g.status)}`}>
-          <div data-tone={g.status === "online" ? "ok" : g.status === "offline" ? "err" : "info"} className="mb-0.5 flex items-center gap-1.5 px-1.5 text-[11px] font-medium text-(--tone)">
-            <ToneDot tone={g.status === "online" ? "ok" : g.status === "offline" ? "err" : "info"} className="size-1.5" />
+          <div data-tone={g.status === "standby" ? "gray" : g.status === "online" ? "ok" : g.status === "offline" ? "err" : "info"} className="mb-0.5 flex items-center gap-1.5 px-1.5 text-[11px] font-medium text-(--tone)">
+            <ToneDot tone={g.status === "standby" ? "gray" : g.status === "online" ? "ok" : g.status === "offline" ? "err" : "info"} className="size-1.5" />
             {tc(g.status)} · {g.hosts.length}
           </div>
           <div className="flex flex-col gap-1">

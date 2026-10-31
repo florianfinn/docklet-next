@@ -39,7 +39,7 @@ describe("host HTTP reads", () => {
   it.each(["online", "offline", "pending", "update-required", "token-rejected", "standby", "error"])("maps %s and last_seen without inventing a contact", async (status) => {
     const f = fixture([{ ...row, status }]);
     const [host] = await f.adapter.listHosts();
-    expect(host?.status).toBe(["standby", "error"].includes(status) ? "offline" : status);
+    expect(host?.status).toBe(status === "error" ? "offline" : status);
     expect(host?.lastSeen).toBe(at);
     expect(host?.connection).toBe("direct");
     expect(host?.demoAdded).toBeUndefined();

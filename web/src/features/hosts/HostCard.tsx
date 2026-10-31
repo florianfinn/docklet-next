@@ -6,7 +6,7 @@ import { useTranslations } from "use-intl";
 import { useCapability } from "@/data/use-capability";
 import { RotateTokenButton } from "./RotateTokenButton";
 import { formatRelative } from "@/domain/format";
-import { hostTone, isHostVisible } from "@/domain/hosts";
+import { hostTone, isHostVisible, isHostAvailable } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
 import { SYSTEM_LABEL, type SystemComponent } from "@/domain/system";
 import { versionLabel } from "@/domain/updates";
@@ -77,7 +77,8 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const tc = useTranslations("common.host");
   const dt = useAdapterText();
   const cmd = useHostCommands();
-  const reconnect = useCapability("reconnectHost");
+  const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
+  const connection = useCapability("connectHost", { kind: "host", id: host.id });
   const selection = useHostSelection();
   const [confirm, setConfirm] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -149,11 +150,11 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents"><SystemSection component={system} /></CapabilityGate>}
       <p className="text-xs text-muted-foreground">{t("card.usage", { stacks: stacks ?? 0, containers: containers ?? 0 })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
-        {pending ? (import.meta.env.DEV ? (
-          <BusyButton size="sm" busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>
+        {pending ? (
+          <BusyButton size="sm" disabled={!connection.available} title={connection.reason} busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>
             {t("card.connect")}
           </BusyButton>
-        ) : <span className="self-center text-xs text-muted-foreground">{t("card.waiting")}</span>) : (
+        ) : (
           <BusyButton
             size="sm"
             variant="outline"
@@ -193,7 +194,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         open={confirm}
         onOpenChange={setConfirm}
         title={t("card.removeTitle", { name: host.name })}
-        description={`${t("card.removeCounts", { stacks: host.status === "online" ? String(stacks ?? t("card.unknown")) : t("card.unknown"), containers: host.status === "online" ? String(containers ?? t("card.unknown")) : t("card.unknown") })} ${t("card.removeBody")}`}
+        description={`${t("card.removeCounts", { stacks: isHostAvailable(host) ? String(stacks ?? t("card.unknown")) : t("card.unknown"), containers: isHostAvailable(host) ? String(containers ?? t("card.unknown")) : t("card.unknown") })} ${t("card.removeBody")}`}
         confirmLabel={t("card.removeConfirm")}
         destructive
         onConfirm={async () => (await cmd.remove(host.id)) ?? false}

@@ -374,6 +374,7 @@ export const deSettings: typeof enSettings = {
     managedByEnvironment: "Durch Umgebungsvariablen gesetzt – nur lesbar",
     configurationLocked: "UI-Konfiguration ist am Hub abgeschaltet – nur lesbar",
     hostStatus: {
+      standby: "Standby – verbindet bei Bedarf",
       offline: "Host offline",
       pending: "Host noch nicht verbunden",
       "update-required": "Agent-Update erforderlich",

@@ -41,7 +41,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
   const ts = useTranslations("common.status");
   const cmd = useHostCommands();
   const restartCapability = useCapability("restartAgent");
-  const reconnect = useCapability("reconnectHost");
+  const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
   const restart = useHostAction(host.id, "agent-restart", async () => await feedback.run(() => cmd.restartAgent(host.id)));
   const check = useHostAction(host.id, "reconnect", async () => await feedback.run(() => cmd.reconnect(host.id)));
   if (!component) return <CapabilityGate operation="listSystemComponents"><p className="text-sm text-muted-foreground">{t("agentNone")}</p></CapabilityGate>;

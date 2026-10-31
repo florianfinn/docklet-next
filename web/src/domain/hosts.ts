@@ -30,7 +30,7 @@ export function toggleHost(selection: readonly string[], hostId: string, allIds:
 export function hostTone(host: Host | undefined): Tone {
   if (!host) return "gray";
   // A disconnected host is a problem (red), like everywhere else in the fleet view.
-  return host.status === "online" ? "ok" : host.status === "pending" ? "info" : "err";
+  return host.status === "standby" ? "gray" : host.status === "online" ? "ok" : host.status === "pending" ? "info" : "err";
 }
 
 const LABEL_TONES: Record<string, Tone> = {
@@ -60,4 +60,9 @@ export function defaultHostColor(id: string): string {
   let hash = 0;
   for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return HOST_COLORS[hash % HOST_COLORS.length]!;
+}
+
+/** Standby Edge hosts can open a tunnel for deliberate reads and writes. */
+export function isHostAvailable(host: Pick<Host, "status"> | undefined): boolean {
+  return host?.status === "online" || host?.status === "standby";
 }

@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useNetworkCapabilities } from "./use-network-capabilities";
@@ -79,7 +80,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
   const staticPossible = !block && !!network?.subnetConfigured && !!network.subnet;
   const static6Possible = !block && !!network?.ipv6 && !!network.subnet6Configured && !!network.subnet6;
   // Both sides must belong to the shown host; the identity colour is no substitute for this id check.
-  const ready = host.status === "online" && !!capabilities.get(networkId)?.available && !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
+  const ready = isHostAvailable(host) && !!capabilities.get(networkId)?.available && !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
   const nameOf = (id: string) => {
     const c = containers.find((x) => x.id === id);
     return c ? label(c) : id;

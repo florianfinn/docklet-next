@@ -4,17 +4,21 @@
 // License: Apache-2.0
 // Deviations: Original catalogue-backed fallback for technical command errors.
 
+import { operationReasonKey } from "./operation-reason";
 import { useCallback } from "react";
 import { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "./capability";
 
 /** Exception messages and unknown server codes have no UI translation contract. */
 export function useCommandError() {
+  const operation = useTranslations("containers.operationReasons");
   const t = useTranslations("common.commandErrors");
   const capability = useTranslations("activity.capability");
   return useCallback((error: unknown): string => {
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
+      const key = operationReasonKey(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code);
+      if (key) return operation(key);
       if (outcome.kind === "not-available") return capability(outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable");
       if (outcome.kind === "error") {
         switch (outcome.code) {
@@ -27,5 +31,5 @@ export function useCommandError() {
       }
     }
     return t("failed");
-  }, [t, capability]);
+  }, [t, capability, operation]);
 }

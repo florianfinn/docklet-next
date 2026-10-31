@@ -31,8 +31,6 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
   const t = useTranslations("dashboard.attention");
   const title = useAttentionText();
   const navigate = useNavigate();
-  const adapter = useAdapter();
-  const reconnect = useCapability("reconnectHost");
 
   const sub = (item: AttentionItem) => {
     const v = item.values;
@@ -67,9 +65,7 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
         );
       case "offline":
         return (
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!reconnect.available} title={reconnect.reason} onClick={() => item.hostId && void adapter.reconnectHost(item.hostId)}>
-            {t("actions.check")}
-          </Button>
+          <HostCheckButton hostId={item.hostId} label={t("actions.check")} />
         );
       case "failed":
         return (
@@ -132,4 +128,10 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
       </ol>
     </ScrollArea>
   );
+}
+
+function HostCheckButton({ hostId, label }: { hostId?: string; label: string }) {
+  const adapter = useAdapter();
+  const capability = useCapability("reconnectHost", { kind: "host", id: hostId ?? "" });
+  return <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!hostId || !capability.available} title={capability.reason} onClick={() => hostId && void adapter.reconnectHost(hostId)}>{label}</Button>;
 }

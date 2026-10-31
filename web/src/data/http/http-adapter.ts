@@ -23,6 +23,7 @@ import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
+import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
 import { mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
@@ -123,6 +124,7 @@ const IMPLEMENTED = new Set<string>([
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
+  "connectHost", "reconnectHost",
   "updateHost",
   "registerHost",
   "issueAgentToken",
@@ -658,6 +660,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       invalidateEnvironments();
       changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics]));
     }, getCapability, () => identityGeneration),
+    ...createHostChecks({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { invalidateCapabilities(); invalidateEnvironments(); actions.invalidate(true); changeListeners.forEach((listener) => listener(["hosts"])); } }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
     installStackUpdates: runtime.installStackUpdates,
     restoreRestorePoint: runtime.restoreRestorePoint,

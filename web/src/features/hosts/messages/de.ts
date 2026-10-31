@@ -2,6 +2,8 @@
 import type { enHosts } from "./en";
 
 export const deHosts: typeof enHosts = {
+  checkOnline: "Online – Verbindung geprüft",
+  checkStandbyOpened: "Standby-Tunnel geöffnet – Verbindung geprüft",
   tokenRejected: "Der Agent lehnt das aktuelle Token ab. Installiere das neu ausgestellte Token auf dem Host und prüfe die Verbindung erneut.",
   title: "Hosts",
   description: "Alle verbundenen Hosts gemeinsam. Der Hostfilter in der Navigation blendet nur aus – er wechselt keine Umgebung.",
@@ -261,6 +263,7 @@ export const deHosts: typeof enHosts = {
     install: "Installationsdateien",
   },
   errors: {
+    uiConfigurationDisabled: "Einstellungen dieses Hosts werden über seine Umgebung verwaltet",
     busy: "Für diesen Host läuft bereits eine andere Aktion.",
     unreachable: "Der Agent ist derzeit nicht erreichbar. Prüfe die Verbindung und versuche es erneut.",
     credentialRejected: "Das Agent-Token wurde abgelehnt. Installiere das neu ausgestellte Token und versuche es erneut.",

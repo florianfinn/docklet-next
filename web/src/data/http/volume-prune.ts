@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/docs/design/storage-workspace.md
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
@@ -25,7 +26,7 @@ export function createVolumePrune(options: VolumeTransportOptions, hosts: () => 
       const available = await hosts();
       const plan: VolumePrunePlan = { candidates: [], kept: [], skippedHosts: [], failedHosts: [], candidateReasons: {}, all };
       await Promise.all([...new Set(hostIds)].map(async (hostId) => {
-        if (!available.some((h) => h.id === hostId && h.status === "online")) { plan.skippedHosts.push(hostId); return; }
+        if (!available.some((h) => h.id === hostId && isHostAvailable(h))) { plan.skippedHosts.push(hostId); return; }
         try {
           await require("planVolumePrune", { kind: "host", id: hostId });
           const data = await request<Schema["VolumePrunePlan"]>(hostId, `/prune?all=${all}`);

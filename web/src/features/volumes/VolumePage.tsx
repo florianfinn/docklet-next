@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
@@ -189,7 +190,7 @@ export default function VolumePage() {
   const tab = (["overview", "files", "backups"].includes(params.get("tab") ?? "") ? params.get("tab") : "overview") as Tab;
   const v = volume.data;
   const host = v ? hosts.byId.get(v.hostId) : undefined;
-  const online = host?.status === "online";
+  const online = isHostAvailable(host);
   const images = (containers.data ?? []).filter((c) => v?.consumers.some((x) => x.containerId === c.id)).map((c) => c.image.repository);
   const runningNames = v?.consumers.filter((c) => c.running).map((c) => c.containerName) ?? [];
   const warning = v && holdsDatabase(images) ? t("dbWarning", { images: [...new Set(images)].join(", ") }) : runningNames.length ? tf("runningWarning", { names: runningNames.join(", ") }) : undefined;

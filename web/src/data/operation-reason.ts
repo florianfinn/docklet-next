@@ -10,9 +10,13 @@ export function operationReasonKey(code: string) {
     case "container.recreate-recovered": return "recreateRecovered";
     case "container.recreate-ambiguous": return "recreateAmbiguous";
     case "runtime.idempotency-mismatch": return "idempotencyMismatch";
+    case "host.unreachable":
     case "agent.unavailable": return "hostUnavailable";
     case "agent.invalid-token": return "credentialRejected";
     case "agent.update-required": return "updateRequired";
+    case "agent.ui-configuration-disabled":
+    case "settings.ui-configuration-disabled": return "uiConfigurationDisabled";
+    case "host.restarting": return "hostRestarting";
     default: return undefined;
   }
 }

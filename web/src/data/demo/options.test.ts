@@ -16,7 +16,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const cases: { failure: DemoFailure; start: (adapter: ReturnType<typeof createDemoAdapter>) => Promise<string>; step: string }[] = [
+const cases: { failure: DemoFailure; start: (adapter: ReturnType<typeof createDemoAdapter>) => Promise<string | import("../api").HostCheckResult>; step: string }[] = [
   { failure: { operation: "runStackCommand", at: "pull" }, start: (adapter) => adapter.runStackCommand("media", "redeploy"), step: "pull" },
   { failure: { operation: "installStackUpdates", at: "pull" }, start: (adapter) => adapter.installStackUpdates("cloud"), step: "pull" },
   { failure: { operation: "deployStack", at: "pull" }, start: async (adapter) => (await adapter.deployStack({ stackId: null, hostId: "atlas", name: "Example", compose: "services:\n  app:\n    image: nginx:1.27\n", env: "", labels: [] })).actionId, step: "pull" },

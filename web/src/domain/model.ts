@@ -25,7 +25,7 @@ export type Tone =
 
 export type HostConnection = "direct" | "edge";
 /** "pending": registered during onboarding, agent has not connected yet. */
-export type HostStatus = "online" | "offline" | "pending" | "update-required" | "token-rejected";
+export type HostStatus = "online" | "standby" | "offline" | "pending" | "update-required" | "token-rejected";
 
 /** File owner IDs used by the agent for project files (PUID/PGID). */
 export interface FileOwner {

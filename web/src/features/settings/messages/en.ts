@@ -373,6 +373,7 @@ export const enSettings = {
     managedByEnvironment: "Set by environment variables – read-only",
     configurationLocked: "UI configuration is disabled on the hub – read-only",
     hostStatus: {
+      standby: "Standby – connects on demand",
       offline: "Host offline",
       pending: "Host not connected yet",
       "update-required": "Agent update required",

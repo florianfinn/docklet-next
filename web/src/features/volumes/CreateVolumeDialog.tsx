@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useState } from "react";
@@ -33,7 +34,7 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
   const tv = useTranslations("hosts.validation");
   const cmd = useVolumeCommands();
   const navigate = useNavigate();
-  const online = hosts.filter((h) => h.status === "online");
+  const online = hosts.filter((h) => isHostAvailable(h));
   const [name, setName] = useState("");
   const [hostId, setHostId] = useState(defaultHostId ?? online[0]?.id ?? "");
   const feedback = useDialogCommand(open, hostId);
@@ -90,9 +91,9 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
               <SelectContent>
                 <SelectGroup>
                   {hosts.map((h) => (
-                    <SelectItem key={h.id} value={h.id} disabled={h.status !== "online"}>
+                    <SelectItem key={h.id} value={h.id} disabled={!isHostAvailable(h)}>
                       <i className="size-2.5 rounded-[3px]" style={{ background: h.color }} aria-hidden />
-                      {h.status === "online" ? h.name : t("hostOffline", { name: h.name })}
+                      {isHostAvailable(h) ? h.name : t("hostOffline", { name: h.name })}
                     </SelectItem>
                   ))}
                 </SelectGroup>

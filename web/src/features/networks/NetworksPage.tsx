@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import "@xyflow/react/dist/style.css";
 import "./topology.css";
@@ -111,7 +112,7 @@ function HostPicker({ hosts, topology, value, onChange }: { hosts: Host[]; topol
             <span className="size-2.5 rounded-[3px] bg-(--host)" aria-hidden />
             {h.name}
             {topology.inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
-            {h.status !== "online" && <ToneDot tone={hostTone(h)} label={tc(h.status)} className="size-1.5" />}
+            {!isHostAvailable(h) && <ToneDot tone={hostTone(h)} label={tc(h.status)} className="size-1.5" />}
           </button>
         );
       })}
@@ -134,7 +135,7 @@ function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: strin
   const [removing, setRemoving] = useState<TopologyNetwork | null>(null);
 
   const requested = params.get("host");
-  const availableHosts = source.hosts.filter((h) => h.status === "online" || h.id === requested || source.topology.networks.some((n) => n.hostId === h.id));
+  const availableHosts = source.hosts.filter((h) => isHostAvailable(h) || h.id === requested || source.topology.networks.some((n) => n.hostId === h.id));
   const host = availableHosts.find((h) => h.id === requested) ?? availableHosts[0];
 
   // Focus lives in the URL; the host and node params change together so a host switch never keeps a foreign focus.
@@ -161,7 +162,7 @@ function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: strin
   const hostContainers = useMemo(() => (host ? source.containers.filter((c) => c.hostId === host.id) : []), [source.containers, host]);
   const hostNets = useMemo(() => (host ? sortNetworks(source.topology.networks.filter((n) => n.hostId === host.id)) : []), [source.topology, host]);
   const cmd = useNetworkCommands(host?.id);
-  const onlineHosts = source.hosts.filter((h) => h.status === "online");
+  const onlineHosts = source.hosts.filter((h) => isHostAvailable(h));
   const createCapabilities = useHostCreateCapabilities(onlineHosts.map((h) => h.id));
   const createHosts = onlineHosts.filter((h) => createCapabilities.get(h.id)?.available);
   const createHost = createHosts.find((h) => h.id === host?.id) ?? createHosts[0];
@@ -230,7 +231,7 @@ function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: strin
   };
 
   if (!host) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
-  const online = host.status === "online";
+  const online = isHostAvailable(host);
   const removingNetwork = removing ? source.topology.networks.find((n) => n.id === removing.id) ?? removing : undefined;
   const removalBlock = removingNetwork ? removeBlock(source.topology, removingNetwork) : undefined;
   const removalReason = removalBlock ? t(`removeBlocked.${removalBlock}`, { stack: removingNetwork ? networkComposeOwner(removingNetwork) ?? "" : "", count: source.topology.attachments.filter((a) => a.networkId === removingNetwork?.id).length }) : undefined;
@@ -412,8 +413,8 @@ function TopologySection() {
   const [, setParams] = useSearchParams();
   const ready = source && !source.isPending && !source.isError;
   const hosts = ready ? source.hosts : [];
-  const createCapabilities = useHostCreateCapabilities(hosts.filter((h) => h.status === "online").map((h) => h.id));
-  const createHostIds = hosts.filter((h) => h.status === "online" && createCapabilities.get(h.id)?.available).map((h) => h.id);
+  const createCapabilities = useHostCreateCapabilities(hosts.filter((h) => isHostAvailable(h)).map((h) => h.id));
+  const createHostIds = hosts.filter((h) => isHostAvailable(h) && createCapabilities.get(h.id)?.available).map((h) => h.id);
   // Query resets temporarily remove inventory; only a confirmed empty scope closes the wizard.
   if (creating && ready && (!hosts.length || source.bench)) setCreating(null);
   let content: React.ReactNode;
@@ -427,7 +428,7 @@ function TopologySection() {
   } else if (source.isError) content = <QueryError error={source.error} onRetry={source.refetch} />;
   else if (!hosts.length) content = <><InventoryNotice hosts={hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   else {
-    const partialHosts = hosts.filter((host) => host.status === "online" && partialNetworkRead(source.topology, host.id));
+    const partialHosts = hosts.filter((host) => isHostAvailable(host) && partialNetworkRead(source.topology, host.id));
     const partialIds = new Set(partialHosts.map((host) => host.id));
     const inventoryHosts = hosts.filter((host) => !partialIds.has(host.id)).map((host) => ({ ...host, inventory: source.topology.inventory?.[host.id] ?? host.inventory }));
     content = <><InventoryNotice hosts={inventoryHosts} items={source.topology.networks} />{partialHosts.map((host) => <p key={host.id} aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>)}<Canvas source={source} onCreate={setCreating} /></>;

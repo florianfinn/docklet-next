@@ -1,10 +1,11 @@
+import { isHostAvailable } from "./hosts";
 import type { ContainerInfo, ContainerState, Health, Host, Service, Stack, Tone } from "./model";
 
 export type StackStatus = "running" | "partial" | "problem" | "stopped" | "busy" | "unreachable";
 
 export function stackStatus(stack: Stack, host: Host | undefined): StackStatus {
   if (stack.busyActionId) return "busy";
-  if (host?.status === "offline") return "unreachable";
+  if (host && !isHostAvailable(host)) return "unreachable";
   if (stack.services.some((s) => s.health === "unhealthy" || s.state === "restarting")) return "problem";
   if (stack.reportedStatus) {
     if (stack.reportedStatus === "running") return "running";
@@ -46,11 +47,11 @@ export const RUNTIME_TONE: Record<RuntimeStatus, Tone> = {
 };
 
 export function serviceRuntime(service: Service, host: Host | undefined): RuntimeStatus {
-  return runtimeStatus(service.state, service.health, host?.status !== "offline");
+  return runtimeStatus(service.state, service.health, isHostAvailable(host));
 }
 
 export function containerRuntime(container: ContainerInfo, host: Host | undefined): RuntimeStatus {
-  return runtimeStatus(container.state, container.health, host?.status !== "offline");
+  return runtimeStatus(container.state, container.health, isHostAvailable(host));
 }
 
 export function runningCount(stack: Stack): number {

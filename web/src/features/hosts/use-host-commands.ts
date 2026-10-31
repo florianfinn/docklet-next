@@ -1,4 +1,6 @@
 import { captureCommandFailure } from "@/shared/components/command-failure";
+import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { useCallback } from "react";
 
 import { type RegisterHostInput } from "@/data/api";
@@ -14,6 +16,7 @@ import { preferencesStore } from "@/shared/preferences/preferences-store";
 /** Host commands with translated errors; progress of connections is shown by action toasts. */
 export function useHostCommands() {
   const adapter = useAdapter();
+  const t = useTranslations("hosts");
   const errorText = useHostError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -33,9 +36,9 @@ export function useHostCommands() {
     register: (input: RegisterHostInput) => guard(() => adapter.registerHost(input)),
     connect: (hostId: string, fail?: boolean) => guard(() => {
       if (fail) queueDemoFailure(adapter, { operation: "connectHost" });
-      return adapter.connectHost(hostId);
+      return adapter.connectHost(hostId).then((result) => { if (typeof result === "string") return result; toast.success(t(result.status === "online" ? "checkOnline" : "checkStandbyOpened")); });
     }),
-    reconnect: (hostId: string) => guard(() => adapter.reconnectHost(hostId)),
+    reconnect: (hostId: string) => guard(async () => { const result = await adapter.reconnectHost(hostId); if (typeof result === "string") return result; toast.success(t(result.status === "online" ? "checkOnline" : "checkStandbyOpened")); }),
     restartAgent: (hostId: string) => guard(() => adapter.restartAgent(hostId)),
     remove: (hostId: string) =>
       guard(async () => {

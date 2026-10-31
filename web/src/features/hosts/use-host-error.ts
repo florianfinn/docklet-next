@@ -21,9 +21,11 @@ export function useHostError() {
       switch (outcome.code) {
         case "host.name-invalid": return t("invalid-name");
         case "host.name-taken": return t("exists");
+        case "host.unreachable":
         case "agent.unavailable": return t("unreachable");
         case "agent.invalid-token": return t("credentialRejected");
         case "agent.update-required": return t("updateRequired");
+        case "agent.ui-configuration-disabled": return t("uiConfigurationDisabled");
       }
     }
     const code = errorCode(error);

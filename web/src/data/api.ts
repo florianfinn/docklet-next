@@ -90,6 +90,8 @@ export interface UpdateHostInput {
   color: string | null;
 }
 
+export interface HostCheckResult { status: "online" | "standby-opened" }
+
 export interface HostsApi {
   /** Renames or recolours a host; every view reads hosts from one query, so names and colours follow at once. */
   updateHost(hostId: string, input: UpdateHostInput): Promise<Host>;
@@ -98,7 +100,7 @@ export interface HostsApi {
   /** Registers a host that waits for its agent (status "pending"). */
   registerHost(input: RegisterHostInput): Promise<{ host: Host; token: string }>;
   /** Connects the agent and returns the connection run's action id. */
-  connectHost(hostId: string): Promise<string>;
+  connectHost(hostId: string): Promise<string | HostCheckResult>;
   removeHost(hostId: string): Promise<void>;
   /** Docklet's own components per host; they never appear in stack or container lists. */
   listSystemComponents(): Promise<SystemComponent[]>;

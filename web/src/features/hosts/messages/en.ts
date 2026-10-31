@@ -1,6 +1,8 @@
 // American English texts of host management and host onboarding.
 
 export const enHosts = {
+  checkOnline: "Online – connection verified",
+  checkStandbyOpened: "Standby tunnel opened – connection verified",
   tokenRejected: "The agent rejected the current token. Install the newly issued token on the host and check the connection again.",
   title: "Hosts",
   description: "All connected hosts together. The host filter in the navigation only hides hosts – it does not switch environments.",
@@ -58,7 +60,7 @@ export const enHosts = {
     waiting: "Waiting for the next agent health check",
     connecting: "Agent starting …",
     files: "Installation files",
-    connect: (import.meta.env.DEV ? "Simulate agent start" : ""),
+    connect: "Check connection",
     resume: "Continue onboarding",
     remove: "Remove",
     removeBlocked: "This host cannot be removed.",
@@ -260,6 +262,7 @@ export const enHosts = {
     install: "Installation files",
   },
   errors: {
+    uiConfigurationDisabled: "Settings on this host are managed through its environment",
     busy: "Another action is already running for this host.",
     unreachable: "The agent is currently unreachable. Check its connection and try again.",
     credentialRejected: "The agent token was rejected. Install the newly issued token and try again.",

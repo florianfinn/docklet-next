@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { InventoryNotice } from "../InventoryNotice";
 import { ArrowLeft, FileCode2, FileText, History, LayoutGrid, Layers } from "lucide-react";
 import { useState } from "react";
@@ -109,8 +110,8 @@ function NewStack() {
   const { all, visible } = useHostScope();
   const stacks = useStacks();
   const [params] = useSearchParams();
-  const requested = all.find((h) => h.id === params.get("host") && h.status === "online")?.id;
-  const firstOnline = requested ?? (visible.find((h) => h.status === "online") ?? all.find((h) => h.status === "online"))?.id ?? "atlas";
+  const requested = all.find((h) => h.id === params.get("host") && isHostAvailable(h))?.id;
+  const firstOnline = requested ?? (visible.find((h) => isHostAvailable(h)) ?? all.find((h) => isHostAvailable(h)))?.id ?? "atlas";
   const [mode, setMode] = useState<EditorMode>("easy");
   const draft = useComposeDraft({ compose: NEW_STACK_DRAFT, env: "TZ=Europe/Berlin\n", hostId: firstOnline, labels: [] });
   const host = all.find((h) => h.id === draft.hostId);
