@@ -52,3 +52,33 @@ it("H3 stops following on identity loss and retains no run or timer", async () =
 it("H3 keeps host.restarting typed for runtime consumers", () => {
   expect(operationReasonKey("host.restarting")).toBe("hostRestarting");
 });
+function failing(respond: (reads: number) => Response) {
+  vi.useFakeTimers(); let reads = 0;
+  const runs: CodedActionRun[] = [];
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "POST") return new Response(JSON.stringify({ success: true, data: row }), { status: 202 });
+    return respond(++reads);
+  });
+  const capability = vi.fn(async (operationId: string, resourceRef: { kind: string; id: string }) => ({ operationId, resourceRef, available: true }));
+  const api = createHostRestarts({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability, generation: () => 0, publish: run => runs.push(run), changed: () => {} });
+  return { api, runs, reads: () => reads };
+}
+it("H3 marks only observed phases done when a restart fails before sending", async () => {
+  const f = failing(() => new Response(JSON.stringify({ success: true, data: { ...row, state: "unknown", settledAt: at, code: "agent.restart-unconfirmed" } })));
+  await f.api.restartAgent("example"); await vi.advanceTimersByTimeAsync(1000);
+  expect(f.runs.at(-1)?.steps.map(step => step.state)).toEqual(["error", "skipped", "skipped", "skipped"]);
+  expect(f.runs.at(-1)?.outcomeState).toBe("unknown");
+  f.api.reset();
+});
+it("H3 stops following a restart whose reads keep failing", async () => {
+  const f = failing(() => new Response(JSON.stringify({ success: false, error: { code: "not-found" } }), { status: 404 }));
+  await f.api.restartAgent("example"); await vi.advanceTimersByTimeAsync(10_000);
+  expect(f.reads()).toBe(1);
+  const g = failing(() => new Response("{}", { status: 503 }));
+  await g.api.restartAgent("example"); await vi.advanceTimersByTimeAsync(300_000);
+  // Deadline span (3 min) plus a bounded grace, then the last observation stays.
+  const stopped = g.reads(); await vi.advanceTimersByTimeAsync(100_000);
+  expect(g.reads()).toBe(stopped);
+  expect(g.runs.at(-1)?.status).toBe("running");
+  f.api.reset(); g.api.reset();
+});

@@ -55,6 +55,8 @@ it("H8 v10 disables restart, and hub restart remains unavailable", async () => {
   expect((await adapter.getCapability("restartAgent", { kind: "host", id: "atlas" })).disabledReasonCode).toBe("agent.update-required");
   await expect(adapter.restartAgent("atlas")).rejects.toMatchObject({ outcome: { code: "agent.update-required" } });
   expect((await adapter.getCapability("restartAgent", { kind: "host", id: "0" })).available).toBe(false);
+  // Edit and connection checks stay usable so an upgrade can be confirmed (AUTO-8).
+  for (const operation of ["updateHost", "connectHost", "reconnectHost"] as const) expect((await adapter.getCapability(operation, { kind: "host", id: "atlas" })).available).toBe(true);
 });
 it("H8 typed UI configuration refusal and disconnected capabilities preserve no fake effects", async () => {
   const adapter = createDemoAdapter({ uiConfigurationDisabledHosts: ["atlas"] });

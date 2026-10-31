@@ -30,6 +30,7 @@ function fixture(allow = true, metadata: unknown = discovery) {
         exists = true;
         return json({ ...current, apiKey: "example" });
       }
+      if (method === "PUT" && body?.regenerateApiKey !== true) { current = { ...current, ...(body as object) }; return json(current); }
       if (method === "PUT") return json({ ...current, apiKey: "test-only" });
       if (method === "DELETE") { exists = false; return json({ message: "Removed" }); }
     }
@@ -49,11 +50,14 @@ describe("host creation HTTP adapter", () => {
     expect(result.token).toBe("example");
     expect(result.host.status).toBe("pending");
     expect(f.writes[0]).toMatchObject({ method: "POST", path: "/api/environments", body: { useApiKey: true, isEdge: connection === "edge", apiUrl: connection === "edge" ? "edge://pending" : "http://agent.example.com:3552" } });
+    // The create contract has no colour; the picked colour follows as a host edit.
+    expect(f.writes[1]).toEqual({ method: "PUT", path: "/api/environments/example-host", body: { name: "Example", color: "#8b5cf6" } });
+    expect(result.host.color).toBe("#8b5cf6");
     const [listed] = await f.adapter.listHosts();
     expect(listed).toEqual(result.host);
     for (const key of ["apiKey", "accessToken", "token"]) expect(listed).not.toHaveProperty(key);
     expect(await f.adapter.issueAgentToken(result.host.id)).toBe("test-only");
-    expect(f.writes[1]).toMatchObject({ method: "PUT", path: "/api/environments/example-host", body: { regenerateApiKey: true } });
+    expect(f.writes[2]).toMatchObject({ method: "PUT", path: "/api/environments/example-host", body: { regenerateApiKey: true } });
     expect(JSON.stringify(await f.adapter.listHosts()).includes("test-only")).toBe(false);
     await f.adapter.removeHost(result.host.id);
     expect(await f.adapter.listHosts()).toEqual([]);

@@ -1,15 +1,15 @@
 # Host maintenance and installation files
 
 Hosts can be edited, checked, reconnected and removed from the web UI, remote
-agents can be restarted, and installation files are available for every host in
-production. Shared contract and migration items are in
+agents can be restarted, and installation files are available for every remote
+host in production. Shared contract and migration items are in
 [container and host operations](container-host-operations.md); onboarding of new
 hosts stays in [host onboarding](host-onboarding.md).
 
 ## Decisions
 
 - Edit host, check and reconnect, restart agent, agent components, Settings ›
-  Hosts and installation files per host card are live in production.
+  Hosts and installation files per remote host card are live in production.
 - A host with stacks or containers can be removed after a warning; workloads
   and the agent keep running.
 - Restart agent is a Docker restart of the agent container. The hub host has no

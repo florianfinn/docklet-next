@@ -150,7 +150,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />
       {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents" resourceRef={{ kind: "host", id: host.id }}><SystemSection component={system} /></CapabilityGate>}
-      <p className="text-xs text-muted-foreground">{t("card.usage", { stacks: stacks ?? 0, containers: containers ?? 0 })}</p>
+      <p className="text-xs text-muted-foreground">{stacks === undefined || containers === undefined ? t("card.usageUnknown") : t("card.usage", { stacks, containers })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
         {pending ? (
           <BusyButton size="sm" disabled={!connection.available} title={connection.reason} busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>

@@ -55,6 +55,7 @@ export const enHosts = {
     system: "System",
     lastSeen: "Last contact",
     usage: "{stacks, plural, one {# stack} other {# stacks}} · {containers, plural, one {# container} other {# containers}}",
+    usageUnknown: "Stacks and containers: unknown",
     check: "Check connection",
     checking: "Checking …",
     waiting: "Waiting for the next agent health check",

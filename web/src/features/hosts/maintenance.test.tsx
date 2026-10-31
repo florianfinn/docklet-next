@@ -43,6 +43,14 @@ it.each(["online", "offline"] as const)("H6 shows honest workload counts for %s 
   expect(dialog.textContent).toContain("Containers and stacks keep running");
   expect(within(dialog).getByRole("button", { name: "Remove host" }) !== null).toBe(true);
 });
+it("H6 shows unknown usage on the card and states in German that the agent keeps running", async () => {
+  setAppLocale("de");
+  renderWithApp(<HostCard host={{ ...host, status: "offline" }} system={undefined} stacks={undefined} containers={undefined} allIds={[host.id]} />, createDemoAdapter());
+  expect(screen.queryByText("Stacks und Container: unbekannt") !== null).toBe(true);
+  expect(screen.queryByText(/0 Stacks/) === null).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "Entfernen" }));
+  expect((await screen.findByRole("alertdialog")).textContent?.includes("Der Agent läuft weiter, bis du ihn auf dem Host stoppst.")).toBe(true);
+});
 it("H1 ignores a save response after the dialog closes", async () => {
   setAppLocale("en-US"); const adapter = createDemoAdapter();
   let release!: (host: import("@/domain/model").Host) => void;

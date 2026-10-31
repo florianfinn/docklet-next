@@ -5,10 +5,20 @@ import { build, type Plugin } from "vite";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const configFile = fileURLToPath(new URL("../vite.config.ts", import.meta.url));
 
+// A nested development-only module that exists only for the red proof.
+const NESTED_DEV = "virtual:boundary-proof/nested-dev";
+const nestedDevPath = `${root.replace(/\/$/, "")}/src/features/boundary-proof/nested.dev.ts`;
+
 async function inspect(injected?: string, mode = "production", target = "/src/main.tsx", extraCode = "") {
   const injection: Plugin = {
     name: "production-boundary-red-proof",
     enforce: "pre",
+    resolveId(source) {
+      if (source === NESTED_DEV) return nestedDevPath;
+    },
+    load(id) {
+      if (id === nestedDevPath) return "export const proof = true;";
+    },
     transform(code, id) {
       if (id.endsWith(target) && (injected || extraCode)) return `${injected ? `import ${JSON.stringify(injected)};\n` : ""}${code}\n${extraCode}`;
     },
@@ -46,6 +56,7 @@ if (process.argv.includes("--prove")) {
   console.log("Red proof passed: test helper rejected in production build.");
   for (const module of [
     "@/runtime.dev",
+    NESTED_DEV,
     "@/features/auth/login/login-model",
     "@/app/preview/PreviewPage",
   ]) {

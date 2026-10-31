@@ -7,7 +7,7 @@
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
 import type { CodedActionRun, MessageCode } from "../message-code";
-import { unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
+import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { operationReasonKey } from "../operation-reason";
 import type { CsrfClient } from "./csrf-client";
 import { runtimeError, runtimeResponseError } from "./runtime-mapping";
@@ -22,7 +22,8 @@ const phases = ["reserved", "sent", "awaiting", "connected"] as const;
 const terminal = (row: Restart) => ["connected", "failed", "unknown"].includes(row.state);
 const message = (code: string): MessageCode => ({ code, params: {} });
 export function createHostRestarts({ baseUrl, client, capability, generation, publish, changed }: Options) {
-  const rows = new Map<string, { host: string; row: Restart; run: CodedActionRun }>();
+  // reached: highest observed phase; until: local follow budget (producer deadline span plus grace).
+  const rows = new Map<string, { host: string; row: Restart; run: CodedActionRun; reached: number; until: number }>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const pending = new Map<string, Promise<string>>();
   const controllers = new Set<AbortController>();
@@ -30,18 +31,24 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
   function retain(host: string, row: Restart) {
     const phase = phases.indexOf(row.state as typeof phases[number]);
     const done = terminal(row);
+    const prior = rows.get(row.runId);
+    const reached = Math.max(prior?.reached ?? 0, phase);
+    const until = prior?.until ?? Date.now() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
+    // A failed or unknown restart marks done only phases that were observed.
+    const failedStep = (index: number) => index < reached ? "done" : index === reached ? "error" : "skipped";
     const reason = operationReasonKey(row.code ?? "");
     const run: CodedActionRun = {
       id: row.runId, hostId: host, kind: "agent-restart", title: message("activity.runKind.agent-restart"),
       target: { code: "runMessages.value", params: { value: host } },
       services: [], status: row.state === "connected" ? "succeeded" : done ? "failed" : "running",
+      ...(row.state === "unknown" ? { outcomeState: "unknown" as const } : {}),
       startedAt: row.createdAt, finishedAt: row.settledAt,
       progress: row.state === "connected" ? 100 : phase < 0 ? 0 : phase * 25,
-      steps: phases.map((name, index) => ({ key: ["validate", "stop", "wait", "connect"][index] as "validate" | "stop" | "wait" | "connect", label: message(`hosts.restart.phases.${name}`), state: row.state === "connected" ? "done" : done ? index === 3 ? "error" : "done" : index < phase ? "done" : index === phase ? "running" : "pending" })),
+      steps: phases.map((name, index) => ({ key: ["validate", "stop", "wait", "connect"][index] as "validate" | "stop" | "wait" | "connect", label: message(`hosts.restart.phases.${name}`), state: row.state === "connected" ? "done" : done ? failedStep(index) : index < phase ? "done" : index === phase ? "running" : "pending" })),
       ...(done && row.code ? { error: message(reason ? `containers.operationReasons.${reason}` : "hosts.errors.failed") } : {}),
       log: [], output: [],
     };
-    rows.set(row.runId, { host, row, run });
+    rows.set(row.runId, { host, row, run, reached, until });
     if (rows.size > 128) { const old = [...rows.values()].find(item => terminal(item.row) && item.row.runId !== row.runId); if (old) rows.delete(old.row.runId); }
     publish(run); changed();
     return run;
@@ -67,7 +74,10 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
     timers.set(id, setTimeout(() => {
       timers.delete(id);
       if (version !== epoch || owner !== generation()) return;
-      void detail(host, id).catch(() => {}).finally(() => { if (version === epoch && owner === generation()) schedule(host, id); });
+      let stop = false;
+      // A removed run or host, or a read failing past the follow budget, keeps the last observation.
+      void detail(host, id).catch((error: unknown) => { stop = (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 404) || Date.now() > (rows.get(id)?.until ?? 0); })
+        .finally(() => { if (!stop && version === epoch && owner === generation()) schedule(host, id); });
     }, 1000));
   }
   async function detail(host: string, id: string, signal?: AbortSignal): Promise<CodedActionRun> {

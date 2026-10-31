@@ -41,15 +41,10 @@ func operationCapabilityReaders(d HandlerDeps, cfg *config.Config) activity.Oper
 			if env == "0" {
 				return ""
 			}
-			host, err := hosts.GetEnvironmentByID(ctx, env)
-			if err != nil {
+			// Edit and connection-check writes admit disabled and incompatible hosts; the check
+			// itself reports agent.update-required and confirms an upgrade.
+			if _, err := hosts.GetEnvironmentByID(ctx, env); err != nil {
 				return "capability.unavailable"
-			}
-			if !host.Enabled {
-				return "agent.unavailable"
-			}
-			if host.Status == string(environment.EnvironmentStatusUpdateRequired) {
-				return "agent.update-required"
 			}
 			return ""
 		},

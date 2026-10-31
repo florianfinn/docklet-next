@@ -582,8 +582,10 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     const host = db.host(hostId);
     if (!host) return "capability.unavailable";
     if (runner.list().some(run => run.hostId === hostId && run.kind === "agent-restart" && run.status === "running")) return "host.restarting";
+    // Edit and connection checks stay usable on incompatible hosts, as in the backend (AUTO-8).
+    if (!runtimeOperations.has(operation) && operation !== "restartAgent") return undefined;
     if (host.status === "update-required") return "agent.update-required";
-    if ((runtimeOperations.has(operation) || operation === "restartAgent") && !isHostAvailable(host)) {
+    if (!isHostAvailable(host)) {
       if (host.status === "token-rejected") return "agent.invalid-token";
       return "host.unreachable";
     }

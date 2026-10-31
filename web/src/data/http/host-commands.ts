@@ -62,7 +62,10 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
       const isEdge = input.connection === "edge";
       const apiUrl = isEdge ? "edge://pending" : new URL(input.address.includes("://") ? input.address : `http://${input.address}`).toString().replace(/\/$/, "");
       const row = await request<Environment>("/environments", "POST", { name: input.name, apiUrl, isEdge, useApiKey: true });
-      const result = { host: mapHost(row), token: token(row.apiKey) };
+      let host = mapHost(row);
+      // The create contract has no colour; a failed follow-up edit leaves the palette default.
+      if (input.color) host = await request<Environment>(`/environments/${encodeURIComponent(row.id)}`, "PUT", { name: row.name, color: input.color.toLowerCase() }).then(mapHost, () => host);
+      const result = { host, token: token(row.apiKey) };
       changed();
       return result;
     },
