@@ -37,7 +37,9 @@ export function mapRuntime(snapshot: unknown, hostId: string, id?: string, detai
     const recovery = detail?.recovery;
     if (detail && (!recovery || typeof recovery.executorState !== "string" || typeof recovery.releaseAcknowledged !== "boolean" ||
       (recovery.unknownReason !== undefined && typeof recovery.unknownReason !== "string"))) throw runtimeError("runtime.invalid-response");
-    return { ...run, outcomeState: value.outcomeState as "known" | "unknown", cancelRequested: value.cancelRequested,
+    const result = object(value.result);
+    if (value.result !== undefined && !["oldId", "newId", "oldName", "newName"].every((key) => typeof result[key] === "string" && result[key])) throw runtimeError("runtime.invalid-response");
+    return { ...run, ...(value.result ? { recreateResult: value.result as NonNullable<RuntimeRun["recreateResult"]> } : {}), outcomeState: value.outcomeState as "known" | "unknown", cancelRequested: value.cancelRequested,
       runtime: { ...rights, sourceObserved: false, resultCode: typeof value.messageCode === "string" ? value.messageCode : undefined,
         unknownReason: recovery?.unknownReason, released: recovery?.disposition === "released", releaseReason: recovery?.dispositionReason,
         lateResult: recovery?.disposition ? recovery.executorResultCode : undefined } };

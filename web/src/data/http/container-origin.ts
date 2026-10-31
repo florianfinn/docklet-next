@@ -16,8 +16,22 @@ export function createContainerOrigin(options: {
   baseUrl: string; client: CsrfClient;
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
   generation: () => number; changed: () => void;
-}): Pick<DockletAdapter, "setContainerOrigin"> {
+}): Pick<DockletAdapter, "setContainerOrigin" | "getContainerEditConfig"> {
   return {
+    async getContainerEditConfig(id) {
+      const generation = options.generation();
+      const [host, dockerId] = splitInventoryId(id);
+      const descriptor = await options.capability("recreateContainer", { kind: "container", id });
+      if (generation !== options.generation()) throw new CancelledError();
+      if (!descriptor.available) throw unavailable("recreateContainer", descriptor.resourceRef, descriptor.disabledReasonCode);
+      const response = await options.client.fetch(`${options.baseUrl}/environments/${encodeURIComponent(host)}/containers/${encodeURIComponent(dockerId)}/edit-config`, { headers: { Accept: "application/json" } });
+      const body = await response.json();
+      if (generation !== options.generation()) throw new CancelledError();
+      if (!response.ok) throw runtimeResponseError(body, response.status);
+      const config = body?.data as components["schemas"]["ContainerEditConfig"];
+      if (body?.success !== true || config?.id !== dockerId || typeof config.image !== "string" || !config.hostConfig?.restartPolicy) throw runtimeResponseError({}, 502);
+      return config;
+    },
     async setContainerOrigin(id, origin) {
       const generation = options.generation();
       const check = () => { if (generation !== options.generation()) throw new CancelledError(); };

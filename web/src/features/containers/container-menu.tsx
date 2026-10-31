@@ -18,7 +18,7 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
   const navigate = useNavigate();
   const cmd = useContainerCommands();
   const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
-  const edit = useCapability("recreateContainer");
+  const edit = useCapability("recreateContainer", { kind: "container", id: c.id });
   const hide = useHideAction("containers");
   const restart = useContainerRestart();
   const run: MenuAction[] =
@@ -37,7 +37,7 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
     ],
     [
       ...run.map((action) => ({ ...action, disabled: !command.available || !!c.inventory?.stale, title: command.reason })),
-      { id: "edit", label: t("menu.edit"), icon: <Pencil />, disabled: !edit.available || !!c.inventory?.stale || c.restrictions?.recreate || c.origin !== "standalone", onSelect: () => open.onEdit(c.id) },
+      ...(c.origin === "compose" ? [] : [{ id: "edit", title: edit.reason, label: t("menu.edit"), icon: <Pencil />, disabled: !edit.available || !!c.inventory?.stale, onSelect: () => open.onEdit(c.id) }]),
 
     ],
     [hide(c.id, c.name, hidden)],

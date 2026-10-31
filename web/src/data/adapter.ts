@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/schema";
 import type {
   AutoUpdatePolicy,
   ContainerInfo,
@@ -5,7 +6,6 @@ import type {
   Host,
   LogLine,
   MetricsSnapshot,
-  PortMapping,
   RuntimeKnowledge,
   ScheduledJob,
   SecurityOverview,
@@ -55,12 +55,7 @@ export class StackCreatedError extends Error {
   }
 }
 
-export interface RecreateInput {
-  image: string;
-  ports: PortMapping[];
-  env: Record<string, string>;
-  restartPolicy: string;
-}
+export type RecreateInput = components["schemas"]["ContainerRecreateRequest"]["edit"];
 
 export interface ImportRequest {
   kind: "github" | "dockerhub";
@@ -136,7 +131,8 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, HostsApi, VolumesAp
   openContainerShell: OpenShell;
 
   runContainerCommand(containerId: string, command: ContainerCommand): Promise<string>;
-  recreateContainer(containerId: string, input: RecreateInput): Promise<string>;
+  recreateContainer(containerId: string, input: RecreateInput, idempotencyKey?: string): Promise<string>;
+  getContainerEditConfig?(containerId: string): Promise<components["schemas"]["ContainerEditConfig"]>;
   setContainerOrigin(containerId: string, origin: ContainerOrigin): Promise<void>;
   installContainerUpdate(containerId: string): Promise<string>;
 

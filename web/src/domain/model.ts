@@ -230,6 +230,7 @@ export interface RunOutputLine {
 }
 
 export interface ActionRun {
+  recreateResult?: { oldId: string; newId: string; oldName: string; newName: string };
   baselineCode?: string;
   lifecycleCode?: string;
   effectVerified?: boolean;

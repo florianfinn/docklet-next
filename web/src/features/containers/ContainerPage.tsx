@@ -79,7 +79,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
   const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
-  const edit = useCapability("recreateContainer");
+  const edit = useCapability("recreateContainer", { kind: "container", id: c.id });
   const restart = useContainerRestart();
   return (
     <>
@@ -103,7 +103,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
       )}
       {c.origin === "standalone" && (
         <HelpTarget topic="container.recreate">
-          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale || c.restrictions?.recreate} title={edit.reason} onClick={onEdit}>
+          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale} title={edit.reason} onClick={onEdit}>
             <Pencil data-icon="inline-start" /> {t("edit")}
           </Button>
         </HelpTarget>
@@ -116,7 +116,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
         </Button>
       )}
       {(c.origin === "unraid" || c.origin === "unknown") && (
-        <Button size="sm" variant="secondary" disabled title={to(`${c.origin}Body`)}>
+        <Button size="sm" variant="secondary" disabled title={edit.reason ?? to(`${c.origin}Body`)}>
           <Lock data-icon="inline-start" /> {t("editBlocked")}
         </Button>
       )}

@@ -36,9 +36,9 @@ export function useContainerCommands() {
   );
   return {
     run: (id: string, command: ContainerCommand) => guard(() => adapter.runContainerCommand(id, command)),
-    recreate: (id: string, input: RecreateInput, failAt?: DemoFailure["at"]) => guard(() => {
+    recreate: (id: string, input: RecreateInput, failAt?: DemoFailure["at"], idempotencyKey?: string) => guard(() => {
       if (failAt) queueDemoFailure(adapter, { operation: "recreateContainer", at: failAt });
-      return adapter.recreateContainer(id, input);
+      return adapter.recreateContainer(id, input, idempotencyKey);
     }),
     update: (id: string) => guard(() => adapter.installContainerUpdate(id)),
     check: (id: string) => guard(() => adapter.checkUpdates({ containerId: id })),

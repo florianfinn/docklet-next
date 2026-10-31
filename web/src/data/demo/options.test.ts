@@ -20,7 +20,7 @@ const cases: { failure: DemoFailure; start: (adapter: ReturnType<typeof createDe
   { failure: { operation: "runStackCommand", at: "pull" }, start: (adapter) => adapter.runStackCommand("media", "redeploy"), step: "pull" },
   { failure: { operation: "installStackUpdates", at: "pull" }, start: (adapter) => adapter.installStackUpdates("cloud"), step: "pull" },
   { failure: { operation: "deployStack", at: "pull" }, start: async (adapter) => (await adapter.deployStack({ stackId: null, hostId: "atlas", name: "Example", compose: "services:\n  app:\n    image: nginx:1.27\n", env: "", labels: [] })).actionId, step: "pull" },
-  { failure: { operation: "recreateContainer", at: "start" }, start: (adapter) => adapter.recreateContainer("c-whoami-test", { image: "traefik/whoami:v1.11", ports: [], env: {}, restartPolicy: "no" }), step: "start" },
+  { failure: { operation: "recreateContainer", at: "start" }, start: (adapter) => adapter.recreateContainer("c-whoami-test", { image: "traefik/whoami:v1.11", environment: [], hostConfig: { restartPolicy: { name: "no" } } }), step: "start" },
   { failure: { operation: "connectHost" }, start: (adapter) => adapter.connectHost("atlas"), step: "connect" },
   { failure: { operation: "connectHost" }, start: (adapter) => adapter.connectHost("cedar"), step: "wait" },
   { failure: { operation: "pullImage" }, start: async (adapter) => (await adapter.pullImage({ hostId: "atlas", reference: "example/missing:1.0" })).actionId!, step: "pull" },

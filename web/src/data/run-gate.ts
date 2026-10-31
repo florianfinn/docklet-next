@@ -294,7 +294,7 @@ export class RunGate {
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "restoreRestorePoint") };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {

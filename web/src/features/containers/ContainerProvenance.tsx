@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original scoped origin assignment, confirmation and detection reset UI.
 
+import { ComposeContainerHint } from "./ComposeContainerHint";
 import { Lock } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -17,7 +18,7 @@ import { Label } from "@/shared/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
 export function ContainerProvenance({ c }: { c: ContainerInfo }) {
-  return <OriginControls key={c.id} c={c} />;
+  return c.origin === "compose" ? <ComposeContainerHint c={c} /> : <OriginControls key={c.id} c={c} />;
 }
 
 function OriginControls({ c }: { c: ContainerInfo }) {

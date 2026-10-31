@@ -467,7 +467,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     async recreateContainer(id, input) {
       const c = findContainer(id);
       if (c.origin !== "standalone") throw new DemoCommandError("recreate-not-allowed");
-      const [repository = c.image.repository, tag = "latest"] = input.image.split(/:(?=[^:/]+$)/);
+      const [repository = c.image.repository, tag = "latest"] = (input.image ?? imageRef(c.image)).split(/:(?=[^:/]+$)/);
       const fail = failStep(takeDemoFailure(adapter, "recreateContainer")?.at);
       return runner.start({
         kind: "recreate",
@@ -478,18 +478,18 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         services: [c.name],
         steps: [
           { key: "validate", label: "Prüfung", detail: "Konfiguration gültig, vorherige gesichert" },
-          { key: "pull", label: "Image-Pull", detail: input.image },
+          { key: "pull", label: "Image-Pull", detail: input.image ?? imageRef(c.image) },
           { key: "create", label: "Neu erstellen" },
           { key: "start", label: "Start" },
           { key: "health", label: "Zustandsprüfung" },
         ],
-        output: containerScript(c.name, input.image),
+        output: containerScript(c.name, input.image ?? imageRef(c.image)),
         failAt: fail,
         failMessage: fail ? "Simulierter Fehler (Design-Labor)" : undefined,
         onSuccess: () => {
           db.patchContainer(c.id, (x) => {
             const image = { repository, tag, version: tag.replace(/^v/, ""), published: new Date().toISOString() };
-            return { ...x, image, ports: input.ports, env: input.env, restartPolicy: input.restartPolicy, state: "running", startedAt: new Date().toISOString(), update: { state: "current", current: image, checkedAt: new Date().toISOString(), registry: "Docker Hub · anonym" } };
+            return { ...x, image, ports: x.ports, env: input.environment ? Object.fromEntries(input.environment.map((entry) => { const index = entry.indexOf("="); return [entry.slice(0, index), entry.slice(index + 1)]; })) : x.env, restartPolicy: input.hostConfig?.restartPolicy?.name ?? x.restartPolicy, state: "running", startedAt: new Date().toISOString(), update: { state: "current", current: image, checkedAt: new Date().toISOString(), registry: "Docker Hub · anonym" } };
           });
           db.pushEvent({ kind: "deploy", level: "ok", title: `${c.name} neu erstellt`, hostId: c.hostId });
           db.changed("containers");
@@ -509,7 +509,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       if (c.origin === "unraid") throw new DemoCommandError("managed-by-unraid");
       if (c.origin !== "standalone") throw new DemoCommandError("recreate-not-allowed");
       const next = c.update.state === "version" || c.update.state === "rebuild" ? c.update.latest : c.image;
-      return adapter.recreateContainer(id, { image: imageRef(next), ports: c.ports, env: c.env, restartPolicy: c.restartPolicy });
+      return adapter.recreateContainer(id, { image: imageRef(next) });
     },
 
     async reconnectHost(hostId) {

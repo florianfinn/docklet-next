@@ -34,7 +34,7 @@ export function runtimeFixture() {
   const calls: { url: URL; init: RequestInit }[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input), "https://hub.example.com"); calls.push({ url, init });
-    if (url.pathname.endsWith("/capabilities")) return envelope(["runStackCommand", "runContainerCommand", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
+    if (url.pathname.endsWith("/capabilities")) return envelope(["runStackCommand", "runContainerCommand", "recreateContainer", "restartService", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
     if (url.pathname.includes("/auth/") && state.auth) return state.auth(url, init);
     if (url.pathname.includes("/activities") && state.activity) return state.activity(url, init);
     if (url.pathname.endsWith("/auth/mode")) return envelope({ mode: "local" });
