@@ -1,6 +1,9 @@
+import { SystemMetadata } from "./SystemMetadata";
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
-import { CapabilityGate } from "@/shared/components/capability-gate";
+import { isHostAvailable } from "@/domain/hosts";
+import { useActionRuns } from "@/data/live";
+import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { useCapability } from "@/data/use-capability";
 import { Bot, Cable, Check, RotateCw } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -22,6 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/shared/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
+import { defaultHostColor } from "@/domain/hosts";
 import { HEX, hostDraftError } from "./host-draft";
 import { HOST_COLORS } from "./onboarding/onboarding-draft";
 import { useHostAction, useHostCommands } from "./use-host-commands";
@@ -38,15 +42,19 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
 function AgentPanel({ host, component, feedback }: { host: Host; component: SystemComponent | undefined; feedback: DialogCommand }) {
   const t = useTranslations("hosts.settings");
   const ts = useTranslations("common.status");
+  const stage = useTranslations("hosts.onboarding.stageState");
   const cmd = useHostCommands();
-  const restartCapability = useCapability("restartAgent");
-  const reconnect = useCapability("reconnectHost");
-  const restart = useHostAction(host.id, "agent-restart", async () => await feedback.run(() => cmd.restartAgent(host.id)));
+  const restartCapability = useCapability("restartAgent", { kind: "host", id: host.id });
+  const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
+  const adapter = useAdapter(), formatError = useHostError();
   const check = useHostAction(host.id, "reconnect", async () => await feedback.run(() => cmd.reconnect(host.id)));
-  if (!component) return <CapabilityGate operation="listSystemComponents"><p className="text-sm text-muted-foreground">{t("agentNone")}</p></CapabilityGate>;
-  const online = host.status === "online";
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const latestRestart = useActionRuns().find(run => run.hostId === host.id && run.kind === "agent-restart");
+  const online = isHostAvailable(host);
   return (
     <div className="flex flex-col gap-4" data-slot="agent-container">
+      {component?.metadataOnly ? <SystemMetadata component={component} /> : component ? <>
+      <SystemMetadata component={component} />
       <p className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/15 p-3 text-xs text-muted-foreground">
         <Bot className="mt-0.5 size-4 shrink-0" aria-hidden />
         {t("agentIntro", { label: `${SYSTEM_LABEL}=agent` })}
@@ -105,15 +113,21 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
           ))}
         </ol>
       </section>
+      </> : <p className="text-sm text-muted-foreground">{t("agentNone")}</p>}
       <div className="flex flex-wrap items-center gap-2">
-        <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={restart.busy} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => void restart.run()}>
+        {host.id !== "0" && <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={latestRestart?.status === "running" || latestRestart?.status === "queued"} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => setConfirmRestart(true)}>
           {t("restart")}
-        </BusyButton>
+        </BusyButton>}
         <BusyButton type="button" size="sm" variant="ghost" disabled={!reconnect.available} title={reconnect.reason} busy={check.busy} busyLabel={t("checking")} icon={<Cable data-icon="inline-start" />} onClick={() => void check.run()}>
           {t("check")}
         </BusyButton>
         <span className="text-xs text-muted-foreground">{online ? t("restartHint") : t("restartBlocked")}</span>
       </div>
+      {latestRestart && <section aria-label={t("restartProgress")}>
+        <ol className="flex flex-col gap-1 text-sm">{latestRestart.steps.map(step => <li key={step.key} data-state={step.state}>{step.label} · {stage(step.state === "skipped" ? "pending" : step.state)}</li>)}</ol>
+        {latestRestart.error && <p role="alert" className="text-sm text-destructive">{latestRestart.error}</p>}
+      </section>}
+      <ConfirmDialog open={confirmRestart} onOpenChange={setConfirmRestart} title={t("restartTitle", { name: host.name })} description={t("restartBody")} confirmLabel={t("restart")} formatError={formatError} onConfirm={() => adapter.restartAgent(host.id)} />
     </div>
   );
 }
@@ -130,42 +144,49 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const change = (next: boolean) => feedback.change(next, onOpenChange);
   const adapter = useAdapter();
   const [name, setName] = useState(host.name);
-  const update = useCapability("updateHost");
+  const update = useCapability("updateHost", { kind: "host", id: host.id });
   const [color, setColor] = useState(host.color);
+  const [resetColor, setResetColor] = useState(false);
   const [hex, setHex] = useState(host.color);
   const [tab, setTab] = useState("general");
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [seen, setSeen] = useState(open);
-  if (open !== seen) {
+  const [seenHost, setSeenHost] = useState(host.id);
+  if (open !== seen || host.id !== seenHost) {
+    setSeenHost(host.id);
     setSeen(open);
     if (open) {
+      setSaving(false);
       setName(host.name);
       setColor(host.color);
       setHex(host.color);
+      setResetColor(false);
       setServerError(null);
       setTouched(false);
       setTab("general");
     }
   }
   const error = hostDraftError(name, color);
-  const dirty = name.trim() !== host.name || color.toLowerCase() !== host.color.toLowerCase();
+  const dirty = resetColor || name.trim() !== host.name || color.toLowerCase() !== host.color.toLowerCase();
 
   const save = async () => {
-    if (!update.available) return;
+    if (saving || !update.available) return;
     setTouched(true);
     if (error || !dirty) return;
     setServerError(null);
     setSaving(true);
+    const current = feedback.checkpoint();
     try {
-      const saved = await adapter.updateHost(host.id, { name: name.trim(), color });
+      const saved = await adapter.updateHost(host.id, { name: name.trim(), color: resetColor ? null : color });
+      if (!current()) return;
       toast.success(t("saved", { name: saved.name }));
       change(false);
     } catch (e) {
-      setServerError(errorText(e));
+      if (current()) setServerError(errorText(e));
     } finally {
-      setSaving(false);
+      if (current()) setSaving(false);
     }
   };
 
@@ -217,6 +238,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
                         aria-checked={color.toLowerCase() === c.toLowerCase()}
                         aria-label={t("colorOption", { color: c })}
                         onClick={() => {
+                          setResetColor(false);
                           setColor(c);
                           setHex(c);
                         }}
@@ -232,12 +254,14 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
                     aria-invalid={!HEX.test(hex) || undefined}
                     value={hex}
                     onChange={(e) => {
+                      setResetColor(false);
                       setHex(e.target.value);
                       if (HEX.test(e.target.value)) setColor(e.target.value.toLowerCase());
                     }}
                     className="h-8 w-28 font-mono text-xs"
                   />
                 </div>
+                <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => { const value = defaultHostColor(host.id); setColor(value); setHex(value); setResetColor(true); }}>{t("resetColor")}</Button>
                 {!HEX.test(hex) && <p className="text-xs text-destructive">{t("colorInvalid")}</p>}
               </fieldset>
               <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3 text-sm" aria-label={t("preview")}>
@@ -260,7 +284,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
             {tab === "general" ? t("cancel") : t("close")}
           </Button>
           {tab === "general" && (
-            <Button type="submit" form={`host-settings-${host.id}`} disabled={!update.available || !dirty || !!error || saving} title={update.reason}>
+            <Button type="submit" form={`host-settings-${host.id}`} disabled={!update.available || !dirty || !!error || !HEX.test(hex) || saving} title={update.reason}>
               {t("save")}
             </Button>
           )}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; raw line capture, bounded blocking queue and trailing line flush; additive runtime seal, error and drain join.
+// Deviations: Local module namespace; raw line capture, bounded blocking queue and trailing line flush; additive runtime seal, error and drain join; executor step frames.
 
 package activity
 
@@ -170,6 +170,9 @@ func (w *Writer) captureLineInternal(line string) writerAppendMessage {
 		if message.level == activitytypes.MessageLevelError {
 			output.Stream = "stderr"
 		}
+		if message.step != w.defaultStep {
+			output.Step, output.Text = message.step, message.message
+		}
 	}
 	message.output = output
 	return message
@@ -189,6 +192,12 @@ func (w *Writer) processLineInternal(line string) mo.Option[writerAppendMessage]
 			message: line,
 			step:    w.defaultStep,
 		})
+	}
+
+	// A frame holding exactly one string "step" names the executor's current step.
+	if step, ok := payload["step"].(string); ok && len(payload) == 1 && strings.TrimSpace(step) != "" {
+		step = strings.TrimSpace(step)
+		return mo.Some(writerAppendMessage{level: activitytypes.MessageLevelInfo, message: step, step: step})
 	}
 
 	if errorValue, ok := payload["error"]; ok && errorValue != nil {

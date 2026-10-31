@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original typed notification and Auto Heal problem presentation.
+// Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability.
 
 import type { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "./capability";
@@ -10,9 +10,9 @@ import { AdapterOutcomeError } from "./capability";
 /** Producer codes the settings UI translates; anything else stays generic. */
 export const SETTINGS_PROBLEM_CODES = [
   "notification.config-invalid", "notification.hub-only", "notification.test-busy",
-  "autoheal.settings-invalid", "autoheal.settings-env-managed", "settings.key-managed",
+  "autoheal.settings-invalid", "autoheal.settings-env-managed", "settings.key-managed", "settings.ui-configuration-disabled",
 ] as const;
-const ACCESS_CODES = ["agent.unavailable", "agent.invalid-token", "agent.update-required"] as const;
+const ACCESS_CODES = ["agent.unavailable", "agent.invalid-token", "agent.update-required", "agent.ui-configuration-disabled"] as const;
 export type SettingsProblemCode = (typeof SETTINGS_PROBLEM_CODES)[number] | (typeof ACCESS_CODES)[number];
 
 /** A typed refusal; `field` is the producer's JSON pointer, never a value. */
@@ -42,6 +42,8 @@ const KEYS: Record<SettingsProblemCode, string> = {
   "notification.test-busy": "settings.codes.notification.test-busy",
   "autoheal.settings-invalid": "settings.codes.autoheal.settings-invalid",
   "autoheal.settings-env-managed": "settings.codes.autoheal.settings-env-managed",
+  "settings.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
+  "agent.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
   "settings.key-managed": "settings.codes.settings.key-managed",
   "agent.unavailable": "common.commandErrors.unreachable",
   "agent.invalid-token": "common.commandErrors.credentialRejected",

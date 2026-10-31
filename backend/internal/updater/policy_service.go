@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
@@ -301,6 +302,10 @@ func (s *UpdaterService) RefreshImagePolicySchedules(ctx context.Context) error 
 	return nil
 }
 func policyCode(err error, fallback string) string {
+	var host *environmentDTO.HostProblem
+	if errors.As(err, &host) && imageDTO.ValidReason(host.Code) {
+		return host.Code
+	}
 	var problem *imageDTO.OperationError
 	if errors.As(err, &problem) {
 		if imageDTO.ValidReason(problem.Problem.Code) {

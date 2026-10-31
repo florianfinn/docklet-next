@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { useNetworkCapabilities } from "./use-network-capabilities";
 import { Boxes, Crosshair, Link2, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -63,7 +64,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
   const [sort, setSort] = useState<SortState<SortKey>>({ key: "order", dir: "asc" });
   const connect = useNetworkCapabilities("connectNetwork", networks.map((n) => n.id));
   const remove = useNetworkCapabilities("removeNetwork", networks.map((n) => n.id));
-  const online = host.status === "online";
+  const online = isHostAvailable(host);
   const members = useMemo(() => {
     const byId = new Map(containers.map((c) => [c.id, c]));
     const out = new Map<string, NetworkMember[]>();

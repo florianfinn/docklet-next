@@ -21,7 +21,7 @@ import { inventoryId, mapContainer, type ContainerRow, type ProjectRow } from ".
 const at = "2026-10-17T12:00:00Z";
 const later = "2026-10-17T12:05:00Z";
 const project: ProjectRow = { id: "project", name: "app", status: "running", isArchived: false, runningCount: 1, serviceCount: 1, path: "/srv/projects/app", createdAt: at, updatedAt: at, tags: [{ name: "example", color: "blue", sources: ["ui"] }], runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running", containerId: "web" }] };
-const container: ContainerRow = { id: "web", names: ["/web"], image: "example:1.0.0", imageId: "example", command: "serve", created: 0, ports: [{ privatePort: 80, publicPort: 8080, type: "tcp" }], labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, state: "running", status: "Up (healthy)", hostConfig: { restartPolicy: "unless-stopped", memory: 104857600 }, networkSettings: { networks: {} }, mounts: [], autoUpdateEnabled: false };
+const container: ContainerRow = { id: "web", names: ["/web"], image: "example:1.0.0", imageId: "example", command: "serve", created: 0, ports: [{ privatePort: 80, publicPort: 8080, type: "tcp" }], labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, state: "running", status: "Up (healthy)", hostConfig: { restartPolicy: "unless-stopped", memory: 104857600 }, networkSettings: { networks: {} }, mounts: [], autoUpdateEnabled: false, origin: "compose", originSource: "detected" };
 
 function fixture() {
   const state = { reason: "", observedAt: at, rows: [container], projects: [project], hostStatus: "online", malformed: false };
@@ -29,7 +29,7 @@ function fixture() {
   const fetcher = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(String(input), "https://hub.example.com");
     if (url.pathname === "/api/capabilities") return json(["listHosts", "listStacks", "getStack", "listContainers"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })));
-    if (url.pathname === "/api/environments") return json(["first", "second"].map((id) => ({ id, name: id, apiUrl: "http://agent.example.com", enabled: true, status: state.hostStatus, isEdge: false } satisfies components["schemas"]["EnvironmentEnvironment"])), true);
+    if (url.pathname === "/api/environments") return json(["first", "second"].map((id) => ({ id, name: id, color: null, apiUrl: "http://agent.example.com", enabled: true, status: state.hostStatus, isEdge: false } satisfies components["schemas"]["EnvironmentEnvironment"])), true);
     if (url.pathname.endsWith("/projects/project/compose")) return json({ ...project, composeContent: "name: app\nservices: {}", envContent: "EXAMPLE=value" });
     if (url.pathname.endsWith("/projects/project")) return json(project, false, 200, true);
     if (url.pathname.endsWith("/projects")) return json(state.projects, true, 200, true);
@@ -54,10 +54,10 @@ describe("host inventory HTTP reads", () => {
     [{ "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, "compose"],
     [{}, "standalone"],
     [{ "com.docker.compose.project": "app" }, "unknown"],
-  ] as const)("maps origin and restrictions: %s → %s", (labels, origin) => {
-    const mapped = mapContainer({ ...container, labels }, "first", [project], { stale: false });
+  ] as const)("maps the backend origin without granting edit authority: %s → %s", (labels, origin) => {
+    const mapped = mapContainer({ ...container, labels, origin }, "first", [project], { stale: false });
     expect(mapped.origin).toBe(origin);
-    expect(mapped.restrictions?.recreate).toBe(origin !== "standalone");
+    expect(mapped.restrictions).toBeUndefined();
     expect(mapped.ports).toEqual([{ host: "8080", container: "80", protocol: "tcp" }]);
   });
 

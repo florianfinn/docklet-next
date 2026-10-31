@@ -146,6 +146,7 @@ export const enCommon = {
     paused: "Paused",
   },
   host: {
+    standby: "Standby – connects on demand",
     "token-rejected": "Agent token invalid",
     "update-required": "Update required",
     online: "Online",

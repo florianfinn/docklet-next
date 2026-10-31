@@ -2,8 +2,9 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections.
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability.
 
+import { settingsProblem, SettingsProblemError } from "../settings-error";
 import { discardResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
@@ -25,7 +26,7 @@ function boolean(values: CoreSettings, key: string): boolean {
   return value === "true";
 }
 
-export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "saveSettings"> {
+export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
@@ -38,8 +39,14 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, {
       method: "PUT", credentials: "same-origin", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(values),
     });
+    if (!response.ok) {
+      if (/\bjson\b/i.test(response.headers.get("Content-Type") ?? "")) {
+        const problem = settingsProblem(await response.json().catch(() => undefined), response.status);
+        if (problem instanceof SettingsProblemError) throw problem;
+      } else discardResponse(response);
+      throw new Error(`settings.write.${response.status}`);
+    }
     discardResponse(response);
-    if (!response.ok) throw new Error(`settings.write.${response.status}`);
   }
 
   return {
@@ -63,26 +70,35 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         setupCompleted: "true",
       });
     },
-    async getConnectedSettings() {
+    getStackStopMode: () => readStackStopMode(baseUrl, client),
+    getConnectedSettings: (async (section?: "hostDefaults" | "installation") => {
       const values = await read();
+      const connection = field(values, "defaultHostConnection");
+      if (connection !== "direct" && connection !== "edge") throw new Error("settings.invalid.defaultHostConnection");
+      const hostDefaults = { connection, projectDir: field(values, "agentProjectsDirectory"), installDir: field(values, "agentInstallDirectory"), puid: field(values, "defaultPuid"), pgid: field(values, "defaultPgid"), detectSocketGroup: boolean(values, "detectSocketGroup") };
+      if (section === "hostDefaults") return { hostDefaults };
+      const timeZone = field(values, "effectiveTimeZone");
+      try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
+      if (section === "installation") return { hostDefaults, general: { hubName: values.hubName ?? "", hubAddress: field(values, "hubAddress"), domainUrl: values.domainUrl ?? "", linkBase: "auto", timeZone } };
       const linkBase = field(values, "linkBase");
       const actionPresentation = field(values, "actionPresentation");
       if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
       if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
-      const connection = field(values, "defaultHostConnection");
-      if (connection !== "direct" && connection !== "edge") throw new Error("settings.invalid.defaultHostConnection");
-      const timeZone = field(values, "effectiveTimeZone");
-      try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
       return {
-        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
-        hostDefaults: { connection, projectDir: field(values, "agentProjectsDirectory"), installDir: field(values, "agentInstallDirectory"), puid: field(values, "defaultPuid"), pgid: field(values, "defaultPgid"), detectSocketGroup: boolean(values, "detectSocketGroup") },
+        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, stackStopMode: stackStopMode(values) },
+        hostDefaults,
         activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
       };
-    },
+    }) as SettingsApi["getConnectedSettings"],
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
       if (section === "general") {
         const general = value as HubSettings["general"];
-        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase });
+        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, stackStopMode: general.stackStopMode ?? "down" });
+        return;
+      }
+      if (section === "hostDefaults") {
+        const host = value as HubSettings["hostDefaults"];
+        await write({ agentProjectsDirectory: host.projectDir, agentInstallDirectory: host.installDir, defaultHostConnection: host.connection, defaultPuid: host.puid, defaultPgid: host.pgid, detectSocketGroup: String(host.detectSocketGroup) });
         return;
       }
       if (section === "activity") {
@@ -93,4 +109,19 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");
     },
   };
+}
+
+/** Missing values on older hubs preserve the established down default. */
+function stackStopMode(values: CoreSettings): "down" | "stop" {
+  const value = values.stackStopMode ?? "down";
+  if (value !== "down" && value !== "stop") throw new Error("settings.invalid.stackStopMode");
+  return value;
+}
+
+export async function readStackStopMode(baseUrl: string, client: CsrfClient): Promise<"down" | "stop"> {
+  const response = await client.fetch(`${baseUrl}/environments/0/settings`, { headers: { Accept: "application/json" } });
+  if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
+  const items: unknown = await response.json();
+  if (!Array.isArray(items) || !items.every((item) => typeof item?.key === "string" && typeof item?.value === "string")) throw new Error("settings.invalid-response");
+  return stackStopMode(Object.fromEntries(items.map((item) => [item.key, item.value])));
 }

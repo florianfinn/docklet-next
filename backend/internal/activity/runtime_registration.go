@@ -174,7 +174,7 @@ func (r *RuntimeReceiver) Resolve(ctx context.Context, request activitytypes.Run
 	if err != nil {
 		return activitytypes.RuntimeTargetMetadata{}, err
 	}
-	out := activitytypes.RuntimeTargetMetadata{Target: resolved.Target, ComposeManaged: resolved.ComposeManaged}
+	out := activitytypes.RuntimeTargetMetadata{Target: resolved.Target, ComposeManaged: resolved.ComposeManaged, Origin: resolved.Origin, ComposeProjectLabel: resolved.ComposeProjectLabel, Protected: resolved.Protected}
 	if request.Lifecycle != nil {
 		adapter, ok := r.service.localExecution.Executor.(*RuntimeServiceAdapter)
 		if !ok || resolved.Target.Kind != "stack" {

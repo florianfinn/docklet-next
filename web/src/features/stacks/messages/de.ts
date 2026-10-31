@@ -2,7 +2,10 @@
 import type { enStacks } from "./en";
 
 export const deStacks: typeof enStacks = {
+  stopMode: {"modeUnavailable": "Der Stopp-Modus des Hubs kann nicht gelesen werden. Wähle unten eine ausdrückliche Aktion.", "down": "Herunterfahren (Container entfernen)", "stop-containers": "Container stoppen", "containersRemoved": "Container entfernt", "definitionInvalid": "Die Compose-Definition kann nicht aufgelöst werden. Repariere sie, um die Services wieder anzuzeigen."},
   inventory: { readError: "Inventar konnte nicht gelesen werden", mappingError: "Ungültige Inventardaten", host: "{name}: {reason}.", asOf: "Veraltete Werte, Stand {time}.", noSnapshot: "Noch keine gespeicherten Werte vorhanden.", updateRequired: "Agent-Update erforderlich", credentialRejected: "Agent-Token ungültig", unavailable: "Host nicht erreichbar" },
+  serviceState: { "not-created": "Container entfernt" },
+  definitionHint: { "definition-invalid": "Die Compose-Definition konnte nicht aufgelöst werden." },
   title: "Stacks",
   description: "{scope} · nur Stacks. Run-, Unraid- und andere Container ohne Compose stehen unter Container.",
   scopeAll: "Alle Hosts gemeinsam",

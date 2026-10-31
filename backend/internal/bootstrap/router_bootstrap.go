@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring.
 
 package bootstrap
 
@@ -31,6 +31,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -193,6 +194,7 @@ type RouterParams struct {
 	HandlerDeps    api.HandlerDeps
 	AuthMiddleware *auth.AuthMiddleware
 	TunnelRegistry *edge.TunnelRegistry
+	ShellSessions  *containershell.Registry `optional:"true"`
 }
 
 // newEchoInternal builds the Echo instance with path parameter values
@@ -307,6 +309,13 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	if hubMode {
 		inventorySnapshots = deps.Environment.Service().ReadSnapshots()
 	}
+	var shellSessions *containershell.Registry
+	if hubMode {
+		shellSessions = p.ShellSessions
+		if shellSessions == nil {
+			shellSessions = containershell.New(deps.Activity.Service(), ctx)
+		}
+	}
 	envProxyMiddleware := middleware.NewEnvProxyMiddlewareWithParamAndRegistry(
 		types.LocalDockerEnvironmentID,
 		"id",
@@ -317,13 +326,13 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
-		middleware.EnvironmentProxySecurity{VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
+		middleware.EnvironmentProxySecurity{ShellSessions: shellSessions, VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
 			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
 		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
 		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
-		}, InventoryPending: deps.Environment.Service().InventoryPending},
+		}, OriginOverlay: deps.Container.Service().OverlayInventory, InventoryPending: deps.Environment.Service().InventoryPending},
 	)
 	apiGroup.Use(envProxyMiddleware)
 
@@ -343,7 +352,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 
 	// Remaining echo handlers (WebSocket/streaming)
-	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg)
+	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg, shellSessions)
 
 	// Register edge tunnel endpoint for manager to accept agent connections
 	// This is only registered when NOT in agent mode (i.e., running as manager)

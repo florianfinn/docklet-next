@@ -1,6 +1,10 @@
+import { Checkbox } from "@/shared/ui/checkbox";
+import { Field, FieldLabel } from "@/shared/ui/field";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "use-intl";
+
+import { setPreference, usePreference } from "@/shared/preferences/preferences-store";
 
 import type { Host } from "@/domain/model";
 
@@ -23,6 +27,21 @@ interface FleetRingProps {
   size?: number;
   /** Hovered or focused segment moves outward; the info card opens on that side when there is room. */
   fan?: boolean;
+  /** Per-host rings share one toggle rendered by their parent. */
+  unraidToggle?: boolean;
+}
+
+/** Personal preference: Unraid units are hidden from the ring by default. */
+export function UnraidRingToggle() {
+  const t = useTranslations("dashboard.ring");
+  const showUnraid = usePreference("showUnraidRing");
+  const uid = useId().replace(/:/g, "");
+  return (
+    <Field orientation="horizontal" className="justify-center">
+      <Checkbox id={`${uid}-unraid`} checked={showUnraid} onCheckedChange={(value) => setPreference("showUnraidRing", value === true)} />
+      <FieldLabel htmlFor={`${uid}-unraid`}>{t("showUnraid")}</FieldLabel>
+    </Field>
+  );
 }
 
 /**
@@ -39,8 +58,10 @@ interface FleetRingProps {
  * Pointer input lands on a static hit cell per segment that covers both the
  * resting and the fanned position, so the target never slips away mid-move.
  */
-export function FleetRing({ hosts, units, label, center, size = 220, fan = true }: FleetRingProps) {
+export function FleetRing({ hosts, units, label, center, size = 220, fan = true, unraidToggle = true }: FleetRingProps) {
   const t = useTranslations("dashboard.ring");
+  const showUnraid = usePreference("showUnraidRing");
+  const visibleUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
   const ts = useTranslations("common.status");
   const unitName = useUnitName();
   const uid = useId().replace(/:/g, "");
@@ -48,7 +69,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
   const infoId = `ring-info-${uid}`;
   const g = ringGeometry(size);
   const c = size / 2;
-  const groups = layoutRing(hosts.map((h) => ({ group: h, items: units.filter((u) => u.hostId === h.id) })));
+  const groups = layoutRing(hosts.map((h) => ({ group: h, items: visibleUnits.filter((u) => u.hostId === h.id) })));
   const glow = glowRegion(size, GLOW_BLUR);
   const flat = groups.flatMap((gr) => gr.segments.map((s) => ({ ...s, host: gr.group })));
   const cells = hitCells(flat, (g.hitPad / g.segR) * (180 / Math.PI));
@@ -115,6 +136,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
   };
 
   return (
+    <div className="flex shrink-0 flex-col items-center gap-2">
     <div ref={wrapRef} className="relative shrink-0" style={{ width: size, height: size }} data-slot="fleet-ring" data-fan={fan || undefined}>
       <svg
         ref={svgRef}
@@ -246,6 +268,8 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
           </div>,
           document.body,
         )}
+    </div>
+      {unraidToggle && <UnraidRingToggle />}
     </div>
   );
 }

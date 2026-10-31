@@ -1,4 +1,5 @@
 import { useAdapter } from "@/data/use-adapter";
+import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
 import { Download, Eye, FileCode2, FileText, FlaskConical, Play, RefreshCw, RotateCw, ScanSearch, Square } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -9,6 +10,7 @@ import { summarizeUpdates } from "@/domain/updates";
 import type { MenuAction, MenuGroups } from "@/shared/components/action-menu";
 import { useHideAction } from "@/shared/components/hide-action";
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
+import { useStackStopMode } from "../stop-mode";
 
 /** Actions of one stack; the ellipsis button and the row's context menu show the same entries. */
 export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
@@ -18,16 +20,18 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
   const live = useAdapter().kind === "http";
   const update = useCapability("installStackUpdates");
   const check = useCapability("checkUpdates");
-  const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
+  const command = useStackCapability(stack.id, stack.hostId);
   const hide = useHideAction("stacks");
   const allStopped = stack.services.every((s) => s.state === "stopped");
   const pending = summarizeUpdates(stack.services).pending;
+  const stopMode = useStackStopMode();
+  const stopText = useTranslations("stacks.stopMode");
   const busy = !!stack.busyActionId;
   const href = `/stacks/${stack.id}`;
   const run: MenuAction[] = allStopped
     ? [{ id: "start", label: t("start"), icon: <Play />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "start") }]
     : [
-        { id: "stop", label: t("stop"), icon: <Square />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "stop") },
+        { id: "stop", label: t("stop"), icon: <Square />, disabled: busy || stopMode.unavailable || !command.available || !!stack.inventory?.stale, title: stopMode.unavailable ? stopText("modeUnavailable") : command.reason, onSelect: () => void cmd.run(stack.id, "stop") },
         { id: "restart", label: t("restart"), icon: <RotateCw />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "restart") },
       ];
   return [
@@ -38,6 +42,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
     ],
     [
       ...run,
+      ...stopMode.alternates.map((alternate): MenuAction => ({ id: alternate, label: stopText(alternate), icon: <Square />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, alternate) })),
       { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
       ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy || (!live && !update.available), title: update.reason, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
       { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy || (!live && !check.available), title: check.reason, onSelect: () => live ? navigate(href) : void cmd.checkUpdates(stack.id) },

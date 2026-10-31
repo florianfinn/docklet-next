@@ -86,9 +86,11 @@ export interface RegisterHostInput {
 
 export interface UpdateHostInput {
   name: string;
-  /** "#rrggbb"; used for host bars, chips, blocks and topology zones. */
-  color: string;
+  /** Lowercase hex; null resets the stable palette default. */
+  color: string | null;
 }
+
+export interface HostCheckResult { status: "online" | "standby-opened" }
 
 export interface HostsApi {
   /** Renames or recolours a host; every view reads hosts from one query, so names and colours follow at once. */
@@ -98,7 +100,7 @@ export interface HostsApi {
   /** Registers a host that waits for its agent (status "pending"). */
   registerHost(input: RegisterHostInput): Promise<{ host: Host; token: string }>;
   /** Connects the agent and returns the connection run's action id. */
-  connectHost(hostId: string): Promise<string>;
+  connectHost(hostId: string): Promise<string | HostCheckResult>;
   removeHost(hostId: string): Promise<void>;
   /** Docklet's own components per host; they never appear in stack or container lists. */
   listSystemComponents(): Promise<SystemComponent[]>;
@@ -254,6 +256,10 @@ export interface ImagesApi {
 export interface SettingsApi {
   getSetupStatus(): Promise<boolean>;
   getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;
+  getConnectedSettings(section: "hostDefaults"): Promise<Pick<HubSettings, "hostDefaults">>;
+  getConnectedSettings(section: "installation"): Promise<Pick<HubSettings, "general" | "hostDefaults">>;
+  /** Reads only the hub stop mode, the value a stack Stop dispatches by. */
+  getStackStopMode?(): Promise<"down" | "stop">;
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */

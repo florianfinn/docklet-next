@@ -1,8 +1,9 @@
+import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/297
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original per-host Auto Heal overview with read-only and unavailable states.
+// Deviations: Original per-host Auto Heal overview with read-only and unavailable states. M14 host maintenance and availability.
 
 import { HeartPulse, Pencil } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -83,7 +84,7 @@ function Unavailable({ host, reason }: { host: Host; reason: string }) {
 function HostRow({ host, edit }: { host: Host; edit: (settings: AutoHealSettings) => void }) {
   const t = useTranslations("settings.autoHeal");
   const all = useTranslations();
-  const online = host.status === "online";
+  const online = isHostAvailable(host);
   const capability = useCapability("getAutoHealSettings", { kind: "host", id: host.id });
   const query = useAutoHeal(host.id, online && capability.available);
   if (!online) return <Unavailable host={host} reason={t(`hostStatus.${host.status}`)} />;

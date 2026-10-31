@@ -5,6 +5,6 @@
 // Deviations: Original implementation for issue 38; network contract v6 boundary for #203.
 package contract
 
-const AgentHubVersion = 10
-const MinimumAgentVersion = 10
-const AgentHubFingerprint = "2861a7e34b62e2cfbb6b466a84eded47338e85d33b26a35a8197c4d40a872c02"
+const AgentHubVersion = 11
+const MinimumAgentVersion = 11
+const AgentHubFingerprint = "d8b0149f8e20ef60a7019e128b34587a9ab54fce25eea974b6f45520f9c9fef5"

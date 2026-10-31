@@ -23,7 +23,7 @@ it("maps live stack and standalone observations and opens their real details", a
     const path = new URL(String(input), "https://hub.example.com").pathname;
     if (!path.endsWith("/containers") && !path.endsWith("/projects")) return response;
     const body = await response.json();
-    body.data = body.data.map((row: Record<string, unknown>) => path.endsWith("/containers") ? { ...row, labels: {}, updateInfo: observation("rebuild") } : { ...row, runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running" }], updateInfo: { status: "has_update", hasUpdate: true, imageCount: 1, checkedImageCount: 1, imagesWithUpdates: 1, imagesNotPulled: 0, errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("version") } } } });
+    body.data = body.data.map((row: Record<string, unknown>) => path.endsWith("/containers") ? { ...row, labels: {}, origin: "standalone", originSource: "detected", updateInfo: observation("rebuild") } : { ...row, runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running" }], updateInfo: { status: "has_update", hasUpdate: true, imageCount: 1, checkedImageCount: 1, imagesWithUpdates: 1, imagesNotPulled: 0, errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("version") } } } });
     return new Response(JSON.stringify(body), { headers: response.headers });
   });
   const [stack] = await f.adapter.listStacks(), [container] = await f.adapter.listContainers();

@@ -40,7 +40,9 @@ one notification entry through existing channels per new candidate version.
 M4 uses admitted-user literal Compose image rewrites for version updates and
 image-only replacement for same-tag rebuilds; no generated override exists.
 M5 limits update, policies and restore points to Compose stacks; standalone
-containers expose update information only.
+containers expose update information only. The 2026-10-30 entry of the
+[core adoption ledger](core-adoption.md#decision-ledger) reverses this, the `off`
+default and the update-and-restore-only restore points in M18.
 #229 owns all G1–G4 implementation work and its explicit database risk gate.
 
 M10 includes host-scoped pull, remove and prune; registry create/edit/delete/test

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; relocated WebSocket origin/forwarding test to client_websocket_origin_test.go.
+// Deviations: Local module namespace; relocated WebSocket origin/forwarding test to client_websocket_origin_test.go; use allowlisted terminal commands for stream lifecycle fixtures.
 
 package edge
 
@@ -146,9 +146,10 @@ func TestTunnelClient_WebSocketProxy(t *testing.T) {
 
 		// Send WS Start
 		startMsg := &TunnelMessage{
-			ID:   "ws-1",
-			Type: MessageTypeWebSocketStart,
-			Path: "/", // Connect to root of local server
+			ID:      "ws-1",
+			Type:    MessageTypeWebSocketStart,
+			Path:    "/api/environments/0/ws/containers/example/terminal",
+			Command: "container.exec.stream",
 		}
 		data, _ := json.Marshal(startMsg)
 		_ = conn.Write(r.Context(), websocket.MessageText, data)
@@ -245,7 +246,7 @@ func TestTunnelClient_WebSocket_ReconnectClosesStreams(t *testing.T) {
 
 		// First connection: open a stream and prove it is live by round-tripping
 		// data through the local echo server, then force a disconnect.
-		startMsg, _ := json.Marshal(&TunnelMessage{ID: "ws-1", Type: MessageTypeWebSocketStart, Path: "/"})
+		startMsg, _ := json.Marshal(&TunnelMessage{ID: "ws-1", Type: MessageTypeWebSocketStart, Path: "/api/environments/0/ws/containers/example/terminal", Command: "container.exec.stream"})
 		_ = conn.Write(r.Context(), websocket.MessageText, startMsg)
 		dataMsg, _ := json.Marshal(&TunnelMessage{
 			ID:            "ws-1",
@@ -492,11 +493,6 @@ func TestTunnelClient_BuildLocalWebSocketURL(t *testing.T) {
 			assert.Equal(t, testCase.expected, client.buildLocalWebSocketURLInternal(msg))
 		})
 	}
-}
-
-func TestTunnelClient_GRPCConnectMethodInternal(t *testing.T) {
-	client := NewTunnelClient(&Config{}, http.NotFoundHandler())
-	assert.Equal(t, "/api/tunnel/connect", client.grpcConnectMethodInternal())
 }
 
 func TestTunnelClient_buildLocalWebSocketHeadersInternal(t *testing.T) {

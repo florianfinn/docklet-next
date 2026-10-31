@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110; translated volume name clash for #224.
 
+import { operationReasonKey } from "@/data/operation-reason";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
@@ -13,10 +14,13 @@ import { openActivity } from "./activity-store";
 
 export function useRuntimeError() {
   const t = useTranslations("activity.runtime");
+  const operation = useTranslations("containers.operationReasons");
   return useCallback((error: unknown, report: CommandFailure["error"] = toast.error): boolean => {
     if (!(error instanceof AdapterOutcomeError)) return false;
     const outcome = error.outcome;
-    const code = outcome.kind === "conflict" || outcome.kind === "error" ? outcome.code : "unavailable";
+    const code = outcome.kind === "conflict" || outcome.kind === "error" ? outcome.code : outcome.kind === "not-available" ? outcome.reasonCode : "unavailable";
+    const specific = operationReasonKey(code);
+    if (specific) { report(operation(specific)); return true; }
     const key = code === "run.busy" ? "busy" : code === "run.cancelling" ? "cancellingConflict" : code === "run.request-mismatch" ? "mismatch" :
       code === "runtime.admission-unknown" ? "ambiguous" : code === "runtime.parent-unresolved" ? "parentUnresolved" :
       code === "runtime.target-removed" ? "targetRemoved" : code === "runtime.target-changed" ? "targetChanged" :
@@ -26,5 +30,5 @@ export function useRuntimeError() {
     const id = outcome.kind === "conflict" ? outcome.activeRunId : undefined;
     report(t(key), { action: id ? { label: t("openRun"), onClick: () => openActivity(id) } : undefined });
     return true;
-  }, [t]);
+  }, [t, operation]);
 }

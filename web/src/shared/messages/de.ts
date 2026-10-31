@@ -147,6 +147,7 @@ export const deCommon: typeof enCommon = {
     paused: "Pausiert",
   },
   host: {
+    standby: "Standby – verbindet bei Bedarf",
     "token-rejected": "Agent-Token ungültig",
     "update-required": "Update erforderlich",
     online: "Online",

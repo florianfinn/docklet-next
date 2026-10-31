@@ -1,8 +1,9 @@
+import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/docs/design/images-updates.md
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230.
+// Deviations: Original production image and registry UI implementation for issue #230. M14 host maintenance and availability.
 
 import { useState } from "react";
 import { toast } from "sonner";
@@ -27,9 +28,9 @@ export function PruneDialog({ open, onOpenChange, hosts, images }: { open: boole
   const scope = hosts.map((h) => h.id).sort().join("|");
   const feedback = useDialogCommand(open, scope, error);
   const capabilities = useImageHostCapabilities("pruneImages", hosts.map((h) => h.id));
-  const connected = hosts.filter((h) => h.status === "online" && capabilities.get(h.id));
-  const unavailable = hosts.filter((h) => h.status === "online" && !capabilities.get(h.id));
-  const offline = hosts.filter((h) => h.status !== "online");
+  const connected = hosts.filter((h) => isHostAvailable(h) && capabilities.get(h.id));
+  const unavailable = hosts.filter((h) => isHostAvailable(h) && !capabilities.get(h.id));
+  const offline = hosts.filter((h) => !isHostAvailable(h));
   const scoped = images.filter((i) => connected.some((h) => h.id === i.hostId));
   const remove = pruneCandidates(scoped, mode), kept = scoped.filter((i) => i.consumers.length);
   const change = (next: boolean) => { feedback.change(next, onOpenChange); if (!next) setReport(undefined); };

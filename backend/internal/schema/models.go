@@ -12,6 +12,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
+	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/patch"
@@ -44,7 +45,7 @@ import (
 func Models() []any {
 	return append(activity.Models(),
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
-		&environment.Environment{}, &event.Event{},
+		&environment.Environment{}, &environment.AgentRestartRequest{}, &container.RecreateJournal{}, &container.OriginOverride{}, &event.Event{},
 		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},
 		&kv.KVEntry{}, &notification.NotificationSettings{},
 		&notificationoutbox.Row{}, &notificationoutbox.Availability{}, &autoheal.Restart{},

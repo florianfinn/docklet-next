@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; current-session heartbeat cleanup.
 
 package edge
 
@@ -32,9 +32,11 @@ func NewAgentTunnelWithConn(envID string, conn TunnelConnection) *AgentTunnel {
 }
 
 // UpdateHeartbeat updates the last heartbeat timestamp
-func (t *AgentTunnel) UpdateHeartbeat() {
+func (t *AgentTunnel) UpdateHeartbeat() { t.updateHeartbeatAt(time.Now()) }
+
+func (t *AgentTunnel) updateHeartbeatAt(now time.Time) {
 	t.mu.Lock()
-	t.LastHeartbeat = time.Now()
+	t.LastHeartbeat = now
 	t.mu.Unlock()
 }
 
@@ -130,6 +132,9 @@ func (r *TunnelRegistry) Get(envID string) mo.Option[*AgentTunnel] {
 
 // Register adds a tunnel to the registry, closing any existing tunnel for the same env
 func (r *TunnelRegistry) Register(envID string, tunnel *AgentTunnel) {
+	if tunnel != nil {
+		tunnel.initializeHeartbeat()
+	}
 	ctx := context.Background() //nolint:forbidigo // Legacy registration path runs outside any request context.
 	if r == nil || tunnel == nil {
 		slog.ErrorContext(ctx, "Failed to register edge agent tunnel", "environmentId", envID, "error", "tunnel is required")
@@ -173,6 +178,7 @@ func (r *TunnelRegistry) RegisterSession(ctx context.Context, tunnel *AgentTunne
 		return false, false, "tunnel is required", nil
 	}
 
+	tunnel.initializeHeartbeat()
 	envID := tunnel.EnvironmentID
 	if envID == "" {
 		return false, false, "environment ID is required", nil
@@ -269,22 +275,39 @@ func (r *TunnelRegistry) UnregisterCurrent(ctx context.Context, envID string, cu
 
 // CleanupStale removes tunnels that haven't had a heartbeat within the given duration.
 func (r *TunnelRegistry) CleanupStale(ctx context.Context, maxAge time.Duration) []*AgentTunnel {
-	now := time.Now()
-	removed, err := r.tunnels.RemoveWhere(ctx, "clean up stale edge tunnels", func(_ string, tunnel *AgentTunnel) bool {
-		return tunnel == nil || now.Sub(tunnel.GetLastHeartbeat()) > maxAge
+	return r.CleanupStaleAt(ctx, maxAge, time.Now())
+}
+
+// CleanupStaleAt permits deterministic sweeps using the same production path.
+func (r *TunnelRegistry) CleanupStaleAt(ctx context.Context, maxAge time.Duration, now time.Time) []*AgentTunnel {
+	return r.cleanupStaleCandidates(ctx, maxAge, now, r.tunnels.Values())
+}
+
+func (r *TunnelRegistry) cleanupStaleCandidates(ctx context.Context, maxAge time.Duration, now time.Time, candidates []*AgentTunnel) []*AgentTunnel {
+	expected := make(map[string]*AgentTunnel, len(candidates))
+	sessions := make(map[string]string, len(candidates))
+	for _, tunnel := range candidates {
+		if tunnel != nil {
+			expected[tunnel.EnvironmentID] = tunnel
+			sessions[tunnel.EnvironmentID] = tunnel.MetadataSnapshot().SessionID
+		}
+	}
+	removed, err := r.tunnels.RemoveWhere(ctx, "clean up stale edge tunnels", func(id string, tunnel *AgentTunnel) bool {
+		if tunnel == nil {
+			return true
+		}
+		metadata := tunnel.MetadataSnapshot()
+		return expected[id] == tunnel && sessions[id] == metadata.SessionID && now.Sub(metadata.LastHeartbeat) > maxAge
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to clean up stale edge tunnels", "error", err)
 		return nil
 	}
 	for _, tunnel := range removed {
-		if tunnel == nil {
-			continue
+		if tunnel != nil {
+			_ = tunnel.CloseWithReason("edge.heartbeat-stale")
 		}
-		slog.WarnContext(ctx, "Removing stale edge tunnel", "lastHeartbeat", tunnel.GetLastHeartbeat())
-		_ = tunnel.CloseWithReason("edge tunnel heartbeat expired")
 	}
-
 	return removed
 }
 

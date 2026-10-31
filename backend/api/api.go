@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability.
 
 package api
 
@@ -29,6 +29,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
@@ -336,6 +337,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	api.UseMiddleware(middleware.RejectInlineImageCredentials(api))
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
+	registerContainerHostSchemasInternal(api)
 
 	// Register all Huma handlers
 	registerHandlersInternal(api, deps, appCtx, cfg)
@@ -409,6 +411,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
+	registerContainerHostSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	registerImageSafetyErrors(api)
@@ -458,7 +461,9 @@ var routeModules = []routeModule{
 	{"event", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Event.RegisterRoutes(api)
 	}},
-	{"capabilities", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+	{"capabilities", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		api.UseMiddleware(activity.OperationCapabilityContext(operationCapabilityReaders(d, cfg)))
+		api.UseMiddleware(containershell.CapabilityContext(d.Container.Service().ShellCapabilityReader(d.Environment.Service())))
 		activity.RegisterCapabilities(api, func(ctx context.Context, env, target, point string) error {
 			return d.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, d.Environment.Service())
 		})
@@ -494,8 +499,8 @@ var routeModules = []routeModule{
 	{"volume", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
 		d.Volume.RegisterRoutes(api, c, cfg)
 	}},
-	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
-		d.Container.RegisterRoutes(api, c)
+	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
+		d.Container.RegisterRoutes(api, c, cfg)
 	}},
 	{"port", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		port.RegisterPorts(api, d.Port)

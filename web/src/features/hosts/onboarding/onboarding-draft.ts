@@ -10,7 +10,8 @@ export { onboardingStore, patchDraft, useOnboardingDraft, type HostDraft } from 
 export const ONBOARDING_STEPS = ["connection", "directories", "install", "connect"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-export const HOST_COLORS = ["#8b5cf6", "#22c55e", "#eab308", "#ec4899", "#06b6d4", "#ef4444", "#84cc16", "#6366f1"];
+import { HOST_COLORS } from "@/domain/hosts";
+export { HOST_COLORS } from "@/domain/hosts";
 
 export function freshDraft(defaults: HostDefaults, usedColors: readonly string[]): HostDraft {
   return {

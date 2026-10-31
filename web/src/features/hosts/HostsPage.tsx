@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { Plus, Radio, Server, ServerCog, Unplug } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
@@ -13,7 +14,7 @@ import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { HostCard } from "./HostCard";
-const InstallSheet = import.meta.env.DEV ? lazy(() => import("./InstallSheet.dev")) : null;
+const InstallSheet = lazy(() => import("./InstallSheet"));
 
 export default function HostsPage() {
   const t = useTranslations("hosts");
@@ -25,8 +26,8 @@ export default function HostsPage() {
   const [filesFor, setFilesFor] = useState<Host | null>(null);
   const ids = hosts.all.map((h) => h.id);
   const count = (hostId: string) => ({
-    stacks: (stacks.data ?? []).filter((s) => s.hostId === hostId).length,
-    containers: (containers.data ?? []).filter((c) => c.hostId === hostId).length,
+    stacks: stacks.data && !stacks.isError ? stacks.data.filter((s) => s.hostId === hostId).length : undefined,
+    containers: containers.data && !containers.isError ? containers.data.filter((c) => c.hostId === hostId).length : undefined,
   });
 
   return (
@@ -48,7 +49,7 @@ export default function HostsPage() {
           { label: t("strip.total"), value: hosts.isPending ? "–" : hosts.all.length, icon: <Server /> },
           { label: t("strip.online"), value: hosts.isPending ? "–" : hosts.all.filter((h) => h.status === "online").length, icon: <ServerCog />, tone: "ok" },
           { label: t("strip.edge"), value: hosts.isPending ? "–" : hosts.all.filter((h) => h.connection === "edge").length, icon: <Radio />, tone: "info" },
-          { label: t("strip.attention"), value: hosts.isPending ? "–" : hosts.all.filter((h) => h.status !== "online").length, icon: <Unplug />, tone: hosts.all.some((h) => h.status === "offline") ? "err" : hosts.all.some((h) => h.status === "pending") ? "info" : undefined },
+          { label: t("strip.attention"), value: hosts.isPending ? "–" : hosts.all.filter((h) => !isHostAvailable(h)).length, icon: <Unplug />, tone: hosts.all.some((h) => h.status === "offline") ? "err" : hosts.all.some((h) => h.status === "pending") ? "info" : undefined },
         ]}
       />
       {hosts.isPending ? (
@@ -72,7 +73,7 @@ export default function HostsPage() {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,34rem),1fr))] gap-4">
           {hosts.all.map((h) => (
-            <HostCard key={h.id} host={h} system={system.data?.find((c) => c.hostId === h.id)} {...count(h.id)} allIds={ids} onFiles={import.meta.env.DEV ? setFilesFor : undefined} />
+            <HostCard key={h.id} host={h} system={system.data?.find((c) => c.hostId === h.id)} {...count(h.id)} allIds={ids} onFiles={setFilesFor} />
           ))}
         </div>
       )}

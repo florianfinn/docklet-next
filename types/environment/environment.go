@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Added process-local agent reports to host read responses.
+// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts.
 
 package environment
 
@@ -45,6 +45,7 @@ type Create struct {
 }
 
 type Update struct {
+	Color **string `json:"color,omitzero" pattern:"^#[0-9a-f]{6}$"`
 	// ApiUrl is the URL of the environment API.
 	//
 	// Required: false
@@ -125,6 +126,7 @@ type AgentReport struct {
 }
 
 type Environment struct {
+	Color       *string      `json:"color"`
 	AgentReport *AgentReport `json:"agentReport,omitempty"`
 	// ID of the environment.
 	//

@@ -2,7 +2,7 @@
 // Revision: fdb37e836f708bd9ff76f75075bbb3e60ae2f0b3
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original host error and connected onboarding regressions.
+// Deviations: Original host error and connected onboarding regressions. M14 host maintenance and availability.
 
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -19,7 +19,7 @@ import { HostSettingsDialog } from "./HostSettingsDialog";
 import { ConnectStep } from "./onboarding/ConnectSteps";
 import { freshDraft } from "./onboarding/onboarding-draft";
 
-const host = mapHost({ id: "example", name: "Example", apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
+const host = mapHost({ id: "atlas", name: "Example", color: null, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
 const draft = freshDraft({ projectDir: "/srv/projects", installDir: "/srv/agent", connection: "direct", puid: "", pgid: "", detectSocketGroup: true }, []);
 
 afterEach(() => { setAppLocale("de"); vi.restoreAllMocks(); });
@@ -81,7 +81,7 @@ describe.each(["de", "en-US"] as const)("host polish (%s)", (locale) => {
     setAppLocale(locale);
     const view = renderWithApp(<ConnectStep draft={draft} host={host} hubUrl="http://hub.example.com" />);
     expect(view.container.textContent).not.toMatch(/No stacks are running|Es laufen noch keine Stacks|Create first stack|Ersten Stack anlegen/);
-    expect(screen.getByRole("link", { name: locale === "de" ? "Stack anlegen" : "Create stack" }).getAttribute("href")).toBe("/stacks/new?host=example");
+    expect(screen.getByRole("link", { name: locale === "de" ? "Stack anlegen" : "Create stack" }).getAttribute("href")).toBe("/stacks/new?host=atlas");
   });
 
   it.each(["direct", "edge"] as const)("uses row-specific missing values for a %s host", (connection) => {
@@ -107,8 +107,8 @@ describe.each(["de", "en-US"] as const)("host polish (%s)", (locale) => {
 
 it.each(["fallback", "explicit", "swatch"])("opens a valid host colour and preserves it on an unchanged %s save", async (mode) => {
   const adapter = createDemoAdapter();
-  const base = { ...host, ...(mode === "explicit" ? { color: "#22c55e" } : {}) };
-  const save = vi.spyOn(adapter, "updateHost").mockImplementation(async (_id, input) => ({ ...base, ...input }));
+  const base = { ...host, ...(mode === "explicit" ? { color: "#22c55e" } : mode === "swatch" ? { color: "#112233" } : {}) };
+  const save = vi.spyOn(adapter, "updateHost").mockImplementation(async (_id, input) => ({ ...base, ...input, color: input.color ?? base.color }));
   renderWithApp(<HostSettingsDialog host={base} component={undefined} open onOpenChange={() => {}} />, adapter);
   const dialog = await screen.findByRole("dialog");
   const hex = within(dialog).getByRole("textbox", { name: /Hex/ });

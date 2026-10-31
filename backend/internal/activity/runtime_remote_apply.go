@@ -70,7 +70,7 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 					return activitytypes.ErrRuntimeWire
 				}
 			case "failed":
-				if d.Activity.MessageCode != string(activitytypes.CodeRuntimeFailed) && d.Activity.MessageCode != string(activitytypes.CodeRuntimeInterrupted) {
+				if d.Activity.MessageCode != string(activitytypes.CodeRuntimeFailed) && d.Activity.MessageCode != string(activitytypes.CodeRuntimeInterrupted) && d.Activity.MessageCode != "container.recreate-recovered" && d.Activity.MessageCode != "container.recreate-ambiguous" {
 					return activitytypes.ErrRuntimeWire
 				}
 			case "cancelled":
@@ -88,6 +88,11 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		if *row.ExecutorState != evidence.State || !runtimeEqualInternal(row.ExecutorSettledAt, runtimeExecutorTimeInternal(evidence.SettledAt)) || !runtimeEqualInternal(row.ExecutorResultCode, evidence.ResultCode) {
 			return &runtimeConflictInternal{}
 		}
+		if terminal {
+			if err := runtimeRecreateResultTx(tx, row, d.Activity.Result); err != nil {
+				return err
+			}
+		}
 		if fromQuery {
 			if err := runtimeUpdateTxInternal(tx, now, row, map[string]any{"last_reconciled_at": now}); err != nil {
 				return err
@@ -103,7 +108,7 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 			return err
 		}
 		var model Activity
-		if err := tx.First(&model, "id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).Error; err != nil {
+		if err := runtimeEnsureActivityTx(tx, row, &model); err != nil {
 			return err
 		}
 		// Terminal always wins against an outstanding active acknowledgment. Within
@@ -176,6 +181,9 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 			s.activity.publishMessageInternal(snapshot.EnvironmentID, snapshot.Type, activityMessageToDTOInternal(final))
 		}
 		s.activity.publishActivityInternal(snapshot.Activity)
+	}
+	if snapshot.Result != nil && s.activity.runtimeHTTP != nil && s.activity.runtimeHTTP.ports.InvalidateInventory != nil {
+		s.activity.runtimeHTTP.ports.InvalidateInventory(ref.Store.EnvironmentID)
 	}
 	return snapshot, nil
 }

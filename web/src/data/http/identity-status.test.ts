@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original status-only response ownership regressions for issue #133.
 
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createIdentityReads } from "./identity-reads";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth } from "./auth";
@@ -33,4 +33,22 @@ it.each(["settings-success", "settings-failure", "setup", "auth-failure", "host-
   expect(cancelled).toBe(50);
   reads.reset();
   expect(aborted).toBe(0);
+});
+
+it.each(["settings", "host"])("%s cancels an unclosed status-only failure before awaiting its body", async consumer => {
+  let cancelled = 0;
+  let controller!: ReadableStreamDefaultController;
+  const client = { fetch: (async () => new Response(new ReadableStream({ start(value) { controller = value; }, cancel() { cancelled++; } }), { status: 503 })), token: async () => csrf };
+  const action = consumer === "settings" ? createSettingsCore("/api", client).saveSettings("hostDefaults", { connection: "direct", projectDir: "/srv/projects", installDir: "/srv/agent", puid: "", pgid: "", detectSocketGroup: true })
+    : createHostCommands("/api", client, async () => {}, () => {}).removeHost("example");
+  const settled = action.then(() => undefined, error => error);
+  try {
+    await vi.waitFor(() => expect(cancelled).toBe(1), { timeout: 250 });
+    const error = await settled;
+    if (consumer === "settings") expect(error.message).toBe("settings.write.503");
+    else expect(error.outcome).toMatchObject({ kind: "error", status: 503 });
+  } finally {
+    if (!cancelled) controller.close();
+    await settled;
+  }
 });

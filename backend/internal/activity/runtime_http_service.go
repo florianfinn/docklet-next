@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Legacy and stack image routes share durable admission and application-owned execution.
+// Deviations: Legacy and stack image routes share durable admission and application-owned execution; a restarting host is refused before remote preparation.
 
 package activity
 
@@ -25,11 +25,13 @@ import (
 // RuntimeHTTPPorts are trusted construction ports; no browser execution envelope
 // can select an executor, registration, storage generation or actor.
 type RuntimeHTTPPorts struct {
-	ApplicationContext context.Context
-	Agent              bool
-	Store              func(context.Context, string) (RuntimeStoreBinding, error)
-	PrepareLifecycle   func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
-	PrepareTarget      func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
+	InvalidateInventory func(string)
+	GuardContainer      func(context.Context, string, string) error
+	ApplicationContext  context.Context
+	Agent               bool
+	Store               func(context.Context, string) (RuntimeStoreBinding, error)
+	PrepareLifecycle    func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
+	PrepareTarget       func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
 }
 
 type RuntimeHTTPService struct {
@@ -60,10 +62,14 @@ func runtimePermissionInternal(operation RuntimeOperation) string {
 		return authz.PermProjectsDeploy
 	case RuntimeDeployProject, RuntimeRedeployProject:
 		return authz.PermProjectsDeploy
-	case RuntimeDownProject:
+	case RuntimeDownProject, RuntimeStopProject:
 		return authz.PermProjectsDown
 	case RuntimeRestartProject:
 		return authz.PermProjectsRestart
+	case RuntimeRecreateContainer:
+		return authz.PermContainersEdit
+	case RuntimeRedeployContainer:
+		return authz.PermContainersRedeploy
 	case RuntimeStartContainer:
 		return authz.PermContainersStart
 	case RuntimeStopContainer:
@@ -139,6 +145,9 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		if err := h.service.refuseRemovedEnvironmentInternal(ctx, environmentID); err != nil {
 			return empty, noRef, err
 		}
+		if err := h.service.refuseRestartingEnvironmentInternal(ctx, environmentID); err != nil {
+			return empty, noRef, err
+		}
 		command.Store, err = h.ports.Store(ctx, environmentID)
 		if err != nil {
 			return empty, noRef, err
@@ -146,6 +155,14 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		resolved, err := h.ports.PrepareTarget(ctx, environmentID, target)
 		if err != nil {
 			return empty, noRef, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
+		}
+		if runtimeRecreateOperation(operation) {
+			if h.ports.GuardContainer == nil {
+				return empty, noRef, &RuntimeTargetError{Code: "container.origin-locked"}
+			}
+			if err := h.ports.GuardContainer(ctx, environmentID, resolved.Target.ID); err != nil {
+				return empty, noRef, err
+			}
 		}
 		if resolved.ComposeManaged && resolved.Target.ParentProjectID == nil {
 			return empty, noRef, &RuntimeTargetError{Code: string(activitytypes.CodeRuntimeParentUnresolved)}

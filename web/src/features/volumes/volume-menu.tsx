@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { useVolumeCapability } from "./use-volume-capability";
 import { useCapability } from "@/data/use-capability";
 import { Archive, Eye, FolderOpen, Layers, Play, Trash2 } from "lucide-react";
@@ -14,7 +15,7 @@ import { filesHref } from "./files/files-href";
 export function deleteBlock(v: Pick<Volume, "kind" | "consumers">, host: Pick<Host, "status"> | undefined): "bind" | "in-use" | "offline" | undefined {
   if (v.kind === "bind") return "bind";
   if (v.consumers.length) return "in-use";
-  if (host?.status !== "online") return "offline";
+  if (!isHostAvailable(host)) return "offline";
   return undefined;
 }
 
@@ -25,7 +26,7 @@ export function useVolumeMenu(v: Volume, host: Host | undefined, on: { remove: (
   const remove = useVolumeCapability("deleteVolume", v.id);
   const backup = useCapability("runBackup");
   const files = useVolumeCapability("listFiles", v.id);
-  const online = host?.status === "online";
+  const online = isHostAvailable(host);
   return [
     [
       { id: "open", label: t("open"), icon: <Eye />, onSelect: () => navigate(`/volumes/${v.id}`) },

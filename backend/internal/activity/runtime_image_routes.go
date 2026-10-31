@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"net/http"
@@ -66,5 +67,6 @@ func imageAdmissionOperation(api huma.API, operation RuntimeOperation, id, path 
 		}
 		op.Responses[status] = &huma.Response{Description: "Typed refusal or admitted failure with durable action identity", Content: map[string]*huma.MediaType{"application/json": {Schema: body}}}
 	}
+	handlerutil.HostProblemResponses(api, &op, "409")
 	return op
 }

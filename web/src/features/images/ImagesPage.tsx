@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { useImageHostCapabilities } from "./use-image-capabilities";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { useCapability } from "@/data/use-capability";
@@ -119,7 +120,7 @@ export default function ImagesPage() {
   };
   const scopeHosts = hosts.visible.length ? hosts.visible : hosts.all;
   const scopedPull = useImageHostCapabilities("pullImage", scopeHosts.map((h) => h.id));
-  const initialPullHost = scopeHosts.find((h) => h.status === "online" && scopedPull.get(h.id));
+  const initialPullHost = scopeHosts.find((h) => isHostAvailable(h) && scopedPull.get(h.id));
 
   return (
     <>

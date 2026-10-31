@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission.
 
 package edge
 
@@ -206,7 +206,7 @@ func (c *CommandClient) OpenStream(ctx context.Context, tunnel *AgentTunnel, req
 var DefaultCommandClient = NewCommandClient()
 
 func validateConnectedTunnelInternal(tunnel *AgentTunnel) error {
-	if tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+	if !TunnelLiveAt(tunnel, time.Now()) {
 		return errors.New("edge tunnel is not connected")
 	}
 	return nil

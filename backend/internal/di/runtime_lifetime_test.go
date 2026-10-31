@@ -15,6 +15,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -50,6 +51,7 @@ func TestRuntimeActivationConstructionFailureCancelsContext(t *testing.T) {
 		fx.Provide(func() context.Context { return parent }),
 		fx.Supply(
 			activity.NewActivityService(nil, nil),
+			(*database.DB)(nil),
 			(*project.ProjectService)(nil),
 			(*container.ContainerService)(nil),
 			(*environment.EnvironmentService)(nil),

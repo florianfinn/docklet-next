@@ -2,7 +2,7 @@
 // Revision: 3d2d4f27b524b3422d010d6a69a22fe57225a78f
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original production boundary and regression coverage for issue #27.
+// Deviations: Original production boundary and regression coverage for issue #27. M14 host maintenance and availability.
 
 // Exact development-only keys whose empty values never render on product routes.
 // Removing a development key also requires removing its exception.
@@ -50,10 +50,6 @@ export const productionEmptyExceptions: Record<string, string> = Object.fromEntr
   ["stacks.logs.simulated", "Only DEV failure controls or demo-adapter simulation labels use this key."],
   ["containers.recreate.failDemo", "Only DEV failure controls or demo-adapter simulation labels use this key."],
   ["hosts.card.report.reported", "The HTTP mapper never marks agent reports as simulated."],
-  ["hosts.card.connect", "The simulated connect controls are DEV-only."],
-  ["hosts.install.sheetDescription", "InstallSheet.dev is excluded; connected onboarding uses its own installer text."],
-  ["hosts.install.demoNote", "InstallSheet.dev is excluded; connected onboarding uses its own installer text."],
-  ["hosts.install.regenerateToken", "InstallSheet.dev is excluded; connected onboarding uses its own installer text."],
   ["hosts.onboarding.simulation", "The simulated connect controls are DEV-only."],
   ["hosts.onboarding.simulate", "The simulated connect controls are DEV-only."],
   ["hosts.onboarding.simulateFailure", "The simulated connect controls are DEV-only."],

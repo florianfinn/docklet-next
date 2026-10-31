@@ -336,7 +336,8 @@ hook is rejected.
 The 592-file aggregate remains the historical import record. Current per-file
 sidecars record the post-import bytes of the production shell correction. The
 host installation sheet was extracted from the imported `HostsPage.tsx` into
-`InstallSheet.dev.tsx`; its sidecar retains the original host-page source hash.
+`InstallSheet.dev.tsx`. In M14 (#318) the production `InstallSheet.tsx`
+replaced that development sheet, and its sidecar entry was removed.
 Development-only routes, controls and catalogue values retain their imported
 wording in development builds, while the product build uses neutral values or
 omits demo-only modules. The disconnected adapter now presents a stable error

@@ -17,7 +17,7 @@ import OnboardingPage from "./OnboardingPage";
 import { onboardingStore } from "./onboarding-store";
 
 const settings = { hubName: "Example hub", hubAddress: "192.0.2.10:3552", domainUrl: "https://hub.example.com", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog", defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true" };
-const row = { id: "example", name: "Example", apiUrl: "http://agent.example.com:3552", enabled: true, isEdge: false, status: "pending" };
+const row = { id: "example", name: "Example", color: null, apiUrl: "http://agent.example.com:3552", enabled: true, isEdge: false, status: "pending" };
 
 function server(admin = true) {
   const writes: Record<string, unknown>[] = [];

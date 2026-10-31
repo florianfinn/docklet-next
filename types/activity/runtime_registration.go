@@ -6,7 +6,10 @@
 
 package activity
 
-import "github.com/florianfinn/docklet-next/types/updater"
+import (
+	"github.com/florianfinn/docklet-next/types/container"
+	"github.com/florianfinn/docklet-next/types/updater"
+)
 
 // RuntimeRegistration is constructed from the hub's persisted instance and host
 // registration. Possession of these public identifiers grants no authority.
@@ -22,7 +25,10 @@ type RuntimeTargetRequest struct {
 }
 
 type RuntimeTargetMetadata struct {
-	Lifecycle      *updater.LifecycleIntent `json:"lifecycle,omitempty"`
-	Target         RuntimeTarget            `json:"target"`
-	ComposeManaged bool                     `json:"composeManaged"`
+	Origin              *container.OriginFields  `json:"origin,omitempty"`
+	ComposeProjectLabel bool                     `json:"composeProjectLabel,omitempty"`
+	Protected           bool                     `json:"protected,omitempty"`
+	Lifecycle           *updater.LifecycleIntent `json:"lifecycle,omitempty"`
+	Target              RuntimeTarget            `json:"target"`
+	ComposeManaged      bool                     `json:"composeManaged"`
 }

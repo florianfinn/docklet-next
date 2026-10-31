@@ -444,7 +444,8 @@ forwarding; an update-required host receives no ordinary agent request.
 Compose project tags map to stack labels; runtime containers supply service
 status, health and published ports. Complete Compose project/service labels
 identify Compose containers. Partial Compose metadata or evidence of an external
-manager leaves origin unclear. Containers without these labels map to Run.
+manager leaves origin unclear; M14 detects Unraid as its own origin
+([container origin](container-origin-recreate.md)). Containers without these labels map to Run.
 Recreation restrictions include Compose ownership, unclear origin and the
 server's protected-container flag. Agent-labeled workloads are excluded from
 both lists; the backend excludes their tracked Compose projects before pagination.

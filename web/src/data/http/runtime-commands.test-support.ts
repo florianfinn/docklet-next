@@ -23,6 +23,7 @@ export function snapshot(host = "0", patch: Partial<RuntimeSnapshot> = {}): Runt
 export const runtimeDetail = (run: RuntimeSnapshot, patch: Partial<RuntimeDetail> = {}): RuntimeDetail => ({ activity: run, messages: [], stepTrace: [], output: [], outputTruncated: false, retainedStartSeq: 0, recovery: { executorState: "pending", releaseAcknowledged: false }, ...patch });
 export function runtimeFixture() {
   const state = {
+    stopMode: "down" as "down" | "stop" | undefined,
     run: snapshot(), detailStatus: 200, admin: true,
     permissions: ["activities:read", "activities:cancel"],
     recovery: { executorState: "pending", releaseAcknowledged: false } as RuntimeDetail["recovery"],
@@ -34,7 +35,7 @@ export function runtimeFixture() {
   const calls: { url: URL; init: RequestInit }[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input), "https://hub.example.com"); calls.push({ url, init });
-    if (url.pathname.endsWith("/capabilities")) return envelope(["runStackCommand", "runContainerCommand", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
+    if (url.pathname.endsWith("/capabilities")) return envelope(["runStackCommand", "runContainerCommand", "recreateContainer", "restartService", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
     if (url.pathname.includes("/auth/") && state.auth) return state.auth(url, init);
     if (url.pathname.includes("/activities") && state.activity) return state.activity(url, init);
     if (url.pathname.endsWith("/auth/mode")) return envelope({ mode: "local" });
@@ -47,6 +48,7 @@ export function runtimeFixture() {
       if (init.method === "POST") return envelope({ ...state.run, cancelRequested: true });
       return state.detailStatus === 200 ? envelope(runtimeDetail(state.run, { recovery: state.recovery })) : response({ code: "http.error" }, state.detailStatus);
     }
+    if (url.pathname.endsWith("/settings")) return response(state.stopMode ? [{ key: "stackStopMode", value: state.stopMode }] : []);
     if (state.command) return state.command(url, init);
     return envelope({ activityId: state.run.id, code: "run.started", activity: state.run }, 202);
   });

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence.
+// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts.
 
 package settings
 
@@ -18,6 +18,9 @@ import (
 )
 
 func validateSettingValueInternal(key, value string) error {
+	if key == "stackStopMode" && value != "down" && value != "stop" {
+		return common.Classify(common.ErrValidation, errors.New("stackStopMode must be down or stop"))
+	}
 	if key == "vulnerabilityScanSchedule" {
 		if _, err := dto.ParseVulnerabilitySchedule(value); err != nil {
 			return common.Classify(common.ErrValidation, err)

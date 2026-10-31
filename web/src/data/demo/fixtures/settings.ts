@@ -6,7 +6,7 @@ import { daysAgo } from "./time";
 /** Synthetic hub settings; example domains and RFC 5737 addresses only. */
 export const SETTINGS: HubSettings = {
   setupCompleted: true,
-  general: { hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "https://docklet.example.com", linkBase: "auto", timeZone: "Europe/Berlin" },
+  general: { stackStopMode: "down", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "https://docklet.example.com", linkBase: "auto", timeZone: "Europe/Berlin" },
   auth: {
     mode: "local",
     local: { username: "admin", passwordSet: true },

@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Toggle } from "@/shared/ui/toggle";
 
+import { ContainerTerminalTabs } from "./ContainerTerminalTabs";
 import { ContainerFacts, ContainerProvenance } from "./ContainerFacts";
 import { useContainerRestart } from "./container-restart";
 import { OriginBadge } from "./OriginBadge";
@@ -78,7 +79,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
   const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
-  const edit = useCapability("recreateContainer");
+  const edit = useCapability("recreateContainer", { kind: "container", id: c.id });
   const restart = useContainerRestart();
   return (
     <>
@@ -102,7 +103,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
       )}
       {c.origin === "standalone" && (
         <HelpTarget topic="container.recreate">
-          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale || c.restrictions?.recreate} title={edit.reason} onClick={onEdit}>
+          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale} title={edit.reason} onClick={onEdit}>
             <Pencil data-icon="inline-start" /> {t("edit")}
           </Button>
         </HelpTarget>
@@ -115,7 +116,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
         </Button>
       )}
       {(c.origin === "unraid" || c.origin === "unknown") && (
-        <Button size="sm" variant="secondary" disabled title={to(`${c.origin}Body`)}>
+        <Button size="sm" variant="secondary" disabled title={edit.reason ?? to(`${c.origin}Body`)}>
           <Lock data-icon="inline-start" /> {t("editBlocked")}
         </Button>
       )}
@@ -123,11 +124,10 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   );
 }
 
-function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
+function Body({ c, host, onEdit }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void }) {
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
-  const [editing, setEditing] = useState(false);
   const m = useMetrics((s) => s?.containers[c.id]);
   const rt = containerRuntime(c, host);
   return (
@@ -142,7 +142,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
         description={
           <span className="flex flex-wrap items-center gap-2 pt-1">
             <ToneBadge tone={RUNTIME_TONE[rt]}>{ts(rt)}</ToneBadge>
-            <OriginBadge origin={c.origin} note={c.originNote} />
+            <OriginBadge origin={c.origin} source={c.originSource} note={c.originNote} />
             <HostChip host={host} />
             {c.stackId && (
               <Link to={`/stacks/${c.stackId}`} className="text-primary-text underline-offset-4 hover:underline">
@@ -151,7 +151,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
             )}
           </span>
         }
-        actions={<ContainerActions c={c} onEdit={() => setEditing(true)} />}
+        actions={<ContainerActions c={c} onEdit={onEdit} />}
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
@@ -192,9 +192,8 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
         </Card>
       </div>
       <div className="mt-4">
-        <ContainerLogs key={c.id} c={c} />
+        <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>
       </div>
-      {c.origin === "standalone" && <RecreateDialog container={editing ? c : undefined} open={editing} onOpenChange={setEditing} />}
     </>
   );
 }
@@ -206,25 +205,32 @@ export default function ContainerPage() {
   const containers = useContainers();
   const hosts = useHostScope();
   const c = containers.data?.find((x) => x.id === containerId);
-  if (containers.isPending || hosts.isPending)
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-64 w-full rounded-2xl" />
-      </div>
-    );
-  if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
-  if (!c)
-    return (
-      <EmptyState
-        icon={<Boxes />}
-        title={t("missing")}
-        action={
-          <Button variant="outline" asChild>
-            <Link to="/containers">{t("back")}</Link>
-          </Button>
-        }
-      />
-    );
-  return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body c={c} host={hosts.byId.get(c.hostId)} /></>;
+  // The page owns the recreate run at a stable position: the old ID leaves the
+  // list before the run settles, and the run must survive that to navigate.
+  const [recreating, setRecreating] = useState<ContainerInfo>();
+  return <>{content()}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
+
+  function content() {
+    if (containers.isPending || hosts.isPending)
+      return (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
+      );
+    if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
+    if (!c)
+      return (
+        <EmptyState
+          icon={<Boxes />}
+          title={t("missing")}
+          action={
+            <Button variant="outline" asChild>
+              <Link to="/containers">{t("back")}</Link>
+            </Button>
+          }
+        />
+      );
+    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
+  }
 }

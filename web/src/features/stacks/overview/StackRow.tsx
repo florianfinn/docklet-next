@@ -1,5 +1,5 @@
 import { useAdapter } from "@/data/use-adapter";
-import { Globe, Layers } from "lucide-react";
+import { Globe, Layers, TriangleAlert } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -106,6 +106,7 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
             >
               {stack.name}
             </Link>
+            {stack.definitionHint === "definition-invalid" && <span title={t("definitionHint.definition-invalid")}><TriangleAlert role="img" aria-label={t("definitionHint.definition-invalid")} className="size-4 text-warning" /></span>}
             {(!compact || inBlock) && <LabelChips labels={stack.labels} size="sm" />}
           </div>
           {((compact && !inBlock) || stack.url || (condensed && !inBlock)) && (

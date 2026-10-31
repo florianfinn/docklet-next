@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.; status-first one-shot restart acknowledgement.
 
 // Package proxy owns the transport to remote environment agents: request
 // building, edge tunnel routing, JSON decoding and configuration pushes.
@@ -40,6 +40,7 @@ import (
 // Service sends requests to remote environment agents over HTTP or edge
 // tunnels and pushes manager-owned configuration to them.
 type Service struct {
+	httpClient      *http.Client
 	accessCheck     remenv.AgentAccessCheck
 	db              *database.DB
 	client          *remenv.Client
@@ -51,7 +52,8 @@ type Service struct {
 // forget delivery state when an environment reconnects.
 func New(db *database.DB, httpClient *http.Client, settingsService *settings.SettingsService, syncGate *utils.SyncGate) *Service {
 	return &Service{
-		db: db,
+		httpClient: httpClient,
+		db:         db,
 		client: remenv.NewClient(httpClient, remenv.TunnelTransportFuncs{
 			EnsureAvailableFunc: ensureTunnelAvailableInternal,
 			DoFunc:              doTunnelRequestInternal,

@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Durable-first admission, parent arbitration and atomic coded evidence.
+// Deviations: Durable-first admission, parent arbitration and atomic coded evidence; transactional host restart exclusion.
 
 package activity
 
@@ -50,6 +50,15 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	if err := ctx.Err(); err != nil {
 		return RuntimeAdmissionResult{}, err
 	}
+	if string(command.Operation) == "recreate-container" || string(command.Operation) == "redeploy-container" {
+		h := s.activity.runtimeHTTP
+		if h == nil || h.ports.GuardContainer == nil {
+			return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "container.origin-locked"}
+		}
+		if err := h.ports.GuardContainer(ctx, command.Store.EnvironmentID, resolved.Target.ID); err != nil {
+			return RuntimeAdmissionResult{}, err
+		}
+	}
 	if resolved.ComposeManaged && resolved.Target.ParentProjectID == nil {
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: string(activitytypes.CodeRuntimeParentUnresolved)}
 	}
@@ -82,6 +91,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 			return err
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A known key keeps its durable answer during a restart; joins and new
+			// admissions are refused while the host is restarting.
+			if err := runtimeCheckRestartTx(tx, c.command.Store.EnvironmentID); err != nil {
+				return err
+			}
 			row, err = runtimeActiveConflictTxInternal(tx, c)
 			if err != nil {
 				return err
@@ -117,6 +131,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					TargetName: target.Name, ParentProjectID: target.ParentProjectID, GateScope: c.gateScope, GateKey: c.gateKey})
 				if err != nil {
 					return err
+				}
+				if c.command.Operation == RuntimeRecreateContainer {
+					if err := tx.Model(&Activity{}).Where("id=?", row.RunID).UpdateColumn("metadata", database.JSON{"changedFields": runtimeRecreateFields(c.command.Options)}).Error; err != nil {
+						return err
+					}
 				}
 				if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
 					return err

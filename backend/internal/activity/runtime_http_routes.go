@@ -23,6 +23,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 )
@@ -48,6 +49,9 @@ type runtimeContainerHTTPInput struct {
 // The original permission metadata remains the proxy/API authority source.
 func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation RuntimeOperation, op huma.Operation) {
 	op.MaxBodyBytes = activitytypes.RuntimeMaxBodyBytes
+	if runtimeRecreateOperation(operation) {
+		op.MaxBodyBytes = 64 << 10
+	}
 	op.BodyReadTimeout = RuntimeAdmissionLimit
 	// Legacy commands permit an empty body; RawBody otherwise defaults to required.
 	op.RequestBody = &huma.RequestBody{Required: false}
@@ -76,10 +80,25 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 		})
 	} else {
 		middleware.RegisterWithPermission(api, op, runtimePermissionInternal(operation), func(ctx context.Context, input *runtimeContainerHTTPInput) (*huma.StreamResponse, error) {
-			if len(bytes.TrimSpace(input.RawBody)) != 0 {
+			options := RuntimeOptions{}
+			if runtimeRecreateOperation(operation) {
+				if input.Key == "" || !runtimeWantsAsync(input.Prefer) {
+					if operation == RuntimeRedeployContainer {
+						return nil, &containerDTO.Problem{Code: "update.path-retired", Status: 409}
+					}
+					return nil, huma.Error400BadRequest("Idempotency-Key and Prefer: respond-async required")
+				}
+			}
+			if operation == RuntimeRecreateContainer {
+				var request containerDTO.RecreateRequest
+				if len(input.RawBody) > 64<<10 || activitytypes.DecodeRuntimeJSON(input.RawBody, &request) != nil {
+					return nil, huma.Error400BadRequest("Invalid recreate request")
+				}
+				options.Recreate = &request.Edit
+			} else if len(bytes.TrimSpace(input.RawBody)) != 0 {
 				return nil, huma.Error400BadRequest("Runtime command has no request body")
 			}
-			return runtimeLegacyResponse(ctx, service, input.EnvironmentID, input.Key, input.Prefer, operation, RuntimeTarget{Kind: "container", ID: input.ContainerID}, RuntimeOptions{})
+			return runtimeLegacyResponse(ctx, service, input.EnvironmentID, input.Key, input.Prefer, operation, RuntimeTarget{Kind: "container", ID: input.ContainerID}, options)
 		})
 	}
 	// Huma marks RawBody required during registration. Preserve the legacy optional body.
@@ -124,7 +143,11 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		case errors.As(err, &gate):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(gate.Code), ActiveRunID: gate.RunID}}), nil
 		case errors.As(err, &mismatch):
-			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.CodeRunRequestMismatch}}), nil
+			code := activitytypes.CodeRunRequestMismatch
+			if runtimeRecreateOperation(operation) {
+				code = "runtime.idempotency-mismatch"
+			}
+			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: code}}), nil
 		case errors.As(err, &targetErr):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(targetErr.Code)}}), nil
 		case errors.Is(err, remenv.ErrAgentInvalidToken):

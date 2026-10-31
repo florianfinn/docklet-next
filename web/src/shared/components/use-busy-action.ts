@@ -4,7 +4,7 @@ import { useActionRun } from "@/data/live";
 import type { ActionStatus } from "@/domain/model";
 
 /** What a busy action returns: an action run id to follow, or any other settled value. */
-type ActionResult = string | null | undefined | void | boolean;
+type ActionResult = string | null | undefined | void | boolean | { status: "online" | "standby-opened" };
 
 export type BusyState = "idle" | "calling" | ActionStatus;
 

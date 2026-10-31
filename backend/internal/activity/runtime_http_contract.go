@@ -9,8 +9,10 @@ package activity
 import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	"reflect"
 	"strconv"
@@ -22,6 +24,9 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 	admission := schema(reflect.TypeFor[base.ApiResponse[activitytypes.RuntimeAdmission]]())
 	success := schema(reflect.TypeFor[base.ApiResponse[base.MessageResponse]]())
 	content := map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{success, admission}}}}
+	if runtimeRecreateOperation(operation) {
+		content = map[string]*huma.MediaType{"application/json": {Schema: admission}}
+	}
 	if operation == RuntimeDeployProject || operation == RuntimeRedeployProject {
 		content = map[string]*huma.MediaType{"application/json": {Schema: admission}, "application/x-ndjson": {Schema: &huma.Schema{Type: "string", Description: "Legacy activity started frame, unchanged output lines and a terminal done or coded error frame with activityId"}}}
 	}
@@ -30,6 +35,10 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 		"202": {Description: "New admission only; activityId equals activity.id", Content: map[string]*huma.MediaType{"application/json": {Schema: admission}}},
 		"409": {Description: "Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{schema(reflect.TypeFor[activitytypes.RuntimeConflictResponse]()), schema(reflect.TypeFor[activitytypes.RuntimeFailureResponse]())}}}}},
 	}
+	if runtimeRecreateOperation(operation) {
+		op.Responses["409"].Content["application/json"].Schema.OneOf = append(op.Responses["409"].Content["application/json"].Schema.OneOf, schema(reflect.TypeFor[containerDTO.Problem]()))
+	}
+	handlerutil.HostProblemResponses(api, op, "409")
 	op.Responses["410"] = &huma.Response{Description: "Removed registration; runtime.target-removed never dispatches", Content: map[string]*huma.MediaType{"application/json": {Schema: schema(reflect.TypeFor[common.APIError]())}}}
 	for _, status := range []int{408, 500, 503, 504} {
 		op.Responses[strconv.Itoa(status)] = &huma.Response{Description: "Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{schema(reflect.TypeFor[activitytypes.RuntimeFailureResponse]()), schema(reflect.TypeFor[huma.ErrorModel]()), schema(reflect.TypeFor[common.APIError]())}}}}}
@@ -42,6 +51,9 @@ func runtimeHTTPBodyContract(api huma.API, operation RuntimeOperation, op *huma.
 	op.RequestBody.Required = false
 	if operation == RuntimeDeployProject || operation == RuntimeRedeployProject {
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[projecttypes.DeployOptions](), true, "")}}
+	} else if operation == RuntimeRecreateContainer {
+		op.RequestBody.Required = true
+		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerDTO.RecreateRequest](), true, "")}}
 	} else {
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{Not: &huma.Schema{}}}}
 	}

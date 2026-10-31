@@ -2,6 +2,7 @@
 import type { enSettings } from "./en";
 
 export const deSettings: typeof enSettings = {
+  stackStopMode: {"title": "Stopp-Modus für Stacks", "down": "Herunterfahren und Container entfernen (Standard)", "stop": "Stoppen und Container behalten", "hint": "Hub-weite Einstellung. Stoppen folgt auf jedem Host diesem Modus; das Stack-Menü bietet die andere Aktion."},
   // Texts of backend notification and Auto Heal codes, keyed by the wire code path.
   codes: {
     notification: {
@@ -373,6 +374,7 @@ export const deSettings: typeof enSettings = {
     managedByEnvironment: "Durch Umgebungsvariablen gesetzt – nur lesbar",
     configurationLocked: "UI-Konfiguration ist am Hub abgeschaltet – nur lesbar",
     hostStatus: {
+      standby: "Standby – verbindet bei Bedarf",
       offline: "Host offline",
       pending: "Host noch nicht verbunden",
       "update-required": "Agent-Update erforderlich",

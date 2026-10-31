@@ -69,7 +69,9 @@ it("shows agent restart rejection inline inside host settings", async () => {
   const dialog = await screen.findByRole("dialog");
   await userEvent.click(within(dialog).getByRole("tab", { name: "Agent-Container" }));
   await userEvent.click(within(dialog).getByRole("button", { name: "Agent neu starten" }));
-  expect((await within(dialog).findByRole("alert")).textContent).toBeTruthy();
+  const confirmation = await screen.findByRole("alertdialog");
+  await userEvent.click(within(confirmation).getByRole("button", { name: "Agent neu starten" }));
+  expect((await within(confirmation).findByRole("alert")).textContent).toBe(catalogs.de.hosts.errors.unreachable);
   expect(error).not.toHaveBeenCalled(); expect(adapter.restartAgent).toHaveBeenCalledOnce();
 });
 function FileName() {

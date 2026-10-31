@@ -4,9 +4,12 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110.
 
+import { readStackStopMode } from "./settings-core";
+import type { components } from "@/api/generated/schema";
+import { commandUUID } from "../intent-key";
 import type { LifecycleInput } from "@/domain/stack-updates";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
-import type { ContainerCommand, RuntimeReleaseInput, StackCommand } from "../adapter";
+import type { ContainerCommand, RecreateInput, RuntimeReleaseInput, StackCommand } from "../adapter";
 import { AdapterOutcomeError, unavailable } from "../capability";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { CodedActionRun } from "../message-code";
@@ -18,18 +21,10 @@ import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDet
 export const COMMAND_RETRY_MS = 10 * 60_000;
 export const RIGHTS_MAX_AGE_MS = 30_000;
 const LIMIT = 256;
-const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy" };
+const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy", down: "down", "stop-containers": "stop" };
 const active = (run: Pick<CodedActionRun, "status">) => run.status === "running" || run.status === "queued";
 
-/** HTTP contexts still have secure random bytes even without Crypto.randomUUID. */
-function commandUUID(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 15) | 64;
-  bytes[8] = (bytes[8]! & 63) | 128;
-  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+
 
 
 interface Options {
@@ -51,6 +46,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   const controllers = new Set<AbortController>();
   const pending = new Map<string, Promise<string>>();
   const ambiguous = new Set<string>();
+  const recreateKeys = new Map<string, string>();
   const runs = new Map<string, RuntimeRun>();
   const attempts = new Map<string, number>();
   const reads = new Map<string, Promise<RuntimeRun>>();
@@ -198,27 +194,30 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore", lifecycle?: LifecycleInput): Promise<string> {
+  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">): Promise<string> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
     const imageOperation = command === "update" || command === "restore";
-    const suffix = imageOperation ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
+    const suffix = imageOperation || command === "recreate" ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
-    const scope = `${kind}:${target}`, key = `${scope}:${command}:${imageOperation ? JSON.stringify(lifecycle) : ""}`;
-    if (ambiguous.has(scope)) return Promise.reject(runtimeError("runtime.admission-unknown"));
+    const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : ""}`;
+    if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing;
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
     const version = generation;
     const task = (async () => {
-      const operation = imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      const operation = service ? "restartService" : recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
       if (imageOperation) {
         if (!lifecycle || !/^[a-f0-9]{64}$/.test(lifecycle.expectedRevision) || (command === "restore" && !lifecycle.pointId)) throw runtimeError("runtime.invalid-target");
         for (const read of command === "restore" ? ["getUpdateBaseline", "listRestorePoints"] : ["getUpdateBaseline"]) { const cap = await capability(read, { kind: "stack", id: target }); check(version); if (!cap.available) throw unavailable(read, cap.resourceRef, cap.disabledReasonCode); }
       }
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
+      const commandSuffix = kind === "stack" && command === "stop" ? (await readStackStopMode(baseUrl, client) === "stop" ? "stop" : "down") : suffix;
+      check(version);
       let idempotencyKey: string;
-      try { idempotencyKey = uuid(); } catch { throw runtimeError("runtime.key-unavailable"); }
+      try { idempotencyKey = recreate?.key ?? uuid();
+        if (recreate) recreateKeys.set(scope, idempotencyKey); } catch { throw runtimeError("runtime.key-unavailable"); }
       const began = now();
       let uncertainSend = false;
       const controller = new AbortController(); controllers.add(controller);
@@ -241,11 +240,11 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           let response: Response;
           try {
             if (now() - began >= COMMAND_RETRY_MS) break;
-            const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${suffix}`;
+            const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${commandSuffix}${service ? `?${new URLSearchParams(service.restartServices?.map((name) => ["services", name]) ?? [])}` : ""}`;
             response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
-              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation ? { "Content-Type": "application/json" } : {}) },
-              ...(imageOperation ? { body: JSON.stringify(lifecycle) } : {}),
+              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate ? { "Content-Type": "application/json" } : {}) },
+              ...(recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify(lifecycle) } : {}),
             });
           } catch (error) {
             check(version);
@@ -283,6 +282,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
             run.runtime = { ...run.runtime, currentIntent: true };
             sequences.set(run.id, Math.max(started, sequences.get(run.id) ?? 0));
             remember(run);
+            ambiguous.delete(scope);
             // A final admission response ends key retention. Future work is query-only.
             void detail(host, run.id).catch(() => undefined);
             return run.id;
@@ -290,7 +290,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
         }
         ambiguous.add(scope);
         throw runtimeError("runtime.admission-unknown");
-      } finally { clearTimeout(timeout); controllers.delete(controller); }
+      } finally { clearTimeout(timeout); controllers.delete(controller); if (!ambiguous.has(scope)) recreateKeys.delete(scope); }
     })();
     pending.set(key, task);
     void task.finally(() => { if (pending.get(key) === task) pending.delete(key); }).catch(() => undefined);
@@ -316,7 +316,9 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   return {
     installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
     restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),
+    restartService: (id: string, name: string) => command("stack", id, "restart", undefined, undefined, { restartServices: [name] }),
     runStackCommand: (id: string, action: StackCommand) => command("stack", id, action),
+    recreateContainer: (id: string, edit: RecreateInput, key?: string) => command("container", id, "recreate", undefined, { edit, key }),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
     getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },
     cancelRuntimeRun: (host: string, id: string) => mutate(host, id, "cancel"),
@@ -335,7 +337,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     reset(retainOwners = false) {
       ++generation; for (const controller of controllers) controller.abort(); controllers.clear();
       if (timer) clearTimeout(timer); timer = undefined; rights = undefined;
-      runs.clear(); pending.clear(); ambiguous.clear(); reads.clear(); attempts.clear(); sequences.clear(); if (!retainOwners) detailOwners.clear(); explicitFollows.clear();
+      runs.clear(); pending.clear(); ambiguous.clear(); recreateKeys.clear(); reads.clear(); attempts.clear(); sequences.clear(); if (!retainOwners) detailOwners.clear(); explicitFollows.clear();
     },
   };
 }

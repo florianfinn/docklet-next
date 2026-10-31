@@ -25,15 +25,18 @@ import (
 type RuntimeOperation = activitytypes.RuntimeOperation
 
 const (
-	RuntimeUpdateProject    = activitytypes.RuntimeUpdateProject
-	RuntimeRestoreProject   = activitytypes.RuntimeRestoreProject
-	RuntimeDeployProject    = activitytypes.RuntimeDeployProject
-	RuntimeDownProject      = activitytypes.RuntimeDownProject
-	RuntimeRestartProject   = activitytypes.RuntimeRestartProject
-	RuntimeRedeployProject  = activitytypes.RuntimeRedeployProject
-	RuntimeStartContainer   = activitytypes.RuntimeStartContainer
-	RuntimeStopContainer    = activitytypes.RuntimeStopContainer
-	RuntimeRestartContainer = activitytypes.RuntimeRestartContainer
+	RuntimeUpdateProject     = activitytypes.RuntimeUpdateProject
+	RuntimeRestoreProject    = activitytypes.RuntimeRestoreProject
+	RuntimeDeployProject     = activitytypes.RuntimeDeployProject
+	RuntimeDownProject       = activitytypes.RuntimeDownProject
+	RuntimeStopProject       = activitytypes.RuntimeStopProject
+	RuntimeRecreateContainer = activitytypes.RuntimeRecreateContainer
+	RuntimeRedeployContainer = activitytypes.RuntimeRedeployContainer
+	RuntimeRestartProject    = activitytypes.RuntimeRestartProject
+	RuntimeRedeployProject   = activitytypes.RuntimeRedeployProject
+	RuntimeStartContainer    = activitytypes.RuntimeStartContainer
+	RuntimeStopContainer     = activitytypes.RuntimeStopContainer
+	RuntimeRestartContainer  = activitytypes.RuntimeRestartContainer
 )
 
 type RuntimeTarget = activitytypes.RuntimeTarget
@@ -133,10 +136,23 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	command.Target.ParentProjectID = copyPtrInternal(command.Target.ParentProjectID)
 	command.Target.Name = copyPtrInternal(command.Target.Name)
 	command.Actor.DisplayName = copyPtrInternal(command.Actor.DisplayName)
+	if command.Options.Recreate != nil && command.Operation != RuntimeRecreateContainer {
+		return invalid()
+	}
 	if command.Operation != RuntimeUpdateProject && command.Operation != RuntimeRestoreProject && command.Options.Lifecycle != nil {
 		return invalid()
 	}
 	switch command.Operation {
+	case RuntimeRecreateContainer:
+		if command.Options.Recreate == nil || command.Options.Deploy != nil || command.Options.RestartServices != nil {
+			return invalid()
+		}
+		owned, err := runtimeOwnedEdit(command.Options.Recreate)
+		if err != nil {
+			return invalid()
+		}
+		command.Options.Recreate = owned
+
 	case RuntimeUpdateProject, RuntimeRestoreProject:
 		if command.Options.Deploy != nil || command.Options.RestartServices != nil || command.Options.Lifecycle == nil {
 			return invalid()
@@ -245,7 +261,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	// Text validation rejects invalid UTF-8 rather than allowing JSON replacement
 	// characters to collapse distinct byte strings into the same semantic intent.
 	var options any = [0]string{}
-	if command.Options.Lifecycle != nil {
+	if command.Options.Recreate != nil {
+		options = runtimeRecreateSemantic(*command.Options.Recreate)
+	} else if command.Options.Lifecycle != nil {
 		options = command.Options.Lifecycle
 	} else if deploy := command.Options.Deploy; deploy != nil {
 		options = [4]any{deploy.PullPolicy, deploy.ForceRecreate, deploy.RemoveOrphans, deploy.RecreateVolumes}

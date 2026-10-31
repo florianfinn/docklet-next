@@ -7,7 +7,7 @@ import { createRegistryCommands } from "./registry-commands";
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211).
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability.
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
@@ -23,6 +23,9 @@ import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
+import { createSystemComponents } from "./system-components";
+import { createHostRestarts } from "./host-restarts";
+import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
 import { mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
@@ -32,6 +35,7 @@ import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
 import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
+import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
@@ -48,6 +52,7 @@ import { createVolumeWorkspace } from "./volume-workspace";
 import { BACKUP_OPERATIONS, createBackups } from "./backups";
 import { createNotificationSettings, NOTIFICATION_SETTINGS_OPERATIONS } from "./notification-settings";
 import { createVolumeReads } from "./volumes";
+import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -114,12 +119,16 @@ const IMPLEMENTED = new Set<string>([
   "renameVolume",
   "subscribeLogs",
   "subscribeContainerLogs",
+  "openContainerShell",
   "runStackCommand",
   "runContainerCommand",
   "deployStack",
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
+  "restartAgent",
+  "connectHost", "reconnectHost",
+  "updateHost",
   "registerHost",
   "issueAgentToken",
   "removeHost",
@@ -142,6 +151,9 @@ const IMPLEMENTED = new Set<string>([
   "completeSetup",
   "getConnectedSettings",
   "saveSettings",
+  "setContainerOrigin",
+  "recreateContainer",
+  "restartService",
   "listImages",
   "listVolumes",
   "getVolume",
@@ -155,6 +167,7 @@ export interface HttpAdapterOptions {
   fetch?: typeof globalThis.fetch;
   eventSource?: (url: string) => Source;
   webSocket?: (url: string) => MetricsSocket;
+  shellWebSocket?: (url: string) => ShellSocket;
   uploadFactory?: () => XMLHttpRequest;
 }
 
@@ -257,8 +270,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
     runtime.reset(retain);
+    restarts.reset();
     targets.reset(retain);
     logs.reset();
+    shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
@@ -378,17 +393,20 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
+  const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
+  const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
-    retained: runtime.retained,
+    retained: () => [...runtime.retained(), ...restarts.retained()],
     mergeSummary: runtime.mergeSummary,
     changed: (previous, current, recovered) => {
       targets.changed(previous, current, recovered);
       if (current.some((run) => run.kind === "scan" && !["running", "queued"].includes(run.status) && previous.some((old) => old.id === run.id && old.hostId === run.hostId && ["running", "queued"].includes(old.status)))) securityChanged();
     },
     detailRun: async (host, id, signal, expanded) => {
+      if (restarts.has(host, id)) return restarts.detail(host, id, signal);
       if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
       const backupOwner = backups.guard(host);
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
@@ -647,16 +665,22 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       invalidateCapabilities();
       invalidateEnvironments();
       changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics]));
-    }),
+    }, getCapability, () => identityGeneration),
+    ...createHostChecks({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { invalidateCapabilities(); invalidateEnvironments(); actions.invalidate(true); changeListeners.forEach((listener) => listener(["hosts"])); } }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
+    listSystemComponents: createSystemComponents({ baseUrl, client, hosts: listHosts, capability: getCapability, generation: () => identityGeneration }),
+    restartAgent: restarts.restartAgent,
     installStackUpdates: runtime.installStackUpdates,
     restoreRestorePoint: runtime.restoreRestorePoint,
     runStackCommand: runtime.runStackCommand,
     runContainerCommand: runtime.runContainerCommand,
+    recreateContainer: runtime.recreateContainer,
+    restartService: runtime.restartService,
     getRuntimeRun: runtime.getRuntimeRun,
     cancelRuntimeRun: runtime.cancelRuntimeRun,
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,
+    ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
     ...createSettingsCore(baseUrl, client),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
@@ -781,6 +805,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     subscribeMetrics: metrics,
     subscribeLogs: logs.subscribeLogs,
     subscribeContainerLogs: logs.subscribeContainerLogs,
+    openContainerShell: (...args) => { invalidateCapabilities(); return shells.open(...args); },
   };
   registerIdentityLifetime(adapter.subscribeChanges, {
     version: () => lifetimeGeneration,

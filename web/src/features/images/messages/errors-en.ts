@@ -5,8 +5,10 @@
 // Deviations: Original production image and registry UI implementation for issue #230.
 
 import { enBackend } from "@/data/messages/en";
+import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "host_restarting": enRunMessages.codes.host["restarting"],
   "update_permission-denied": enBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": enBackend.errors.update["schedule-owner-unset"],
   "autoheal_interrupted": enBackend.errors.autoheal["interrupted"],

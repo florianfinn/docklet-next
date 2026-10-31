@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation.
+// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation; dedicated terminal drain lifetime.
 
 package ws
 
@@ -26,6 +26,9 @@ import (
 // already validated, so accepting any Origin would let an attacker-controlled
 // page open a terminal or log stream in a remote environment.
 func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header http.Header, checkOrigin func(*http.Request) bool) error {
+	if IsTerminalRequest(r) {
+		return proxyTerminalHTTP(w, r, remoteWS, header, checkOrigin)
+	}
 	if checkOrigin == nil {
 		return errors.New("websocket proxy requires an origin validator")
 	}

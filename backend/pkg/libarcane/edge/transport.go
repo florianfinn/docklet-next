@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Application-heartbeat liveness for host projections; shared application-heartbeat projection predicate.
 
 package edge
 
 import (
 	"strings"
+	"time"
 
 	"github.com/samber/mo"
 )
@@ -90,7 +91,7 @@ func UsePollEdgeTransport(cfg *Config) bool {
 // GetActiveTunnelTransport returns the currently active tunnel transport for an environment.
 func GetActiveTunnelTransport(envID string) mo.Option[string] {
 	tunnel, ok := GetRegistry().Get(envID).Get()
-	if !ok || tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+	if !ok || !TunnelLiveAt(tunnel, time.Now()) {
 		return mo.None[string]()
 	}
 
@@ -102,8 +103,13 @@ func GetActiveTunnelTransport(envID string) mo.Option[string] {
 
 // GetTunnelRuntimeState returns live metadata for an active tunnel.
 func GetTunnelRuntimeState(envID string) mo.Option[*TunnelRuntimeState] {
+	return GetTunnelRuntimeStateAt(envID, time.Now())
+}
+
+// GetTunnelRuntimeStateAt shares a clock sample with availability observations.
+func GetTunnelRuntimeStateAt(envID string, now time.Time) mo.Option[*TunnelRuntimeState] {
 	tunnel, ok := GetRegistry().Get(envID).Get()
-	if !ok || tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+	if !ok || !TunnelLiveAt(tunnel, now) {
 		return mo.None[*TunnelRuntimeState]()
 	}
 

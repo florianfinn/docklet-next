@@ -218,6 +218,9 @@ func runtimeAdmitTxInternal(tx *gorm.DB, now time.Time, request runtimeAdmission
 		StartedAt: now, GateScope: request.GateScope, GateKey: request.GateKey,
 		MessageCode: string(activitytypes.CodeRunStarted),
 	}
+	if RuntimeOperation(request.OperationID) == RuntimeRecreateContainer {
+		model.Metadata = database.JSON{"changedFields": []string{}}
+	}
 	if err := tx.Create(&model).Error; err != nil {
 		return nil, runtimeWriteErrorInternal(err)
 	}
@@ -231,11 +234,11 @@ func runtimeActivityTypeInternal(operation, target string) (activitytypes.Type, 
 	var kind activitytypes.Type
 	if target == "stack" {
 		kind = map[string]activitytypes.Type{"deploy-project": activitytypes.TypeProjectDeploy,
-			"down-project": activitytypes.TypeProjectDown, "restart-project": activitytypes.TypeProjectRestart,
+			"down-project": activitytypes.TypeProjectDown, "stop-project": activitytypes.TypeProjectDown, "restart-project": activitytypes.TypeProjectRestart,
 			"redeploy-project": activitytypes.TypeProjectRedeploy, "update-project": activitytypes.TypeProjectUpdate, "restore-project": activitytypes.TypeProjectRestore}[operation]
 	} else if target == "container" {
 		kind = map[string]activitytypes.Type{"start-container": activitytypes.TypeContainerStart,
-			"stop-container": activitytypes.TypeContainerStop, "restart-container": activitytypes.TypeContainerRestart}[operation]
+			"recreate-container": activitytypes.TypeContainerEdit, "redeploy-container": activitytypes.TypeContainerRedeploy, "stop-container": activitytypes.TypeContainerStop, "restart-container": activitytypes.TypeContainerRestart}[operation]
 	}
 	return kind, kind != ""
 }

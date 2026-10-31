@@ -1,11 +1,11 @@
 import type { DockletAdapter } from "./adapter";
-import { GENERIC_REASON, HUB_REF } from "./capability";
+import { AdapterOutcomeError, GENERIC_REASON, HUB_REF } from "./capability";
 
 export const BACKEND_DISCONNECTED = "backend-not-connected";
 
 /** Until the HTTP adapter arrives, every operation fails without fabricating data. */
 export function createDisconnectedAdapter(): DockletAdapter {
-  const unavailable = async (): Promise<never> => { throw new Error(BACKEND_DISCONNECTED); };
+  const unavailable = async (): Promise<never> => { throw new AdapterOutcomeError({ kind: "not-available", operationId: BACKEND_DISCONNECTED, resourceRef: HUB_REF, reasonCode: GENERIC_REASON }); };
   const subscribe = () => () => {};
   return {
     kind: "disconnected",
@@ -47,8 +47,10 @@ export function createDisconnectedAdapter(): DockletAdapter {
     restartService: unavailable,
     importSource: unavailable,
     convertDockerRun: unavailable,
+    openContainerShell: () => { throw new AdapterOutcomeError({ kind: "not-available", operationId: BACKEND_DISCONNECTED, resourceRef: HUB_REF, reasonCode: GENERIC_REASON }); },
     runContainerCommand: unavailable,
     recreateContainer: unavailable,
+    getContainerEditConfig: unavailable,
     setContainerOrigin: unavailable,
     installContainerUpdate: unavailable,
     reconnectHost: unavailable,

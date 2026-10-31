@@ -1,3 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
+import { useAdapter } from "@/data/use-adapter";
+import { queryKeys } from "@/data/query-keys";
+import { QueryError } from "@/shared/components/page";
+import { Skeleton } from "@/shared/ui/skeleton";
+import { useCapability } from "@/data/use-capability";
 import { useTranslations } from "use-intl";
 
 import { ActionPresentationField } from "@/features/activity/ActionPresentationSetting";
@@ -58,17 +64,19 @@ export function HostDefaultsFields({ value, onChange, showErrors, idPrefix = "hd
   );
 }
 
-export function HostDefaultsSection({ settings }: { settings: HubSettings }) {
+export function HostDefaultsSection({ settings }: { settings: Pick<HubSettings, "hostDefaults"> }) {
   const t = useTranslations("settings");
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.hostDefaults);
+  const capability = useCapability("saveSettings");
   const errors = useHostDefaultErrors(draft ?? settings.hostDefaults);
   if (!draft) return null;
   return (
     <SettingsForm
       title={t("sections.hosts")}
       dirty={dirty}
-      valid={!Object.values(errors).some(Boolean)}
+      valid={capability.available && !Object.values(errors).some(Boolean)}
+      note={capability.reason}
       onDiscard={reset}
       onSave={async () => {
         await save("hostDefaults", draft);
@@ -112,4 +120,13 @@ export function ActivitySection({ settings }: { settings: Pick<HubSettings, "act
       </FieldGroup>
     </SettingsForm>
   );
+}
+
+/** This control does not parse unrelated general or activity settings. */
+export function ConnectedHostDefaultsSection() {
+  const adapter = useAdapter();
+  const settings = useQuery({ queryKey: [...queryKeys.connectedSettings, "hostDefaults"], queryFn: () => adapter.getConnectedSettings("hostDefaults") });
+  if (settings.isError) return <QueryError error={settings.error} onRetry={() => void settings.refetch()} />;
+  if (!settings.data) return <Skeleton className="h-80 rounded-xl" />;
+  return <HostDefaultsSection settings={settings.data} />;
 }

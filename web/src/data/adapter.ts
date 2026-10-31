@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/schema";
 import type {
   AutoUpdatePolicy,
   ContainerInfo,
@@ -5,12 +6,13 @@ import type {
   Host,
   LogLine,
   MetricsSnapshot,
-  PortMapping,
   RuntimeKnowledge,
   ScheduledJob,
   SecurityOverview,
   Stack,
 } from "@/domain/model";
+
+import type { OpenShell } from "./shell";
 
 import type { UpdatesApi, LifecycleInput } from "@/domain/stack-updates";
 import type { AuthApi, AutoHealApi, HostsApi, HubApi, ImagesApi, NetworksApi, NotificationsApi, SettingsApi, VolumesApi } from "./api";
@@ -19,7 +21,7 @@ import type { CapabilityDescriptor, ResourceRef } from "./capability";
 import type { RegistriesApi } from "@/domain/registries";
 import type { HubBackupApi } from "@/domain/hub-backup";
 
-export type StackCommand = "start" | "stop" | "restart" | "redeploy";
+export type StackCommand = "start" | "stop" | "restart" | "redeploy" | "down" | "stop-containers";
 export type ContainerCommand = "start" | "stop" | "restart";
 
 export interface DeployInput {
@@ -53,12 +55,7 @@ export class StackCreatedError extends Error {
   }
 }
 
-export interface RecreateInput {
-  image: string;
-  ports: PortMapping[];
-  env: Record<string, string>;
-  restartPolicy: string;
-}
+export type RecreateInput = components["schemas"]["ContainerRecreateRequest"]["edit"];
 
 export interface ImportRequest {
   kind: "github" | "dockerhub";
@@ -131,12 +128,15 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, HostsApi, VolumesAp
   importSource(request: ImportRequest): Promise<ImportResult>;
   convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
 
+  openContainerShell: OpenShell;
+
   runContainerCommand(containerId: string, command: ContainerCommand): Promise<string>;
-  recreateContainer(containerId: string, input: RecreateInput): Promise<string>;
+  recreateContainer(containerId: string, input: RecreateInput, idempotencyKey?: string): Promise<string>;
+  getContainerEditConfig?(containerId: string): Promise<components["schemas"]["ContainerEditConfig"]>;
   setContainerOrigin(containerId: string, origin: ContainerOrigin): Promise<void>;
   installContainerUpdate(containerId: string): Promise<string>;
 
-  reconnectHost(hostId: string): Promise<string>;
+  reconnectHost(hostId: string): Promise<string | import("./api").HostCheckResult>;
   runScan(input?: { hostIds?: readonly string[]; imageId?: string }): Promise<string>;
   getScanSettings?(): Promise<import("@/domain/security").ScanSettings>;
   saveScanSettings?(value: import("@/domain/security").ScanSettingsInput): Promise<void>;

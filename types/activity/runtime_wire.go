@@ -150,7 +150,7 @@ func runtimeNullShape(body []byte, typ reflect.Type) error {
 		}
 		raw, ok := fields[name]
 		if !ok {
-			if !strings.Contains(tag, "omitempty") {
+			if !strings.Contains(tag, "omitempty") && !strings.Contains(tag, "omitzero") {
 				return ErrRuntimeWire
 			}
 			continue
@@ -237,6 +237,15 @@ func ValidateRuntimeOutcome(o RuntimeExecutionOutcome, identity RuntimeRunIdenti
 	}
 	if err := ValidateRuntimeExecutionDetail(o.Detail, identity.RunID); err != nil {
 		return err
+	}
+	if o.Detail.Activity.Result != nil {
+		result := o.Detail.Activity.Result
+		if o.Detail.Activity.Status != StatusSuccess || o.Detail.Activity.ResourceID == nil || result.OldID != *o.Detail.Activity.ResourceID || len(result.NewID) != 64 || result.NewID == result.OldID || result.OldName == "" || len(result.OldName) > 256 || result.NewName == "" || len(result.NewName) > 256 {
+			return ErrRuntimeWire
+		}
+	}
+	if o.Detail.Activity.Status == StatusSuccess && (o.Detail.Activity.Type == TypeContainerEdit || o.Detail.Activity.Type == TypeContainerRedeploy) && o.Detail.Activity.Result == nil {
+		return ErrRuntimeWire
 	}
 	terminal := o.Detail.Activity.Status == StatusSuccess || o.Detail.Activity.Status == StatusFailed || o.Detail.Activity.Status == StatusCancelled
 	if terminal != (o.State == RuntimeAnswerTerminal) || (terminal && o.Detail.Activity.EndedAt == nil) {

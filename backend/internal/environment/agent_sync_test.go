@@ -29,7 +29,7 @@ func TestIncompatibleAgentBlocksAllSyncTriggers(t *testing.T) {
 			h := &EnvironmentHandler{environmentService: f.service}
 			switch source {
 			case "creation":
-				_, err := h.createEnvironmentLegacyInternal(ctx, &Environment{ID: "created-host", ApiUrl: "http://agent.example.com", Enabled: true, Status: "pending"}, &usertypes.Actor{ID: "operator", Username: "operator"}, environmenttypes.Create{AccessToken: &f.token})
+				_, err := h.createEnvironmentLegacyInternal(ctx, &Environment{ID: "created-host", Name: "Created host", ApiUrl: "http://agent.example.com", Enabled: true, Status: "pending"}, &usertypes.Actor{ID: "operator", Username: "operator"}, environmenttypes.Create{AccessToken: &f.token})
 				require.NoError(t, err)
 			case "update":
 				_, err := h.UpdateEnvironment(ctx, &UpdateEnvironmentInput{ID: f.id, Body: environmenttypes.Update{Name: new("Changed")}})

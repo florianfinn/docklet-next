@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -21,6 +22,11 @@ import (
 // Frozen only after the executor and capture have actually joined. Settlement
 // retries reuse these executor times and codes; they never rerun work or drain.
 type runtimeLocalResultInternal struct {
+	// held records unknown executor evidence and keeps the run excluded for
+	// startup recovery; it is retried like a terminal result until committed.
+	held               bool
+	recovered          bool
+	recreate           *containerDTO.RecreateResult
 	silentNotification bool
 	imageLifecycle     *updaterDTO.LifecycleResult
 	outputLost         bool
@@ -62,23 +68,30 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	switch *row.ExecutorState {
+	case "unknown":
+		if !result.recovered || row.OperationID == nil || !runtimeRecreateOperation(RuntimeOperation(*row.OperationID)) {
+			return empty, nil, &runtimeConflictInternal{}
+		}
 	case "pending", "accepted", "executing", "success", "failed", "cancelled":
 	default:
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	valid := (result.state == "success" && result.code == activitytypes.CodeActivitySuccess) ||
 		(result.state == "cancelled" && result.code == activitytypes.CodeRuntimeCancelled) ||
-		(result.state == "failed" && (result.code == activitytypes.CodeRuntimeFailed || result.code == activitytypes.CodeRuntimeInterrupted))
+		(result.state == "failed" && (result.code == activitytypes.CodeRuntimeFailed || result.code == activitytypes.CodeRuntimeInterrupted || result.code == "container.recreate-recovered" || result.code == "container.recreate-ambiguous"))
 	if !valid || result.settledAt.IsZero() || result.message == "" {
 		return empty, nil, errRuntimeInvalidInternal
 	}
 	wasTerminal := row.ExecutorSettledAt != nil
-	if result.state == "success" && !wasTerminal && *row.ExecutorState != "executing" {
+	if result.state == "success" && !wasTerminal && *row.ExecutorState != "executing" && !result.recovered {
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	row, err = runtimeEvidenceTxInternal(tx, now, id, runtimeEvidenceInternal{State: result.state, ResultCode: new(string(result.code)),
 		Error: result.errorText, StartedAt: result.startedAt, SettledAt: new(result.settledAt)})
 	if err != nil {
+		return empty, nil, err
+	}
+	if err := runtimeRecreateResultTx(tx, row, result.recreate); err != nil {
 		return empty, nil, err
 	}
 	if result.imageLifecycle != nil {
@@ -91,7 +104,7 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		return snapshot, nil, err
 	}
 	var model Activity
-	if err := tx.First(&model, "id = ? AND environment_id = ?", id.RunID, id.EnvironmentID).Error; err != nil {
+	if err := runtimeEnsureActivityTx(tx, row, &model); err != nil {
 		return empty, nil, err
 	}
 	if !gatedWriterAllowedInternal(tx.Statement.Context, &model) {
@@ -135,7 +148,8 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 }
 
 // Caller holds runningMu. Keep the existing per-activity commit/publish order.
-// Only a successful terminal COMMIT permits ownership and slot release.
+// Only a committed joined outcome permits ownership and slot release: terminal
+// settlement, or held unknown evidence that keeps the durable exclusion.
 func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activitytypes.RuntimeSnapshot, error) {
 	if owner.result == nil {
 		return activitytypes.RuntimeSnapshot{}, ErrRuntimeNotSettled
@@ -145,7 +159,31 @@ func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activ
 	defer lock.Unlock()
 	var snapshot activitytypes.RuntimeSnapshot
 	var final *ActivityMessage
+	held := owner.result.held
 	err := s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
+		held = owner.result.held
+		// The journal check shares the terminal transaction: a failed read retains
+		// the joined result, an unresolved journal turns it into held evidence.
+		if !held && runtimeRecreateOperation(owner.command.command.Operation) {
+			unresolved, err := runtimeRecreateUnresolvedTxInternal(tx, owner.id.RunID)
+			if err != nil {
+				return err
+			}
+			held = unresolved
+		}
+		if held {
+			if owner.result.imageLifecycle != nil {
+				if err := runtimeImageResultTx(tx, owner.id.RunID, owner.result.imageLifecycle); err != nil {
+					return err
+				}
+			}
+			row, err := runtimeEvidenceTxInternal(tx, now, owner.id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: owner.result.startedAt})
+			if err != nil {
+				return err
+			}
+			snapshot, err = runtimeSnapshotTxInternal(tx, row)
+			return err
+		}
 		var err error
 		snapshot, final, err = runtimeCompleteTxInternal(tx, now, owner.id, *owner.result)
 		return err
@@ -153,6 +191,7 @@ func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activ
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, err
 	}
+	owner.result.held = held
 	if final != nil {
 		s.activity.publishMessageInternal(snapshot.EnvironmentID, snapshot.Type, activityMessageToDTOInternal(final))
 		s.activity.publishActivityInternal(snapshot.Activity)

@@ -19,6 +19,7 @@ export interface Preferences {
   imagesLayout: OverviewLayout;
   workspaceAside: WorkspaceAside;
   sidebarHostsOpen: boolean;
+  showUnraidRing: boolean;
 }
 
 /** Overview modes come from the shipped design; host selection and the sidebar state are per browser only. */
@@ -26,6 +27,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   hostSelection: [],
   ...SHIPPED_DESIGN.overview,
   sidebarHostsOpen: true,
+  showUnraidRing: false,
 };
 
 export const preferencesStore = createStore<Preferences>(DEFAULT_PREFERENCES, {

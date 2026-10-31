@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded.
 
 package middleware
 
@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	containertypes "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
@@ -31,6 +32,7 @@ import (
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -80,6 +82,7 @@ type AuthValidator func(ctx context.Context, c *echo.Context) (*authz.Permission
 
 // EnvironmentMiddleware proxies requests for remote environments to their respective agents.
 type EnvironmentMiddleware struct {
+	shellSessions *containershell.Registry
 	localID       string
 	paramName     string
 	resolver      EnvResolver
@@ -90,6 +93,7 @@ type EnvironmentMiddleware struct {
 	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin                func(*http.Request) bool
 	proxyIdentityHeader        string
+	originOverlay              func(context.Context, string, []byte) ([]byte, error)
 	snapshots                  *hoststate.Store
 	inventoryPending           func(context.Context, string) (bool, error)
 	agentAccess                remenv.AgentAccessCheck
@@ -127,10 +131,12 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.shellSessions = options[0].ShellSessions
 		m.vulnerabilityEnabled = options[0].VulnerabilityEnabled
 		m.vulnerabilityIgnoreUnfixed = options[0].VulnerabilityIgnoreUnfixed
 		m.pointHolds = options[0].PointHolds
 		m.pointAccess = options[0].PointAccess
+		m.originOverlay = options[0].OriginOverlay
 		m.snapshots = options[0].Snapshots
 		m.inventoryPending = options[0].InventoryPending
 		if options[0].HTTPClient != nil {
@@ -254,6 +260,21 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
+	if strings.HasPrefix(suffix, "/ws/containers/") && strings.HasSuffix(suffix, "/terminal") && m.shellSessions != nil {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		ctx, handle, err := m.shellSessions.Accept(c.Request().Context(), c.QueryParams(), user, envID, parts[2], httpx.IsWebSocketUpgradeRequest(c.Request()))
+		if err != nil {
+			if problem, ok := err.(*containertypes.Problem); ok {
+				return c.JSON(problem.Status, problem)
+			}
+			return c.NoContent(http.StatusServiceUnavailable)
+		}
+		if handle != nil {
+			defer handle.Release()
+		}
+		c.SetRequest(c.Request().WithContext(ctx))
+	}
+
 	if list, point := pointRoute(suffix); (list || point != "") && !perms.IsGlobalAdmin() {
 		parts := strings.Split(strings.Trim(suffix, "/"), "/")
 		if m.pointAccess == nil {
@@ -315,6 +336,7 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
 	// Pending credentials retain snapshots without probing an unpaired agent.
 	inventory := m.snapshots != nil && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/"))
+	defer boundInventoryRead(c, inventory)()
 	if inventory && m.inventoryPending != nil {
 		pending, err := m.inventoryPending(c.Request().Context(), envID)
 		if err != nil || pending {
@@ -335,8 +357,7 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 			}
 			return c.JSON(status, map[string]any{"success": false, "code": code})
 		}
-		defer cancel()
-		c.SetRequest(c.Request().WithContext(ctx))
+		defer forwardOnContext(c, ctx, cancel)()
 	}
 	isEdgeEnvironment := isEdgeEnvironmentURLInternal(apiURL)
 
@@ -650,6 +671,18 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 }
 
 func isManagementPathInternal(method, suffix string) bool {
+	if method == http.MethodPost && suffix == "/agent/restart" {
+		return true
+	}
+	partsRestart := strings.Split(suffix, "/")
+	if method == http.MethodGet && len(partsRestart) == 4 && partsRestart[0] == "" && partsRestart[1] == "agent" && partsRestart[2] == "restarts" && partsRestart[3] != "" {
+		return true
+	}
+
+	partsOrigin := strings.Split(strings.Trim(suffix, "/"), "/")
+	if len(partsOrigin) == 3 && partsOrigin[0] == "containers" && partsOrigin[2] == "origin" {
+		return true
+	}
 	if suffix == "/updater/schedules" || suffix == "/updater/system-image-hints" || strings.HasPrefix(suffix, "/updater/policies/") {
 		return true
 	}
@@ -665,10 +698,10 @@ func isManagementPathInternal(method, suffix string) bool {
 	if method == http.MethodPost {
 		parts := strings.Split(strings.Trim(suffix, "/"), "/")
 		if len(parts) == 3 && parts[1] != "" {
-			if parts[0] == "projects" && (parts[2] == "up" || parts[2] == "down" || parts[2] == "restart" || parts[2] == "redeploy") {
+			if parts[0] == "projects" && (parts[2] == "up" || parts[2] == "down" || parts[2] == "stop" || parts[2] == "restart" || parts[2] == "redeploy") {
 				return true
 			}
-			if parts[0] == "containers" && (parts[2] == "start" || parts[2] == "stop" || parts[2] == "restart") {
+			if parts[0] == "containers" && (parts[2] == "start" || parts[2] == "stop" || parts[2] == "restart" || parts[2] == "recreate" || parts[2] == "redeploy") {
 				return true
 			}
 		}
@@ -877,6 +910,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
+	resp.Body = watchInventoryBody(c.Response(), resp.Body)
 	if isVulnerabilityRequest(c) {
 		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
 	}
@@ -950,7 +984,7 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 		slog.WarnContext(c.Request().Context(), "Remote environment rejected the manager's credentials", "target", resp.Request.URL.Host)
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
-			"code":    "agent.invalid-token",
+			"code":    remenv.ClassifyAgentRefusal(resp.StatusCode, remenv.ReadAgentRefusalBody(resp.Body)),
 			"data":    map[string]any{"error": "Remote environment rejected the manager's credentials"},
 		})
 	}
@@ -963,17 +997,4 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 		edge.CopyBodyWithFlush(w, resp.Body)
 	}
 	return nil
-}
-
-// EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
-type EnvironmentProxySecurity struct {
-	VulnerabilityEnabled       func(context.Context) bool
-	VulnerabilityIgnoreUnfixed func() bool
-	PointHolds                 PointHoldReader
-	PointAccess                PointAccessReader
-	Snapshots                  *hoststate.Store
-	InventoryPending           func(context.Context, string) (bool, error)
-	HTTPClient                 *http.Client
-	ProxyIdentityHeader        string
-	AgentAccess                remenv.AgentAccessCheck
 }

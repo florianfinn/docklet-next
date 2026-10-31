@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original activity and event DTO projection for issue 38.
 
+import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
 import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
 import { DELIVERY_REASONS, isProvider } from "@/domain/notifications";
@@ -19,6 +20,9 @@ type Activity = components["schemas"]["ActivityActivity"];
 type Detail = components["schemas"]["ActivityDetail"];
 type Event = components["schemas"]["EventEvent"];
 
+// Recreate run step names (backend recreate_journal.go) with catalogued EN/DE text, so the
+// generic action dialog, toasts and history show the same labels as the recreate view.
+const RECREATE_STEPS: Record<string, string> = { "Renaming container": "renaming", "Creating replacement": "creating", "Starting replacement": "starting", "Removing previous container": "removing", "Restoring previous container": "restoring" };
 const STEP_KEYS = new Set<DeployStepKey>(["validate", "pull", "build", "create", "stop", "start", "health", "scan", "collect", "save", "wait", "connect"]);
 const STREAMS = new Set<OutputStream>(["cmd", "stdout", "stderr", "note"]);
 const KINDS: Record<string, ActionKind> = {
@@ -103,6 +107,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       if (key) return { code: key, params: {} };
       return { code: field === "error" ? "common.commandErrors.failed" : `activity.runKind.${kind}`, params: {} };
     }
+    const operationReason = operationReasonKey(code ?? source);
+    if (operationReason) return { code: `containers.operationReasons.${operationReason}`, params: {} };
     if (!m10) return message(code, source);
     const safe = reason(code);
     if (safe && safe !== "http.error") return { code: `images.errors.${safe.replaceAll(".", "_")}`, params: {} };
@@ -143,13 +149,14 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     error: run.error
       ? (backup ? coded(run.error, "", "error") : vulnerabilityError(run.error))
         ?? coded(
-          lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined),
+          lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") || run.messageCode?.startsWith("container.recreate-") ? run.messageCode : undefined),
           run.error,
           "error",
         )
       : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
-      key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
+      key: stepKey(step.name), state: stepState(step.status),
+      label: Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
     log: detail.messages?.length ? detail.messages.map((item) => coded(item.code, item.message)) : run.latestMessage ? [coded(run.messageCode, run.latestMessage)] : [],

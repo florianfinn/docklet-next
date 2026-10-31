@@ -2,11 +2,12 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability.
 package activity
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"net/http"
 	"slices"
 	"strings"
@@ -27,7 +28,7 @@ var adapterOperationIDs = []string{
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
 	"getScanSettings", "saveScanSettings", "cancelScan",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
-	"getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
+	"openContainerShell", "getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
 	"listHosts", "listImages", "listSchedule", "listStacks", "listSystemComponents",
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
@@ -122,6 +123,20 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
+		case "recreateContainer", "setContainerOrigin", "restartService", "getSettings", "saveSettings", "updateHost", "connectHost", "reconnectHost", "restartAgent":
+			reason := operationCapability(ctx, descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
+			descriptors[i].Available = reason == ""
+			descriptors[i].DisabledReasonCode = reason
+		case "openContainerShell":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == "container" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(authz.PermContainersExec, env)
+			reason := "capability.unavailable"
+			if valid {
+				reason = containershell.Availability(ctx, env, raw)
+			}
+			descriptors[i].Available = valid && reason == ""
+			descriptors[i].DisabledReasonCode = reason
 		case "subscribeLogs", "subscribeContainerLogs":
 			ref := descriptors[i].ResourceRef
 			kind, logGrant, readGrant := "stack", authz.PermProjectsLogs, authz.PermProjectsRead

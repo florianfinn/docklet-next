@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { ArrowRight, Layers, Lock } from "lucide-react";
 import { useTranslations } from "use-intl";
 
@@ -77,9 +78,9 @@ export function StackStep({ draft, model, hosts, isNew, labelSuggestions, onEdit
                 <SelectContent>
                   <SelectGroup>
                     {hosts.map((h) => (
-                      <SelectItem key={h.id} value={h.id} disabled={h.status !== "online"}>
+                      <SelectItem key={h.id} value={h.id} disabled={!isHostAvailable(h)}>
                         <i className="size-2.5 rounded-[3px]" style={{ background: h.color }} aria-hidden />
-                        {h.status !== "online" ? t("hostOffline", { name: h.name }) : h.name}
+                        {!isHostAvailable(h) ? t("hostOffline", { name: h.name }) : h.name}
                       </SelectItem>
                     ))}
                   </SelectGroup>

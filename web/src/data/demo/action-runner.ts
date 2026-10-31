@@ -13,6 +13,7 @@ export interface StepPlan {
 }
 
 export interface RunPlan {
+  recreateResult?: ActionRun["recreateResult"];
   kind: ActionKind;
   title: string;
   target: string;
@@ -24,6 +25,8 @@ export interface RunPlan {
   /** Step key at which the run fails; undefined runs to success. */
   failAt?: DeployStepKey;
   failMessage?: string;
+  /** A current identity refusal takes precedence over simulated completion. */
+  refusal?: () => string | undefined;
   restorePointId?: string;
   /** Raw output per step; a generic one is used when absent. */
   output?: OutputScript;
@@ -115,27 +118,29 @@ export class ActionRunner {
     // Output lines arrive spread over the step, so a running action shows ongoing progress.
     lines.forEach((line, k) => setTimeout(() => this.append(id, step.key, [line]), (duration * (k + 1)) / (lines.length + 1)));
     setTimeout(() => {
-      const failed = plan.failAt === step.key;
+      const refusal = plan.refusal?.();
+      const failure = refusal ?? plan.failMessage;
+      const failed = !!refusal || plan.failAt === step.key;
       const last = index === plan.steps.length - 1;
       const at = new Date().toISOString();
       // The patched run is taken before pruning, so callbacks do not depend on history retention.
       const settled = this.patch(id, (run) => {
         const steps = run.steps.map((s, i): ActionStep => {
-          if (i === index) return { ...s, state: failed ? "error" : "done", finishedAt: at, detail: failed ? (plan.failMessage ?? s.detail) : s.detail };
+          if (i === index) return { ...s, state: failed ? "error" : "done", finishedAt: at, detail: failed ? (failure ?? s.detail) : s.detail };
           if (failed && i > index) return { ...s, state: "skipped" };
           if (!failed && i === index + 1) return { ...s, state: "running", startedAt: at };
           return s;
         });
         const progress = Math.round(((index + (failed ? 0 : 1)) / plan.steps.length) * 100);
-        const log = [...run.log, failed ? `Fehler bei ${step.label}: ${plan.failMessage ?? "unbekannt"}` : `${step.label}${step.detail ? ` – ${step.detail}` : ""}`];
-        if (failed) return { ...run, steps, progress, status: "failed", finishedAt: at, error: plan.failMessage, log };
-        if (last) return { ...run, steps, progress: 100, status: "succeeded", finishedAt: at, log: [...log, "Abgeschlossen"] };
+        const log = [...run.log, failed ? `Fehler bei ${step.label}: ${failure ?? "unbekannt"}` : `${step.label}${step.detail ? ` – ${step.detail}` : ""}`];
+        if (failed) return { ...run, steps, progress, status: "failed", finishedAt: at, error: failure, log };
+        if (last) return { ...run, recreateResult: plan.recreateResult, steps, progress: 100, status: "succeeded", finishedAt: at, log: [...log, "Abgeschlossen"] };
         return { ...run, steps, progress, log };
       });
       if (!settled) return;
       let run = settled;
       if (failed) {
-        const lines = script.failure(step, plan.failMessage ?? "unbekannter Fehler");
+        const lines = script.failure(step, failure ?? "unbekannter Fehler");
         run = { ...run, output: [...run.output, ...this.stamp(step.key, lines)] };
         this.runs = this.runs.map((r) => (r.id === id ? run : r));
         this.runs = pruneRuns(this.runs, this.maxFinished());

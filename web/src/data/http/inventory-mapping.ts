@@ -35,7 +35,7 @@ function imageVersion(ref: string): ImageVersion {
 
 function state(value: string): ContainerState {
   if (value === "running" || value === "restarting") return value;
-  if (["exited", "dead", "created", "stopped"].includes(value)) return "stopped";
+  if (["exited", "dead", "created", "stopped", "not-created"].includes(value)) return "stopped";
   return "unknown";
 }
 function health(value: string): Health {
@@ -50,22 +50,21 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   const labels = row.labels ?? {};
   const project = labels["com.docker.compose.project"];
   const service = labels["com.docker.compose.service"];
-  const composeHints = Object.keys(labels).some((key) => key.startsWith("com.docker.compose."));
-  // An unlabelled container has no evidence of an external manager; partial Compose labels are ambiguous.
-  const origin = project && service ? "compose" : composeHints || labels["net.unraid.docker.managed"] ? "unknown" : "standalone";
+  // Older responses without origin stay unknown; labels never grant editing authority.
+  const origin = row.origin ?? "unknown";
+  const originSource = row.originSource ?? "detected";
   const owner = composeProjectOwner(projects, project, row.id);
   const image = imageVersion(row.image);
   return {
     imageId: row.imageId ? inventoryId(hostId, row.imageId) : undefined,
     id: inventoryId(hostId, row.id), name: row.names[0].replace(/^\//, ""), hostId,
     ...(owner && origin === "compose" ? { stackId: inventoryId(hostId, owner.id), stackName: owner.name } : {}),
-    ...(service ? { serviceName: service } : {}), origin, image,
+    ...(service ? { serviceName: service } : {}), origin, originSource, image,
     state: state(row.state), health: health(row.status),
     ports: (row.ports ?? []).filter((port, index, ports) => ports.findIndex((other) => other.publicPort === port.publicPort && other.privatePort === port.privatePort && other.type === port.type) === index).map((port) => ({ container: String(port.privatePort), ...(port.publicPort ? { host: String(port.publicPort) } : {}), ...(port.type === "tcp" || port.type === "udp" ? { protocol: port.type } : {}) })),
     networks: Object.keys(row.networkSettings?.networks ?? {}), mounts: (row.mounts ?? []).map((mount) => mount.name || mount.destination),
     env: {}, restartPolicy: row.hostConfig?.restartPolicy ?? "", memLimitMb: (row.hostConfig?.memory ?? 0) / 1024 / 1024,
     update: mapUpdateInfo(row.updateInfo, image, row.image, inventory.stale), dockerLabels: labels, inventory,
-    restrictions: { recreate: row.redeployDisabled === true || origin !== "standalone", reason: row.redeployDisabled ? "protected" : origin },
   };
 }
 
@@ -83,10 +82,10 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
   const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
     const image = imageVersion(runtime.image);
-    return { name: runtime.name, image, state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
+    return { name: runtime.name, image, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
       update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, definitionHint: row.definitionHint, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };
 }

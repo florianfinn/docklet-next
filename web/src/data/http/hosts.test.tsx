@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host HTTP mapping and report tests.
+// Deviations: Original host HTTP mapping and report tests. M14 host maintenance and availability.
 
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -18,7 +18,7 @@ import { mapHost } from "./hosts";
 type Environment = components["schemas"]["EnvironmentEnvironment"];
 const at = "2026-10-17T12:00:00Z";
 const row: Environment = {
-  id: "example-host", name: "Example host", apiUrl: "http://agent.example.com:3552", enabled: true, status: "online", isEdge: false, lastSeen: at,
+  id: "example-host", name: "Example host", color: null, apiUrl: "http://agent.example.com:3552", enabled: true, status: "online", isEdge: false, lastSeen: at,
 };
 const info: components["schemas"]["VersionInfo"] = {
   agentContractVersion: 3, agentContractFingerprint: "example", minimumAgentContractVersion: 3, toolsImageOverride: false,
@@ -39,7 +39,7 @@ describe("host HTTP reads", () => {
   it.each(["online", "offline", "pending", "update-required", "token-rejected", "standby", "error"])("maps %s and last_seen without inventing a contact", async (status) => {
     const f = fixture([{ ...row, status }]);
     const [host] = await f.adapter.listHosts();
-    expect(host?.status).toBe(["standby", "error"].includes(status) ? "offline" : status);
+    expect(host?.status).toBe(status === "error" ? "offline" : status);
     expect(host?.lastSeen).toBe(at);
     expect(host?.connection).toBe("direct");
     expect(host?.demoAdded).toBeUndefined();

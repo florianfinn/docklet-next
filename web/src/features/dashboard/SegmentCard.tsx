@@ -1,3 +1,4 @@
+import { hostTone } from "@/domain/hosts";
 import { ArrowRight, Boxes, Layers, MousePointerClick, Unplug } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -43,7 +44,7 @@ export function SegmentCard({ unit: u, host, variant = "popover" }: { unit: Flee
         <dd className="flex min-w-0 items-center gap-1.5">
           <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: host?.color }} aria-hidden />
           <span className="truncate font-medium">{host?.name ?? u.hostId}</span>
-          {host && host.status !== "online" && <ToneDot tone="err" pulse className="size-1.5" />}
+          {host && host.status !== "online" && <ToneDot tone={hostTone(host)} pulse className="size-1.5" />}
         </dd>
         {unreachable && (
           <>

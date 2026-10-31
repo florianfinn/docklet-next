@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: cd9f5a79c78df3883ffdcddf5032e3810e7a18de03dd67a08f08b9480809b89a
+// Revision: eef39ce6b1ce34992f9bc8cd7ab75fa8f68069b84756f11cd0d7cd8c6ec7c91c
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1119,6 +1119,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/agent/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restart a remote agent once */
+        post: operations["restartEnvironmentAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/agent/restarts/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a durable agent restart run */
+        get: operations["getEnvironmentAgentRestart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/auto-heal": {
         parameters: {
             query?: never;
@@ -1262,6 +1296,7 @@ export interface paths {
         put?: never;
         /**
          * Edit container
+         * @deprecated
          * @description Apply configuration changes and recreate the container
          */
         post: operations["edit-container"];
@@ -1331,6 +1366,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/containers/{containerId}/origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["assign-container-origin"];
+        post?: never;
+        delete: operations["reset-container-origin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/containers/{containerId}/pause": {
         parameters: {
             query?: never;
@@ -1368,6 +1419,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/containers/{containerId}/recreate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
+        post: operations["recreate-container"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/containers/{containerId}/redeploy": {
         parameters: {
             query?: never;
@@ -1377,10 +1445,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Redeploy container
-         * @description Pull latest image and recreate container
-         */
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
         post: operations["redeploy-container"];
         delete?: never;
         options?: never;
@@ -2753,6 +2818,26 @@ export interface paths {
         get: operations["get-project-runtime"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/projects/{projectId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop project containers
+         * @description Stop every service from the resolved Compose model without removing containers Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
+         */
+        post: operations["stop-project"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4811,7 +4896,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4849,7 +4934,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4891,7 +4976,7 @@ export interface components {
         ActivityMessage: {
             activityId: string;
             /** @enum {string} */
-            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            code?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             /** Format: date-time */
             createdAt: string;
             id: string;
@@ -4957,7 +5042,7 @@ export interface components {
             attribution: components["schemas"]["ActivityRuntimeAttribution"];
             identity: components["schemas"]["ActivityRuntimeRunIdentity"];
             /** @enum {string} */
-            operation: "deploy-project" | "down-project" | "restart-project" | "redeploy-project" | "start-container" | "stop-container" | "restart-container" | "update-project" | "restore-project";
+            operation: "deploy-project" | "down-project" | "restart-project" | "redeploy-project" | "start-container" | "stop-container" | "restart-container" | "update-project" | "restore-project" | "stop-project" | "recreate-container" | "redeploy-container";
             options: components["schemas"]["ActivityRuntimeOptions"];
             target: components["schemas"]["ActivityRuntimeTarget"];
         };
@@ -5021,6 +5106,7 @@ export interface components {
         ActivityRuntimeOptions: {
             deploy: components["schemas"]["ProjectDeployOptions"];
             lifecycle?: components["schemas"]["UpdaterLifecycleIntent"];
+            recreate?: components["schemas"]["ContainerEdit"];
             restartServices: string[] | null;
         };
         ActivityRuntimeRecoveryEvidence: {
@@ -5070,7 +5156,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -5081,6 +5167,7 @@ export interface components {
             resourceId?: string;
             resourceName?: string;
             resourceType?: string;
+            result?: components["schemas"]["ContainerRecreateResult"];
             sourceEnvironmentId?: string;
             sourceEnvironmentName?: string;
             /** Format: date-time */
@@ -5106,7 +5193,10 @@ export interface components {
              */
             readonly $schema?: string;
             composeManaged: boolean;
+            composeProjectLabel?: boolean;
             lifecycle?: components["schemas"]["UpdaterLifecycleIntent"];
+            origin?: components["schemas"]["ContainerOriginFields"];
+            protected?: boolean;
             target: components["schemas"]["ActivityRuntimeTarget"];
         };
         ActivityRuntimeTargetRequest: {
@@ -5127,7 +5217,7 @@ export interface components {
         };
         ActivityStepTraceEntry: {
             /** @enum {string} */
-            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            code?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             /** Format: date-time */
             endedAt?: string;
             id: string;
@@ -5147,6 +5237,10 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             type: string;
+        };
+        AgentAccessError: {
+            code: string;
+            success: boolean;
         };
         "ApiResponseStruct {}DataStruct": Record<string, never>;
         ApikeyApiKey: {
@@ -6115,6 +6209,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["EnvironmentAgentPairResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseEnvironmentAgentRestartRun: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseEnvironmentAgentRestartRun.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["EnvironmentAgentRestartRun"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -7652,6 +7758,10 @@ export interface components {
             mounts: components["schemas"]["ContainerMount"][] | null;
             name: string;
             networkSettings: components["schemas"]["ContainerNetworkSettings"];
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
             redeployDisabled?: boolean;
             state: components["schemas"]["ContainerState"];
@@ -7888,6 +7998,29 @@ export interface components {
                 [key: string]: components["schemas"]["ContainerEndpointSettingsCreate"];
             };
         };
+        ContainerOriginAssignment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerOriginAssignment.json
+             */
+            readonly $schema?: string;
+            dockerId: string;
+            /** @enum {string} */
+            origin: "unraid" | "standalone";
+        };
+        ContainerOriginFields: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerOriginFields.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
+        };
         ContainerPort: {
             ip?: string;
             /** Format: int64 */
@@ -7900,9 +8033,26 @@ export interface components {
             hostIp?: string;
             hostPort?: string;
         };
+        ContainerProblem: {
+            /** @enum {string} */
+            code: "container.origin-locked" | "container.recreate-recovered" | "container.recreate-ambiguous" | "runtime.idempotency-mismatch" | "update.path-retired" | "container.shell-invalid" | "container.shell-protocol" | "container.shell-unavailable" | "container.shell-orphaned" | "container.shell-not-running";
+            /** @enum {string} */
+            origin?: "compose" | "unraid" | "unknown" | "standalone";
+            /** Format: int64 */
+            status: number;
+        };
         ContainerProcesses: {
             processes: (string[] | null)[] | null;
             titles: string[] | null;
+        };
+        ContainerRecreateRequest: {
+            edit: components["schemas"]["ContainerEdit"];
+        };
+        ContainerRecreateResult: {
+            newId: string;
+            newName: string;
+            oldId: string;
+            oldName: string;
         };
         ContainerResourceSample: {
             /** Format: double */
@@ -7918,6 +8068,36 @@ export interface components {
             /** Format: int64 */
             maximumRetryCount?: number;
             name?: string;
+        };
+        ContainerShellClose: {
+            /** @enum {string} */
+            type: "close";
+        };
+        ContainerShellExit: {
+            /** Format: int64 */
+            code: number | null;
+            reason: string;
+            /** @enum {string} */
+            type: "exit";
+        };
+        ContainerShellQuery: {
+            /** Format: int64 */
+            cols?: number;
+            /** Format: int64 */
+            rows?: number;
+            /**
+             * @default auto
+             * @enum {string}
+             */
+            shell: "auto" | "sh" | "bash";
+        };
+        ContainerShellResize: {
+            /** Format: int64 */
+            cols: number;
+            /** Format: int64 */
+            rows: number;
+            /** @enum {string} */
+            type: "resize";
         };
         ContainerState: {
             /** Format: int64 */
@@ -7954,6 +8134,10 @@ export interface components {
             mounts: components["schemas"]["ContainerMount"][] | null;
             names: string[] | null;
             networkSettings: components["schemas"]["ContainerNetworkSettings"];
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
             redeployDisabled?: boolean;
             resourceSample?: components["schemas"]["ContainerResourceSample"];
@@ -8975,6 +9159,21 @@ export interface components {
             reportedAt: string;
             version: components["schemas"]["VersionInfo"];
         };
+        EnvironmentAgentRestartResponse: {
+            instanceId: string;
+        };
+        EnvironmentAgentRestartRun: {
+            code?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            deadline: string;
+            runId: string;
+            /** Format: date-time */
+            settledAt?: string;
+            /** @enum {string} */
+            state: "reserved" | "sent" | "awaiting" | "connected" | "failed" | "unknown";
+        };
         EnvironmentCreate: {
             /**
              * Format: uri
@@ -9002,6 +9201,7 @@ export interface components {
             agentReport?: components["schemas"]["EnvironmentAgentReport"];
             apiKey?: string;
             apiUrl: string;
+            color: string | null;
             connected?: boolean;
             /** Format: date-time */
             connectedAt?: string;
@@ -9023,6 +9223,12 @@ export interface components {
             lastSeen?: string;
             name?: string;
             status: string;
+        };
+        EnvironmentHostProblem: {
+            /** @enum {string} */
+            code: "agent.restart-unsupported" | "agent.restart-superseded" | "agent.restart-timeout" | "agent.restart-unconfirmed" | "agent.restart-interrupted" | "host.busy" | "host.restarting" | "host.name-invalid" | "host.name-taken" | "host.unreachable" | "edge.heartbeat-stale" | "agent.ui-configuration-disabled" | "settings.ui-configuration-disabled";
+            /** Format: int64 */
+            status: number;
         };
         EnvironmentHubAddressCandidate: {
             id: string;
@@ -9066,6 +9272,7 @@ export interface components {
             readonly $schema?: string;
             accessToken?: string | null;
             apiUrl?: string | null;
+            color?: string | null;
             enabled?: boolean | null;
             name?: string | null;
             regenerateApiKey?: boolean | null;
@@ -9103,6 +9310,7 @@ export interface components {
             /** @description API key for pairing (only shown once during creation) */
             apiKey?: string;
             apiUrl: string;
+            color: string | null;
             connected?: boolean;
             /** Format: date-time */
             connectedAt?: string;
@@ -9179,7 +9387,7 @@ export interface components {
             environmentId?: string;
             id: string;
             /** @enum {string} */
-            messageCode: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -9635,7 +9843,7 @@ export interface components {
             category: string;
             children?: components["schemas"]["JobscheduleJobStatus"][] | null;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             currentRun?: components["schemas"]["SchedulerRun"];
             description: string;
             enabled: boolean;
@@ -10202,6 +10410,8 @@ export interface components {
             composeProjectName?: string;
             configurationError?: components["schemas"]["ProjectConfigurationError"];
             createdAt: string;
+            /** @enum {string} */
+            definitionHint?: "definition-invalid";
             dirName?: string;
             envContent?: string;
             hasBuildDirective?: boolean;
@@ -10250,7 +10460,8 @@ export interface components {
             ports?: string[] | null;
             redeployDisabled?: boolean;
             serviceConfig?: components["schemas"]["ServiceConfig"];
-            status: string;
+            /** @enum {string} */
+            status: "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead" | "stopped" | "unknown" | "not-created";
         };
         ProjectServiceUpdateInfo: {
             imageRef: string;
@@ -10293,7 +10504,7 @@ export interface components {
             lastCheckedAt?: string;
             notPulledImageRefs?: string[] | null;
             /** @enum {string} */
-            policyCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            policyCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             serviceUpdates?: {
                 [key: string]: components["schemas"]["ProjectServiceUpdateInfo"];
             };
@@ -10614,7 +10825,7 @@ export interface components {
         SchedulerOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             message?: string;
             status: string;
             targets?: components["schemas"]["SchedulerTargetOutcome"][] | null;
@@ -10686,7 +10897,7 @@ export interface components {
         SchedulerTargetOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             id: string;
             message?: string;
             resourceType?: string;
@@ -11012,6 +11223,8 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
+            /** @enum {string|null} */
+            stackStopMode?: "down" | "stop" | null;
             /** @description Docker image reference; empty uses this environment's release default */
             toolsImage?: string | null;
             trivyConcurrentScanContainers?: string | null;
@@ -11149,6 +11362,7 @@ export interface components {
              * @example /api/schemas/SystemHealthResponse.json
              */
             readonly $schema?: string;
+            instanceId: string;
             status: string;
         };
         SystemPruneAllRequest: {
@@ -11270,16 +11484,16 @@ export interface components {
             /** Format: date-time */
             applyCheckedAt?: string;
             /** @enum {string} */
-            applyCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            applyCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             /** Format: date-time */
             bookkeepingAt?: string;
             /** @enum {string} */
-            bookkeepingCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            bookkeepingCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             candidates: components["schemas"]["UpdaterUpdateCandidate"][] | null;
             /** Format: date-time */
             checkedAt?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             environmentId: string;
             jobId: string;
             /** @enum {string} */
@@ -11438,7 +11652,7 @@ export interface components {
         UpdaterSystemImageHint: {
             candidateVersion?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             compatibleReference?: string;
             currentVersion?: string;
             /** @enum {string} */
@@ -15916,6 +16130,24 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentWithApiKey"];
                 };
             };
+            /** @description Host or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16483,6 +16715,24 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentEnvironment"];
                 };
             };
+            /** @description Host or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16720,6 +16970,87 @@ export interface operations {
             };
         };
     };
+    restartEnvironmentAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentAgentRestartRun"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getEnvironmentAgentRestart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentAgentRestartRun"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-auto-heal-settings": {
         parameters: {
             query?: never;
@@ -16746,7 +17077,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16755,7 +17086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16764,7 +17095,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16773,7 +17104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -16818,7 +17149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16827,7 +17158,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16836,7 +17167,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16845,7 +17176,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -17313,6 +17644,74 @@ export interface operations {
             };
         };
     };
+    "assign-container-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerOriginAssignment"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerOriginFields"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-container-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerOriginFields"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "pause-container": {
         parameters: {
             query?: never;
@@ -17381,36 +17780,194 @@ export interface operations {
             };
         };
     };
-    "redeploy-container": {
+    "recreate-container": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerRecreateRequest"];
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseContainerDetails"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    "redeploy-container": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -17470,6 +18027,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -17565,6 +18123,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -17660,6 +18219,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23043,6 +23603,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23174,6 +23735,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23272,6 +23834,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23342,6 +23905,105 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "stop-project": {
+        parameters: {
+            query?: {
+                /** @description Legacy restart service selection */
+                services?: string[] | null;
+            };
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -23477,6 +24139,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23959,6 +24622,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseListSettingsSettingDto"];
+                };
+            };
+            /** @description Host or framework refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -24448,6 +25129,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentTest"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -25027,6 +25726,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -26029,6 +26729,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */

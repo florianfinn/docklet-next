@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; a tunnel drop or failed Edge probe keeps the update-required verdict.
 
 package environment
 
@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"go.getarcane.app/kit/pkg"
+	"gorm.io/gorm"
 	"log/slog"
 	"net/http"
 	"time"
@@ -269,6 +270,10 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 		}
 		slog.InfoContext(ctx, "promoted pending direct environment to online via reachability check", "environmentId", id)
 	}
+	// A failed Edge probe proves no newer agent; only a completed compatibility check replaces the verdict.
+	if currentEnv.IsEdge && currentEnv.Status == string(EnvironmentStatusUpdateRequired) && status != string(EnvironmentStatusOnline) {
+		return nil
+	}
 
 	now := time.Now()
 	updates := map[string]any{
@@ -279,7 +284,16 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 	if status == string(EnvironmentStatusOnline) || status == string(EnvironmentStatusUpdateRequired) {
 		updates["last_seen"] = &now
 	}
-	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+	// The write re-checks the protected states itself: a probe that read the row earlier must not
+	// replace a pending registration or an Edge verdict stored since.
+	write := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id)
+	if status == string(EnvironmentStatusOnline) {
+		write = write.Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusPending))
+	} else {
+		write = write.Where("status <> ?", string(EnvironmentStatusPending)).
+			Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusUpdateRequired))
+	}
+	if err := write.Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to update environment status: %w", err)
 	}
 	// Direct environments have no tunnel callback, so this health-check write is
@@ -326,7 +340,10 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 		"updated_at": &now,
 	}
 	if connected {
-		updates["status"] = string(EnvironmentStatusPending)
+		// The connect-time compatibility check replaces the incompatible verdict; until it
+		// answers, the returning host keeps showing update-required instead of pending.
+		updates["status"] = gorm.Expr("CASE WHEN status = ? THEN status ELSE ? END",
+			string(EnvironmentStatusUpdateRequired), string(EnvironmentStatusPending))
 		updates["last_seen"] = &now
 		// Remember the tunnel transport so the UI can keep showing it after
 		// the tunnel drops or while the agent is poll-only.
@@ -334,13 +351,10 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 			updates["last_edge_transport"] = state.Transport
 		}
 	} else {
-		var current Environment
-		if err := s.db.WithContext(ctx).Select("status").Where("id = ?", id).First(&current).Error; err != nil {
-			return err
-		}
-		if current.Status != string(EnvironmentStatusPending) {
-			updates["status"] = string(EnvironmentStatusOffline)
-		}
+		// Pending and the incompatible verdict belong to the registration, not the tunnel; the
+		// next probe replaces them. Evaluated in the write so a concurrent verdict is kept.
+		updates["status"] = gorm.Expr("CASE WHEN status IN (?, ?) THEN status ELSE ? END",
+			string(EnvironmentStatusPending), string(EnvironmentStatusUpdateRequired), string(EnvironmentStatusOffline))
 	}
 
 	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {

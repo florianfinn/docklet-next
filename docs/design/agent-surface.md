@@ -51,7 +51,7 @@ have an explicit target checked against the running hub on both forwarding paths
 agents reject blank targets. No update/restore/policy/schedule capability is added
 by this PR1 boundary; PR2a/PR2b own that activation.
 
-Vulnerability scanning entered the agent contract at v8; the current minimum is v10. The hub feature veto
+Vulnerability scanning entered the agent contract at v8; the current minimum is v11. The hub feature veto
 covers local and remote vulnerability routes; agent feature-disabled and busy
 refusals remain typed. Host-wide runs are agent-owned evidence read through the
 run route. Agents refresh KEV/EPSS intelligence daily and register no local image
@@ -70,7 +70,7 @@ database restore, cancel the runtime context and are not treated as failures.
 
 ## Volume backup contract v9
 
-Volume backup requires contract v9; the current minimum is v10. Overview, repository metadata/check, restore
+Volume backup requires contract v9; the current minimum is v11. Overview, repository metadata/check, restore
 admissions and target host routes are part of the allowlisted volume module in
 both agent modes. Hub-only target CRUD and administrative key export are absent
 from agent registration. The target-set receiver is agent-only and accepts the
@@ -105,3 +105,65 @@ Auto Heal events use authenticated notification dispatch with captured credentia
 and session identity, strict payload validation and hub insertion deduplication.
 Older Auto Heal dispatch shapes are invalid. Shared agent-access refusals keep
 their stable status and code envelope on both transports.
+
+
+## Container and host operations contract v11
+
+Version and minimum are 11. The fingerprint includes the strict recreate edit,
+replacement result, origins, stop-project, stopped definition services, hub stop
+setting and the host/shell vocabulary, including the v1 explicit close control. Version 10 and mismatched
+fingerprints are update-required before ordinary Direct or Edge sends.
+
+Both agent modes register recreate/redeploy and stack stop through the existing
+runtime module and manager-authenticated execute/query transport. Origin
+assignment/reset remain hub-only. The retired edit route refuses with
+`update.path-retired`; headerless redeploy has the same refusal. Compose-child
+redeploy is also refused at the retained webhook effect boundary.
+
+`system.agent.restart` answers POST `/api/system/agent/restart` only in agent
+modes, through the allowlisted system module. The receiver resolves and inspects
+its own Docker container before returning 202 `{instanceId}`; missing self
+identity or an unavailable inspect returns 409 `agent.restart-unsupported` with
+no restart effect. After flushing the acknowledgement it waits one second, then
+restarts the inspected container. The hub host has no answering restart route.
+
+`/health` includes the per-process `instanceId`. The hub reserves a durable
+restart run, commits `sent` before one POST, and persists acknowledgement and
+terminal codes. Direct completion requires stable instance reads around fresh
+compatibility and authenticated system-health checks. Edge completion requires a
+current authenticated session with a different instance; reconnecting the same
+process never completes. Every observation and settling transaction checks the
+registration and credential revision. Runtime intake checks active restart
+reservations in its admission transaction, including policy children.
+
+After hub restart, `reserved` settles `agent.restart-interrupted`; `sent` and
+`awaiting` resume observation without another POST. Deadline results distinguish
+timely acknowledged `agent.restart-timeout` from unacknowledged
+`agent.restart-unconfirmed`. Direct acknowledgement uses the received 202 status
+without depending on its optional body. Replies and process proofs arriving at
+or after the deadline do not establish a timely outcome. The hub-only POST
+`/environments/{id}/agent/restart` and GET
+`/environments/{id}/agent/restarts/{runId}` expose compact run truth independently
+of activity pruning. Joined outcomes survive failed writes; exclusion ends only
+with the terminal commit.
+
+Host projection, Edge dispatch and the availability observer share a 90-second
+application-heartbeat window. The 15-second sweeper closes only the scanned
+current session, with `edge.heartbeat-stale`; a healthy replacement survives.
+UI-disabled Auto Heal and generic settings writes emit 403
+`settings.ui-configuration-disabled`. All agent-refusal consumers share a bounded
+16 KiB classifier and retain a public 502 host-access envelope.
+
+Shell query and protocol v1 frame DTOs remain reserved for their behavior owner.
+`stackStopMode` stays in environment 0 on the hub; agent settings responses omit
+it and remote or agent writes refuse before forwarding.
+
+The container terminal retains `containers:exec` on hub-local, Direct and Edge
+paths. The hub validates shell choice and dimensions before upgrading, then
+owns the activity actor and session handle. The agent accepts binary stdin and
+strict resize/close controls, writes binary stdout and a final typed exit, and
+performs joined exec cleanup. A browser-first close becomes a close control at
+the hub; the agent socket remains open for at most five seconds to deliver its
+exit. Lost agent connections end activity without a shell-specific code. Both
+Edge stream opens and legacy `ws_start` require the existing command allowlist.
+See [container shell](container-shell.md) for frame protocol v1 and cleanup limits.

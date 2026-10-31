@@ -24,7 +24,7 @@ const report: components["schemas"]["VersionInfo"] = {
   onboardingChecks: { projectDirectory: "/srv/projects", ownerUid: 123, ownerGid: 456, writable: false, socketGroup: 998 },
 };
 const row: components["schemas"]["EnvironmentEnvironment"] = {
-  id: "example", name: "Example", apiUrl: "edge://example", enabled: true, isEdge: true, status: "online",
+  id: "example", name: "Example", color: null, apiUrl: "edge://example", enabled: true, isEdge: true, status: "online",
   agentReport: { reportedAt: "2026-10-17T12:00:00Z", version: report },
 };
 

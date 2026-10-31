@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { ScanImageButton } from "./ImageSecurity";
 import { useImageSecurity } from "./use-image-security";
 import { ImageUpdate } from "./ImageUpdate";
@@ -57,7 +58,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
   const td = useTranslations("images.details");
   const pull = useCapability("pullImage", { kind: "host", id: image?.hostId ?? "" });
   const remove = useCapability("removeImage", { kind: "image", id: image?.id ?? "" });
-  const online = host?.status === "online";
+  const online = isHostAvailable(host);
   // Where an update is installed: the first user workload of this image (never the agent).
   const user = image?.consumers.find((c) => !c.system);
   return (

@@ -121,6 +121,7 @@ POST /environments/{id}/containers/{containerId}/commit
 POST /environments/{id}/containers/{containerId}/edit
 POST /environments/{id}/containers/{containerId}/kill
 POST /environments/{id}/containers/{containerId}/pause
+POST /environments/{id}/containers/{containerId}/recreate
 POST /environments/{id}/containers/{containerId}/redeploy
 POST /environments/{id}/containers/{containerId}/restart
 POST /environments/{id}/containers/{containerId}/start
@@ -154,6 +155,7 @@ POST /environments/{id}/projects/{projectId}/down
 POST /environments/{id}/projects/{projectId}/pull
 POST /environments/{id}/projects/{projectId}/redeploy
 POST /environments/{id}/projects/{projectId}/restart
+POST /environments/{id}/projects/{projectId}/stop
 POST /environments/{id}/projects/{projectId}/unarchive
 POST /environments/{id}/projects/{projectId}/up
 POST /environments/{id}/projects/{projectId}/update-services
@@ -182,6 +184,7 @@ POST /environments/{id}/vulnerabilities/ignore/bulk
 POST /environments/{id}/vulnerabilities/scan
 POST /environments/{id}/vulnerabilities/unignore/bulk
 POST /settings/search
+POST /system/agent/restart
 PUT /environments/{id}/auto-heal
 PUT /environments/{id}/containers/{containerId}/auto-update
 PUT /environments/{id}/job-schedules

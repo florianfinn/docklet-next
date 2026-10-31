@@ -1,8 +1,9 @@
+import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/284
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original per-host local repository status with read-only engine image.
+// Deviations: Original per-host local repository status with read-only engine image. M14 host maintenance and availability.
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -51,7 +52,7 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
-          disabled={busy || host.status !== "online" || !!value?.running}
+          disabled={busy || !isHostAvailable(host) || !!value?.running}
           onClick={async () => {
             setBusy(true);
             try {

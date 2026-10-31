@@ -25,7 +25,7 @@ export type Tone =
 
 export type HostConnection = "direct" | "edge";
 /** "pending": registered during onboarding, agent has not connected yet. */
-export type HostStatus = "online" | "offline" | "pending" | "update-required" | "token-rejected";
+export type HostStatus = "online" | "standby" | "offline" | "pending" | "update-required" | "token-rejected";
 
 /** File owner IDs used by the agent for project files (PUID/PGID). */
 export interface FileOwner {
@@ -69,6 +69,8 @@ export interface Host {
   os: string;
   dockerVersion: string;
   agentVersion: string;
+  /** Historical display metadata; never evidence of current credentials or connectivity. */
+  componentVersion?: import("@/api/generated/schema").components["schemas"]["VersionInfo"];
   address: string;
   projectDir: string;
   /** Directory holding the agent's own compose.yaml and .env; never a stack directory. */
@@ -132,6 +134,8 @@ export interface PortMapping {
 }
 
 export interface Service {
+  containersRemoved?: boolean;
+  containerId?: string;
   name: string;
   image: ImageVersion;
   state: ContainerState;
@@ -151,6 +155,7 @@ export type AutoUpdateMode = "check" | "scheduled";
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
 export interface Stack {
+  definitionHint?: "definition-invalid";
   path?: string;
   reportedStatus?: string;
   serviceCount?: number;
@@ -230,6 +235,7 @@ export interface RunOutputLine {
 }
 
 export interface ActionRun {
+  recreateResult?: { oldId: string; newId: string; oldName: string; newName: string };
   baselineCode?: string;
   lifecycleCode?: string;
   effectVerified?: boolean;
@@ -294,6 +300,7 @@ export interface ContainerInfo {
   stackName?: string;
   serviceName?: string;
   origin: ContainerOrigin;
+  originSource?: "detected" | "manual" | "unconfirmed";
   /** Why origin is unclear or how it was detected; shown in explanations. */
   originNote?: string;
   image: ImageVersion;

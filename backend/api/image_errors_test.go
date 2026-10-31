@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
@@ -84,5 +86,33 @@ func TestRetiredUpdateOperationsAdvertiseTypedRefusal(t *testing.T) {
 		body, err := json.Marshal(response)
 		require.NoError(t, err)
 		require.Contains(t, string(body), "ImageOperationError")
+	}
+}
+
+func TestImageRuntimeHostProblemSurvivesFinalAPIPass(t *testing.T) {
+	for _, code := range []string{"host.restarting", "host.busy", "agent.restart-superseded"} {
+		t.Run(code, func(t *testing.T) {
+			router := echo.New()
+			cfg := huma.DefaultConfig("test", "test")
+			cfg.Transformers = append(cfg.Transformers, imageErrorTransformer)
+			api := humaecho.NewWithGroup(router, router.Group("/api"), cfg)
+			huma.Register(api, huma.Operation{OperationID: "host-refusal", Method: "POST", Path: "/environments/{id}/updater/projects/{projectId}/update"}, func(context.Context, *struct {
+				ID        string `path:"id"`
+				ProjectID string `path:"projectId"`
+			}) (*struct{ Body any }, error) {
+				return nil, &environmentDTO.HostProblem{Code: code, Status: 409}
+			})
+			op := api.OpenAPI().Paths["/environments/{id}/updater/projects/{projectId}/update"].Post
+			handlerutil.HostProblemResponses(api, op, "409")
+			registerImageSafetyErrors(api)
+			schema, err := json.Marshal(op.Responses["409"])
+			require.NoError(t, err)
+			require.Contains(t, string(schema), "HostProblem")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest("POST", "/api/environments/example/updater/projects/example/update", nil))
+			require.Equal(t, 409, rec.Code)
+			require.Contains(t, rec.Body.String(), code)
+			require.NotContains(t, rec.Body.String(), "update.invalid-target")
+		})
 	}
 }

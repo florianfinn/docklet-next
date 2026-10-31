@@ -179,7 +179,10 @@ func TestComposeNameResponseOwnersAcrossPagesAndSystemAliases(t *testing.T) {
 		require.NoError(t, err)
 		for _, row := range rows {
 			if row.ID == alias.ID {
-				require.Empty(t, row.RuntimeServices, "off-page observed owner must beat this alias")
+				for _, service := range row.RuntimeServices {
+					require.Empty(t, service.ContainerID, "off-page observed owner must beat this alias")
+					require.Equal(t, projecttypes.ServiceNotCreated, service.Status, "only this tracked alias definition may be projected")
+				}
 			} else {
 				require.Equal(t, owner.ID, row.ID)
 				require.Len(t, row.RuntimeServices, 1)
@@ -190,7 +193,10 @@ func TestComposeNameResponseOwnersAcrossPagesAndSystemAliases(t *testing.T) {
 	rows, _, err := svc.ListProjects(t.Context(), pagination.QueryParams{Limit: -1})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.Empty(t, rows[0].RuntimeServices, "archived observed owners still exclude aliases")
+	for _, service := range rows[0].RuntimeServices {
+		require.Empty(t, service.ContainerID, "archived observed owners still exclude aliases")
+		require.Equal(t, projecttypes.ServiceNotCreated, service.Status)
+	}
 	require.NoError(t, svc.db.Model(owner).Update("is_archived", false).Error)
 	// The system agent uses only the old default; it must not hide the actual
 	// owner whose stable display/default still happens to be that alias.

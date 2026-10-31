@@ -560,3 +560,32 @@ SQLite AUTOINCREMENT so pruning cannot reuse projection identities. The migratio
 hash is pinned. Existing notification settings and prior history are preserved.
 Restore expires unfinished hub delivery intent and clears availability timers;
 host recovery projects interrupted work without sending historical notices.
+
+
+## Container and host operations migration 014
+
+`014_container_host_operations.sql` runs on hub and agent databases. It rebuilds
+`runtime_receipts` with valid operation/target pairs for `recreate-container`,
+`redeploy-container` and `stop-project`, preserving the 007 indexes and key
+bindings, and adds nullable compact `result` JSON text. Replacement identity is
+receipt-owned rather than activity-history-owned.
+
+`container_recreate_journal` records intent and observed Docker phases, including
+compensation intents. Startup recovery settles these runs before generic runtime
+interruption can release exclusions. Resolved done/rolled-back journals are
+pruned only after settlement and seven days; ambiguous journals remain.
+`container_origin_overrides` stores hub assignments by registration, name and
+Docker identity. Completion moves only a matching existing row; registration
+removal deletes overrides in its transaction.
+
+`environments` adds `credential_revision INTEGER NOT NULL DEFAULT 0` and nullable
+`color` constrained to lowercase `#rrggbb`. `agent_restart_requests` reserves
+registration, credential revision, old process identity, state and bounded
+request timing, with one active request per environment. Host-maintenance code
+owns the behavior built on these reserved columns and table.
+
+The schema registry, integrity reference/manifest and migration hash manifest
+cover the same foundation. Upgrade tests seed schema-013 receipts and bindings
+for both roles, migrate, reopen and admit every new operation while rejecting
+invalid pairs. Fresh model/Goose catalogue equality remains required. Database
+files continue to require local persistent storage.
