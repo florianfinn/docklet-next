@@ -184,8 +184,8 @@ export function createActivityReader(reads: Reads) {
         }
       }
       for (const run of reads.retained?.() ?? []) {
-        if (!merged.has(run.id) && (run.status === "running" || run.status === "queued")) merged.set(run.id, summaryOnly(run));
-        if (!observed.has(run.id) && (run.status === "running" || run.status === "queued")) observed.set(run.id, summaryOnly(run));
+        if (!merged.has(run.id) && (run.kind === "agent-restart" || run.status === "running" || run.status === "queued")) merged.set(run.id, summaryOnly(run));
+        if (!observed.has(run.id) && (run.kind === "agent-restart" || run.status === "running" || run.status === "queued")) observed.set(run.id, summaryOnly(run));
       }
       initialized = true;
       const previous = current;

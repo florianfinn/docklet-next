@@ -255,6 +255,9 @@ export const deHosts: typeof enHosts = {
     labels: "Labels",
     log: "Letzte Agent-Meldungen (synthetisch)",
     restart: "Agent neu starten",
+    restartTitle: "Agent auf {name} neu starten?",
+    restartBody: "Der Agent-Container wird neu gestartet. Laufzeitaktionen dieses Hosts bleiben gesperrt, bis eine neue Agent-Instanz verbunden ist. Agent-lokale Sicherungen können unterbrochen werden.",
+    restartProgress: "Fortschritt des Agent-Neustarts",
     restarting: "Startet neu …",
     restartHint: (import.meta.env.DEV ? "Simuliert: stoppt und startet den Agent-Container; der Host ist währenddessen kurz nicht erreichbar." : "Stoppt und startet den Agent-Container; der Host ist kurz nicht erreichbar."),
     restartBlocked: "Nur bei verbundenem Host möglich.",
@@ -262,6 +265,7 @@ export const deHosts: typeof enHosts = {
     checking: "Wird geprüft …",
     install: "Installationsdateien",
   },
+  restart: { phases: { reserved: "Neustart reserviert", sent: "Neustart gesendet", awaiting: "Warten auf die neue Agent-Instanz", connected: "Neue Agent-Instanz verbunden" } },
   errors: {
     uiConfigurationDisabled: "Einstellungen dieses Hosts werden über seine Umgebung verwaltet",
     busy: "Für diesen Host läuft bereits eine andere Aktion.",

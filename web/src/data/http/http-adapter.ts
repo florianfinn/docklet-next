@@ -23,6 +23,7 @@ import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
+import { createHostRestarts } from "./host-restarts";
 import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
 import { mapEvent } from "./map-dto";
@@ -124,6 +125,7 @@ const IMPLEMENTED = new Set<string>([
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
+  "restartAgent",
   "connectHost", "reconnectHost",
   "updateHost",
   "registerHost",
@@ -267,6 +269,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
     runtime.reset(retain);
+    restarts.reset();
     targets.reset(retain);
     logs.reset();
     shells.reset();
@@ -392,15 +395,17 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
+  const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
-    retained: runtime.retained,
+    retained: () => [...runtime.retained(), ...restarts.retained()],
     mergeSummary: runtime.mergeSummary,
     changed: (previous, current, recovered) => {
       targets.changed(previous, current, recovered);
       if (current.some((run) => run.kind === "scan" && !["running", "queued"].includes(run.status) && previous.some((old) => old.id === run.id && old.hostId === run.hostId && ["running", "queued"].includes(old.status)))) securityChanged();
     },
     detailRun: async (host, id, signal, expanded) => {
+      if (restarts.has(host, id)) return restarts.detail(host, id, signal);
       if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
       const backupOwner = backups.guard(host);
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
@@ -662,6 +667,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }, getCapability, () => identityGeneration),
     ...createHostChecks({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { invalidateCapabilities(); invalidateEnvironments(); actions.invalidate(true); changeListeners.forEach((listener) => listener(["hosts"])); } }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
+    restartAgent: restarts.restartAgent,
     installStackUpdates: runtime.installStackUpdates,
     restoreRestorePoint: runtime.restoreRestorePoint,
     runStackCommand: runtime.runStackCommand,

@@ -1,6 +1,8 @@
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
-import { CapabilityGate } from "@/shared/components/capability-gate";
+import { isHostAvailable } from "@/domain/hosts";
+import { useActionRuns } from "@/data/live";
+import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { useCapability } from "@/data/use-capability";
 import { Bot, Cable, Check, RotateCw } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -40,14 +42,16 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
   const t = useTranslations("hosts.settings");
   const ts = useTranslations("common.status");
   const cmd = useHostCommands();
-  const restartCapability = useCapability("restartAgent");
+  const restartCapability = useCapability("restartAgent", { kind: "host", id: host.id });
   const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
   const restart = useHostAction(host.id, "agent-restart", async () => await feedback.run(() => cmd.restartAgent(host.id)));
   const check = useHostAction(host.id, "reconnect", async () => await feedback.run(() => cmd.reconnect(host.id)));
-  if (!component) return <CapabilityGate operation="listSystemComponents"><p className="text-sm text-muted-foreground">{t("agentNone")}</p></CapabilityGate>;
-  const online = host.status === "online";
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const latestRestart = useActionRuns().find(run => run.hostId === host.id && run.kind === "agent-restart");
+  const online = isHostAvailable(host);
   return (
     <div className="flex flex-col gap-4" data-slot="agent-container">
+      {component ? <>
       <p className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/15 p-3 text-xs text-muted-foreground">
         <Bot className="mt-0.5 size-4 shrink-0" aria-hidden />
         {t("agentIntro", { label: `${SYSTEM_LABEL}=agent` })}
@@ -106,15 +110,21 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
           ))}
         </ol>
       </section>
+      </> : <p className="text-sm text-muted-foreground">{t("agentNone")}</p>}
       <div className="flex flex-wrap items-center gap-2">
-        <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={restart.busy} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => void restart.run()}>
+        {host.id !== "0" && <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={restart.busy} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => setConfirmRestart(true)}>
           {t("restart")}
-        </BusyButton>
+        </BusyButton>}
         <BusyButton type="button" size="sm" variant="ghost" disabled={!reconnect.available} title={reconnect.reason} busy={check.busy} busyLabel={t("checking")} icon={<Cable data-icon="inline-start" />} onClick={() => void check.run()}>
           {t("check")}
         </BusyButton>
         <span className="text-xs text-muted-foreground">{online ? t("restartHint") : t("restartBlocked")}</span>
       </div>
+      {latestRestart && <section aria-label={t("restartProgress")}>
+        <ol className="flex flex-col gap-1 text-sm">{latestRestart.steps.map(step => <li key={step.key} data-state={step.state}>{step.label}</li>)}</ol>
+        {latestRestart.error && <p role="alert" className="text-sm text-destructive">{latestRestart.error}</p>}
+      </section>}
+      <ConfirmDialog open={confirmRestart} onOpenChange={setConfirmRestart} title={t("restartTitle", { name: host.name })} description={t("restartBody")} confirmLabel={t("restart")} onConfirm={async () => (await restart.run()) ?? false} />
     </div>
   );
 }

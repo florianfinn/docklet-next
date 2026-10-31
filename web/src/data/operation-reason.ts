@@ -16,6 +16,12 @@ export function operationReasonKey(code: string) {
     case "agent.update-required": return "updateRequired";
     case "agent.ui-configuration-disabled":
     case "settings.ui-configuration-disabled": return "uiConfigurationDisabled";
+    case "agent.restart-superseded": return "restartSuperseded";
+    case "agent.restart-timeout": return "restartTimeout";
+    case "agent.restart-unsupported": return "restartUnsupported";
+    case "agent.restart-interrupted": return "restartInterrupted";
+    case "agent.restart-unconfirmed": return "restartUnconfirmed";
+    case "host.busy": return "hostBusy";
     case "host.restarting": return "hostRestarting";
     default: return undefined;
   }

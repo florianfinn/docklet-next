@@ -254,6 +254,9 @@ export const enHosts = {
     labels: "Labels",
     log: "Latest agent messages (synthetic)",
     restart: "Restart agent",
+    restartTitle: "Restart agent on {name}?",
+    restartBody: "The agent container restarts. Runtime actions on this host are locked until a new agent instance connects. Agent-local backups may be interrupted.",
+    restartProgress: "Agent restart progress",
     restarting: "Restarting …",
     restartHint: (import.meta.env.DEV ? "Simulated: stops and starts the agent container; the host is briefly unreachable meanwhile." : "Stops and starts the agent container; the host is briefly unreachable."),
     restartBlocked: "Only possible while the host is connected.",
@@ -261,6 +264,7 @@ export const enHosts = {
     checking: "Checking …",
     install: "Installation files",
   },
+  restart: { phases: { reserved: "Restart reserved", sent: "Restart sent", awaiting: "Waiting for the new agent instance", connected: "New agent instance connected" } },
   errors: {
     uiConfigurationDisabled: "Settings on this host are managed through its environment",
     busy: "Another action is already running for this host.",
