@@ -74,6 +74,7 @@ type Handle struct {
 	closer     func()
 	closed     bool
 	reason     string
+	status     activity.Status
 	activityID string
 	lease      *sessionlife.Lease
 	stop       func() bool
@@ -82,11 +83,14 @@ type Handle struct {
 
 // Accept validates before creating any activity or upgrading. Its returned context
 // retains the hub browser identity; callers must release even on upgrade failure.
-func (r *Registry) Accept(ctx context.Context, values url.Values, actor *user.Actor, env, containerID string) (context.Context, *Handle, error) {
+func (r *Registry) Accept(ctx context.Context, values url.Values, actor *user.Actor, env, containerID string, upgrade ...bool) (context.Context, *Handle, error) {
 	if _, err := ParseQuery(values); err != nil {
 		return ctx, nil, err
 	}
-	h := &Handle{registry: r, reason: "container.shell-unavailable"}
+	if len(upgrade) > 0 && !upgrade[0] {
+		return ctx, nil, nil
+	}
+	h := &Handle{registry: r, status: activity.StatusCancelled}
 	if actor != nil {
 		h.actor = actor.ID
 	}
@@ -128,15 +132,22 @@ func (h *Handle) SetCloser(closer func()) {
 	h.closer = closer
 	h.mu.Unlock()
 }
-func (h *Handle) Observe(reason string) {
+func (h *Handle) ObserveExit(exit container.ShellExit) {
+	reason := exit.Reason
 	// Only bounded protocol reasons reach activity persistence.
 	switch reason {
 	case "", "container.shell-invalid", "container.shell-protocol", "container.shell-unavailable", "container.shell-orphaned", "container.shell-not-running":
 	default:
-		reason = "container.shell-unavailable"
+		reason = ""
 	}
 	h.mu.Lock()
 	h.reason = reason
+	h.status = activity.StatusCancelled
+	if reason != "" {
+		h.status = activity.StatusFailed
+	} else if exit.Code != nil {
+		h.status = activity.StatusSuccess
+	}
 	h.mu.Unlock()
 }
 func (h *Handle) Close() {
@@ -172,12 +183,11 @@ func (h *Handle) Release() {
 		delete(h.registry.handles, h)
 		h.registry.mu.Unlock()
 		h.mu.Lock()
-		reason := h.reason
+		reason, status := h.reason, h.status
 		h.mu.Unlock()
 		if h.activityID != "" {
-			status := activity.StatusSuccess
-			if reason != "" {
-				status = activity.StatusFailed
+			if reason == "" {
+				reason = "Shell ended"
 			}
 			if _, err := h.registry.activity.CompleteActivity(context.WithoutCancel(h.ctx), h.activityID, status, reason, nil); err != nil {
 				slog.ErrorContext(h.ctx, "Failed to complete shell activity", "error", err)

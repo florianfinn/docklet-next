@@ -7,6 +7,7 @@ package activity
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"net/http"
 	"slices"
 	"strings"
@@ -27,7 +28,7 @@ var adapterOperationIDs = []string{
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
 	"getScanSettings", "saveScanSettings", "cancelScan",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
-	"getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
+	"openContainerShell", "getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
 	"listHosts", "listImages", "listSchedule", "listStacks", "listSystemComponents",
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
@@ -122,6 +123,16 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
+		case "openContainerShell":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == "container" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(authz.PermContainersExec, env)
+			reason := "capability.unavailable"
+			if valid {
+				reason = containershell.Availability(ctx, env, raw)
+			}
+			descriptors[i].Available = valid && reason == ""
+			descriptors[i].DisabledReasonCode = reason
 		case "subscribeLogs", "subscribeContainerLogs":
 			ref := descriptors[i].ResourceRef
 			kind, logGrant, readGrant := "stack", authz.PermProjectsLogs, authz.PermProjectsRead

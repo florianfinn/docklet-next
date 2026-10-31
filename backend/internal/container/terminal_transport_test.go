@@ -9,6 +9,7 @@ package container
 import (
 	"context"
 	"encoding/json/v2"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -112,21 +113,27 @@ func dockerTerminalAgent(t *testing.T, f *shellDocker) http.Handler {
 			return
 		}
 		defer conn.CloseNow()
+		if f.agentSockets != nil {
+			f.agentSockets <- conn
+		}
 		ctx := sessionlife.WithCadence(r.Context(), func(time.Duration, bool) sessionlife.Cadence { return sessionlife.Cadence{C: f.tick, Stop: func() {}} })
 		svc.ServeTerminal(ctx, conn, "example", query)
 	})
 }
 func TestShellRealDirectAndEdgeFramesAndEarlyFailures(t *testing.T) {
 	for _, transport := range []string{"direct", "edge"} {
-		for _, scenario := range []string{"EOF", "create", "protocol", "idle"} {
+		for _, scenario := range []string{"EOF", "create", "protocol", "idle", "stop"} {
 			t.Run(transport+"/"+scenario, func(t *testing.T) {
 				f := &shellDocker{}
+				if scenario == "stop" {
+					f.attached = make(chan net.Conn, 1)
+				}
 				if scenario == "create" {
 					f.failure = "create"
 				}
 				hub := shellTransportHub(t, transport, dockerTerminalAgent(t, f), containershell.New(nil), middleware.EnvironmentProxySecurity{})
 				conn := dialShellHub(t, hub)
-				want := "container.shell-unavailable"
+				want := ""
 				if scenario != "create" {
 					kind, data := readShell(t, conn)
 					require.Equal(t, websocket.MessageBinary, kind)
@@ -145,7 +152,11 @@ func TestShellRealDirectAndEdgeFramesAndEarlyFailures(t *testing.T) {
 					default:
 						t.Fatal("resize frame lost or coerced")
 					}
-					if scenario == "protocol" {
+					if scenario == "stop" {
+						f.running.Store(false)
+						require.NoError(t, (<-f.attached).Close())
+						want = ""
+					} else if scenario == "protocol" {
 						require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"bad-control"}`)))
 						want = "container.shell-protocol"
 					} else {
@@ -156,7 +167,8 @@ func TestShellRealDirectAndEdgeFramesAndEarlyFailures(t *testing.T) {
 				}
 				exit := readShellExit(t, conn)
 				require.Equal(t, want, exit.Reason)
-				if want == "" {
+				if want == "" && scenario != "create" {
+					require.NotNil(t, exit.Code)
 					require.Equal(t, 23, *exit.Code)
 				}
 				_, _, err := conn.Read(t.Context())

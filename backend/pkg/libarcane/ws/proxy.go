@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation; terminal exit delivery before cancellation.
+// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation; dedicated terminal drain lifetime.
 
 package ws
 
@@ -26,6 +26,9 @@ import (
 // already validated, so accepting any Origin would let an attacker-controlled
 // page open a terminal or log stream in a remote environment.
 func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header http.Header, checkOrigin func(*http.Request) bool) error {
+	if IsTerminalRequest(r) {
+		return proxyTerminalHTTP(w, r, remoteWS, header, checkOrigin)
+	}
 	if checkOrigin == nil {
 		return errors.New("websocket proxy requires an origin validator")
 	}
@@ -36,19 +39,9 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		return err
 	}
 	defer func() { _ = clientConn.CloseNow() }()
-	terminal := IsTerminalRequest(r)
-	relay := NewTerminalRelay(r.Context(), clientConn, terminal)
-	if terminal {
-		defer relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
-	}
 	viewerCtx, viewerCancel := context.WithCancel(r.Context())
 	defer viewerCancel()
-	lease, err := sessionlife.Register(viewerCtx, func() {
-		viewerCancel()
-		if !terminal {
-			_ = clientConn.CloseNow()
-		}
-	})
+	lease, err := sessionlife.Register(viewerCtx, func() { viewerCancel(); _ = clientConn.CloseNow() })
 	if err != nil {
 		return err
 	}
@@ -80,7 +73,7 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 			}
 			return 0
 		}())
-		relay.Finish(websocket.StatusBadGateway, "container.shell-unavailable")
+		_ = clientConn.Close(websocket.StatusBadGateway, "")
 		return err
 	}
 	defer func() { _ = remoteConn.CloseNow() }()
@@ -90,11 +83,7 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 
 	// When either pump ends, close both legs and join the pumps and durable
 	// cadence before returning from this viewer lifetime.
-	pumpParent := viewerCtx
-	if terminal {
-		pumpParent = context.WithoutCancel(viewerCtx)
-	}
-	pumpCtx, pumpCancel := context.WithCancel(pumpParent)
+	pumpCtx, pumpCancel := context.WithCancel(viewerCtx)
 	defer pumpCancel()
 
 	errc := make(chan struct{}, 2)
@@ -120,15 +109,10 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		for {
 			mt, msg, readErr := remoteConn.Read(pumpCtx)
 			if readErr != nil {
-				var closeError websocket.CloseError
-				if errors.As(readErr, &closeError) {
-					relay.Finish(closeError.Code, closeError.Reason)
-				} else if terminal {
-					relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
-				}
+				relayCloseInternal(r.Context(), clientConn, readErr)
 				return
 			}
-			if writeErr := relay.Write(pumpCtx, mt, msg); writeErr != nil {
+			if writeErr := clientConn.Write(pumpCtx, mt, msg); writeErr != nil {
 				return
 			}
 		}
@@ -146,29 +130,14 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 			case <-ticker.C:
 				if sessionlife.Check(pumpCtx) != nil {
 					viewerCancel()
-					if !terminal {
-						_ = clientConn.CloseNow()
-						_ = remoteConn.CloseNow()
-					}
+					_ = clientConn.CloseNow()
+					_ = remoteConn.CloseNow()
 					return
 				}
 			}
 		}
 	}()
-	select {
-	case <-errc:
-	case <-viewerCtx.Done():
-		if terminal {
-			relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
-		}
-		pumpCancel()
-		_ = clientConn.CloseNow()
-		_ = remoteConn.CloseNow()
-		<-errc
-	}
-	if terminal {
-		relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
-	}
+	<-errc
 	pumpCancel()
 	_ = clientConn.CloseNow()
 	_ = remoteConn.CloseNow()

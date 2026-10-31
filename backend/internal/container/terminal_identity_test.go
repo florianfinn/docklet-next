@@ -61,6 +61,16 @@ func TestShellReplacementIdentityRealDirectAndEdge(t *testing.T) {
 				require.NoError(t, err)
 				t.Cleanup(func() { _ = db.Close() })
 				require.NoError(t, db.Exec("INSERT INTO api_keys(id,name,key_hash,key_prefix,kind) VALUES(?,?,?,?,?)", "example-key", "Example", "test-only", "example", "environment").Error)
+				lateOutput, lateAttempted := make(chan struct{}), make(chan struct{})
+				var lateOnce sync.Once
+				var oldOutputStarted atomic.Bool
+				t.Cleanup(func() {
+					lateOnce.Do(func() { close(lateOutput) })
+					if oldOutputStarted.Load() {
+						<-lateAttempted
+					}
+				})
+				var connectionNumber atomic.Int32
 				var credential atomic.Value
 				credential.Store("test-only")
 				agent := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -82,9 +92,25 @@ func TestShellReplacementIdentityRealDirectAndEdge(t *testing.T) {
 					}
 					defer conn.CloseNow()
 					_ = conn.Write(r.Context(), websocket.MessageBinary, []byte("ready"))
+					if connectionNumber.Add(1) == 1 {
+						oldOutputStarted.Store(true)
+						go func() {
+							<-lateOutput
+							writeCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), time.Second)
+							defer cancel()
+							_ = conn.Write(writeCtx, websocket.MessageBinary, []byte("stale-output"))
+							close(lateAttempted)
+						}()
+					}
 					for {
 						kind, data, err := conn.Read(r.Context())
 						if err != nil {
+							return
+						}
+						if wshub.IsTerminalClose(kind, data) {
+							code := 0
+							wshub.WriteTerminalExit(r.Context(), conn, &code, "")
+							_ = conn.Close(websocket.StatusNormalClosure, "")
 							return
 						}
 						if conn.Write(r.Context(), kind, data) != nil {
@@ -207,9 +233,9 @@ func TestShellReplacementIdentityRealDirectAndEdge(t *testing.T) {
 					createHost()
 				}
 				exit := readShellExit(t, old)
-				require.Equal(t, "container.shell-unavailable", exit.Reason)
+				require.Empty(t, exit.Reason)
 				_, _, err = old.Read(t.Context())
-				require.Equal(t, websocket.StatusPolicyViolation, websocket.CloseStatus(err))
+				require.Contains(t, []websocket.StatusCode{websocket.StatusNormalClosure, websocket.StatusPolicyViolation}, websocket.CloseStatus(err))
 				<-held
 				if reconnect != nil {
 					reconnect(credential.Load().(string))
@@ -218,6 +244,8 @@ func TestShellReplacementIdentityRealDirectAndEdge(t *testing.T) {
 				_, data = readShell(t, replacement)
 				require.Equal(t, "ready", string(data))
 				require.Equal(t, 2, sessions.ActiveCount())
+				lateOnce.Do(func() { close(lateOutput) })
+				<-lateAttempted
 				sessionlife.Revoke("example-old", "example-user", "")
 				releaseOnce.Do(func() { close(release) })
 				oldID := <-audit.completed
@@ -227,9 +255,9 @@ func TestShellReplacementIdentityRealDirectAndEdge(t *testing.T) {
 				require.Equal(t, "still-live", string(data))
 				sessions.CloseByUser("example-user")
 				exit = readShellExit(t, replacement)
-				require.Equal(t, "container.shell-unavailable", exit.Reason)
+				require.Empty(t, exit.Reason)
 				_, _, err = replacement.Read(t.Context())
-				require.Equal(t, websocket.StatusPolicyViolation, websocket.CloseStatus(err))
+				require.Equal(t, websocket.StatusNormalClosure, websocket.CloseStatus(err))
 				newID := <-audit.completed
 				require.NotEqual(t, oldID, newID)
 				require.Zero(t, sessions.ActiveCount())
@@ -245,7 +273,7 @@ func TestShellReplacementIdentityRealDirectAndEdge(t *testing.T) {
 					require.Equal(t, "example-host", entry.EnvironmentID)
 					require.Equal(t, "example", *entry.ResourceID)
 					require.Empty(t, entry.Output)
-					require.Equal(t, "container.shell-unavailable", entry.LatestMessage)
+					require.Equal(t, "Shell ended", entry.LatestMessage)
 					require.NotContains(t, fmt.Sprint(entry.Metadata), "still-live")
 				}
 			})

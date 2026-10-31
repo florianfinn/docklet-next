@@ -262,14 +262,16 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 
 	if strings.HasPrefix(suffix, "/ws/containers/") && strings.HasSuffix(suffix, "/terminal") && m.shellSessions != nil {
 		parts := strings.Split(strings.Trim(suffix, "/"), "/")
-		ctx, handle, err := m.shellSessions.Accept(c.Request().Context(), c.QueryParams(), user, envID, parts[2])
+		ctx, handle, err := m.shellSessions.Accept(c.Request().Context(), c.QueryParams(), user, envID, parts[2], httpx.IsWebSocketUpgradeRequest(c.Request()))
 		if err != nil {
 			if problem, ok := err.(*containertypes.Problem); ok {
 				return c.JSON(problem.Status, problem)
 			}
-			return c.JSON(503, map[string]any{"code": "container.shell-unavailable", "status": 503})
+			return c.NoContent(http.StatusServiceUnavailable)
 		}
-		defer handle.Release()
+		if handle != nil {
+			defer handle.Release()
+		}
 		c.SetRequest(c.Request().WithContext(ctx))
 	}
 

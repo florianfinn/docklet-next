@@ -72,14 +72,18 @@ func (e *ExecSession) Close(ctx context.Context) error {
 		}
 		timer.Stop()
 		state, err := e.dockerClient.ExecInspect(ctx, e.execID, client.ExecInspectOptions{})
-		if err != nil || state.Running {
-			e.closeErr = errors.New("container.shell-orphaned")
+		if err != nil {
+			e.closeErr = err
+		} else if state.Running {
+			e.closeErr = errShellOrphaned
 		}
 		e.hijackedResp.Close()
 	})
 	return e.closeErr
 }
 func (e *ExecSession) Resize(ctx context.Context, cols, rows int) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	_, err := e.dockerClient.ExecResize(ctx, e.execID, client.ExecResizeOptions{Width: uint(cols), Height: uint(rows)})
 	return err
 }

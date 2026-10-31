@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 0f6922614a7470229300481fde32eeaf0c01bfdddd6efa94c540601f9edfcbb0
+// Revision: eef39ce6b1ce34992f9bc8cd7ab75fa8f68069b84756f11cd0d7cd8c6ec7c91c
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -8068,6 +8068,10 @@ export interface components {
             /** Format: int64 */
             maximumRetryCount?: number;
             name?: string;
+        };
+        ContainerShellClose: {
+            /** @enum {string} */
+            type: "close";
         };
         ContainerShellExit: {
             /** Format: int64 */

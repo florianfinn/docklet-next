@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,14 +36,16 @@ import (
 )
 
 type shellDocker struct {
-	running     atomic.Bool
-	inspections atomic.Int32
-	orphan      bool
-	stopped     bool
-	failure     string
-	commands    chan []string
-	resizes     chan string
-	tick        chan time.Time
+	running      atomic.Bool
+	inspections  atomic.Int32
+	orphan       bool
+	stopped      bool
+	failure      string
+	commands     chan []string
+	resizes      chan string
+	tick         chan time.Time
+	attached     chan net.Conn
+	agentSockets chan *websocket.Conn
 }
 
 func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,21 +53,34 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case path == "/containers/example/json":
-		_, _ = fmt.Fprintf(w, `{"Id":"example","State":{"Running":%t}}`, !f.stopped)
+		_, _ = fmt.Fprintf(w, `{"Id":"example","State":{"Running":%t}}`, !f.stopped && f.running.Load())
+	case path == "/containers/example/archive":
+		if f.failure == "missing-sh" {
+			w.WriteHeader(404)
+		} else {
+			w.WriteHeader(500)
+		}
 	case path == "/containers/example/exec":
 		var req struct{ Cmd []string }
 		_ = json.UnmarshalRead(r.Body, &req)
 		f.commands <- req.Cmd
-		if f.failure == "create" {
+		if f.failure == "create" || f.failure == "stop-create" {
+			if f.failure == "stop-create" {
+				f.running.Store(false)
+			}
 			w.WriteHeader(500)
 			_, _ = io.WriteString(w, `{"message":"synthetic create failure"}`)
 			return
 		}
 		_, _ = io.WriteString(w, `{"Id":"example-exec"}`)
 	case path == "/exec/example-exec/start":
-		if f.failure == "attach" {
+		if f.failure == "attach" || f.failure == "missing-sh" {
 			w.WriteHeader(500)
-			_, _ = io.WriteString(w, `{"message":"synthetic attach failure"}`)
+			if f.failure == "missing-sh" {
+				_, _ = io.WriteString(w, `{"message":"exec /bin/sh: no such file or directory"}`)
+			} else {
+				_, _ = io.WriteString(w, `{"message":"synthetic attach failure"}`)
+			}
 			return
 		}
 		_, _ = io.Copy(io.Discard, r.Body)
@@ -73,6 +89,9 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer conn.Close()
+		if f.attached != nil {
+			f.attached <- conn
+		}
 		_, _ = rw.WriteString("HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
 		_ = rw.Flush()
 		_, _ = conn.Write([]byte("ready"))
@@ -100,6 +119,10 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.resizes <- r.URL.RawQuery
 	case path == "/exec/example-exec/json":
 		f.inspections.Add(1)
+		if f.failure == "inspect-error" {
+			w.WriteHeader(500)
+			return
+		}
 		_, _ = fmt.Fprintf(w, `{"ID":"example-exec","Running":%t,"ExitCode":23}`, f.running.Load())
 	default:
 		w.WriteHeader(404)
@@ -194,12 +217,15 @@ func TestShellResizeRealWebSocketDockerHTTP(t *testing.T) {
 	require.GreaterOrEqual(t, f.inspections.Load(), int32(2))
 }
 func TestShellEarlyFailuresAndEOF(t *testing.T) {
-	for _, failure := range []string{"create", "attach", "stopped", "EOF"} {
+	for _, failure := range []string{"create", "attach", "missing-sh", "stopped", "stop-create", "EOF"} {
 		t.Run(failure, func(t *testing.T) {
 			f := &shellDocker{failure: failure, stopped: failure == "stopped"}
 			conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "sh"})
-			want := "container.shell-unavailable"
-			if failure == "stopped" {
+			want := ""
+			if failure == "missing-sh" {
+				want = "container.shell-unavailable"
+			}
+			if failure == "stopped" || failure == "stop-create" {
 				want = "container.shell-not-running"
 			}
 			if failure == "EOF" {
@@ -273,4 +299,16 @@ func TestShellOrphanRecordedWithoutContent(t *testing.T) {
 	require.NotNil(t, entries[0].EndedAt)
 	require.Equal(t, "example-user", *entries[0].StartedByUserID)
 	require.Empty(t, entries[0].Output)
+}
+
+func TestShellInspectFailureDoesNotProveOrphan(t *testing.T) {
+	f := &shellDocker{orphan: true, failure: "inspect-error"}
+	conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "auto"})
+	readShell(t, conn)
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, wshub.TerminalCloseControl))
+	exit := readShellExit(t, conn)
+	require.Empty(t, exit.Reason)
+	require.Nil(t, exit.Code)
+	_, _, _ = conn.Read(t.Context())
+	<-done
 }

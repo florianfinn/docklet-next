@@ -773,6 +773,17 @@
         "required": ["shell"],
         "type": "object"
       },
+      "ContainerShellClose": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "enum": ["close"],
+            "type": "string"
+          }
+        },
+        "required": ["type"],
+        "type": "object"
+      },
       "ContainerShellResize": {
         "additionalProperties": false,
         "properties": {
@@ -956,7 +967,7 @@
     "shell": {
       "frameProtocolVersion": 1,
       "binary": "stdin/stdout",
-      "text": "resize/exit",
+      "text": "resize/close/exit",
       "closeCodes": [1000,1008],
       "wsStart": "allowlisted",
       "closeReasonTransport": true

@@ -55,7 +55,7 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	relay := wshub.NewTerminalRelay(ctx, clientWS, terminal)
 	ctx = wshub.WithTerminalRelay(ctx, relay)
 	if terminal {
-		defer relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
+		defer relay.Finish(websocket.StatusNormalClosure, "")
 	}
 	viewerCtx, viewerCancel := context.WithCancel(ctx)
 	defer viewerCancel()
@@ -116,9 +116,13 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	// Goroutine to read from client and send to agent
 	go forwardClientToAgent(ctx, streamCtx, clientWS, tunnel, streamID, clientDoneCh)
 
-	forwardAgentToClient(viewerCtx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
 	if terminal {
-		relay.Finish(websocket.StatusPolicyViolation, "container.shell-unavailable")
+		forwardTerminalAgentToClient(viewerCtx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
+	} else {
+		forwardAgentToClient(viewerCtx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
+	}
+	if terminal {
+		relay.Finish(websocket.StatusNormalClosure, "")
 	}
 	cancel()
 	_ = clientWS.CloseNow()
@@ -144,7 +148,11 @@ func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Co
 			if !wshub.IsExpectedClose(err) {
 				slog.DebugContext(ctx, "Client WebSocket read error", "error", err)
 			}
-			sendWebSocketClose(tunnel, streamID)
+			if wshub.Relay(ctx) != nil && wshub.Relay(ctx).IsTerminal() {
+				_ = sendStreamDataInternal(tunnel, streamID, int(websocket.MessageText), wshub.TerminalCloseControl)
+			} else {
+				sendWebSocketClose(tunnel, streamID)
+			}
 			return
 		}
 
@@ -154,6 +162,9 @@ func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Co
 
 		if sendStreamDataErr := sendStreamDataInternal(tunnel, streamID, int(msgType), data); sendStreamDataErr != nil {
 			slog.DebugContext(ctx, "Failed to send WebSocket data to agent", "error", sendStreamDataErr)
+			return
+		}
+		if relay := wshub.Relay(ctx); relay != nil && relay.IsTerminal() && wshub.IsTerminalClose(msgType, data) {
 			return
 		}
 	}

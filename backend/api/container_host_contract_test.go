@@ -14,7 +14,7 @@ import (
 
 func TestContainerHostContractSchemas(t *testing.T) {
 	api := SetupAPIForSpec()
-	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerProblem", "ContainerShellQuery", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem"} {
+	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerProblem", "ContainerShellQuery", "ContainerShellClose", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem"} {
 		require.Contains(t, api.OpenAPI().Components.Schemas.Map(), name)
 	}
 }

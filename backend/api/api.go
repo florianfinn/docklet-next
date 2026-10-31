@@ -29,6 +29,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
@@ -461,6 +462,7 @@ var routeModules = []routeModule{
 		d.Event.RegisterRoutes(api)
 	}},
 	{"capabilities", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		api.UseMiddleware(containershell.CapabilityContext(d.Container.Service().ShellCapabilityReader(d.Environment.Service())))
 		activity.RegisterCapabilities(api, func(ctx context.Context, env, target, point string) error {
 			return d.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, d.Environment.Service())
 		})

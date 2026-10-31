@@ -11,14 +11,19 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/containerd/errdefs"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/types/container"
 	"github.com/moby/moby/client"
 )
+
+var errShellProtocol = errors.New("container.shell-protocol")
+var errShellOrphaned = errors.New("container.shell-orphaned")
 
 func shellCommand(shell string) []string {
 	command := "exec " + shell
@@ -32,7 +37,7 @@ func shellCommand(shell string) []string {
 // Reader goroutines remain alive until the final exit has been written: canceling
 // coder/websocket.Read before that write would close the socket prematurely.
 func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Conn, containerID string, query container.ShellQuery) {
-	reason := "container.shell-unavailable"
+	reason := ""
 	var code *int
 	finished := false
 	defer func() {
@@ -60,10 +65,12 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 	}
 	execID, err := s.CreateExec(ctx, containerID, shellCommand(query.Shell))
 	if err != nil {
+		reason = s.shellFailureReason(ctx, containerID, err)
 		return
 	}
 	session, err := s.AttachExec(ctx, containerID, execID)
 	if err != nil {
+		reason = s.shellFailureReason(ctx, containerID, err)
 		return
 	}
 
@@ -78,7 +85,7 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 		if err := session.Resize(ctx, cols, rows); err != nil {
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			if session.Close(cleanup) != nil {
+			if errors.Is(session.Close(cleanup), errShellOrphaned) {
 				reason = "container.shell-orphaned"
 			}
 			return
@@ -93,16 +100,19 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 	reason = ""
 	select {
 	case <-ctx.Done():
-		reason = "container.shell-unavailable"
+		reason = ""
 	case err := <-inputDone:
 		inputEnded = true
 		if err != nil && !wshub.IsExpectedClose(err) {
-			reason = "container.shell-protocol"
+			reason = ""
+			if errors.Is(err, errShellProtocol) {
+				reason = "container.shell-protocol"
+			}
 		}
 	case err := <-outputDone:
 		outputEnded = true
 		if err != nil {
-			reason = "container.shell-unavailable"
+			reason = ""
 		}
 	}
 	closing.Store(true)
@@ -113,7 +123,7 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 		code = &inspected.ExitCode
 		session.hijackedResp.Close()
 	} else {
-		if err := session.Close(cleanupCtx); err != nil {
+		if err := session.Close(cleanupCtx); errors.Is(err, errShellOrphaned) {
 			reason = "container.shell-orphaned"
 		}
 		if inspected, err := session.Inspect(cleanupCtx); err == nil && !inspected.Running {
@@ -147,14 +157,18 @@ func readTerminalInput(ctx context.Context, conn *websocket.Conn, session *ExecS
 			continue
 		}
 		if kind == websocket.MessageBinary {
+			_ = session.hijackedResp.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			if _, err := session.Stdin().Write(data); err != nil {
 				return err
 			}
 			continue
 		}
+		if wshub.IsTerminalClose(kind, data) {
+			return nil
+		}
 		var resize container.ShellResize
 		if kind != websocket.MessageText || json.Unmarshal(data, &resize, json.RejectUnknownMembers(true)) != nil || resize.Type != "resize" || resize.Cols < 1 || resize.Cols > 1000 || resize.Rows < 1 || resize.Rows > 1000 {
-			return errors.New("container.shell-protocol")
+			return errShellProtocol
 		}
 		if err := session.Resize(ctx, resize.Cols, resize.Rows); err != nil {
 			return err
@@ -180,4 +194,28 @@ func writeTerminalOutput(ctx context.Context, conn *websocket.Conn, stdout io.Re
 			return err
 		}
 	}
+}
+
+func (s *ContainerService) shellFailureReason(ctx context.Context, containerID string, failure error) string {
+	cli, err := s.dockerService.GetClient(ctx)
+	if err == nil {
+		state, err := cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+		if err == nil && state.Container.State != nil && !state.Container.State.Running {
+			return "container.shell-not-running"
+		}
+		// ExecAttach discards a non-101 response body in the Docker SDK. Check
+		// the executable path rather than inventing a reason from its HTTP code.
+		if _, statErr := cli.ContainerStatPath(ctx, containerID, client.ContainerStatPathOptions{Path: "/bin/sh"}); errdefs.IsNotFound(statErr) {
+			current, verifyErr := cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+			if verifyErr == nil && current.Container.State != nil && current.Container.State.Running {
+				return "container.shell-unavailable"
+			}
+		}
+	}
+	// Only an explicit missing shell executable proves shell-unavailable.
+	message := strings.ToLower(failure.Error())
+	if strings.Contains(message, "/bin/sh") && (strings.Contains(message, "no such file") || strings.Contains(message, "not found")) {
+		return "container.shell-unavailable"
+	}
+	return ""
 }

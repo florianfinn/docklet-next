@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/labstack/echo/v5"
@@ -49,11 +50,13 @@ func (h *WebSocketHandler) ContainerExec(c *echo.Context) error {
 		if authenticatedUser != nil {
 			actor = authenticatedUser.Actor()
 		}
-		ctx, handle, err := h.shellSessions.Accept(c.Request().Context(), c.QueryParams(), actor, c.Param("id"), containerID)
+		ctx, handle, err := h.shellSessions.Accept(c.Request().Context(), c.QueryParams(), actor, c.Param("id"), containerID, httpx.IsWebSocketUpgradeRequest(c.Request()))
 		if err != nil {
-			return c.JSON(503, map[string]any{"code": "container.shell-unavailable", "status": 503})
+			return c.NoContent(http.StatusServiceUnavailable)
 		}
-		defer handle.Release()
+		if handle != nil {
+			defer handle.Release()
+		}
 		c.SetRequest(c.Request().WithContext(ctx))
 	}
 	query, _ := containershell.ParseQuery(c.QueryParams())

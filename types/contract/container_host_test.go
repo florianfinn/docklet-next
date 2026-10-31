@@ -31,9 +31,10 @@ func TestAgentHubV11ContainerHostFixture(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &fixture))
 	require.Equal(t, 11, fixture.Version)
 	require.Equal(t, 11, fixture.Minimum)
-	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerRecreateResult", "ContainerProblem", "ContainerShellQuery", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem", "SystemHealthResponse", "ActivityRuntimeOptions", "ActivityRuntimeSnapshot"} {
+	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerRecreateResult", "ContainerProblem", "ContainerShellQuery", "ContainerShellClose", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem", "SystemHealthResponse", "ActivityRuntimeOptions", "ActivityRuntimeSnapshot"} {
 		require.Contains(t, fixture.Operations.Schemas, name)
 	}
+	require.JSONEq(t, `{"additionalProperties":false,"properties":{"type":{"enum":["close"],"type":"string"}},"required":["type"],"type":"object"}`, string(fixture.Operations.Schemas["ContainerShellClose"]))
 	for _, operation := range []string{"recreate-container", "redeploy-container", "stop-project"} {
 		require.Contains(t, fixture.Operations.RuntimeOperations, operation)
 	}

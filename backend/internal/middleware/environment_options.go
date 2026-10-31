@@ -1,8 +1,8 @@
-// Source: docklet-next/issues/312
-// Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
-// Retrieved: 2026-10-31
-// License: Apache-2.0
-// Deviations: Original split of proxy wiring options to retain the file size bound.
+// Source: getarcaneapp/arcane/backend/internal/middleware/environment.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Split retained hub proxy wiring options from environment.go; add the shared shell registry.
 
 package middleware
 

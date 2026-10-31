@@ -72,6 +72,12 @@ type ShellResize struct {
 	Cols int    `json:"cols" minimum:"1" maximum:"1000"`
 	Rows int    `json:"rows" minimum:"1" maximum:"1000"`
 }
+
+// ShellClose asks the agent to end the process while retaining the exit channel.
+type ShellClose struct {
+	Type string `json:"type" enum:"close"`
+}
+
 type ShellExit struct {
 	Type   string `json:"type" enum:"exit"`
 	Code   *int   `json:"code"`

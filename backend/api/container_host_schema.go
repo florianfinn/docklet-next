@@ -20,7 +20,7 @@ func registerContainerHostSchemasInternal(api huma.API) {
 	for _, typ := range []reflect.Type{
 		reflect.TypeFor[container.OriginAssignment](), reflect.TypeFor[container.RecreateRequest](),
 		reflect.TypeFor[container.Problem](), reflect.TypeFor[container.ShellQuery](),
-		reflect.TypeFor[container.ShellResize](), reflect.TypeFor[container.ShellExit](),
+		reflect.TypeFor[container.ShellClose](), reflect.TypeFor[container.ShellResize](), reflect.TypeFor[container.ShellExit](),
 		reflect.TypeFor[environment.AgentRestartResponse](), reflect.TypeFor[environment.AgentRestartRun](),
 		reflect.TypeFor[environment.HostProblem](),
 	} {
