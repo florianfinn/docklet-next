@@ -42,7 +42,9 @@ export function createDemoContainerOperations({ db, runner, demoFailure }: DemoC
     },
     async setContainerOrigin(id, origin) {
       const c = find(id);
-      if (capabilityReason("setContainerOrigin", { kind: "container", id }) || origin === "compose" || (origin === "standalone" && hasCompose(c))) throw problem("container.origin-locked");
+      // The descriptor also covers reset; assignment itself needs unknown detection (backend Assign).
+      const assign = origin !== "unknown";
+      if (capabilityReason("setContainerOrigin", { kind: "container", id }) || (assign && detected.get(id) !== "unknown") || origin === "compose" || (origin === "standalone" && hasCompose(c))) throw problem("container.origin-locked");
       db.patchContainer(id, (item) => ({ ...item, origin: origin === "unknown" ? detected.get(id) ?? "unknown" : origin, originSource: origin === "unknown" ? "detected" : "manual", originNote: undefined }));
       db.changed("containers", "stacks");
     },

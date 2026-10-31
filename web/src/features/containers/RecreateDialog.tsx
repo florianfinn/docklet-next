@@ -29,12 +29,27 @@ export function RecreateDialog({ container, open, onOpenChange }: { container: C
   return <Dialog open={open} onOpenChange={onOpenChange}>
     {container && open && <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
       <DialogHeader><DialogTitle>{t("title", { name: container.name })}</DialogTitle><DialogDescription>{t("description")}</DialogDescription></DialogHeader>
-      <LoadForm key={container.id} c={container} close={() => onOpenChange(false)} />
+      <Owner key={container.id} c={container} close={() => onOpenChange(false)} />
     </DialogContent>}
   </Dialog>;
 }
 
-function LoadForm({ c, close }: { c: ContainerInfo; close: () => void }) {
+// The accepted run lives above the form's capability and configuration gate: once
+// Docker removes the old container its descriptor refuses, but the receipt stays
+// followed until the identity generation that accepted it ends.
+function Owner({ c, close }: { c: ContainerInfo; close: () => void }) {
+  const adapter = useAdapter();
+  const lifetime = identityLifetime(adapter);
+  const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
+  const tc = useTranslations("common.actions");
+  const [accepted, setAccepted] = useState<{ runId: string; generation: number }>();
+  if (accepted && accepted.generation === generation) {
+    return <><RecreateRun hostId={c.hostId} runId={accepted.runId} onNavigated={close} /><DialogFooter><Button variant="outline" onClick={close}>{tc("close")}</Button></DialogFooter></>;
+  }
+  return <LoadForm c={c} close={close} onAccepted={(runId) => setAccepted({ runId, generation })} />;
+}
+
+function LoadForm({ c, close, onAccepted }: { c: ContainerInfo; close: () => void; onAccepted: (runId: string) => void }) {
   const adapter = useAdapter();
   const lifetime = identityLifetime(adapter);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
@@ -47,10 +62,10 @@ function LoadForm({ c, close }: { c: ContainerInfo; close: () => void }) {
   if (!capability.available) return <p role="status">{capability.reason}</p>;
   if (config.isError) return <QueryError error={config.error} onRetry={() => void config.refetch()} />;
   if (!config.data) return <p role="status">{t("loading")}</p>;
-  return <EditForm key={generation} c={c} config={config.data} close={close} />;
+  return <EditForm key={generation} c={c} config={config.data} close={close} onAccepted={onAccepted} />;
 }
 
-function EditForm({ c, config, close }: { c: ContainerInfo; config: EditConfig; close: () => void }) {
+function EditForm({ c, config, close, onAccepted }: { c: ContainerInfo; config: EditConfig; close: () => void; onAccepted: (runId: string) => void }) {
   const t = useTranslations("containers.recreate");
   const tc = useTranslations("common.actions");
   const cmd = useContainerCommands();
@@ -60,16 +75,14 @@ function EditForm({ c, config, close }: { c: ContainerInfo; config: EditConfig; 
   const [intent] = useState(() => recreateIntent());
   const [pending, setPending] = useState(false);
   const [invalid, setInvalid] = useState(false);
-  const [runId, setRunId] = useState<string>();
   const patch = (value: Partial<typeof draft>) => { setDraft((old) => ({ ...old, ...value })); setInvalid(false); };
   const submit = async () => {
     let edit;
     try { edit = recreateEdit(initial, draft); } catch { setInvalid(true); return; }
     setPending(true);
-    try { const id = await cmd.recreate(c.id, edit, undefined, intent(edit)); if (id) setRunId(id); }
+    try { const id = await cmd.recreate(c.id, edit, undefined, intent(edit)); if (id) onAccepted(id); }
     finally { setPending(false); }
   };
-  if (runId) return <><RecreateRun hostId={c.hostId} runId={runId} onNavigated={close} /><DialogFooter><Button variant="outline" onClick={close}>{tc("close")}</Button></DialogFooter></>;
   return <>
     <Alert><AlertDescription>{t("warning")}</AlertDescription></Alert>
     <FieldGroup>

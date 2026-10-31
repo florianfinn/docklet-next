@@ -15,36 +15,56 @@ import type { ContainerInfo } from "@/domain/model";
 import { renderRoutes, renderWithApp } from "@/test/render";
 import { useCapability } from "@/data/use-capability";
 import ContainerPage from "./ContainerPage";
+import ContainersPage from "./ContainersPage";
 import { RecreateRun } from "./RecreateRun";
 
 const old: ContainerInfo = { ...STANDALONE.find((item) => item.origin === "standalone")!, id: "0~old", hostId: "0", name: "app" };
 const config = { id: "old", name: "app", image: "example/app:1", running: true, environment: [], hostConfig: { restartPolicy: { name: "always" }, portBindings: {} } };
 
-// The old ID leaves the inventory before the run settles; the page still follows
-// the run, refreshes the inventory and opens the replacement with the form closed.
-it("W3 navigates to the replacement after the old container left the list", async () => {
+const runState = (status: "running" | "succeeded"): ActionDetailState => ({ status: "ready", run: { id: "run", kind: "recreate", title: { code: "runMessages.value", params: { value: "Recreate" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status, steps: [], progress: status === "running" ? 50 : 100, startedAt: "2026-10-31T00:00:00Z", log: [], output: [], ...(status === "succeeded" ? { recreateResult: { oldId: "old", newId: "replacement", oldName: "app", newName: "renamed" } } : {}) } });
+
+const openFromDetail = async () => { await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten & neu erstellen" })); };
+const openFromList = async () => {
+  await userEvent.click((await screen.findAllByRole("button", { name: /: app$/ }))[0]!);
+  await userEvent.click(await screen.findByRole("menuitem", { name: "Bearbeiten & neu erstellen" }));
+};
+
+// The old ID leaves the inventory before the run settles and its recreate
+// descriptor turns unavailable, as the backend reader refuses a removed ID; the
+// dialog still follows the accepted run through refreshes, refreshes the
+// inventory and opens the replacement with the form closed.
+it.each([
+  ["detail page", "/containers/0~old", openFromDetail],
+  ["list", "/containers", openFromList],
+] as const)("W3 follows the accepted run from the %s after the old capability becomes unavailable", async (_where, start, openDialog) => {
   let rows: ContainerInfo[] = [old];
   let receive: ((state: ActionDetailState) => void) | undefined;
   const changes = new Set<(topics: Topic[]) => void>();
   const inner = createDemoAdapter();
   const adapter: DockletAdapter = {
     ...inner,
+    listHosts: async () => [{ ...(await inner.listHosts())[0]!, id: "0", name: "Example" }],
     listContainers: async () => rows,
     subscribeChanges: (listener) => { changes.add(listener); return () => { changes.delete(listener); }; },
-    getCapability: async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true }),
+    getCapability: async (operationId, resourceRef = { kind: "hub", id: "0" }) => rows.some((row) => row.id === resourceRef.id)
+      ? { operationId, resourceRef, available: true }
+      : { operationId, resourceRef, available: false, disabledReasonCode: "capability.unavailable" },
     getContainerEditConfig: async () => config,
     recreateContainer: async () => "run",
     observeActionDetail: (_host, _run, listener) => { receive = listener; return () => { receive = undefined; }; },
   };
-  const { router } = renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], ["/containers/0~old"], adapter);
-  await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten & neu erstellen" }));
+  const { router } = renderRoutes([{ path: "/containers", element: <ContainersPage /> }, { path: "/containers/:containerId", element: <ContainerPage /> }], [start], adapter);
+  await openDialog();
   await userEvent.click(await screen.findByRole("button", { name: "Neu erstellen" }));
   await waitFor(() => expect(typeof receive).toBe("function"));
   rows = [];
   act(() => changes.forEach((listener) => listener(["containers"])));
-  await screen.findByText("Container nicht gefunden");
+  act(() => receive?.(runState("running")));
+  // A refresh while following re-reads the now unavailable descriptor.
+  act(() => changes.forEach((listener) => listener(["hosts", "containers"])));
+  await waitFor(() => expect(screen.queryByText("Läuft") !== null).toBe(true));
   rows = [{ ...old, id: "0~replacement", name: "renamed" }];
-  act(() => receive?.({ status: "ready", run: { id: "run", kind: "recreate", title: { code: "runMessages.value", params: { value: "Recreate" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status: "succeeded", steps: [], progress: 100, startedAt: "2026-10-31T00:00:00Z", log: [], output: [], recreateResult: { oldId: "old", newId: "replacement", oldName: "app", newName: "renamed" } } }));
+  act(() => receive?.(runState("succeeded")));
   await waitFor(() => expect(router.state.location.pathname).toBe("/containers/0~replacement"));
   expect(await screen.findByRole("heading", { name: "renamed" }) !== null).toBe(true);
   expect(screen.queryByRole("dialog") === null).toBe(true);
@@ -59,6 +79,17 @@ it("W3 shows recreate run steps from the catalogue in German", async () => {
   expect(screen.queryByText(/Container wird umbenannt/) !== null).toBe(true);
   expect(screen.queryByText(/Ersatz wird erstellt/) !== null).toBe(true);
   expect(screen.queryByText(/Renaming container/) === null).toBe(true);
+});
+
+it("W3 shows unknown and inherited-property step labels unchanged", async () => {
+  let receive: ((state: ActionDetailState) => void) | undefined;
+  const adapter: DockletAdapter = { ...createDemoAdapter(), observeActionDetail: (_host, _run, listener) => { receive = listener; return () => { receive = undefined; }; } };
+  renderRoutes([{ path: "*", element: <RecreateRun hostId="0" runId="run" /> }], ["/containers/0~old"], adapter);
+  await waitFor(() => expect(typeof receive).toBe("function"));
+  const step = (value: string) => ({ key: "other" as const, label: { code: "runMessages.value", params: { value } }, state: "done" as const });
+  act(() => receive?.({ status: "ready", run: { id: "run", kind: "recreate", title: { code: "runMessages.value", params: { value: "Recreate" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status: "running", steps: [step("constructor"), step("Checking volumes")], progress: 50, startedAt: "2026-10-31T00:00:00Z", log: [], output: [] } }));
+  expect(screen.queryByText(/^constructor ·/) !== null).toBe(true);
+  expect(screen.queryByText(/^Checking volumes ·/) !== null).toBe(true);
 });
 
 function Reasons() {

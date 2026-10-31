@@ -40,7 +40,7 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
   const locale = useLocale();
   const t = useTranslations("containers.recreate");
   const ta = useTranslations("activity");
-  const stepText = (label: string) => { const key = STEP_KEYS[label as keyof typeof STEP_KEYS]; return key ? t(`steps.${key}`) : label; };
+  const stepText = (label: string) => Object.hasOwn(STEP_KEYS, label) ? t(`steps.${STEP_KEYS[label as keyof typeof STEP_KEYS]}`) : label;
   const [view, setView] = useState<{ key: string; state: ActionDetailState }>();
   const state: ActionDetailState = view?.key === key ? view.state : { status: "loading" };
   useEffect(() => {
