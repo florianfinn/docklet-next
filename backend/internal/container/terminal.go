@@ -2,7 +2,8 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original shell frame protocol, Docker resize and joined process cleanup.
+// Deviations: Original shell frame protocol, Docker resize and joined process cleanup;
+// a missing /bin/sh is named on every resize and stream end path.
 
 package container
 
@@ -85,7 +86,12 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 		if err := session.Resize(ctx, cols, rows); err != nil {
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			if errors.Is(session.Close(cleanup), errShellOrphaned) {
+			// A failed start can end the exec before its first resize; only a live exec needs Close.
+			if inspected, err := session.Inspect(cleanup); err == nil && !inspected.Running {
+				code = &inspected.ExitCode
+				reason = s.endedShellReason(cleanup, containerID, inspected.ExitCode)
+				session.hijackedResp.Close()
+			} else if errors.Is(session.Close(cleanup), errShellOrphaned) {
 				reason = "container.shell-orphaned"
 			}
 			return
@@ -122,17 +128,17 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 	if outputEnded && inspectErr == nil && !inspected.Running {
 		code = &inspected.ExitCode
 		session.hijackedResp.Close()
-		// Docker reports a failed exec start inside the hijacked stream, then
-		// ends it with 126 or 127; only a verified missing /bin/sh names the reason.
-		if (inspected.ExitCode == 126 || inspected.ExitCode == 127) && s.shellMissing(cleanupCtx, containerID) {
-			reason = "container.shell-unavailable"
-		}
+		reason = s.endedShellReason(cleanupCtx, containerID, inspected.ExitCode)
 	} else {
 		if err := session.Close(cleanupCtx); errors.Is(err, errShellOrphaned) {
 			reason = "container.shell-orphaned"
 		}
 		if inspected, err := session.Inspect(cleanupCtx); err == nil && !inspected.Running {
 			code = &inspected.ExitCode
+			// A resize can fail on an exec whose start already failed, before its stream ends.
+			if reason == "" {
+				reason = s.endedShellReason(cleanupCtx, containerID, inspected.ExitCode)
+			}
 		}
 	}
 	if !outputEnded {
@@ -217,6 +223,16 @@ func (s *ContainerService) shellFailureReason(ctx context.Context, containerID s
 	// Only an explicit missing shell executable proves shell-unavailable.
 	message := strings.ToLower(failure.Error())
 	if strings.Contains(message, "/bin/sh") && (strings.Contains(message, "no such file") || strings.Contains(message, "not found")) {
+		return "container.shell-unavailable"
+	}
+	return ""
+}
+
+// endedShellReason names the reason of an exec that has ended. Docker reports a failed
+// exec start inside the hijacked stream, then ends it with 126 or 127; only a verified
+// missing /bin/sh names the reason, any other end stays unknown.
+func (s *ContainerService) endedShellReason(ctx context.Context, containerID string, exitCode int) string {
+	if (exitCode == 126 || exitCode == 127) && s.shellMissing(ctx, containerID) {
 		return "container.shell-unavailable"
 	}
 	return ""

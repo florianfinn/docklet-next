@@ -57,7 +57,7 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/containers/example/json":
 		_, _ = fmt.Fprintf(w, `{"Id":"example","State":{"Running":%t}}`, !f.stopped && f.running.Load())
 	case path == "/containers/example/archive":
-		if f.failure == "missing-sh" || f.failure == "missing-sh-stream" {
+		if f.failure == "missing-sh" || f.failure == "missing-sh-stream" || f.failure == "missing-sh-resize" || f.failure == "missing-sh-input-resize" {
 			w.WriteHeader(404)
 		} else {
 			w.WriteHeader(500)
@@ -94,9 +94,20 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if f.attached != nil {
 			f.attached <- conn
 		}
+		if f.failure == "missing-sh-resize" || f.failure == "missing-sh-input-resize" {
+			// The start fails inside the stream before the browser's first resize reaches Docker.
+			f.exitCode.Store(127)
+			f.execEnded.Store(true)
+		}
 		_, _ = rw.WriteString("HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
 		_ = rw.Flush()
-		if f.failure == "missing-sh-stream" || f.failure == "exit-127" {
+		if f.failure == "missing-sh-input-resize" {
+			// The stream stays open; only the failed in-session resize ends the session.
+			f.tick <- time.Now()
+			_, _ = io.Copy(io.Discard, conn)
+			return
+		}
+		if f.failure == "missing-sh-stream" || f.failure == "exit-127" || f.failure == "missing-sh-resize" {
 			// The daemon hijacks first, then writes the exec start error and ends the stream.
 			_, _ = conn.Write([]byte("OCI runtime exec failed: exec failed: stat /bin/sh: no such file or directory\r\n"))
 			f.exitCode.Store(127)
@@ -125,6 +136,11 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	case path == "/exec/example-exec/resize":
+		if f.execEnded.Load() {
+			w.WriteHeader(409)
+			_, _ = io.WriteString(w, `{"message":"exec example-exec is not running"}`)
+			return
+		}
 		f.resizes <- r.URL.RawQuery
 	case path == "/exec/example-exec/json":
 		f.inspections.Add(1)
@@ -230,12 +246,21 @@ func TestShellResizeRealWebSocketDockerHTTP(t *testing.T) {
 	require.GreaterOrEqual(t, f.inspections.Load(), int32(2))
 }
 func TestShellEarlyFailuresAndEOF(t *testing.T) {
-	for _, failure := range []string{"create", "attach", "missing-sh", "missing-sh-stream", "exit-127", "stopped", "stop-create", "EOF"} {
+	for _, failure := range []string{"create", "attach", "missing-sh", "missing-sh-stream", "missing-sh-resize", "missing-sh-input-resize", "exit-127", "stopped", "stop-create", "EOF"} {
 		t.Run(failure, func(t *testing.T) {
 			f := &shellDocker{failure: failure, stopped: failure == "stopped"}
-			conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "sh"})
+			query := dto.ShellQuery{Shell: "sh"}
+			if failure == "missing-sh-resize" {
+				// The browser sends its initial size with the upgrade.
+				cols, rows := 120, 40
+				query.Cols, query.Rows = &cols, &rows
+			}
+			conn, done := shellFixture(t, f, query)
+			if failure == "missing-sh-input-resize" {
+				require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"resize","cols":120,"rows":40}`)))
+			}
 			want := ""
-			if failure == "missing-sh" || failure == "missing-sh-stream" {
+			if failure == "missing-sh" || strings.HasPrefix(failure, "missing-sh-") {
 				want = "container.shell-unavailable"
 			}
 			if failure == "stopped" || failure == "stop-create" {
@@ -252,7 +277,7 @@ func TestShellEarlyFailuresAndEOF(t *testing.T) {
 				require.NotNil(t, exit.Code)
 				require.Equal(t, 23, *exit.Code)
 			}
-			if failure == "missing-sh-stream" || failure == "exit-127" {
+			if strings.HasPrefix(failure, "missing-sh-") || failure == "exit-127" {
 				require.NotNil(t, exit.Code)
 				require.Equal(t, 127, *exit.Code)
 			}
