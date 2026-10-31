@@ -239,7 +239,7 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 	}{
 		{"/environments", "POST", []string{"400", "409"}},
 		{"/environments/{id}", "PUT", []string{"400", "409"}},
-		{"/environments/{id}/test", "POST", []string{"502"}},
+		{"/environments/{id}/test", "POST", []string{"409", "502"}},
 	} {
 		path := api.OpenAPI().Paths[item.path]
 		op := path.Post

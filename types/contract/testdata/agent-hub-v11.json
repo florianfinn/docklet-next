@@ -265,12 +265,12 @@
     "targetKinds": ["project"],
     "routes": [
       {"method":"GET","path":"/environments/{id}/updater/projects/{projectId}/baseline","operationId":"get-update-baseline","sha256":"272a23db153b9a580ea95c0e47611421104bec1ed6f2f5a2e5b28bc5691594a4"},
-      {"method":"POST","path":"/environments/{id}/updater/projects/{projectId}/update","operationId":"update-project-images","sha256":"56994d85f22affe57e9e852964d5159679a43dac0a9ef976b26cbdff857d0295"},
+      {"method":"POST","path":"/environments/{id}/updater/projects/{projectId}/update","operationId":"update-project-images","sha256":"a329a66774896898530ea9892ddf20d230c254ac3e85479ca5011bb3d8791a09"},
       {"method":"GET","path":"/environments/{id}/updater/restore-points","operationId":"list-host-restore-points","sha256":"860a516a25b0d8f2abecce3c5c7e5ef37425a546b92f9100f67281787953b1fe"},
       {"method":"DELETE","path":"/environments/{id}/updater/restore-points/{pointId}","operationId":"delete-host-restore-point","sha256":"489cf1bd6cda7cb5dd6f9f76037a8b76c9df295b2d39a6033f71bf4938fdaed5"},
       {"method":"GET","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points","operationId":"list-restore-points","sha256":"e7aa68e1badc68c3cbb648f9b11c2dc3b441245df30c111280ccb6c6c35a9a25"},
       {"method":"DELETE","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}","operationId":"delete-restore-point","sha256":"d94ec5225f6e44479df8aaa2f427f143f7e1d7eeaec5e7cc7cd98ae52ce097b9"},
-      {"method":"POST","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore","operationId":"restore-update","sha256":"3e193923d20791d64973d3646a35993218b4e95109ee1ca94903126e582bd811"}
+      {"method":"POST","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore","operationId":"restore-update","sha256":"dcf289f2b99572288bd6997f4ab9c12d1486b2066a31669fba18d1ce1838eaf0"}
     ],
     "schemas": {
       "UpdaterLifecycleRequest": {"sha256":"b4d8a19a85ffe9b3007138541f73aeae4663a616e873966ef66d3d9c10035d48"},
@@ -573,8 +573,8 @@
   },
   "autoHeal": {
     "routes": [
-      {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"27983ecb7621f734a0396619a7b0b42716d02adbaa6cf0aed210d43d790ced97"},
-      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"11dcbe9f54167bcb26775075f13bf55241cf1f758973b2a804da99d58d3366eb"}
+      {"method":"GET","path":"/environments/{id}/auto-heal","operationId":"get-auto-heal-settings","sha256":"571aa3e53e0cbd2cdaf61f0187f49db6e2ecf536b11ad3b02186ba043575c630"},
+      {"method":"PUT","path":"/environments/{id}/auto-heal","operationId":"update-auto-heal-settings","sha256":"2a1028d151829c198bc15ace321b088f73d28b3d5c19ee1ef70719561045f580"}
     ],
     "settings": {
       "additionalProperties": false,
@@ -696,13 +696,13 @@
   },
   "containerHostOperations": {
     "routes": [
-      {"method":"POST","path":"/environments/{id}/agent/restart","operationId":"restartEnvironmentAgent","sha256":"84068620e536dce2a7216d57532d79706cbc7bece90dd9e3daa694f529268076"},
+      {"method":"POST","path":"/environments/{id}/agent/restart","operationId":"restartEnvironmentAgent","sha256":"70a6b9f7002106215989ef0310f4e76ba9ec9994f9d845dfd36c53d0a9fbfe5d"},
       {"method":"GET","path":"/environments/{id}/agent/restarts/{runId}","operationId":"getEnvironmentAgentRestart","sha256":"5391fa5aec4da7e64ef82ead07c1e25b944eb4360703209beb6a88089ba5de7f"},
       {"method":"DELETE","path":"/environments/{id}/containers/{containerId}/origin","operationId":"reset-container-origin","sha256":"4b1e3c1fc5377cc3d2b0b567a64305fa6bca9ea182156ca0530cecc76dca0ceb"},
       {"method":"PUT","path":"/environments/{id}/containers/{containerId}/origin","operationId":"assign-container-origin","sha256":"dfa1831222d8379dd131b12de52381128be6a1ad3361ed65a5a6a0ced801a49f"},
-      {"method":"POST","path":"/environments/{id}/containers/{containerId}/recreate","operationId":"recreate-container","sha256":"9a2b7960cb91ac78f7481bb48925a32498bb7ddef0c1df5de68acd6731e1056e"},
-      {"method":"POST","path":"/environments/{id}/containers/{containerId}/redeploy","operationId":"redeploy-container","sha256":"57f998f0a3cb94f61ca298fc4dfb104bfdbdb5254d27c4037ea9007bc1f0ea21"},
-      {"method":"POST","path":"/environments/{id}/projects/{projectId}/stop","operationId":"stop-project","sha256":"fb83604e98e6dc12737a0abdbe0f396fcd63a714547ec584bab5f57d10c7097d"}
+      {"method":"POST","path":"/environments/{id}/containers/{containerId}/recreate","operationId":"recreate-container","sha256":"3c9c58c4ade5289bbd3af570ba3263db0638ae2ff72b2d71e7badb345ae16715"},
+      {"method":"POST","path":"/environments/{id}/containers/{containerId}/redeploy","operationId":"redeploy-container","sha256":"c4d95a2d72991e69ce392ce21f144af65211d15301ee4dd245847c5285fd3b82"},
+      {"method":"POST","path":"/environments/{id}/projects/{projectId}/stop","operationId":"stop-project","sha256":"70b21627b79e6ad97bf4c8f97b03533bfa4b49ec6b7fd62c102ee880b2fe6038"}
     ],
     "schemas": {
       "ContainerOriginAssignment": {

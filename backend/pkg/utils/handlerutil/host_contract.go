@@ -15,6 +15,7 @@ import (
 // HostProblemResponses retains existing errors alongside the typed host refusal.
 func HostProblemResponses(api huma.API, op *huma.Operation, statuses ...string) {
 	host := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.HostProblem](), true, "")
+	access := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[AgentAccessError](), true, "")
 	generic := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
 	if op.Responses == nil {
 		op.Responses = map[string]*huma.Response{}
@@ -32,7 +33,7 @@ func HostProblemResponses(api huma.API, op *huma.Operation, statuses ...string) 
 		if media == nil {
 			media = &huma.MediaType{Schema: generic}
 		}
-		media.Schema = &huma.Schema{AnyOf: []*huma.Schema{media.Schema, host}}
+		media.Schema = &huma.Schema{AnyOf: []*huma.Schema{media.Schema, host, access}}
 		response.Content["application/problem+json"] = media
 	}
 }

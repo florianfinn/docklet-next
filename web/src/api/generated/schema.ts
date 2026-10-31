@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 64eec5a7d4b3860fbccde838e4b402159364fdcb2cb43a4952df67efc9a819cc
+// Revision: 0f6922614a7470229300481fde32eeaf0c01bfdddd6efa94c540601f9edfcbb0
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5237,6 +5237,10 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             type: string;
+        };
+        AgentAccessError: {
+            code: string;
+            success: boolean;
         };
         "ApiResponseStruct {}DataStruct": Record<string, never>;
         ApikeyApiKey: {
@@ -16128,7 +16132,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Host or framework refusal */
@@ -16137,7 +16141,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -16713,7 +16717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Host or framework refusal */
@@ -16722,7 +16726,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -16988,7 +16992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Host or framework refusal */
@@ -16997,7 +17001,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -17069,7 +17073,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -17078,7 +17082,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -17087,7 +17091,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -17096,7 +17100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -17141,7 +17145,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -17150,7 +17154,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -17159,7 +17163,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -17168,7 +17172,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -17827,7 +17831,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -17923,7 +17927,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -18019,7 +18023,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -18115,7 +18119,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -18211,7 +18215,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23595,7 +23599,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23727,7 +23731,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23826,7 +23830,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23959,7 +23963,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -24131,7 +24135,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -24622,7 +24626,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -25115,12 +25128,21 @@ export interface operations {
                 };
             };
             /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -25700,7 +25722,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -26703,7 +26725,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
