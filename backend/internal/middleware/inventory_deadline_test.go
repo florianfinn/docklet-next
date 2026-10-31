@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,4 +85,57 @@ func TestInventoryReadFromFrozenDirectAgentIsBounded(t *testing.T) {
 	other, _ := request(http.MethodGet, "/api/environments/host/system/info")
 	require.True(t, otherSent, "the non-inventory read reached the agent: %d %s", other.Code, other.Body.String())
 	require.False(t, otherBounded, "other proxied operations keep their own budgets")
+}
+
+// The agent sends its headers and a JSON prefix, then freezes. The bound ends the body
+// transfer, which must answer like a failure before headers, not as a truncated success.
+func TestInventoryReadStalledAfterHeadersIsUnavailable(t *testing.T) {
+	previous := inventoryReadTimeout
+	inventoryReadTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { inventoryReadTimeout = previous })
+	var stalled atomic.Bool
+	stalled.Store(true)
+	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !stalled.Load() {
+			_, _ = w.Write([]byte(`{"success":true,"data":[{"id":"app"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"success":true,"data":[`))
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-time.After(3 * time.Second):
+			_, _ = w.Write([]byte(`{"id":"late"}]}`))
+		}
+	}))
+	t.Cleanup(agent.Close)
+	mw := newTestEnvironmentMiddleware()
+	mw.snapshots = &hoststate.Store{}
+	token := "example"
+	mw.resolver = func(context.Context, string) (string, *string, bool, error) { return agent.URL, &token, true, nil }
+	router := echo.New()
+	group := attachMiddleware(router, mw)
+	group.Any("/environments/:id/*", func(c *echo.Context) error { return c.NoContent(418) })
+	request := func() (*httptest.ResponseRecorder, time.Duration) {
+		rec := httptest.NewRecorder()
+		started := time.Now()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/environments/example/containers", nil))
+		return rec, time.Since(started)
+	}
+
+	cold, elapsed := request()
+	require.Less(t, elapsed, 2*time.Second)
+	require.Equal(t, http.StatusBadGateway, cold.Code, cold.Body.String())
+	require.JSONEq(t, `{"success":false,"code":"agent.unavailable"}`, cold.Body.String())
+
+	stalled.Store(false)
+	fresh, _ := request()
+	require.Equal(t, 200, fresh.Code, fresh.Body.String())
+	stalled.Store(true)
+	stale, elapsed := request()
+	require.Less(t, elapsed, 2*time.Second)
+	require.Equal(t, 200, stale.Code)
+	require.JSONEq(t, fresh.Body.String(), stale.Body.String())
+	require.Equal(t, "agent.unavailable", stale.Header().Get("X-Docklet-Host-Reason"))
 }

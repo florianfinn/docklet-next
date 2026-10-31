@@ -79,6 +79,14 @@ func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, fo
 		Code    string `json:"code"`
 	}
 	valid := json.Unmarshal(capture.body.Bytes(), &envelope) == nil
+	if capture.status == http.StatusOK && !valid {
+		// A body cut short after its headers (the read bound or a dropped agent) is the
+		// host being unavailable, never a success; the body copy does not report it.
+		capture.status, capture.header = http.StatusBadGateway, make(http.Header)
+		capture.body.Reset()
+		capture.body.WriteString(`{"success":false,"code":"agent.unavailable"}`)
+		envelope.Code, valid = "agent.unavailable", true
+	}
 	observed := ""
 	reason := ""
 	if capture.status == http.StatusOK && valid && envelope.Success {

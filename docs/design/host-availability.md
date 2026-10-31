@@ -59,7 +59,8 @@ contract items are in [container and host operations](container-host-operations.
 
 4. **Bounded inventory reads**: an ordinary inventory read (lists and point
    reads that keep snapshots) gives up after 20 s, including agent access, and
-   answers from its snapshot or with `agent.unavailable`. A frozen Direct agent
+   answers from its snapshot or with `agent.unavailable`; so does a 200 body cut
+   short after its headers. A frozen Direct agent
    accepts connections but never answers. Without this bound, its reads held all
    six HTTP/1.1 browser connections, and hub-local reads such as host
    descriptors waited until the web's 40 s deadline, so Check stayed disabled.
