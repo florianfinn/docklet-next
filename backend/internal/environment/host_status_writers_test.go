@@ -43,22 +43,45 @@ var hostTableWriters = map[string]int{
 
 var (
 	hostWriteMethods = map[string]bool{"Update": true, "Updates": true, "UpdateColumn": true, "UpdateColumns": true, "Save": true, "Create": true}
-	hostRawWrite     = regexp.MustCompile(`(?is)\b(update|insert\s+(or\s+\w+\s+)?into|replace\s+into)\s+["\x60]?environments\b`)
-	hostStatusWord   = regexp.MustCompile(`(?i)\bstatus\b`)
+	// SQLite statements that change rows: UPDATE and INSERT with an optional OR conflict
+	// clause, REPLACE INTO; the table name may carry a schema and any SQLite identifier quote.
+	hostRawWrite = regexp.MustCompile(`(?is)\b(update(\s+or\s+\w+)?|insert(\s+or\s+\w+)?\s+into|replace\s+into)\s+` +
+		`(["\x60\[]?\w+["\x60\]]?\s*\.\s*)?["\x60\[]?environments\b`)
+	hostStatusWord = regexp.MustCompile(`(?i)\bstatus\b`)
 )
 
-func isEnvironmentType(expr ast.Expr) bool {
+// isModelType reports whether a type expression names a host model: Environment or a
+// type whose TableName is "environments", possibly behind a pointer, slice or array.
+func (s *hostWriterScan) isModelType(expr ast.Expr) bool {
 	switch e := expr.(type) {
 	case *ast.StarExpr:
-		return isEnvironmentType(e.X)
+		return s.isModelType(e.X)
 	case *ast.ArrayType:
-		return isEnvironmentType(e.Elt)
+		return s.isModelType(e.Elt)
 	case *ast.Ident:
-		return e.Name == "Environment"
+		return s.models[e.Name]
 	case *ast.SelectorExpr:
-		return e.Sel.Name == "Environment"
+		return s.models[e.Sel.Name]
 	}
 	return false
+}
+
+// isModel is isModelType for a type the checker resolved inside the scanned package.
+func (s *hostWriterScan) isModel(t types.Type) bool {
+	for {
+		switch v := t.(type) {
+		case *types.Pointer:
+			t = v.Elem()
+		case *types.Slice:
+			t = v.Elem()
+		case *types.Array:
+			t = v.Elem()
+		case *types.Named:
+			return s.models[v.Obj().Name()]
+		default:
+			return false
+		}
+	}
 }
 
 // unwrap strips parentheses, address-of and dereference around a local expression.
@@ -95,6 +118,8 @@ func calleeName(call *ast.CallExpr) string {
 // constant values come from go/types.
 type hostWriterScan struct {
 	info    *types.Info
+	models  map[string]bool // host model type names of the package
+	rawSQL  bool            // the current body holds a constant host table write statement
 	envs    map[string]bool
 	queries map[string]bool
 }
@@ -108,6 +133,14 @@ func (s *hostWriterScan) text(e ast.Expr) (string, bool) {
 	return "", false
 }
 
+// hostTableName returns the bare table of a GORM Table argument: without alias, schema
+// or SQLite identifier quotes.
+func hostTableName(name string) string {
+	name = strings.Fields(name + " x")[0]
+	name = name[strings.LastIndex(name, ".")+1:]
+	return strings.Trim(name, "\"`[]")
+}
+
 // hostStubImporter gives every import an empty package, so a package type-checks without
 // its dependencies; constants of the package itself still evaluate.
 type hostStubImporter struct{}
@@ -118,18 +151,50 @@ func (hostStubImporter) Import(path string) (*types.Package, error) {
 	return pkg, nil
 }
 
+// hostModels returns Environment and every type of the package whose TableName method
+// returns the constant "environments".
+func hostModels(files []*ast.File, info *types.Info) map[string]bool {
+	models := map[string]bool{"Environment": true}
+	scan := &hostWriterScan{info: info}
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name.Name != "TableName" || fn.Recv == nil || len(fn.Recv.List) != 1 || fn.Body == nil {
+				continue
+			}
+			recv := unwrap(fn.Recv.List[0].Type)
+			id, ok := recv.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				if ret, ok := n.(*ast.ReturnStmt); ok && len(ret.Results) == 1 {
+					if name, ok := scan.text(ret.Results[0]); ok && hostTableName(name) == "environments" {
+						models[id.Name] = true
+					}
+				}
+				return true
+			})
+		}
+	}
+	return models
+}
+
 // hostConstantInfo type-checks one package with stub imports, ignoring type errors.
 func hostConstantInfo(fset *token.FileSet, files []*ast.File) *types.Info {
-	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
+	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}, Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{}}
 	conf := types.Config{Importer: hostStubImporter{}, Error: func(error) {}}
 	_, _ = conf.Check(files[0].Name.Name, fset, files, info)
 	return info
 }
 
 func (s *hostWriterScan) isEnv(e ast.Expr) bool {
+	if t := s.info.TypeOf(unwrap(e)); t != nil && s.isModel(t) {
+		return true
+	}
 	switch v := unwrap(e).(type) {
 	case *ast.CompositeLit:
-		return isEnvironmentType(v.Type)
+		return s.isModelType(v.Type)
 	case *ast.Ident:
 		return s.envs[v.Name]
 	case *ast.IndexExpr:
@@ -137,7 +202,7 @@ func (s *hostWriterScan) isEnv(e ast.Expr) bool {
 	case *ast.CallExpr:
 		name := calleeName(v)
 		if name == "new" && len(v.Args) == 1 {
-			return isEnvironmentType(v.Args[0])
+			return s.isModelType(v.Args[0])
 		}
 		return strings.HasPrefix(name, "Get") && strings.Contains(name, "Environment")
 	}
@@ -163,7 +228,7 @@ func (s *hostWriterScan) scoped(chain ast.Expr) bool {
 			return true
 		}
 		if sel.Sel.Name == "Table" && len(call.Args) > 0 {
-			if name, ok := s.text(call.Args[0]); ok && strings.Trim(strings.Fields(name + " x")[0], "\"`") == "environments" {
+			if name, ok := s.text(call.Args[0]); ok && hostTableName(name) == "environments" {
 				return true
 			}
 		}
@@ -192,13 +257,22 @@ func (s *hostWriterScan) bind(lhs, rhs ast.Expr) bool {
 // UpdateColumn(s)/Save/Create on a chain or query variable rooted in Model(<Environment>)
 // or Table("environments"), Save/Updates/UpdateColumns/Create of an Environment value, or
 // Exec/Raw of constant SQL that updates, inserts into or replaces into environments.
-func (s *hostWriterScan) writes(params *ast.FuncType, body ast.Node) bool {
-	s.envs, s.queries = map[string]bool{}, map[string]bool{}
+func (s *hostWriterScan) writes(recv *ast.FieldList, params *ast.FuncType, body ast.Node) bool {
+	s.envs, s.queries, s.rawSQL = map[string]bool{}, map[string]bool{}, false
+	ast.Inspect(body, func(n ast.Node) bool {
+		if e, ok := n.(ast.Expr); ok {
+			if text, ok := s.text(e); ok {
+				s.rawSQL = s.rawSQL || hostRawWrite.MatchString(text)
+				return false
+			}
+		}
+		return true
+	})
 	if params != nil {
-		for _, list := range []*ast.FieldList{params.Params, params.Results} {
+		for _, list := range []*ast.FieldList{recv, params.Params, params.Results} {
 			for _, field := range fieldList(list) {
 				for _, n := range field.Names {
-					s.envs[n.Name] = s.envs[n.Name] || isEnvironmentType(field.Type)
+					s.envs[n.Name] = s.envs[n.Name] || s.isModelType(field.Type)
 				}
 			}
 		}
@@ -209,7 +283,7 @@ func (s *hostWriterScan) writes(params *ast.FuncType, body ast.Node) bool {
 			switch x := n.(type) {
 			case *ast.ValueSpec:
 				for i, name := range x.Names {
-					if x.Type != nil && isEnvironmentType(x.Type) && !s.envs[name.Name] {
+					if x.Type != nil && s.isModelType(x.Type) && !s.envs[name.Name] {
 						s.envs[name.Name], changed = true, true
 					}
 					if i < len(x.Values) && s.bind(name, x.Values[i]) {
@@ -244,10 +318,9 @@ func (s *hostWriterScan) writes(params *ast.FuncType, body ast.Node) bool {
 		}
 		switch method := sel.Sel.Name; {
 		case method == "Exec" || method == "Raw":
-			if len(call.Args) > 0 {
-				text, _ := s.text(call.Args[0])
-				writes = hostRawWrite.MatchString(text)
-			}
+			// Any constant host table write statement in the body counts, also when the
+			// SQL reaches Exec through a variable or a formatting call.
+			writes = s.rawSQL
 		case hostWriteMethods[method]:
 			// Save, Updates, UpdateColumns and Create take an Environment value as their model.
 			valueModel := method != "Update" && method != "UpdateColumn" && len(call.Args) > 0 && s.isEnv(call.Args[0])
@@ -291,8 +364,8 @@ func (s *hostWriterScan) statusRefs(body ast.Node) int {
 
 // hostTableWriterFuncs maps "file:Receiver.Func" (or "file:var" for package-level function
 // literals) to its status reference count for each writer of the environments table.
-func hostTableWriterFuncs(file string, src *ast.File, info *types.Info) map[string]int {
-	scan := &hostWriterScan{info: info}
+func hostTableWriterFuncs(file string, src *ast.File, info *types.Info, models map[string]bool) map[string]int {
+	scan := &hostWriterScan{info: info, models: models}
 	found := map[string]int{}
 	for _, decl := range src.Decls {
 		switch d := decl.(type) {
@@ -310,7 +383,7 @@ func hostTableWriterFuncs(file string, src *ast.File, info *types.Info) map[stri
 					name = id.Name + "." + name
 				}
 			}
-			if scan.writes(d.Type, d.Body) {
+			if scan.writes(d.Recv, d.Type, d.Body) {
 				found[file+":"+name] = scan.statusRefs(d.Body)
 			}
 		case *ast.GenDecl:
@@ -322,7 +395,7 @@ func hostTableWriterFuncs(file string, src *ast.File, info *types.Info) map[stri
 				for _, value := range vs.Values {
 					ast.Inspect(value, func(n ast.Node) bool {
 						lit, ok := n.(*ast.FuncLit)
-						if ok && scan.writes(lit.Type, lit.Body) {
+						if ok && scan.writes(nil, lit.Type, lit.Body) {
 							found[file+":"+vs.Names[0].Name] = scan.statusRefs(lit.Body)
 						}
 						return !ok
@@ -368,8 +441,9 @@ func TestHostTableWritersAreTheReviewedSet(t *testing.T) {
 			list = append(list, src)
 		}
 		info := hostConstantInfo(fset, list)
+		models := hostModels(list, info)
 		for rel, src := range files {
-			for name, refs := range hostTableWriterFuncs(rel, src, info) {
+			for name, refs := range hostTableWriterFuncs(rel, src, info, models) {
 				found[name] = refs
 			}
 		}
@@ -382,7 +456,8 @@ func scanHostWriterFixture(t *testing.T, src string) map[string]int {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "other.go", src, parser.SkipObjectResolution)
 	require.NoError(t, err)
-	return hostTableWriterFuncs("internal/other/other.go", file, hostConstantInfo(fset, []*ast.File{file}))
+	info := hostConstantInfo(fset, []*ast.File{file})
+	return hostTableWriterFuncs("internal/other/other.go", file, info, hostModels([]*ast.File{file}, info))
 }
 
 // The guard recognises the ordinary forms of a host table write, in any package.
@@ -405,6 +480,13 @@ func TestHostTableWriterGuardRecognisesWriteForms(t *testing.T) {
 		"range row":        `var rows []Environment; db.Find(&rows); for _, row := range rows { db.Model(&row).Update("status", "pending") }`,
 		"upsert":           `db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&Environment{ID: id, Status: "pending"})`,
 		"insert or update": "db.Exec(`INSERT OR REPLACE INTO environments (id, status) VALUES (?, ?)`, id, \"pending\")",
+		"update or ignore": "db.Exec(`UPDATE OR IGNORE environments SET status = ? WHERE id = ?`, \"pending\", id)",
+		"bracket quote":    "db.Exec(`UPDATE [environments] SET status = ? WHERE id = ?`, \"pending\", id)",
+		"sql variable":     "sql := `UPDATE environments SET status = ? WHERE id = ?`; db.Exec(sql, \"pending\", id)",
+		"formatted sql":    "db.Exec(fmt.Sprintf(\"UPDATE environments SET %s = ? WHERE id = ?\", \"status\"), \"pending\", id)",
+		"schema table":     `db.Table("main.environments").Where("id = ?", id).Update("status", "pending")`,
+		"quoted table":     "db.Table(`\"environments\" AS e`).Where(\"id = ?\", id).Update(\"status\", \"pending\")",
+		"schema prefix":    "db.Exec(`UPDATE \"main\".\"environments\" SET status = ? WHERE id = ?`, \"pending\", id)",
 		"concat const sql": `db.Exec(concatSQL, "pending", id)`,
 		"alias const sql":  `db.Exec(aliasSQL, "pending", id)`,
 		"paren query":      `q := db.Table("environments"); alias := (q); alias.UpdateColumn("status", "pending")`,
@@ -421,9 +503,18 @@ func TestHostTableWriterGuardRecognisesWriteForms(t *testing.T) {
 		require.Contains(t, found, "internal/other/other.go:Service.write", name)
 		require.Positive(t, found["internal/other/other.go:Service.write"], name)
 	}
+	typed := scanHostWriterFixture(t, "package other\ntype Environment struct{ Status string }\ntype holder struct{ env *Environment }\n"+
+		"func (h holder) load() *Environment { return h.env }\n"+
+		"func (h holder) write(db *gorm.DB) { db.Save(h.env); db.Model(h.load()).Update(\"status\", \"pending\") }\n")
+	require.Equal(t, map[string]int{"internal/other/other.go:holder.write": 1}, typed, "field and call results typed Environment")
+	alias := scanHostWriterFixture(t, "package other\ntype hostRow struct{ Status string }\nfunc (hostRow) TableName() string { return \"environments\" }\n"+
+		"func (s *Service) write(db *gorm.DB) { db.Model(&hostRow{}).Where(\"id = ?\", id).Update(\"status\", \"pending\") }\n")
+	require.Equal(t, map[string]int{"internal/other/other.go:Service.write": 1}, alias, "TableName alias model")
+	receiver := scanHostWriterFixture(t, "package other\nfunc (row *Environment) reset(db *gorm.DB) { row.Status = \"pending\"; db.Save(row) }\n")
+	require.Equal(t, map[string]int{"internal/other/other.go:Environment.reset": 1}, receiver)
 	literal := scanHostWriterFixture(t, "package other\nvar reset = func(db *gorm.DB) { db.Model(&Environment{}).Update(\"status\", \"pending\") }\n")
 	require.Equal(t, map[string]int{"internal/other/other.go:reset": 1}, literal)
-	reads := scanHostWriterFixture(t, "package other\nfunc (s *Service) read() {\ndb.Model(&Environment{}).Where(\"status = ?\", id).First(&env)\ndb.Model(&Run{}).Updates(map[string]any{\"status\": \"done\"})\ndb.Exec(\"UPDATE runs SET status = 'done'\")\n}\n")
+	reads := scanHostWriterFixture(t, "package other\nfunc (s *Service) read() {\ndb.Model(&Environment{}).Where(\"status = ?\", id).First(&env)\ndb.Model(&Run{}).Updates(map[string]any{\"status\": \"done\"})\ndb.Exec(\"UPDATE runs SET status = 'done'\")\ndb.Exec(\"UPDATE OR IGNORE [environments_archive] SET status = 'done'\")\n}\n")
 	require.Empty(t, reads)
 }
 
