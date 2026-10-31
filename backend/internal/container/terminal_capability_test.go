@@ -77,7 +77,7 @@ func TestShellCapabilityHostAvailabilityAndStopped(t *testing.T) {
 	}{
 		{"online", true, ""}, {"standby", true, ""}, {"online", false, "container.shell-not-running"},
 		{"offline", true, "agent.unavailable"}, {"pending", true, "agent.unavailable"},
-		{"token_rejected", true, "agent.invalid-token"}, {"update-required", true, "agent.update-required"},
+		{string(environment.EnvironmentStatusTokenRejected), true, "agent.invalid-token"}, {"update-required", true, "agent.update-required"},
 	} {
 		id := string(rune('a' + i))
 		running = tc.running

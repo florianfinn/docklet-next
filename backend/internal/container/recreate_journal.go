@@ -8,8 +8,10 @@ package container
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"strings"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/docker/compat"
+	"go.getarcane.app/docker/types"
 )
 
 // recreateEffectTimeout bounds the detached effect and compensation sequence.
@@ -39,7 +42,27 @@ func (s *ContainerService) saveRecreate(ctx context.Context, j *RecreateJournal,
 	if err := s.operations.db.WithContext(ctx).Save(j).Error; err != nil {
 		return &recreateUncertain{cause: err}
 	}
+	publishRecreateStep(ctx, phase)
 	return nil
+}
+
+// recreateSteps names the run steps shown for committed journal phases; the
+// journal stays the recovery record. Startup recovery has no progress writer.
+var recreateSteps = map[string]string{
+	"intent-rename": "Renaming container", "intent-create": "Creating replacement",
+	"intent-start": "Starting replacement", "intent-remove-old": "Removing previous container",
+	"comp-remove-new": "Restoring previous container", "comp-rename-old": "Restoring previous container",
+	"comp-start-old": "Restoring previous container",
+}
+
+func publishRecreateStep(ctx context.Context, phase string) {
+	step, ok := recreateSteps[phase]
+	writer, _ := ctx.Value(types.ProgressWriterKey{}).(io.Writer)
+	if !ok || writer == nil {
+		return
+	}
+	frame, _ := json.Marshal(map[string]string{"step": step})
+	_, _ = writer.Write(append(frame, '\n'))
 }
 func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client, old dockercontainer.InspectResponse, name string, config *dockercontainer.Config, host *dockercontainer.HostConfig, networks *network.NetworkingConfig, apiVersion string) (string, error) {
 	run := updaterDTO.ExecutionIdentityFromContext(ctx).RunID

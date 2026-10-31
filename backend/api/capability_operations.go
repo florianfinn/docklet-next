@@ -14,6 +14,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/types/base"
 	dto "github.com/florianfinn/docklet-next/types/container"
 )
@@ -70,7 +71,7 @@ func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReade
 
 func operationHostStatus(status string) string {
 	switch status {
-	case "token-rejected":
+	case string(environment.EnvironmentStatusTokenRejected):
 		return "agent.invalid-token"
 	case "update-required":
 		return "agent.update-required"

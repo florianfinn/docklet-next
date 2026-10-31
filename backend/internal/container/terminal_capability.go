@@ -45,7 +45,7 @@ func (s *ContainerService) ShellCapabilityReader(hosts *environment.EnvironmentS
 				return "agent.unavailable"
 			}
 			switch host.Status {
-			case "token_rejected":
+			case string(environment.EnvironmentStatusTokenRejected):
 				return "agent.invalid-token"
 			case "update-required":
 				return "agent.update-required"

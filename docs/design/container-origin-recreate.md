@@ -169,7 +169,12 @@ admission. Shared contract and migration items are in
 16. Unraid badge and filter, ring segment toggle, assignment dialog with the
     allowed targets, confirm action for `unconfirmed`, reset, and a recreate and
     edit dialog with the standalone warning. Disabled actions show the lock
-    reason from the capability descriptor.
+    reason from the capability descriptor. Each committed journal phase is
+    also published as a run step (renaming, creating, starting, removing the
+    previous container, or restoring it), so the activity shows progress on
+    every transport; the journal stays the recovery record. Assignment is
+    offered only while detection says `unknown`; an unconfirmed override on a
+    replacement detected otherwise is resolved by reset.
 
     The backend origin and origin source are authoritative. Older responses
     without these fields fall back to unknown/detected; labels never grant

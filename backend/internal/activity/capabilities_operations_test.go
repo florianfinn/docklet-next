@@ -76,7 +76,14 @@ func TestD6OperationDescriptors(t *testing.T) {
 					deny, invalid    bool
 					fields           dto.OriginFields
 					want             string
-				}{name: "unconfirmed", fields: dto.OriginFields{Origin: dto.OriginStandalone, OriginSource: dto.OriginUnconfirmed}})
+				}{name: "unconfirmed-unknown", fields: dto.OriginFields{Origin: dto.OriginUnknown, OriginSource: dto.OriginUnconfirmed}})
+				// The write refuses assignment once detection no longer says unknown.
+				cases = append(cases, struct {
+					name, host, lock string
+					deny, invalid    bool
+					fields           dto.OriginFields
+					want             string
+				}{name: "unconfirmed-detected-standalone", fields: dto.OriginFields{Origin: dto.OriginStandalone, OriginSource: dto.OriginUnconfirmed}, want: "container.origin-locked"})
 			}
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
