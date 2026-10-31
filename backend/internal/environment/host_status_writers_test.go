@@ -60,6 +60,25 @@ func isEnvironmentType(expr ast.Expr) bool {
 	return false
 }
 
+// unwrap strips parentheses, address-of and dereference around a local expression.
+func unwrap(e ast.Expr) ast.Expr {
+	for {
+		switch v := e.(type) {
+		case *ast.ParenExpr:
+			e = v.X
+		case *ast.StarExpr:
+			e = v.X
+		case *ast.UnaryExpr:
+			if v.Op != token.AND {
+				return e
+			}
+			e = v.X
+		default:
+			return e
+		}
+	}
+}
+
 func calleeName(call *ast.CallExpr) string {
 	switch f := call.Fun.(type) {
 	case *ast.SelectorExpr:
@@ -89,6 +108,9 @@ func (s *hostWriterScan) text(e ast.Expr) (string, bool) {
 		text, ok := s.consts[v.Name]
 		return text, ok
 	case *ast.BinaryExpr:
+		if v.Op != token.ADD {
+			return "", false
+		}
 		left, lok := s.text(v.X)
 		right, rok := s.text(v.Y)
 		return left + right, lok && rok
@@ -99,10 +121,7 @@ func (s *hostWriterScan) text(e ast.Expr) (string, bool) {
 }
 
 func (s *hostWriterScan) isEnv(e ast.Expr) bool {
-	if u, ok := e.(*ast.UnaryExpr); ok {
-		e = u.X
-	}
-	switch v := e.(type) {
+	switch v := unwrap(e).(type) {
 	case *ast.CompositeLit:
 		return isEnvironmentType(v.Type)
 	case *ast.Ident:
@@ -122,6 +141,7 @@ func (s *hostWriterScan) isEnv(e ast.Expr) bool {
 // scoped walks a receiver chain such as db.Model(x).Where(...) or q.Where(...).
 func (s *hostWriterScan) scoped(chain ast.Expr) bool {
 	for chain != nil {
+		chain = unwrap(chain)
 		if id, ok := chain.(*ast.Ident); ok {
 			return s.queries[id.Name]
 		}
@@ -147,7 +167,7 @@ func (s *hostWriterScan) scoped(chain ast.Expr) bool {
 }
 
 func (s *hostWriterScan) bind(lhs, rhs ast.Expr) bool {
-	id, ok := lhs.(*ast.Ident)
+	id, ok := unwrap(lhs).(*ast.Ident)
 	if !ok || id.Name == "_" {
 		return false
 	}
@@ -239,21 +259,27 @@ func fieldList(list *ast.FieldList) []*ast.Field {
 	return list.List
 }
 
-// statusRefs counts status references in a writer body: string literals and constants
-// naming status, and Status fields or keys.
+// statusRefs counts status references in a writer body: constant string expressions
+// (literals, same-package constants and their concatenations, folded as one) naming
+// status, and Status fields or keys.
 func (s *hostWriterScan) statusRefs(body ast.Node) int {
 	refs := 0
 	ast.Inspect(body, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.BasicLit:
-			if text, ok := s.text(x); ok && hostStatusWord.MatchString(text) {
-				refs++
-			}
-		case *ast.Ident:
-			if x.Name == "Status" {
-				refs++
-			} else if text, ok := s.consts[x.Name]; ok && hostStatusWord.MatchString(text) {
-				refs++
+		if id, ok := n.(*ast.Ident); ok && id.Name == "Status" {
+			refs++
+			return true
+		}
+		expr, ok := n.(ast.Expr)
+		if !ok {
+			return true
+		}
+		switch expr.(type) {
+		case *ast.BasicLit, *ast.Ident, *ast.BinaryExpr, *ast.ParenExpr:
+			if text, ok := s.text(expr); ok {
+				if hostStatusWord.MatchString(text) {
+					refs++
+				}
+				return false
 			}
 		}
 		return true
@@ -306,9 +332,10 @@ func hostTableWriterFuncs(file string, src *ast.File, consts map[string]string) 
 	return found
 }
 
-// packageStringConsts collects string constants declared anywhere in the files of one package.
+// packageStringConsts resolves string constants declared anywhere in the files of one
+// package, including concatenations and aliases of other constants.
 func packageStringConsts(files []*ast.File) map[string]string {
-	consts := map[string]string{}
+	exprs := map[string]ast.Expr{}
 	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			decl, ok := n.(*ast.GenDecl)
@@ -319,16 +346,26 @@ func packageStringConsts(files []*ast.File) map[string]string {
 				vs := spec.(*ast.ValueSpec)
 				for i, name := range vs.Names {
 					if i < len(vs.Values) {
-						if lit, ok := vs.Values[i].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-							consts[name.Name], _ = strconv.Unquote(lit.Value)
-						}
+						exprs[name.Name] = vs.Values[i]
 					}
 				}
 			}
 			return true
 		})
 	}
-	return consts
+	scan := &hostWriterScan{consts: map[string]string{}}
+	for changed := true; changed; {
+		changed = false
+		for name, expr := range exprs {
+			if _, done := scan.consts[name]; done {
+				continue
+			}
+			if text, ok := scan.text(expr); ok {
+				scan.consts[name], changed = text, true
+			}
+		}
+	}
+	return scan.consts
 }
 
 func TestHostTableWritersAreTheReviewedSet(t *testing.T) {
@@ -401,9 +438,18 @@ func TestHostTableWriterGuardRecognisesWriteForms(t *testing.T) {
 		"range row":        `var rows []Environment; db.Find(&rows); for _, row := range rows { db.Model(&row).Update("status", "pending") }`,
 		"upsert":           `db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&Environment{ID: id, Status: "pending"})`,
 		"insert or update": "db.Exec(`INSERT OR REPLACE INTO environments (id, status) VALUES (?, ?)`, id, \"pending\")",
+		"concat const sql": `db.Exec(concatSQL, "pending", id)`,
+		"alias const sql":  `db.Exec(aliasSQL, "pending", id)`,
+		"paren query":      `q := db.Table("environments"); alias := (q); alias.UpdateColumn("status", "pending")`,
+		"paren model":      `row := (new(environment.Environment)); row.ID = id; row.Status = "pending"; db.Save(row)`,
+		"deref model":      `row := new(environment.Environment); row.ID = id; row.Status = "pending"; db.Save(*row)`,
+		"concat const key": `db.Table("environments").UpdateColumn(splitColumn, "pending")`,
+		"concat key":       `db.Table("environments").UpdateColumn("sta" + "tus", "pending")`,
 	}
 	for name, body := range forms {
-		src := "package other\nconst column = \"status\"\nconst resetSQL = `UPDATE environments SET status = 'pending' WHERE id = ?`\nfunc (s *Service) write() {\n" + body + "\n}\n"
+		src := "package other\nconst column = \"status\"\nconst splitColumn = \"sta\" + \"tus\"\n" +
+			"const concatSQL = \"UPDATE environments \" + \"SET status = ? WHERE id = ?\"\nconst aliasSQL = concatSQL\n" +
+			"const resetSQL = `UPDATE environments SET status = 'pending' WHERE id = ?`\nfunc (s *Service) write() {\n" + body + "\n}\n"
 		found := scanHostWriterFixture(t, src)
 		require.Contains(t, found, "internal/other/other.go:Service.write", name)
 		require.Positive(t, found["internal/other/other.go:Service.write"], name)
@@ -423,34 +469,44 @@ func TestHostTableWriterGuardCountsStatusReferences(t *testing.T) {
 	require.Equal(t, 0, clean["internal/other/other.go:Service.edit"])
 	require.Equal(t, 1, reset["internal/other/other.go:Service.edit"])
 	require.Equal(t, 1, field["internal/other/other.go:Service.edit"])
+	folded := scanHostWriterFixture(t, strings.Replace(base, "%s", `db.Model(&Environment{}).Where("id = ?", id).Update("sta" + "tus", "pending")`, 1))
+	require.Equal(t, 1, folded["internal/other/other.go:Service.edit"])
 }
 
 // The generic edit sink accepts only its editable columns, so no spelling of the status
-// column (GORM field name, SQLite case variants) can replace a verdict, and successful
-// edits keep it.
+// column (GORM field name, SQLite case variants) can replace a verdict; refused edits
+// change nothing and successful edits persist and keep it.
 func TestGenericHostUpdateRefusesStatus(t *testing.T) {
 	f := newAgentFixture(t, "edge", version.Info{})
 	require.NoError(t, f.service.db.Model(&Environment{}).Where("id = ?", f.id).Update("status", "update-required").Error)
-	stored := func(label string) {
+	before, err := f.service.GetEnvironmentByID(t.Context(), f.id)
+	require.NoError(t, err)
+	stored := func(label string) *Environment {
 		t.Helper()
 		row, err := f.service.GetEnvironmentByID(t.Context(), f.id)
 		require.NoError(t, err)
 		require.Equal(t, "update-required", row.Status, label)
+		return row
 	}
 	for _, key := range []string{"status", "Status", "STATUS", "sTaTuS", "last_seen", "is_edge"} {
 		_, err := f.service.UpdateEnvironment(t.Context(), f.id, map[string]any{key: "pending", "name": "Renamed"}, nil, nil)
 		require.Error(t, err, key)
-		stored(key)
+		require.Equal(t, before.Name, stored(key).Name, key)
 	}
-	for label, edit := range map[string]map[string]any{
-		"name":        {"name": "Example"},
-		"colour set":  {"color": "#336699"},
-		"colour null": {"color": nil},
-		"disable":     {"enabled": false},
-		"enable":      {"enabled": true},
-	} {
-		_, err := f.service.UpdateEnvironment(t.Context(), f.id, edit, nil, nil)
-		require.NoError(t, err, label)
-		stored(label)
+	edits := []struct {
+		label string
+		edit  map[string]any
+		check func(*Environment) bool
+	}{
+		{"name", map[string]any{"name": "Example renamed"}, func(e *Environment) bool { return e.Name == "Example renamed" }},
+		{"colour set", map[string]any{"color": "#336699"}, func(e *Environment) bool { return e.Color != nil && *e.Color == "#336699" }},
+		{"colour null", map[string]any{"color": nil}, func(e *Environment) bool { return e.Color == nil }},
+		{"disable", map[string]any{"enabled": false}, func(e *Environment) bool { return !e.Enabled }},
+		{"enable", map[string]any{"enabled": true}, func(e *Environment) bool { return e.Enabled }},
+	}
+	for _, step := range edits {
+		_, err := f.service.UpdateEnvironment(t.Context(), f.id, step.edit, nil, nil)
+		require.NoError(t, err, step.label)
+		require.True(t, step.check(stored(step.label)), step.label)
 	}
 }
