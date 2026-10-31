@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring.
 
 package api
 
@@ -462,6 +462,7 @@ var routeModules = []routeModule{
 		d.Event.RegisterRoutes(api)
 	}},
 	{"capabilities", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		api.UseMiddleware(activity.OperationCapabilityContext(operationCapabilityReaders(d)))
 		api.UseMiddleware(containershell.CapabilityContext(d.Container.Service().ShellCapabilityReader(d.Environment.Service())))
 		activity.RegisterCapabilities(api, func(ctx context.Context, env, target, point string) error {
 			return d.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, d.Environment.Service())
