@@ -308,9 +308,15 @@ func (s *EnvironmentService) GetEnvironmentByID(ctx context.Context, id string) 
 	return &envRecord, nil
 }
 
+var editableHostColumns = map[string]struct{}{"name": {}, "color": {}, "api_url": {}, "enabled": {}, "access_token": {}, "api_key_id": {}}
+
 func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, updates map[string]any, userID, username *string) (*Environment, error) {
-	if _, ok := updates["status"]; ok {
-		return nil, errors.New("host status is owned by its status writers")
+	// The generic sink writes only editable columns; the host status (any spelling) and
+	// liveness columns belong to their reviewed writers.
+	for key := range updates {
+		if _, ok := editableHostColumns[key]; !ok {
+			return nil, fmt.Errorf("host column %q is not editable", key)
+		}
 	}
 	if name, ok := updates["name"].(string); ok {
 		updates["name"] = normalization.Text(name, true, true)
