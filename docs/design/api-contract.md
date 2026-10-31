@@ -242,7 +242,6 @@ settings reject Auto Heal keys before any partial write. Agent-access transport
 refusals retain their shared envelope. Notification settings/configuration
 failures and single-provider probe contention have typed problem responses.
 
-
 ## Container and host operations contract v11
 
 Container summary and detail expose detected `origin` and `originSource`. The hub
@@ -293,14 +292,14 @@ restart run states and typed problem codes. The agent-only POST `/api/system/age
 `/environments/{id}/agent/restart` returns 202 with `AgentRestartRun`; GET
 `/environments/{id}/agent/restarts/{runId}` reads its durable state and code.
 Reservation excludes all runtime intake in the same SQLite write transaction.
-`sent` commits before the single POST; `awaiting` persists received
-acknowledgement received before the deadline separately, independently of the
-optional Direct response body. Late replies/proofs cannot replace the deadline
+`sent` commits before the single POST; `awaiting` records an acknowledgement
+received before the deadline, independently of the optional Direct response
+body. Only 202 and 409 `agent.restart-unsupported` are definitive answers; any
+other response is kept like a lost answer. Late replies/proofs cannot replace the deadline
 result; timely joined evidence can be persisted later. Recovery never resends: an unsent reservation settles
 `agent.restart-interrupted`, while sent runs observe until the stored deadline.
 Terminal codes survive history pruning and process restart. `/health` includes a UUID generated once per process;
 `health.InstanceID()` exposes that same identity to host-maintenance wiring.
-
 
 Host edits validate trimmed names of 1–40 Unicode code points and
 case-insensitive uniqueness in the registration/rename write transaction.

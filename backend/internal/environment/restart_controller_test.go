@@ -519,3 +519,36 @@ func TestRestartRecoveryScanSettlesUnclaimedReservedRow(t *testing.T) {
 	}
 	require.Zero(t, f.calls)
 }
+
+// Only 202 and 409 agent.restart-unsupported are definitive answers. Any other
+// response is kept like a lost answer; disabling the host holds until the deadline.
+func TestRestartNonDefinitiveAnswersAndDisabledHost(t *testing.T) {
+	for _, status := range []int{401, 404, 500} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			f := newRestartFixture(t)
+			f.sendStatus = status
+			w := f.reserve(t)
+			require.False(t, f.step(t, w))
+			require.Equal(t, "awaiting", w.row.State)
+			require.Nil(t, w.row.AcknowledgedAt)
+			f.now = w.row.Deadline
+			require.True(t, f.step(t, w))
+			assertRestartCode(t, w, "unknown", "agent.restart-unconfirmed")
+			require.Equal(t, 1, f.calls)
+		})
+	}
+	t.Run("disabled", func(t *testing.T) {
+		f := newRestartFixture(t)
+		w := f.reserve(t)
+		require.False(t, f.step(t, w))
+		require.NotNil(t, w.row.AcknowledgedAt)
+		require.NoError(t, f.c.service.db.Model(&Environment{}).Where("id=?", "example-host").Update("enabled", false).Error)
+		f.instance = "example-new"
+		require.False(t, f.step(t, w), "a disabled host is never observed as restarted")
+		require.Equal(t, "awaiting", w.row.State)
+		f.now = w.row.Deadline
+		require.True(t, f.step(t, w))
+		assertRestartCode(t, w, "failed", "agent.restart-timeout")
+		require.Equal(t, 1, f.calls)
+	})
+}

@@ -82,9 +82,6 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 	var result RuntimeAdmissionResult
 	var found bool
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
-		if err := runtimeCheckRestartTx(tx, c.command.Store.EnvironmentID); err != nil {
-			return err
-		}
 		if err := runtimeTargetPresentTxInternal(tx, c.command.Store); err != nil {
 			return err
 		}
@@ -94,6 +91,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 			return err
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A known key keeps its durable answer during a restart; joins and new
+			// admissions are refused while the host is restarting.
+			if err := runtimeCheckRestartTx(tx, c.command.Store.EnvironmentID); err != nil {
+				return err
+			}
 			row, err = runtimeActiveConflictTxInternal(tx, c)
 			if err != nil {
 				return err

@@ -52,3 +52,22 @@ func TestRuntimeRestartGuardBeforeAndAfterTargetRead(t *testing.T) {
 		})
 	}
 }
+
+// A known key keeps its durable answer during a restart; a new key is refused.
+func TestRuntimeRestartGuardKeepsKnownKeyAnswer(t *testing.T) {
+	f := b1Fixture(t)
+	c := f.command()
+	first, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err)
+	require.NoError(t, f.store.svc.db.Model(&RuntimeReceipt{}).Where("run_id=?", first.ActivityID).Updates(map[string]any{"executor_state": "success", "executor_settled_at": time.Now(), "settled_at": time.Now()}).Error)
+	now := time.Now()
+	require.NoError(t, f.store.svc.db.Create(&environment.AgentRestartRequest{RunID: "example-restart", EnvironmentID: c.Store.EnvironmentID, RegistrationID: c.Store.RegistrationID, State: "reserved", CreatedAt: now, UpdatedAt: now, Deadline: now.Add(3 * time.Minute)}).Error)
+	replay, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err, "a retry of a known key returns its stored result")
+	require.Equal(t, first.ActivityID, replay.ActivityID)
+	fresh := f.command()
+	_, err = f.service.Admit(t.Context(), fresh)
+	var p *dto.HostProblem
+	require.ErrorAs(t, err, &p)
+	require.Equal(t, "host.restarting", p.Code)
+}

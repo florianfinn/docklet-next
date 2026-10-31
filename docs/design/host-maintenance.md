@@ -83,7 +83,13 @@ hosts stays in [host onboarding](host-onboarding.md).
    `acknowledged_at`; its optional body is not required. A send
    error without a response commits `awaiting` without acknowledgement. The
    response instance is evidence only. A definitive 409
-   `agent.restart-unsupported` settles failed with that code.
+   `agent.restart-unsupported` settles failed with that code; any other
+   response (for example 401, 404 or 5xx) is kept like a lost answer. A host
+   disabled during the run is not observed and the run holds until its
+   deadline. Each observation of an Edge run renews the tunnel demand until the
+   deadline, so a poll-mode agent reconnects after a hub restart. A retry of a
+   known idempotency key keeps its stored answer during a restart; joins and new
+   admissions get `host.restarting`.
 9. **Completion proof**, fenced by an unchanged `registration_id` and
    `credential_revision` on every observation and again in the settlement
    transaction: on Edge a new tunnel session whose agent instance differs from

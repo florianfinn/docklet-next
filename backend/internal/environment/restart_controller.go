@@ -9,6 +9,7 @@ package environment
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"log/slog"
 	"sync"
 	"time"
@@ -292,7 +293,13 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 }
 
 func (c *restartController) observe(ctx context.Context, row AgentRestartRequest, env Environment) (string, error) {
-	probeCtx, cancel := context.WithTimeout(ctx, row.Deadline.Sub(c.now()))
+	remaining := row.Deadline.Sub(c.now())
+	if env.IsEdge && remaining > 0 {
+		// Tunnel demand is process-local and lost on a hub restart; a poll-mode
+		// agent reopens its tunnel only on demand, so each observation renews it.
+		edge.TouchTunnelDemand(env.ID, remaining)
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, remaining)
 	defer cancel()
 	return c.service.restartInstance(probeCtx, env)
 }

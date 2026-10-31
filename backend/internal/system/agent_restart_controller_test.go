@@ -52,6 +52,7 @@ type restartTransportFixture struct {
 	release   chan struct{}
 	restarted chan struct{}
 	postCalls atomic.Int32
+	versions  atomic.Int32
 	instance  atomic.Value
 	changes   <-chan struct{}
 }
@@ -107,6 +108,7 @@ func newRestartTransportFixture(t *testing.T) *restartTransportFixture {
 		return &struct{ Body systemDTO.HealthResponse }{Body: systemDTO.HealthResponse{Status: "UP", InstanceID: f.instance.Load().(string)}}, nil
 	})
 	huma.Get(api, "/app-version", func(context.Context, *struct{}) (*struct{ Body version.Info }, error) {
+		f.versions.Add(1)
 		return &struct{ Body version.Info }{Body: version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}}, nil
 	})
 	huma.Head(api, "/environments/{id}/system/health", func(context.Context, *struct {
@@ -270,6 +272,11 @@ func TestRestartControllerRealEdgeDisconnectReconnect(t *testing.T) {
 	same := sameTunnel.MetadataSnapshot()
 	require.NotEqual(t, old.SessionID, same.SessionID)
 	require.Equal(t, old.AgentInstance, same.AgentInstance)
+	// Wait until the controller has observed the reconnected session before asserting.
+	observed := f.versions.Load()
+	require.Eventually(t, func() bool {
+		return f.versions.Load() >= observed+2 || f.read(t, run.RunID).SettledAt != nil
+	}, 10*time.Second, 20*time.Millisecond)
 	require.Equal(t, "awaiting", f.read(t, run.RunID).State, "same instance reconnect cannot complete")
 	cancel()
 	select {

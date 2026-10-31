@@ -33,7 +33,8 @@ contract items are in [container and host operations](container-host-operations.
    - the stale sweeper uses the same window with a 15 s sweep (worst case
      105 s) and removes a tunnel only if it is still the current session for
      its environment, so a replacement is never reaped. The status becomes
-     offline with reason `edge.heartbeat-stale`.
+     offline; the reason `edge.heartbeat-stale` is recorded on the closed
+     session and in the log only, not in the host projection.
 2. **Standby**: the web keeps `standby` (neutral colour, "Standby – connects on
    demand") and treats it as available for actions that can open a tunnel. The
    Auto Heal row and other per-host settings read and save for standby hosts;
