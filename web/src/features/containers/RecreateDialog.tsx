@@ -13,11 +13,12 @@ import { useCapability } from "@/data/use-capability";
 import type { ContainerInfo } from "@/domain/model";
 import { imageRef } from "@/domain/updates";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/shared/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 import { QueryError } from "@/shared/components/page";
 import { recreateDraft, recreateEdit, recreateIntent, type EditConfig } from "./recreate-edit";
@@ -70,20 +71,19 @@ function EditForm({ c, config, close }: { c: ContainerInfo; config: EditConfig; 
   };
   if (runId) return <><RecreateRun hostId={c.hostId} runId={runId} /><DialogFooter><Button variant="outline" onClick={close}>{tc("close")}</Button></DialogFooter></>;
   return <>
-    <p className="rounded-md border border-warning/40 p-3 text-sm text-warning">{t("warning")}</p>
+    <Alert><AlertDescription>{t("warning")}</AlertDescription></Alert>
     <FieldGroup>
-      <Field><FieldLabel htmlFor="rc-name">{t("name")}</FieldLabel><Input id="rc-name" value={draft.name} disabled={pending} onChange={(event) => patch({ name: event.target.value })} /></Field>
-      <Field><FieldLabel htmlFor="rc-image">{t("image")}</FieldLabel><Input id="rc-image" value={draft.image} disabled={pending} onChange={(event) => patch({ image: event.target.value })} /></Field>
-      <Field><FieldLabel htmlFor="rc-restart">{t("restart")}</FieldLabel>
+      <Field data-disabled={pending}><FieldLabel htmlFor="rc-name">{t("name")}</FieldLabel><Input id="rc-name" value={draft.name} disabled={pending} onChange={(event) => patch({ name: event.target.value })} /></Field>
+      <Field data-disabled={pending}><FieldLabel htmlFor="rc-image">{t("image")}</FieldLabel><Input id="rc-image" value={draft.image} disabled={pending} onChange={(event) => patch({ image: event.target.value })} /></Field>
+      <Field data-disabled={pending}><FieldLabel htmlFor="rc-restart">{t("restart")}</FieldLabel>
         <Select value={draft.restart} disabled={pending} onValueChange={(restart) => patch({ restart })}>
           <SelectTrigger id="rc-restart"><SelectValue /></SelectTrigger>
-          <SelectContent>{["no", "always", "on-failure", "unless-stopped"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+          <SelectContent><SelectGroup>{["no", "always", "on-failure", "unless-stopped"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectGroup></SelectContent>
         </Select>
       </Field>
-      <Field><FieldLabel htmlFor="rc-ports">{t("ports")}</FieldLabel><Textarea id="rc-ports" className="font-mono text-xs" rows={4} value={draft.ports} disabled={pending} onChange={(event) => patch({ ports: event.target.value })} /><FieldDescription>{t("portsHint")}</FieldDescription></Field>
-      <Field><FieldLabel htmlFor="rc-env">{t("env")}</FieldLabel><Textarea id="rc-env" className="font-mono text-xs" rows={4} value={draft.environment} disabled={pending} onChange={(event) => patch({ environment: event.target.value })} /><FieldDescription>{t("envHint")}</FieldDescription></Field>
+      <Field data-disabled={pending} data-invalid={invalid}><FieldLabel htmlFor="rc-ports">{t("ports")}</FieldLabel><Textarea id="rc-ports" aria-invalid={invalid} className="font-mono text-xs" rows={4} value={draft.ports} disabled={pending} onChange={(event) => patch({ ports: event.target.value })} /><FieldDescription>{t("portsHint")}</FieldDescription>{invalid && <FieldError>{t("invalidPorts")}</FieldError>}</Field>
+      <Field data-disabled={pending}><FieldLabel htmlFor="rc-env">{t("env")}</FieldLabel><Textarea id="rc-env" className="font-mono text-xs" rows={4} value={draft.environment} disabled={pending} onChange={(event) => patch({ environment: event.target.value })} /><FieldDescription>{t("envHint")}</FieldDescription></Field>
     </FieldGroup>
-    {invalid && <p role="alert" className="text-sm text-destructive">{t("invalidPorts")}</p>}
     <DialogFooter><Button variant="ghost" disabled={pending} onClick={close}>{tc("cancel")}</Button><Button disabled={pending || !capability.available || !!c.inventory?.stale || !draft.name.trim() || !draft.image.trim()} title={capability.reason} onClick={() => void submit()}>{t("submit")}</Button></DialogFooter>
   </>;
 }

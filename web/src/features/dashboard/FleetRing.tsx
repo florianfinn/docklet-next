@@ -1,3 +1,5 @@
+import { Checkbox } from "@/shared/ui/checkbox";
+import { Field, FieldLabel } from "@/shared/ui/field";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "use-intl";
@@ -119,6 +121,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
   };
 
   return (
+    <div className="flex shrink-0 flex-col items-center gap-2">
     <div ref={wrapRef} className="relative shrink-0" style={{ width: size, height: size }} data-slot="fleet-ring" data-fan={fan || undefined}>
       <svg
         ref={svgRef}
@@ -250,10 +253,11 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
           </div>,
           document.body,
         )}
-      <label className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-        <input type="checkbox" checked={showUnraid} onChange={(event) => setPreference("showUnraidRing", event.target.checked)} />
-        {t("showUnraid")}
-      </label>
+    </div>
+      <Field orientation="horizontal" className="justify-center">
+        <Checkbox id={`${uid}-unraid`} checked={showUnraid} onCheckedChange={(value) => setPreference("showUnraidRing", value === true)} />
+        <FieldLabel htmlFor={`${uid}-unraid`}>{t("showUnraid")}</FieldLabel>
+      </Field>
     </div>
   );
 }

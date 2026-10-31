@@ -14,8 +14,8 @@ import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import { Label } from "@/shared/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/shared/ui/field";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
 export function ContainerProvenance({ c }: { c: ContainerInfo }) {
   return <>{c.origin === "compose" && <ComposeContainerHint c={c} />}{(c.origin !== "compose" || c.originSource === "unconfirmed") && <OriginControls key={c.id} c={c} />}</>;
@@ -51,17 +51,17 @@ function OriginControls({ c }: { c: ContainerInfo }) {
     <Dialog open={open} onOpenChange={(next) => { if (!pending) setOpen(next); }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{t("title")}</DialogTitle><DialogDescription>{t("hint")}</DialogDescription></DialogHeader>
-        {canAssign ? <div className="flex flex-col gap-2">
-          <Label htmlFor="container-origin">{t("target")}</Label>
+        {canAssign ? <FieldGroup><Field data-disabled={pending}>
+          <FieldLabel htmlFor="container-origin">{t("target")}</FieldLabel>
           <Select value={target} onValueChange={(value) => setTarget(value as "unraid" | "standalone")} disabled={pending}>
             <SelectTrigger id="container-origin"><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent><SelectGroup>
               <SelectItem value="unraid">{to("unraid")}</SelectItem>
               {!partialCompose && <SelectItem value="standalone">{to("standalone")}</SelectItem>}
-            </SelectContent>
+            </SelectGroup></SelectContent>
           </Select>
-          {partialCompose && <p className="text-sm text-muted-foreground">{t("partialCompose")}</p>}
-        </div> : <p className="text-sm text-muted-foreground">{t("detectionOnly")}</p>}
+          {partialCompose && <FieldDescription>{t("partialCompose")}</FieldDescription>}
+        </Field></FieldGroup> : <p className="text-sm text-muted-foreground">{t("detectionOnly")}</p>}
         <DialogFooter>
           {(manual || unconfirmed) && <Button variant="outline" disabled={pending || !capability.available} onClick={() => void submit(true)}>{t("reset")}</Button>}
           {canAssign && <Button disabled={pending || !capability.available} onClick={() => void submit()}>{unconfirmed ? t("confirm") : t("save")}</Button>}
