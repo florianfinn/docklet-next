@@ -138,8 +138,10 @@ reservations in its admission transaction, including policy children.
 
 After hub restart, `reserved` settles `agent.restart-interrupted`; `sent` and
 `awaiting` resume observation without another POST. Deadline results distinguish
-acknowledged `agent.restart-timeout` from unacknowledged
-`agent.restart-unconfirmed`. The hub-only POST
+timely acknowledged `agent.restart-timeout` from unacknowledged
+`agent.restart-unconfirmed`. Direct acknowledgement uses the received 202 status
+without depending on its optional body. Replies and process proofs arriving at
+or after the deadline do not establish a timely outcome. The hub-only POST
 `/environments/{id}/agent/restart` and GET
 `/environments/{id}/agent/restarts/{runId}` expose compact run truth independently
 of activity pruning. Joined outcomes survive failed writes; exclusion ends only

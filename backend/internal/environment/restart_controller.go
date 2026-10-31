@@ -227,7 +227,7 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 		}
 
 		if w.prepared == nil {
-			old, observeErr := c.service.restartInstance(ctx, *env)
+			old, observeErr := c.observe(ctx, w.row, *env)
 			if observeErr != nil || old == "" {
 				w.pending = &restartOutcome{state: "failed", code: "host.unreachable"}
 				return c.advance(ctx, w)
@@ -246,7 +246,9 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 			return true, nil
 		}
 		// The only send site follows the durable sent commit. Recovery enters below it.
-		response, sendErr := c.service.sendAgentRestart(ctx, w.prepared.env)
+		sendCtx, cancelSend := context.WithTimeout(ctx, w.row.Deadline.Sub(c.now()))
+		response, sendErr := c.service.sendAgentRestart(sendCtx, w.prepared.env)
+		cancelSend()
 		outcome := &restartOutcome{state: "awaiting"}
 		if sendErr == nil && response != nil {
 			if response.StatusCode == 202 {
@@ -256,6 +258,7 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 			if restartUnsupported(response) {
 				outcome.state = "failed"
 				outcome.code = "agent.restart-unsupported"
+				outcome.observedAt = c.now().UTC()
 			}
 		}
 		w.pending = outcome
@@ -269,7 +272,7 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 		w.pending = &restartOutcome{state: state, code: code}
 		return c.advance(ctx, w)
 	}
-	instance, err := c.service.restartInstance(ctx, *env)
+	instance, err := c.observe(ctx, w.row, *env)
 	if err == nil && instance != "" && instance != w.row.OldInstance {
 		// Capture the joined proof before any further binding I/O can fail.
 		w.pending = &restartOutcome{state: "connected", observedAt: c.now().UTC()}
@@ -286,6 +289,12 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 		return false, nil
 	}
 	return c.advance(ctx, w)
+}
+
+func (c *restartController) observe(ctx context.Context, row AgentRestartRequest, env Environment) (string, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, row.Deadline.Sub(c.now()))
+	defer cancel()
+	return c.service.restartInstance(probeCtx, env)
 }
 
 // Every retry checks the tuple inside the transaction; joined outcomes survive a rollback.
@@ -307,18 +316,19 @@ func (c *restartController) persist(ctx context.Context, w *restartWork, out *re
 		if err != nil || env.ID != next.RegistrationID || env.CredentialRevision != next.CredentialRevision {
 			state, code = "failed", "agent.restart-superseded"
 		}
-		if state == "connected" && !out.observedAt.Before(next.Deadline) {
+		now := c.now().UTC()
+		if out.acknowledged != nil && out.acknowledged.Before(next.Deadline) {
+			next.AcknowledgedAt = out.acknowledged
+		}
+		lateProof := (state == "connected" || state == "failed" && code == "agent.restart-unsupported") && !out.observedAt.Before(next.Deadline)
+		if lateProof || state == "awaiting" && !now.Before(next.Deadline) {
 			state, code = "unknown", "agent.restart-unconfirmed"
 			if next.AcknowledgedAt != nil {
 				state, code = "failed", "agent.restart-timeout"
 			}
 		}
-		now := c.now().UTC()
 		next.State = state
 		next.UpdatedAt = now
-		if out.acknowledged != nil {
-			next.AcknowledgedAt = out.acknowledged
-		}
 		if state == "connected" || state == "failed" || state == "unknown" {
 			next.SettledAt = &now
 			if code != "" {

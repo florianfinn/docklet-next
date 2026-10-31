@@ -294,7 +294,9 @@ restart run states and typed problem codes. The agent-only POST `/api/system/age
 `/environments/{id}/agent/restarts/{runId}` reads its durable state and code.
 Reservation excludes all runtime intake in the same SQLite write transaction.
 `sent` commits before the single POST; `awaiting` persists received
-acknowledgement separately. Recovery never resends: an unsent reservation settles
+acknowledgement received before the deadline separately, independently of the
+optional Direct response body. Late replies/proofs cannot replace the deadline
+result; timely joined evidence can be persisted later. Recovery never resends: an unsent reservation settles
 `agent.restart-interrupted`, while sent runs observe until the stored deadline.
 Terminal codes survive history pruning and process restart. `/health` includes a UUID generated once per process;
 `health.InstanceID()` exposes that same identity to host-maintenance wiring.

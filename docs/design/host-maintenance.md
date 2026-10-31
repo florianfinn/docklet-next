@@ -79,7 +79,8 @@ hosts stays in [host onboarding](host-onboarding.md).
    `old_instance` with the current revision; without that evidence the restart
    is refused (`host.unreachable`). The hub sends at most once: `sent` is
    committed before sending, and nothing is replayed after errors or a hub
-   restart. A received 202 commits `awaiting` with `acknowledged_at`; a send
+   restart. A 202 received before the deadline commits `awaiting` with
+   `acknowledged_at`; its optional body is not required. A send
    error without a response commits `awaiting` without acknowledgement. The
    response instance is evidence only. A definitive 409
    `agent.restart-unsupported` settles failed with that code.
@@ -96,7 +97,9 @@ hosts stays in [host onboarding](host-onboarding.md).
     recovery settles an unsent `reserved` row as failed
     `agent.restart-interrupted`; `sent` and `awaiting` resume observation until
     the stored deadline and never resend. The reservation ends with the terminal
-    commit. Terminal states and codes are immutable.
+    commit. Reply and proof timestamps determine deadline eligibility: late
+    acknowledgement or refusal cannot replace an unconfirmed deadline result.
+    Terminal states and codes are immutable.
 11. Environment 0 has no restart action.
 
 ## Persistence and check transport constraints
