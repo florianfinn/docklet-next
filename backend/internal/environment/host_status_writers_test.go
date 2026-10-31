@@ -35,7 +35,7 @@ var hostTableWriters = map[string]int{
 	"internal/environment/service.go:EnvironmentService.EnsureLocalEnvironment":                  1,  // local host insert and api_url/credential revision only
 	"internal/environment/service.go:EnvironmentService.UpdateEnvironment":                       0,  // editable columns only (allowlist + Select)
 	"internal/environment/service.go:EnvironmentService.linkEnvironmentApiKey":                   3,  // credential link → pending
-	"internal/environment/service_health.go:EnvironmentService.UpdateEnvironmentConnectionState": 3,  // connect → pending; disconnect keeps pending/verdict
+	"internal/environment/service_health.go:EnvironmentService.UpdateEnvironmentConnectionState": 4,  // connect → pending, disconnect → offline; both keep the verdict
 	"internal/environment/service_health.go:EnvironmentService.UpdateEnvironmentHeartbeat":       1,  // hub id 0 only
 	"internal/environment/service_health.go:EnvironmentService.updateEnvironmentStatusInternal":  10, // failed probe keeps pending/Edge verdict
 	"internal/environment/service_runtime.go:EnvironmentService.ReconcileEdgeStatusesOnStartup":  4,  // keeps pending/offline/verdict

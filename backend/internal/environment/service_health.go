@@ -340,7 +340,10 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 		"updated_at": &now,
 	}
 	if connected {
-		updates["status"] = string(EnvironmentStatusPending)
+		// The connect-time compatibility check replaces the incompatible verdict; until it
+		// answers, the returning host keeps showing update-required instead of pending.
+		updates["status"] = gorm.Expr("CASE WHEN status = ? THEN status ELSE ? END",
+			string(EnvironmentStatusUpdateRequired), string(EnvironmentStatusPending))
 		updates["last_seen"] = &now
 		// Remember the tunnel transport so the UI can keep showing it after
 		// the tunnel drops or while the agent is poll-only.

@@ -119,6 +119,24 @@ func TestHostVerdictReturnsWithTunnelWithoutProbe(t *testing.T) {
 	}
 }
 
+// The connect write keeps the incompatible verdict, so a returning v10 agent never
+// shows pending before its connect-time compatibility check answers (K22).
+func TestHostVerdictKeptByConnectWrite(t *testing.T) {
+	for stored, want := range map[string]string{"update-required": "update-required", "offline": "pending", "pending": "pending"} {
+		t.Run(stored, func(t *testing.T) {
+			f := newAgentFixture(t, "edge", version.Info{})
+			require.NoError(t, f.service.db.Model(&Environment{}).Where("id = ?", f.id).Update("status", stored).Error)
+			require.NoError(t, f.service.UpdateEnvironmentConnectionState(t.Context(), f.id, true))
+			row, err := f.service.GetEnvironmentByID(t.Context(), f.id)
+			require.NoError(t, err)
+			require.Equal(t, want, row.Status)
+			detail, err := NewHandler(f.service, nil, nil, nil, nil, nil).GetEnvironment(t.Context(), &GetEnvironmentInput{ID: f.id})
+			require.NoError(t, err)
+			require.Equal(t, want, detail.Body.Data.Status)
+		})
+	}
+}
+
 // A transport-loss write that read the row earlier must not replace a verdict
 // stored in between; the write re-checks the protected status itself.
 func TestHostVerdictSurvivesInterleavedTransportLossWrite(t *testing.T) {
