@@ -43,10 +43,13 @@ var hostTableWriters = map[string]int{
 
 var (
 	hostWriteMethods = map[string]bool{"Update": true, "Updates": true, "UpdateColumn": true, "UpdateColumns": true, "Save": true, "Create": true}
-	// SQLite statements that change rows: UPDATE and INSERT with an optional OR conflict
-	// clause, REPLACE INTO; the table name may carry a schema and any SQLite identifier quote.
-	hostRawWrite = regexp.MustCompile(`(?is)\b(update(\s+or\s+\w+)?|insert(\s+or\s+\w+)?\s+into|replace\s+into)\s+` +
-		`(["\x60\[]?\w+["\x60\]]?\s*\.\s*)?["\x60\[]?environments\b`)
+	// SQLite statements that change rows (UPDATE and INSERT with an optional OR conflict
+	// clause, REPLACE INTO) and their target: an identifier, optionally schema-qualified,
+	// unquoted or in any SQLite identifier quote.
+	hostSQLIdent   = `(?:"[^"]*"|\x60[^\x60]*\x60|\[[^\]]*\]|[\w$]+)`
+	hostRawWrite   = regexp.MustCompile(`(?is)\b(?:update(?:\s+or\s+\w+)?|insert(?:\s+or\s+\w+)?\s+into|replace\s+into)\s+(` + hostSQLIdent + `(?:\s*\.\s*` + hostSQLIdent + `)?)`)
+	hostTableRef   = regexp.MustCompile(`^\s*(` + hostSQLIdent + `)(?:\s*\.\s*(` + hostSQLIdent + `))?`)
+	hostSQLComment = regexp.MustCompile(`(?s)/\*.*?\*/|--[^\n]*`)
 	hostStatusWord = regexp.MustCompile(`(?i)\bstatus\b`)
 )
 
@@ -69,7 +72,7 @@ func (s *hostWriterScan) isModelType(expr ast.Expr) bool {
 // isModel is isModelType for a type the checker resolved inside the scanned package.
 func (s *hostWriterScan) isModel(t types.Type) bool {
 	for {
-		switch v := t.(type) {
+		switch v := types.Unalias(t).(type) {
 		case *types.Pointer:
 			t = v.Elem()
 		case *types.Slice:
@@ -121,7 +124,18 @@ type hostWriterScan struct {
 	models  map[string]bool // host model type names of the package
 	rawSQL  bool            // the current body holds a constant host table write statement
 	envs    map[string]bool
-	queries map[string]bool
+	queries map[string]bool   // query holders: variables, local fields ("h.q"), elements ("qs[]")
+	funcs   map[string]string // local method values of write methods: "scoped" or the method
+}
+
+// hostHolder names where a local expression stores a value: a variable, a field path, or
+// the elements of a map, slice or array.
+func hostHolder(e ast.Expr) string {
+	e = unwrap(e)
+	if index, ok := e.(*ast.IndexExpr); ok {
+		return types.ExprString(unwrap(index.X)) + "[]"
+	}
+	return types.ExprString(e)
 }
 
 // text returns the value of a constant string expression: literals, concatenations and
@@ -133,12 +147,29 @@ func (s *hostWriterScan) text(e ast.Expr) (string, bool) {
 	return "", false
 }
 
-// hostTableName returns the bare table of a GORM Table argument: without alias, schema
-// or SQLite identifier quotes.
+// hostTableName returns the bare, lower-case table of a GORM Table argument or SQL target:
+// without comments, alias, schema or SQLite identifier quotes.
 func hostTableName(name string) string {
-	name = strings.Fields(name + " x")[0]
-	name = name[strings.LastIndex(name, ".")+1:]
-	return strings.Trim(name, "\"`[]")
+	m := hostTableRef.FindStringSubmatch(hostSQLComment.ReplaceAllString(name, " "))
+	if m == nil {
+		return ""
+	}
+	table := m[1]
+	if m[2] != "" {
+		table = m[2]
+	}
+	return strings.ToLower(strings.Trim(table, "\"`[]"))
+}
+
+// hostRawWrites reports whether constant SQL updates, inserts into or replaces into the
+// environments table, ignoring SQLite comments.
+func hostRawWrites(sql string) bool {
+	for _, m := range hostRawWrite.FindAllStringSubmatch(hostSQLComment.ReplaceAllString(sql, " "), -1) {
+		if hostTableName(m[1]) == "environments" {
+			return true
+		}
+	}
+	return false
 }
 
 // hostStubImporter gives every import an empty package, so a package type-checks without
@@ -151,11 +182,24 @@ func (hostStubImporter) Import(path string) (*types.Package, error) {
 	return pkg, nil
 }
 
-// hostModels returns Environment and every type of the package whose TableName method
-// returns the constant "environments".
+// hostModels returns Environment, its type aliases and every type of the package whose
+// TableName method returns the constant "environments".
 func hostModels(files []*ast.File, info *types.Info) map[string]bool {
 	models := map[string]bool{"Environment": true}
-	scan := &hostWriterScan{info: info}
+	scan := &hostWriterScan{info: info, models: models}
+	// Type aliases of a model at any scope name a model too (syntactic fallback where
+	// stub imports leave the checker without the aliased type).
+	for changed := true; changed; {
+		changed = false
+		for _, file := range files {
+			ast.Inspect(file, func(n ast.Node) bool {
+				if spec, ok := n.(*ast.TypeSpec); ok && spec.Assign.IsValid() && !models[spec.Name.Name] && scan.isModelType(spec.Type) {
+					models[spec.Name.Name], changed = true, true
+				}
+				return true
+			})
+		}
+	}
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
@@ -213,8 +257,9 @@ func (s *hostWriterScan) isEnv(e ast.Expr) bool {
 func (s *hostWriterScan) scoped(chain ast.Expr) bool {
 	for chain != nil {
 		chain = unwrap(chain)
-		if id, ok := chain.(*ast.Ident); ok {
-			return s.queries[id.Name]
+		switch chain.(type) {
+		case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr:
+			return s.queries[hostHolder(chain)]
 		}
 		call, ok := chain.(*ast.CallExpr)
 		if !ok {
@@ -238,19 +283,51 @@ func (s *hostWriterScan) scoped(chain ast.Expr) bool {
 }
 
 func (s *hostWriterScan) bind(lhs, rhs ast.Expr) bool {
-	id, ok := unwrap(lhs).(*ast.Ident)
-	if !ok || id.Name == "_" {
+	key := hostHolder(lhs)
+	if key == "_" {
 		return false
 	}
-	switch {
-	case !s.envs[id.Name] && s.isEnv(rhs):
+	if id, ok := unwrap(lhs).(*ast.Ident); ok && !s.envs[id.Name] && s.isEnv(rhs) {
 		s.envs[id.Name] = true
-	case !s.queries[id.Name] && s.scoped(rhs):
-		s.queries[id.Name] = true
-	default:
-		return false
+		return true
 	}
-	return true
+	if !s.queries[key] && s.scoped(rhs) {
+		s.queries[key] = true
+		return true
+	}
+	changed := false
+	switch r := unwrap(rhs).(type) {
+	case *ast.SelectorExpr: // method value: write := q.Update, save := db.Save
+		if _, done := s.funcs[key]; !done && (hostWriteMethods[r.Sel.Name] || r.Sel.Name == "Exec" || r.Sel.Name == "Raw") {
+			s.funcs[key] = r.Sel.Name
+			if hostWriteMethods[r.Sel.Name] && s.scoped(r.X) {
+				s.funcs[key] = "scoped"
+			}
+			changed = true
+		}
+	case *ast.CompositeLit: // holder{q: query} or map[string]*gorm.DB{"host": query}
+		for _, elt := range r.Elts {
+			holder, value := key+"[]", elt
+			if kv, ok := elt.(*ast.KeyValueExpr); ok {
+				value = kv.Value
+				if field, ok := kv.Key.(*ast.Ident); ok && !isMapOrSlice(r.Type) {
+					holder = key + "." + field.Name
+				}
+			}
+			if !s.queries[holder] && s.scoped(value) {
+				s.queries[holder], changed = true, true
+			}
+		}
+	}
+	return changed
+}
+
+func isMapOrSlice(t ast.Expr) bool {
+	switch t.(type) {
+	case *ast.MapType, *ast.ArrayType:
+		return true
+	}
+	return false
 }
 
 // writes reports whether body updates the environments table: Update/Updates/
@@ -258,11 +335,11 @@ func (s *hostWriterScan) bind(lhs, rhs ast.Expr) bool {
 // or Table("environments"), Save/Updates/UpdateColumns/Create of an Environment value, or
 // Exec/Raw of constant SQL that updates, inserts into or replaces into environments.
 func (s *hostWriterScan) writes(recv *ast.FieldList, params *ast.FuncType, body ast.Node) bool {
-	s.envs, s.queries, s.rawSQL = map[string]bool{}, map[string]bool{}, false
+	s.envs, s.queries, s.funcs, s.rawSQL = map[string]bool{}, map[string]bool{}, map[string]string{}, false
 	ast.Inspect(body, func(n ast.Node) bool {
 		if e, ok := n.(ast.Expr); ok {
 			if text, ok := s.text(e); ok {
-				s.rawSQL = s.rawSQL || hostRawWrite.MatchString(text)
+				s.rawSQL = s.rawSQL || hostRawWrites(text)
 				return false
 			}
 		}
@@ -312,11 +389,20 @@ func (s *hostWriterScan) writes(recv *ast.FieldList, params *ast.FuncType, body 
 		if !ok || writes {
 			return !writes
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
+		var receiver ast.Expr
+		method := ""
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			receiver, method = sel.X, sel.Sel.Name
 		}
-		switch method := sel.Sel.Name; {
+		switch fn := s.funcs[hostHolder(call.Fun)]; fn {
+		case "":
+		case "scoped":
+			writes = true
+			return false
+		default:
+			method = fn
+		}
+		switch {
 		case method == "Exec" || method == "Raw":
 			// Any constant host table write statement in the body counts, also when the
 			// SQL reaches Exec through a variable or a formatting call.
@@ -324,7 +410,7 @@ func (s *hostWriterScan) writes(recv *ast.FieldList, params *ast.FuncType, body 
 		case hostWriteMethods[method]:
 			// Save, Updates, UpdateColumns and Create take an Environment value as their model.
 			valueModel := method != "Update" && method != "UpdateColumn" && len(call.Args) > 0 && s.isEnv(call.Args[0])
-			writes = valueModel || s.scoped(sel.X)
+			writes = valueModel || receiver != nil && s.scoped(receiver)
 		}
 		return !writes
 	})
@@ -486,6 +572,21 @@ func TestHostTableWriterGuardRecognisesWriteForms(t *testing.T) {
 		"formatted sql":    "db.Exec(fmt.Sprintf(\"UPDATE environments SET %s = ? WHERE id = ?\", \"status\"), \"pending\", id)",
 		"schema table":     `db.Table("main.environments").Where("id = ?", id).Update("status", "pending")`,
 		"quoted table":     "db.Table(`\"environments\" AS e`).Where(\"id = ?\", id).Update(\"status\", \"pending\")",
+		"block comment":    "db.Exec(`UPDATE /* verdict */ environments SET status = ? WHERE id = ?`, \"pending\", id)",
+		"line comment":     "db.Exec(\"UPDATE -- verdict\\n environments SET status = ? WHERE id = ?\", \"pending\", id)",
+		"schema comment":   "db.Exec(`UPDATE main /* schema */ . environments SET status = ? WHERE id = ?`, \"pending\", id)",
+		"upper table":      `db.Table("ENVIRONMENTS").Where("id = ?", id).Update("status", "pending")`,
+		"mixed table":      `db.Table("Environments").Where("id = ?", id).Update("status", "pending")`,
+		"spaced schema":    `db.Table("main . environments").Where("id = ?", id).Update("status", "pending")`,
+		"query field":      `var h struct{ q *gorm.DB }; h.q = db.Table("environments").Where("id = ?", id); h.q.Update("status", "pending")`,
+		"query struct lit": `h := holder{q: db.Table("environments")}; h.q.Update("status", "pending")`,
+		"query map":        `qs := map[string]*gorm.DB{"host": db.Table("environments").Where("id = ?", id)}; qs["host"].Update("status", "pending")`,
+		"method value":     `write := db.Table("environments").Where("id = ?", id).Update; write("status", "pending")`,
+		"save value":       `row := new(Environment); row.Status = "pending"; save := db.Save; save(row)`,
+		"exec value":       "exec := db.Exec; exec(`UPDATE environments SET status = ? WHERE id = ?`, \"pending\", id)",
+		"local alias":      `type Host = Environment; var row Host; row.Status = "pending"; db.Save(&row)`,
+		"pointer alias":    `type Host = *Environment; var row Host; row.Status = "pending"; db.Save(row)`,
+		"slice alias":      `type Hosts = []Environment; var rows Hosts; for i := range rows { rows[i].Status = "pending" }; db.Save(&rows)`,
 		"schema prefix":    "db.Exec(`UPDATE \"main\".\"environments\" SET status = ? WHERE id = ?`, \"pending\", id)",
 		"concat const sql": `db.Exec(concatSQL, "pending", id)`,
 		"alias const sql":  `db.Exec(aliasSQL, "pending", id)`,
@@ -514,7 +615,9 @@ func TestHostTableWriterGuardRecognisesWriteForms(t *testing.T) {
 	require.Equal(t, map[string]int{"internal/other/other.go:Environment.reset": 1}, receiver)
 	literal := scanHostWriterFixture(t, "package other\nvar reset = func(db *gorm.DB) { db.Model(&Environment{}).Update(\"status\", \"pending\") }\n")
 	require.Equal(t, map[string]int{"internal/other/other.go:reset": 1}, literal)
-	reads := scanHostWriterFixture(t, "package other\nfunc (s *Service) read() {\ndb.Model(&Environment{}).Where(\"status = ?\", id).First(&env)\ndb.Model(&Run{}).Updates(map[string]any{\"status\": \"done\"})\ndb.Exec(\"UPDATE runs SET status = 'done'\")\ndb.Exec(\"UPDATE OR IGNORE [environments_archive] SET status = 'done'\")\n}\n")
+	reads := scanHostWriterFixture(t, "package other\nfunc (s *Service) read() {\ndb.Model(&Environment{}).Where(\"status = ?\", id).First(&env)\ndb.Model(&Run{}).Updates(map[string]any{\"status\": \"done\"})\ndb.Exec(\"UPDATE runs SET status = 'done'\")\ndb.Exec(\"UPDATE OR IGNORE [environments_archive] SET status = 'done'\")\n"+
+		"db.Exec(\"UPDATE [environments-archive] SET status = 'done'\")\ndb.Exec(\"UPDATE environments.other SET status = 'done'\")\n"+
+		"db.Table(\"environments_archive\").Update(\"status\", \"done\")\nwrite := db.Table(\"runs\").Update; write(\"status\", \"done\")\n}\n")
 	require.Empty(t, reads)
 }
 
