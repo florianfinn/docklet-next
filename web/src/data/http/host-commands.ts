@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live host credential lifecycle and discovery mapping. M14 host maintenance and availability.
 
+import { discardResponse } from "./identity-reads";
 import { runtimeResponseError } from "./runtime-mapping";
 import { CancelledError } from "@tanstack/react-query";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
@@ -26,6 +27,10 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     if (owner !== generation()) throw new CancelledError();
+    if (!response.ok && !/\bjson\b/i.test(response.headers.get("Content-Type") ?? "")) {
+      discardResponse(response);
+      throw runtimeResponseError(undefined, response.status);
+    }
     const payload = await response.json();
     if (owner !== generation()) throw new CancelledError();
     if (!response.ok) throw runtimeResponseError(payload, response.status);

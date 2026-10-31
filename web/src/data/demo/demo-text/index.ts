@@ -1,12 +1,16 @@
 import type { AppLocale } from "@/domain/locale";
 import type { ActionRun, ContainerInfo, OpsEvent, ScheduledJob, SecurityOverview } from "@/domain/model";
 
+import { deContainers } from "@/features/containers/messages/de";
+import { enContainers } from "@/features/containers/messages/en";
+
 import { EXACT, PATTERNS } from "./en-us";
 
+const REFUSALS = Object.fromEntries(Object.entries(deContainers.operationReasons).map(([key, text]) => [text, enContainers.operationReasons[key as keyof typeof enContainers.operationReasons]]));
 const SEPARATORS = [" · ", " – "];
 
 function translate(text: string): string {
-  const exact = EXACT[text];
+  const exact = REFUSALS[text] ?? EXACT[text];
   if (exact !== undefined) return exact;
   for (const [re, fn] of PATTERNS) {
     const m = text.match(re);

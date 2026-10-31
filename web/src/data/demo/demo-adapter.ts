@@ -61,7 +61,10 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
   // Containers outside Compose get their own stream, keyed so it never collides with a stack id.
   const logs = new LogSimulator(() => [...db.stacks, ...db.containers().filter((c) => !c.stackId).map((c) => ({ id: `container:${c.id}`, services: [{ name: c.name, state: c.state }] }))]);
   const empty = () => simulationStore.get().empty;
-  const ctx: DemoContext = { db, runner, forcedFailure: () => takeForcedFailure() !== "none", demoFailure: (operation) => takeDemoFailure(adapter, operation) };
+  const ctx: DemoContext = { db, runner, guardRuntimeHost: hostId => {
+    const code = maintenanceReason("recreateContainer", { kind: "host", id: hostId });
+    if (code) throw new AdapterOutcomeError({ kind: "error", code, status: 409 });
+  }, forcedFailure: () => takeForcedFailure() !== "none", demoFailure: (operation) => takeDemoFailure(adapter, operation) };
   const supportedOperations = new Set<string>();
 
   function failStep(requested: FailAt | undefined): DeployStepKey | undefined {
@@ -564,7 +567,10 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
   const runtimeOperations = new Set(["runStackCommand", "runContainerCommand", "recreateContainer", "restartService", "setContainerOrigin", "deployStack", "installStackUpdates", "installContainerUpdate"]);
   function hostFor(operation: string, value: unknown): string | undefined {
     if (maintenanceOperations.has(operation)) return typeof value === "string" ? value : undefined;
-    if (operation === "deployStack" && value && typeof value === "object") return (value as { hostId?: string }).hostId;
+    if (operation === "deployStack" && value && typeof value === "object") {
+      const input = value as { hostId?: string; stackId?: string };
+      return input.hostId ?? (input.stackId ? db.stack(input.stackId)?.hostId : undefined);
+    }
     if (/Stack|Service/.test(operation)) return db.stack(String(value))?.hostId;
     return db.containers().find(c => c.id === value)?.hostId;
   }
@@ -584,10 +590,12 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     return undefined;
   }
   for (const operation of [...maintenanceOperations, ...runtimeOperations]) {
+    if (operation === "recreateContainer") continue;
     const method = (adapter as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[operation];
     if (!method) continue;
     (adapter as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[operation] = async (...args) => {
       const host = hostFor(operation, args[0]);
+      if (runtimeOperations.has(operation) && (!host || !db.host(host))) return method(...args);
       const code = maintenanceReason(operation, { kind: "host", id: host ?? "" });
       if (code) throw new AdapterOutcomeError({ kind: "error", code, status: 409 });
       return method(...args);

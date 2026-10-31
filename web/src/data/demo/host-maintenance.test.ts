@@ -9,6 +9,7 @@ import { createDisconnectedAdapter } from "../disconnected-adapter";
 import { createDemoAdapter } from "./demo-adapter";
 import { HOSTS } from "./fixtures/hosts";
 import { defaultHostColor } from "@/domain/hosts";
+import { queueDemoFailure } from "./options";
 import { simulationStore } from "./simulation";
 afterEach(() => { vi.useRealTimers(); simulationStore.reset(); });
 function fixture(status: typeof HOSTS[number]["status"] = "online") {
@@ -61,4 +62,20 @@ it("H8 typed UI configuration refusal and disconnected capabilities preserve no 
   const disconnected = createDisconnectedAdapter();
   for (const operation of ["updateHost", "connectHost", "reconnectHost", "restartAgent", "listSystemComponents", "saveSettings"] as const) expect((await disconnected.getCapability(operation, { kind: "host", id: "example" })).available).toBe(false);
   await expect(disconnected.restartAgent("example")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
+});
+
+it("H8 replays failed recreate receipts before fresh restart admission", async () => {
+  const adapter = fixture();
+  await adapter.setContainerOrigin("c-netdata", "standalone");
+  queueDemoFailure(adapter, { operation: "recreateContainer", at: "start" });
+  const input = { image: "example/app:2" };
+  const run = await adapter.recreateContainer("c-netdata", input, "example");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect((await adapter.listActions()).find(item => item.id === run)?.status).toBe("failed");
+  const container = (await adapter.listContainers()).find(item => item.id === "c-netdata")!;
+  await adapter.restartAgent(container.hostId);
+  const before = (await adapter.listActions()).length;
+  await expect(adapter.recreateContainer(container.id, input, "example")).resolves.toBe(run);
+  await expect(adapter.recreateContainer(container.id, input, "new-intent")).rejects.toMatchObject({ outcome: { code: "host.restarting" } });
+  expect((await adapter.listActions()).length).toBe(before);
 });

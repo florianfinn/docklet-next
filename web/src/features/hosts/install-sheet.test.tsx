@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { runtimeResponseError } from "@/data/http/runtime-mapping";
 import { mapHost } from "@/data/http/hosts";
 import { buildInstallArtifacts } from "@/domain/agent-install";
 import { renderWithApp } from "@/test/render";
@@ -69,4 +70,17 @@ it("H5 clears a late issued token when navigation switches the host", async () =
   expect((await screen.findByTestId("agent-token")).textContent).toBe(TOKEN_PLACEHOLDER);
   expect(document.body.textContent).not.toContain("example-late-token");
   expect(rotate).toHaveBeenCalledTimes(1);
+});
+
+it("H5 presents token generation refusal in its active confirmation", async () => {
+  setAppLocale("en-US"); const adapter = createDemoAdapter();
+  vi.spyOn(adapter, "issueAgentToken").mockRejectedValue(runtimeResponseError({ code: "host.unreachable", status: 502 }, 502));
+  renderWithApp(<Harness />, adapter);
+  await screen.findByTestId("agent-token");
+  await userEvent.click(screen.getByRole("button", { name: "Generate new token" }));
+  const confirm = await screen.findByRole("alertdialog");
+  await userEvent.click(within(confirm).getByRole("button", { name: "Generate new token" }));
+  expect((await within(confirm).findByRole("alert")).textContent).toBe("The agent is currently unreachable. Check its connection and try again.");
+  expect(screen.getByTestId("agent-token").textContent).toBe(TOKEN_PLACEHOLDER);
+  expect(adapter.issueAgentToken).toHaveBeenCalledOnce();
 });

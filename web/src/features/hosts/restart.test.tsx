@@ -38,3 +38,15 @@ it("H3 shows host.restarting from the runtime producer at the actual command con
   await userEvent.click(screen.getByRole("button", { name: "Stop" }));
   expect(error).toHaveBeenCalledWith("The agent is restarting. Wait until it reconnects.");
 });
+
+it("H3 keeps typed admission failure in the active confirmation", async () => {
+  setAppLocale("en-US"); const adapter = createDemoAdapter();
+  vi.spyOn(adapter, "restartAgent").mockRejectedValue(runtimeResponseError({ code: "host.busy", status: 409 }, 409));
+  renderWithApp(<HostSettingsDialog host={host} component={undefined} open onOpenChange={() => {}} />, adapter);
+  await userEvent.click(screen.getByRole("tab", { name: "Agent container" }));
+  await userEvent.click(screen.getByRole("button", { name: "Restart agent" }));
+  const confirm = await screen.findByRole("alertdialog");
+  await userEvent.click(within(confirm).getByRole("button", { name: "Restart agent" }));
+  expect((await within(confirm).findByRole("alert")).textContent).toBe("Runtime work is active on this host. Wait before restarting the agent.");
+  expect(adapter.restartAgent).toHaveBeenCalledOnce();
+});

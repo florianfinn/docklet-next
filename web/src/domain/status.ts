@@ -47,11 +47,11 @@ export const RUNTIME_TONE: Record<RuntimeStatus, Tone> = {
 };
 
 export function serviceRuntime(service: Service, host: Host | undefined): RuntimeStatus {
-  return runtimeStatus(service.state, service.health, isHostAvailable(host));
+  return runtimeStatus(service.state, service.health, host === undefined || isHostAvailable(host));
 }
 
 export function containerRuntime(container: ContainerInfo, host: Host | undefined): RuntimeStatus {
-  return runtimeStatus(container.state, container.health, isHostAvailable(host));
+  return runtimeStatus(container.state, container.health, host === undefined || isHostAvailable(host));
 }
 
 export function runningCount(stack: Stack): number {

@@ -50,9 +50,9 @@ function InstallSession({ host, defaults, general, image }: { host: Host; defaul
     </FieldGroup>
     <DialogError feedback={feedback} />
     {plan ? <InstallArtifacts plan={plan} onRegenerateToken={!token && capability.available ? () => setConfirm(true) : undefined} /> : <p role="alert" className="text-sm text-destructive">{t("invalidFields")}</p>}
-    <ConfirmDialog open={confirm} onOpenChange={setConfirm} title={t("generateTitle", { name: host.name })} description={t("generateWarning")} confirmLabel={t("generate")} onConfirm={async () => {
+    <ConfirmDialog open={confirm} onOpenChange={setConfirm} title={t("generateTitle", { name: host.name })} description={t("generateWarning")} confirmLabel={t("generate")} formatError={formatError} onConfirm={async () => {
       const current = feedback.checkpoint();
-      const issued = await feedback.run(() => adapter.issueAgentToken(host.id));
+      const issued = await adapter.issueAgentToken(host.id);
       if (!current() || !issued) return false;
       setToken(issued); return true;
     }} />

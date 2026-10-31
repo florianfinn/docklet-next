@@ -13,6 +13,9 @@ import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { mapHost } from "@/data/http/hosts";
 import { operationReasonKey } from "@/data/operation-reason";
 import { SettingsProblemError, settingsProblem, settingsErrorMessage } from "@/data/settings-error";
+import { STANDALONE } from "@/data/demo/fixtures/containers";
+import { STACKS } from "@/data/demo/fixtures/stacks";
+import { serviceRuntime, containerRuntime } from "@/domain/status";
 import { isHostAvailable, hostTone } from "@/domain/hosts";
 import { renderWithApp } from "@/test/render";
 import { AutoHealSection } from "@/features/settings/sections/AutoHealSection";
@@ -58,4 +61,17 @@ it.each(["en-US", "de"] as const)("H7 shows the typed environment-managed messag
   renderWithApp(<HostCard host={host} system={undefined} stacks={2} containers={3} allIds={[host.id]} />, adapter);
   await userEvent.click(screen.getByRole("button", { name: locale === "de" ? "Verbindung prüfen" : "Check connection" }));
   expect(shown).toHaveBeenCalledWith(locale === "de" ? "Einstellungen dieses Hosts werden über seine Umgebung verwaltet" : "Settings on this host are managed through its environment");
+});
+
+it("H7 preserves stopped observations without host metadata and rejects known unavailable hosts", () => {
+  const service = { ...STACKS[0]!.services[0]!, state: "stopped" as const, health: "none" as const };
+  const container = { ...STANDALONE[0]!, state: "stopped" as const, health: "none" as const };
+  for (const observedHost of [undefined, host]) {
+    expect(serviceRuntime(service, observedHost)).toBe("stopped");
+    expect(containerRuntime(container, observedHost)).toBe("stopped");
+  }
+  for (const status of ["offline", "pending", "token-rejected", "update-required"] as const) {
+    expect(serviceRuntime(service, { ...host, status })).toBe("unknown");
+    expect(containerRuntime(container, { ...host, status })).toBe("unknown");
+  }
 });

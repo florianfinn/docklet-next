@@ -16,7 +16,7 @@ it("H4 saves only host-default keys and preserves the typed settings refusal", a
     expect(String(url)).toBe("/api/environments/0/settings"); expect(init?.method).toBe("PUT");
     expect(new Headers(init?.headers).has("Idempotency-Key")).toBe(false);
     expect(JSON.parse(String(init?.body))).toEqual({ agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/agent", defaultHostConnection: "edge", defaultPuid: "1000", defaultPgid: "1000", detectSocketGroup: "true" });
-    return new Response(JSON.stringify({ code: "settings.ui-configuration-disabled", status: 403 }), { status: 403 });
+    return new Response(JSON.stringify({ code: "settings.ui-configuration-disabled", status: 403 }), { status: 403, headers: { "Content-Type": "application/problem+json" } });
   });
   const api = createSettingsCore("/api", { fetch: fetcher as typeof fetch, token: async () => "example" });
   await expect(api.saveSettings("hostDefaults", { ...defaults, unexpected: "must-not-be-sent" } as typeof defaults)).rejects.toMatchObject({ outcome: { code: "settings.ui-configuration-disabled", status: 403 } });

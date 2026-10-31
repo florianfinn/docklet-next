@@ -46,7 +46,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
   const cmd = useHostCommands();
   const restartCapability = useCapability("restartAgent", { kind: "host", id: host.id });
   const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
-  const restart = useHostAction(host.id, "agent-restart", async () => await feedback.run(() => cmd.restartAgent(host.id)));
+  const adapter = useAdapter(), formatError = useHostError();
   const check = useHostAction(host.id, "reconnect", async () => await feedback.run(() => cmd.reconnect(host.id)));
   const [confirmRestart, setConfirmRestart] = useState(false);
   const latestRestart = useActionRuns().find(run => run.hostId === host.id && run.kind === "agent-restart");
@@ -115,7 +115,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
       </section>
       </> : <p className="text-sm text-muted-foreground">{t("agentNone")}</p>}
       <div className="flex flex-wrap items-center gap-2">
-        {host.id !== "0" && <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={restart.busy} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => setConfirmRestart(true)}>
+        {host.id !== "0" && <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={latestRestart?.status === "running" || latestRestart?.status === "queued"} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => setConfirmRestart(true)}>
           {t("restart")}
         </BusyButton>}
         <BusyButton type="button" size="sm" variant="ghost" disabled={!reconnect.available} title={reconnect.reason} busy={check.busy} busyLabel={t("checking")} icon={<Cable data-icon="inline-start" />} onClick={() => void check.run()}>
@@ -127,7 +127,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
         <ol className="flex flex-col gap-1 text-sm">{latestRestart.steps.map(step => <li key={step.key} data-state={step.state}>{step.label} · {stage(step.state === "skipped" ? "pending" : step.state)}</li>)}</ol>
         {latestRestart.error && <p role="alert" className="text-sm text-destructive">{latestRestart.error}</p>}
       </section>}
-      <ConfirmDialog open={confirmRestart} onOpenChange={setConfirmRestart} title={t("restartTitle", { name: host.name })} description={t("restartBody")} confirmLabel={t("restart")} onConfirm={async () => (await restart.run()) ?? false} />
+      <ConfirmDialog open={confirmRestart} onOpenChange={setConfirmRestart} title={t("restartTitle", { name: host.name })} description={t("restartBody")} confirmLabel={t("restart")} formatError={formatError} onConfirm={() => adapter.restartAgent(host.id)} />
     </div>
   );
 }

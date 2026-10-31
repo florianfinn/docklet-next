@@ -18,7 +18,7 @@ import { encodeDemoRun } from "./encode-message";
 const problem = (code: string) => new AdapterOutcomeError({ kind: "error", code, status: 409 });
 const hasCompose = (c: ContainerInfo) => Object.keys(c.dockerLabels ?? {}).some((key) => key.startsWith("com.docker.compose."));
 
-export function createDemoContainerOperations({ db, runner, demoFailure }: DemoContext, failStep: (at: FailAt | undefined) => DeployStepKey | undefined) {
+export function createDemoContainerOperations({ db, runner, demoFailure, guardRuntimeHost }: DemoContext, failStep: (at: FailAt | undefined) => DeployStepKey | undefined) {
   const detected = new Map(db.standalone.map((c) => [c.id, c.origin]));
   const receipts = new Map<string, { digest: string; run: ActionRun }>();
   const find = (id: string) => {
@@ -54,6 +54,7 @@ export function createDemoContainerOperations({ db, runner, demoFailure }: DemoC
       const prior = scope ? receipts.get(scope) : undefined;
       if (prior) { if (prior.digest !== digest) throw problem("runtime.idempotency-mismatch"); return prior.run.id; }
       const c = find(id);
+      guardRuntimeHost?.(c.hostId);
       if (capabilityReason("recreateContainer", { kind: "container", id })) throw problem("container.origin-locked");
       const imageText = input.image ?? imageRef(c.image);
       const [repository = c.image.repository, tag = "latest"] = imageText.split(/:(?=[^:/]+$)/);

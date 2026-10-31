@@ -22,7 +22,7 @@ function fixture(code?: string) {
     expect(new Headers(init?.headers).has("Idempotency-Key")).toBe(false);
     const body = JSON.parse(String(init?.body)) as { name: string; color: string | null };
     writes.push({ path: url.pathname, method, body });
-    if (code) return new Response(JSON.stringify({ code, status: 409, title: "Host operation refused" }), { status: 409 });
+    if (code) return new Response(JSON.stringify({ code, status: 409, title: "Host operation refused" }), { status: 409, headers: { "Content-Type": "application/problem+json" } });
     return json({ ...host, ...body });
   });
   return { adapter: createHttpAdapter({ fetch: fetcher as typeof fetch }), writes };

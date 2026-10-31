@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability.
 
-import { settingsProblem } from "../settings-error";
+import { settingsProblem, SettingsProblemError } from "../settings-error";
 import { discardResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
@@ -39,7 +39,13 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, {
       method: "PUT", credentials: "same-origin", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(values),
     });
-    if (!response.ok) throw settingsProblem(await response.json().catch(() => undefined), response.status);
+    if (!response.ok) {
+      if (/\bjson\b/i.test(response.headers.get("Content-Type") ?? "")) {
+        const problem = settingsProblem(await response.json().catch(() => undefined), response.status);
+        if (problem instanceof SettingsProblemError) throw problem;
+      } else discardResponse(response);
+      throw new Error(`settings.write.${response.status}`);
+    }
     discardResponse(response);
   }
 
