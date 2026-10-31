@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original real xterm and Radix gesture, reconnect and lifetime tests.
 
+import { useState } from "react";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import { simulationStore } from "@/data/demo/simulation";
 import type { ShellEvent, ShellOptions } from "@/data/shell";
 import { renderRoutes } from "@/test/render";
 import ContainerPage from "./ContainerPage";
+import { ContainerTerminalTabs } from "./ContainerTerminalTabs";
 
 beforeEach(() => simulationStore.set((s) => ({ ...s, latency: "instant", live: false })));
 afterEach(() => { simulationStore.reset(); localStorage.clear(); });
@@ -62,4 +64,25 @@ it("uses the host refusal reason from the shell descriptor", async () => {
   renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], ["/containers/c-uptime-kuma"], adapter);
   expect((await screen.findByRole("tab", { name: "Terminal" })).hasAttribute("disabled")).toBe(true);
   expect(await screen.findByText(/Der Host ist nicht verfügbar/)).toBeTruthy();
+});
+
+it("refreshes the shell descriptor when an offline-labelled host becomes standby", async () => {
+  const user = userEvent.setup(), adapter = createDemoAdapter();
+  const c = (await adapter.listContainers()).find((row) => row.id === "c-uptime-kuma")!;
+  const host = (await adapter.listHosts()).find((row) => row.id === c.hostId)!;
+  let eligible = false;
+  const original = adapter.getCapability;
+  const capability = vi.fn(async (...args: Parameters<typeof original>) => args[0] === "openContainerShell" ? { operationId: args[0], resourceRef: args[1]!, available: eligible, ...(eligible ? {} : { disabledReasonCode: "agent.unavailable" }) } : original(...args));
+  adapter.getCapability = capability;
+  function HostObservation() {
+    const [seen, setSeen] = useState("2026-01-01T00:00:00Z");
+    return <><button onClick={() => { eligible = true; setSeen("2026-01-01T00:00:01Z"); }}>Observe host</button><ContainerTerminalTabs c={c} host={{ ...host, status: "offline", lastSeen: seen }}><div>Logs</div></ContainerTerminalTabs></>;
+  }
+  renderRoutes([{ path: "/", element: <HostObservation /> }], ["/"], adapter);
+  const tab = await screen.findByRole("tab", { name: "Terminal" });
+  await screen.findByText(/Der Host ist nicht verfügbar/);
+  expect(tab.hasAttribute("disabled")).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Observe host" }));
+  expect(capability.mock.calls.filter(([operation]) => operation === "openContainerShell").length).toBe(2);
+  await waitFor(() => expect(tab.hasAttribute("disabled")).toBe(false));
 });

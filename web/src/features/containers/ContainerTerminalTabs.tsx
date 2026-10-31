@@ -20,7 +20,7 @@ export function ContainerTerminalTabs({ c, host, children }: { c: ContainerInfo;
   const tp = useTranslations("containers.page");
   const reasonId = useId();
   const capability = useQuery({
-    queryKey: ["capability", "openContainerShell", c.id, c.state, c.inventory?.reason, host?.status, host?.agentVersion],
+    queryKey: ["capability", "openContainerShell", c.id, c.state, c.inventory?.reason, host?.status, host?.agentVersion, host?.lastSeen],
     queryFn: () => adapter.getCapability("openContainerShell", { kind: "container", id: c.id }),
     enabled: c.state === "running",
   });
