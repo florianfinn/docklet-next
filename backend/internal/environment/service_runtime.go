@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; application-heartbeat liveness and observer clock projection; polling agents below the minimum protocol keep update-required.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; application-heartbeat liveness and observer clock projection; polling agents below the minimum protocol keep update-required, also across startup reconcile.
 
 package environment
 
@@ -93,12 +93,14 @@ func applyEnvironmentRuntimeStateAt(env *environment.Environment, now time.Time,
 
 // ReconcileEdgeStatusesOnStartup resets edge environments to offline when the manager starts.
 // Live edge tunnels are process-local runtime state, so persisted "online" flags can be stale
-// after a restart until agents reconnect. Pending environments are left untouched.
+// after a restart until agents reconnect. Pending environments and the update-required verdict,
+// which belongs to the registration until the next probe, are left untouched.
 func (s *EnvironmentService) ReconcileEdgeStatusesOnStartup(ctx context.Context) error {
 	result := s.db.WithContext(ctx).Model(&Environment{}).
 		Where("is_edge = ?", true).
 		Where("status <> ?", string(EnvironmentStatusPending)).
 		Where("status <> ?", string(EnvironmentStatusOffline)).
+		Where("status <> ?", string(EnvironmentStatusUpdateRequired)).
 		Updates(map[string]any{
 			"status":     string(EnvironmentStatusOffline),
 			"updated_at": new(time.Now()),

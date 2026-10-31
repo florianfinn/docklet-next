@@ -8,6 +8,7 @@ package environment
 
 import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	"github.com/florianfinn/docklet-next/types/contract"
 	dto "github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
@@ -46,4 +47,34 @@ func TestHostProjectionKeepsUpdateRequiredForPollingAgent(t *testing.T) {
 	require.Equal(t, "update-required", projected.Status)
 	require.False(t, *projected.Connected)
 	require.NotNil(t, projected.LastPollAt)
+}
+
+// The stored incompatible verdict survives a tunnel drop, a failed Edge health
+// probe and a hub restart, so later polls still project update-required.
+func TestHostVerdictSurvivesTransportLossBeforePoll(t *testing.T) {
+	for _, path := range []string{"disconnect", "restart", "health"} {
+		t.Run(path, func(t *testing.T) {
+			f := newAgentFixture(t, "edge", version.Info{AgentContractVersion: 10, AgentContractFingerprint: contract.AgentHubFingerprint})
+			_, err := f.service.CheckAgentCompatibility(t.Context(), f.id)
+			require.ErrorIs(t, err, ErrAgentUpdateRequired)
+			edge.GetRegistry().Unregister(f.id)
+			service := f.service
+			switch path {
+			case "disconnect":
+				require.NoError(t, service.UpdateEnvironmentConnectionState(t.Context(), f.id, false))
+			case "health":
+				require.NoError(t, service.updateEnvironmentStatusInternal(t.Context(), f.id, string(EnvironmentStatusOffline)))
+			default:
+				service = NewEnvironmentService(f.service.db, f.service.httpClient, nil, nil, nil, nil)
+				require.NoError(t, service.ReconcileEdgeStatusesOnStartup(t.Context()))
+			}
+			row, err := service.GetEnvironmentByID(t.Context(), f.id)
+			require.NoError(t, err)
+			require.Equal(t, "update-required", row.Status)
+			edge.GetPollRuntimeRegistry().Update(f.id, time.Second, time.Now())
+			detail, err := NewHandler(service, nil, nil, nil, nil, nil).GetEnvironment(t.Context(), &GetEnvironmentInput{ID: f.id})
+			require.NoError(t, err)
+			require.Equal(t, "update-required", detail.Body.Data.Status)
+		})
+	}
 }

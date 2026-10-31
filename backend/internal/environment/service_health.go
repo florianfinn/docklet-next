@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; a tunnel drop or failed Edge probe keeps the update-required verdict.
 
 package environment
 
@@ -269,6 +269,10 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 		}
 		slog.InfoContext(ctx, "promoted pending direct environment to online via reachability check", "environmentId", id)
 	}
+	// A failed Edge probe proves no newer agent; only a completed compatibility check replaces the verdict.
+	if currentEnv.IsEdge && currentEnv.Status == string(EnvironmentStatusUpdateRequired) && status != string(EnvironmentStatusOnline) {
+		return nil
+	}
 
 	now := time.Now()
 	updates := map[string]any{
@@ -338,7 +342,8 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 		if err := s.db.WithContext(ctx).Select("status").Where("id = ?", id).First(&current).Error; err != nil {
 			return err
 		}
-		if current.Status != string(EnvironmentStatusPending) {
+		// The incompatible verdict belongs to the registration, not the tunnel; the next probe replaces it.
+		if current.Status != string(EnvironmentStatusPending) && current.Status != string(EnvironmentStatusUpdateRequired) {
 			updates["status"] = string(EnvironmentStatusOffline)
 		}
 	}
