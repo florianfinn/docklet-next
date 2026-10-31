@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host inventory read implementation.
+// Deviations: Original host inventory read implementation; ordinary reads are time-bounded.
 
 package middleware
 
@@ -18,6 +18,21 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/labstack/echo/v5"
 )
+
+// inventoryReadTimeout bounds an ordinary inventory read, including agent access. A frozen
+// agent would otherwise hold the browser's connection; the read then answers from its
+// snapshot or with agent.unavailable, well inside the web's 40 s management budget.
+var inventoryReadTimeout = 20 * time.Second
+
+// boundInventoryRead applies inventoryReadTimeout to an ordinary inventory read until the
+// returned restore runs; other proxied operations keep their own budgets.
+func boundInventoryRead(c *echo.Context, inventory bool) func() {
+	if !inventory {
+		return func() {}
+	}
+	ctx, cancel := context.WithTimeout(c.Request().Context(), inventoryReadTimeout)
+	return forwardOnContext(c, ctx, cancel)
+}
 
 // forwardOnContext runs the proxied request on the fenced agent-access context until the
 // returned restore runs; wrappers acting after forwarding (inventory origin overlay) then

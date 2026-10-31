@@ -57,6 +57,15 @@ contract items are in [container and host operations](container-host-operations.
    - the web maps `agent.ui-configuration-disabled` to "Settings on this host
      are managed through its environment".
 
+4. **Bounded inventory reads**: an ordinary inventory read (lists and point
+   reads that keep snapshots) gives up after 20 s, including agent access, and
+   answers from its snapshot or with `agent.unavailable`. A frozen Direct agent
+   accepts connections but never answers. Without this bound, its reads held all
+   six HTTP/1.1 browser connections, and hub-local reads such as host
+   descriptors waited until the web's 40 s deadline, so Check stayed disabled.
+   Other proxied operations, such as pulls, uploads, streams and lifecycle
+   commands, keep their own budgets.
+
 The 90 s window follows the existing WebSocket read wait.
 
 ## Break map
@@ -72,6 +81,7 @@ The 90 s window follows the existing WebSocket read wait.
 | AV7 | observer | a stale tunnel counts as down | observer → outbox | injected clock: one offline notification after 5 min (mutation: stale online cache) |
 | AV8 | codes | `edge.heartbeat-stale`, `agent.ui-configuration-disabled`, `settings.ui-configuration-disabled`, standby label | types, OpenAPI, v11 fixture, EN/DE | catalogue and mapper tests |
 | AV9 | healthy and replaced sessions | not reaped | sweeper | a healthy peer beyond 90 s stays; a replacement during the scan survives (mutation: close by environment ID) |
+| AV11 | frozen Direct agent | inventory reads end within 20 s | environment middleware inventory forward | a never-answering agent → `agent.unavailable` or the snapshot within the bound; another proxied read keeps its budget (mutation: no bound) |
 | AV10 | producers emit codes | exact problem at the agent | agent guard | a producer with framework text only fails (mutation) |
 
 ## Web availability consumers
