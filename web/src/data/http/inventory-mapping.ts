@@ -35,7 +35,7 @@ function imageVersion(ref: string): ImageVersion {
 
 function state(value: string): ContainerState {
   if (value === "running" || value === "restarting") return value;
-  if (["exited", "dead", "created", "stopped"].includes(value)) return "stopped";
+  if (["exited", "dead", "created", "stopped", "not-created"].includes(value)) return "stopped";
   return "unknown";
 }
 function health(value: string): Health {
@@ -82,10 +82,10 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
   const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
     const image = imageVersion(runtime.image);
-    return { name: runtime.name, image, state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
+    return { name: runtime.name, image, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
       update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, definitionHint: row.definitionHint, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };
 }

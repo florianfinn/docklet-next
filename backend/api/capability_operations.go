@@ -30,15 +30,7 @@ func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReade
 			if err != nil || !host.Enabled {
 				return "agent.unavailable"
 			}
-			switch host.Status {
-			case "token_rejected":
-				return "agent.invalid-token"
-			case "update-required":
-				return "agent.update-required"
-			case "offline", "error", "pending":
-				return "agent.unavailable"
-			}
-			return ""
+			return operationHostStatus(host.Status)
 		},
 		Origin: func(ctx context.Context, env, id string) (dto.OriginFields, error) {
 			var response base.ApiResponse[dto.Details]
@@ -74,4 +66,16 @@ func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReade
 			return dto.OriginFields{Origin: origin.Detect(response.Data.Labels).Origin, OriginSource: response.Data.OriginSource}, nil
 		},
 	}
+}
+
+func operationHostStatus(status string) string {
+	switch status {
+	case "token-rejected":
+		return "agent.invalid-token"
+	case "update-required":
+		return "agent.update-required"
+	case "offline", "error", "pending":
+		return "agent.unavailable"
+	}
+	return ""
 }

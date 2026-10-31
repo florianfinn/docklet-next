@@ -1,3 +1,5 @@
+import { useConnectedSettings } from "@/data/queries";
+import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
 import { ChevronDown, FlaskConical, Globe, Layers, Play, RefreshCw, RotateCw, ScanSearch, Square, TriangleAlert } from "lucide-react";
 import { useTranslations } from "use-intl";
@@ -29,9 +31,12 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const t = useTranslations("stacks.detail");
   const dt = useAdapterText();
   const cmd = useStackCommands();
-  const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
+  const command = useStackCapability(stack.id, stack.hostId);
   const check = useCapability("checkUpdates", { kind: "stack", id: stack.id });
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
+  const stopMode = useConnectedSettings().data?.general.stackStopMode ?? "down";
+  const alternate = stopMode === "down" ? "stop-containers" : "down";
+  const stopText = useTranslations("stacks.stopMode");
   const busy = !!stack.busyActionId;
   const updateTimes = useStackUpdateTimes(stack);
   const allStopped = stack.services.every((s) => s.state === "stopped");
@@ -94,6 +99,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
+                  <DropdownMenuItem disabled={!command.available || !!stack.inventory?.stale} title={command.reason} onSelect={() => void cmd.run(stack.id, alternate)}><Square /> {stopText(alternate)}</DropdownMenuItem>
                   <DropdownMenuItem disabled={!check.available} title={check.reason} onSelect={() => void cmd.checkUpdates(stack.id)}>
                     <ScanSearch /> {t("actions.check")}
                   </DropdownMenuItem>
@@ -109,6 +115,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           </div>
         </div>
       </div>
+      {stack.definitionHint === "definition-invalid" && <Alert><TriangleAlert /><AlertDescription>{stopText("definitionInvalid")}</AlertDescription></Alert>}
       {host?.status === "offline" && (
         <Alert className="border-orange/30 bg-orange/8 text-orange">
           <TriangleAlert />

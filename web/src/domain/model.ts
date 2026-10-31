@@ -132,6 +132,8 @@ export interface PortMapping {
 }
 
 export interface Service {
+  containersRemoved?: boolean;
+  containerId?: string;
   name: string;
   image: ImageVersion;
   state: ContainerState;
@@ -151,6 +153,7 @@ export type AutoUpdateMode = "check" | "scheduled";
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
 export interface Stack {
+  definitionHint?: "definition-invalid";
   path?: string;
   reportedStatus?: string;
   serviceCount?: number;

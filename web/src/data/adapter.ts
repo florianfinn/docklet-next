@@ -21,7 +21,7 @@ import type { CapabilityDescriptor, ResourceRef } from "./capability";
 import type { RegistriesApi } from "@/domain/registries";
 import type { HubBackupApi } from "@/domain/hub-backup";
 
-export type StackCommand = "start" | "stop" | "restart" | "redeploy";
+export type StackCommand = "start" | "stop" | "restart" | "redeploy" | "down" | "stop-containers";
 export type ContainerCommand = "start" | "stop" | "restart";
 
 export interface DeployInput {

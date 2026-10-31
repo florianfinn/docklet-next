@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original Compose-child alternatives using stack admission.
 
+import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useTranslations } from "use-intl";
 import { useCapability } from "@/data/use-capability";
 import type { ContainerInfo } from "@/domain/model";
@@ -16,7 +17,7 @@ export function ComposeContainerHint({ c }: { c: ContainerInfo }) {
   const t = useTranslations("containers.composeHint");
   const cmd = useStackCommands();
   const ref = { kind: "stack", id: c.stackId ?? "" };
-  const stack = useCapability("runStackCommand", ref);
+  const stack = useStackCapability(c.stackId ?? "", c.hostId);
   const restart = useCapability("restartService", ref);
   return <Alert><AlertTitle>{t("title")}</AlertTitle><AlertDescription className="flex flex-col gap-2">
     <p>{t("body")}</p>

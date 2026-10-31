@@ -186,8 +186,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       const stack = requireStack(stackId);
       const names = stack.services.map((s) => s.name).join(", ");
       const fail = failStep(takeDemoFailure(adapter, "runStackCommand")?.at);
-      const labels: Record<StackCommand, string> = { start: "Start", stop: "Stopp", restart: "Neustart", redeploy: "Pull & Redeploy" };
-      const steps: Record<StackCommand, StepPlan[]> = {
+      const effectiveCommand = command === "down" || command === "stop-containers" ? "stop" : command;
+      const labels: Record<Exclude<StackCommand, "down" | "stop-containers">, string> = { start: "Start", stop: "Stopp", restart: "Neustart", redeploy: "Pull & Redeploy" };
+      const steps: Record<Exclude<StackCommand, "down" | "stop-containers">, StepPlan[]> = {
         start: [
           { key: "validate", label: "Prüfung", detail: "Compose gültig" },
           { key: "start", label: "Start", detail: names },
@@ -211,13 +212,13 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         ],
       };
       const rp = command === "redeploy" ? db.saveRestorePoint(stack, `Vor Redeploy · ${stack.name}`) : undefined;
-      return runForStack(stack, command === "redeploy" ? "redeploy" : command, `${labels[command]} · ${stack.name}`, steps[command], {
+      return runForStack(stack, effectiveCommand === "redeploy" ? "redeploy" : effectiveCommand, `${labels[effectiveCommand]} · ${stack.name}`, steps[effectiveCommand], {
         failAt: fail,
         failMessage: fail ? "Simulierter Fehler (Design-Labor)" : undefined,
         restorePointId: rp?.id,
         onSuccess: () => {
           const now = new Date().toISOString();
-          setServices(stackId, (s) => ({ ...s, state: command === "stop" ? "stopped" : "running", startedAt: command === "stop" ? undefined : now }));
+          setServices(stackId, (s) => ({ ...s, state: effectiveCommand === "stop" ? "stopped" : "running", startedAt: effectiveCommand === "stop" ? undefined : now }));
           for (const s of stack.services) logs.append(stackId, s.name, "info", command === "stop" ? "Container gestoppt (SIGTERM)" : "Container gestartet");
           if (command === "redeploy") db.patchStack(stackId, (s) => ({ ...s, lastDeployAt: now }));
         },

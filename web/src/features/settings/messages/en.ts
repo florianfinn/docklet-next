@@ -1,6 +1,7 @@
 // American English texts of hub settings and the profile page.
 
 export const enSettings = {
+  stackStopMode: {"title": "Stack stop mode", "down": "Shut down and remove containers (default)", "stop": "Stop and keep containers", "hint": "Hub-wide setting. Stop follows this mode on every host; the stack menu offers the other action."},
   // Texts of backend notification and Auto Heal codes, keyed by the wire code path.
   codes: {
     notification: {

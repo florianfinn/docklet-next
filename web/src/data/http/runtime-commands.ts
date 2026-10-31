@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110.
 
+import { readStackStopMode } from "./settings-core";
+import type { components } from "@/api/generated/schema";
 import { commandUUID } from "../intent-key";
 import type { LifecycleInput } from "@/domain/stack-updates";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
@@ -19,7 +21,7 @@ import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDet
 export const COMMAND_RETRY_MS = 10 * 60_000;
 export const RIGHTS_MAX_AGE_MS = 30_000;
 const LIMIT = 256;
-const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy" };
+const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy", down: "down", "stop-containers": "stop" };
 const active = (run: Pick<CodedActionRun, "status">) => run.status === "running" || run.status === "queued";
 
 
@@ -192,25 +194,27 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }): Promise<string> {
+  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">): Promise<string> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
     const imageOperation = command === "update" || command === "restore";
     const suffix = imageOperation || command === "recreate" ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
-    const scope = `${kind}:${target}`, key = `${scope}:${command}:${recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : ""}`;
+    const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : ""}`;
     if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing;
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
     const version = generation;
     const task = (async () => {
-      const operation = recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      const operation = service ? "restartService" : recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
       if (imageOperation) {
         if (!lifecycle || !/^[a-f0-9]{64}$/.test(lifecycle.expectedRevision) || (command === "restore" && !lifecycle.pointId)) throw runtimeError("runtime.invalid-target");
         for (const read of command === "restore" ? ["getUpdateBaseline", "listRestorePoints"] : ["getUpdateBaseline"]) { const cap = await capability(read, { kind: "stack", id: target }); check(version); if (!cap.available) throw unavailable(read, cap.resourceRef, cap.disabledReasonCode); }
       }
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
+      const commandSuffix = kind === "stack" && command === "stop" ? (await readStackStopMode(baseUrl, client) === "stop" ? "stop" : "down") : suffix;
+      check(version);
       let idempotencyKey: string;
       try { idempotencyKey = recreate?.key ?? uuid();
         if (recreate) recreateKeys.set(scope, idempotencyKey); } catch { throw runtimeError("runtime.key-unavailable"); }
@@ -236,7 +240,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           let response: Response;
           try {
             if (now() - began >= COMMAND_RETRY_MS) break;
-            const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${suffix}`;
+            const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${commandSuffix}${service ? `?${new URLSearchParams(service.restartServices?.map((name) => ["services", name]) ?? [])}` : ""}`;
             response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
               headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate ? { "Content-Type": "application/json" } : {}) },
@@ -312,6 +316,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   return {
     installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
     restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),
+    restartService: (id: string, name: string) => command("stack", id, "restart", undefined, undefined, { restartServices: [name] }),
     runStackCommand: (id: string, action: StackCommand) => command("stack", id, action),
     recreateContainer: (id: string, edit: RecreateInput, key?: string) => command("container", id, "recreate", undefined, { edit, key }),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),

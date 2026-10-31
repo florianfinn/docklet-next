@@ -1,4 +1,6 @@
 import { useAdapter } from "@/data/use-adapter";
+import { useConnectedSettings } from "@/data/queries";
+import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
 import { Download, Eye, FileCode2, FileText, FlaskConical, Play, RefreshCw, RotateCw, ScanSearch, Square } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -18,10 +20,13 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
   const live = useAdapter().kind === "http";
   const update = useCapability("installStackUpdates");
   const check = useCapability("checkUpdates");
-  const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
+  const command = useStackCapability(stack.id, stack.hostId);
   const hide = useHideAction("stacks");
   const allStopped = stack.services.every((s) => s.state === "stopped");
   const pending = summarizeUpdates(stack.services).pending;
+  const stopMode = useConnectedSettings().data?.general.stackStopMode ?? "down";
+  const alternate = stopMode === "down" ? "stop-containers" : "down";
+  const stopText = useTranslations("stacks.stopMode");
   const busy = !!stack.busyActionId;
   const href = `/stacks/${stack.id}`;
   const run: MenuAction[] = allStopped
@@ -38,6 +43,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
     ],
     [
       ...run,
+      { id: alternate, label: stopText(alternate), icon: <Square />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, alternate) },
       { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
       ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy || (!live && !update.available), title: update.reason, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
       { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy || (!live && !check.available), title: check.reason, onSelect: () => live ? navigate(href) : void cmd.checkUpdates(stack.id) },

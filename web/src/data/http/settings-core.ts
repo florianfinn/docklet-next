@@ -74,7 +74,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       const timeZone = field(values, "effectiveTimeZone");
       try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
       return {
-        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
+        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, stackStopMode: stackStopMode(values) },
         hostDefaults: { connection, projectDir: field(values, "agentProjectsDirectory"), installDir: field(values, "agentInstallDirectory"), puid: field(values, "defaultPuid"), pgid: field(values, "defaultPgid"), detectSocketGroup: boolean(values, "detectSocketGroup") },
         activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
       };
@@ -82,7 +82,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
       if (section === "general") {
         const general = value as HubSettings["general"];
-        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase });
+        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, stackStopMode: general.stackStopMode ?? "down" });
         return;
       }
       if (section === "activity") {
@@ -93,4 +93,19 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");
     },
   };
+}
+
+/** Missing values on older hubs preserve the established down default. */
+function stackStopMode(values: CoreSettings): "down" | "stop" {
+  const value = values.stackStopMode ?? "down";
+  if (value !== "down" && value !== "stop") throw new Error("settings.invalid.stackStopMode");
+  return value;
+}
+
+export async function readStackStopMode(baseUrl: string, client: CsrfClient): Promise<"down" | "stop"> {
+  const response = await client.fetch(`${baseUrl}/environments/0/settings`, { headers: { Accept: "application/json" } });
+  if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
+  const items: unknown = await response.json();
+  if (!Array.isArray(items) || !items.every((item) => typeof item?.key === "string" && typeof item?.value === "string")) throw new Error("settings.invalid-response");
+  return stackStopMode(Object.fromEntries(items.map((item) => [item.key, item.value])));
 }

@@ -1,3 +1,5 @@
+import { useCapability } from "@/data/use-capability";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { useTranslations } from "use-intl";
 
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
@@ -79,6 +81,8 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", s
 }
 
 export function GeneralSection({ settings }: { settings: Pick<HubSettings, "general"> }) {
+  const stop = useTranslations("settings.stackStopMode");
+  const saveCapability = useCapability("saveSettings");
   const connected = useAdapter().kind === "http";
   const t = useTranslations("settings");
   const save = useSaveSettings();
@@ -98,6 +102,14 @@ export function GeneralSection({ settings }: { settings: Pick<HubSettings, "gene
       }}
     >
       <GeneralFields value={draft} onChange={patch} showErrors={dirty} showLanguage={!connected} />
+      <Field>
+        <FieldLabel htmlFor="stack-stop-mode">{stop("title")}</FieldLabel>
+        <Select value={draft.stackStopMode ?? "down"} disabled={!saveCapability.available} onValueChange={(value) => patch({ stackStopMode: value as "down" | "stop" })}>
+          <SelectTrigger id="stack-stop-mode" title={saveCapability.reason}><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="down">{stop("down")}</SelectItem><SelectItem value="stop">{stop("stop")}</SelectItem></SelectContent>
+        </Select>
+        <FieldDescription>{stop("hint")}</FieldDescription>
+      </Field>
     </SettingsForm>
   );
 }

@@ -91,6 +91,7 @@ export interface ActivitySettings {
 export type LinkBase = "auto" | "internal" | "domain";
 
 export interface GeneralSettings {
+  stackStopMode?: "down" | "stop";
   hubName: string;
   /**
    * IP or internal URL the agents reach the hub at (LAN, VPN). This is the

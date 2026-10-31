@@ -8,12 +8,11 @@ import { useAdapter } from "@/data/use-adapter";
 import { formatRelative } from "@/domain/format";
 import type { Host } from "@/domain/model";
 import { HostChip } from "@/shared/components/host-chip";
-import { requestServiceRestart } from "@/shared/components/service-restart-store";
 import { IconTile } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 
-import { useStackCommands } from "@/shared/hooks/use-stack-commands";
+import { AttentionServiceRestart } from "./AttentionServiceRestart";
 import type { AttentionItem, AttentionKind } from "../attention";
 import { useAttentionText } from "../attention-text";
 
@@ -33,9 +32,7 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
   const title = useAttentionText();
   const navigate = useNavigate();
   const adapter = useAdapter();
-  const cmd = useStackCommands();
   const reconnect = useCapability("reconnectHost");
-  const restart = useCapability("restartService");
 
   const sub = (item: AttentionItem) => {
     const v = item.values;
@@ -65,12 +62,7 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => navigate(`/stacks/${item.stackId}?tab=logs&service=${item.service}`)}>
               {t("actions.logs")}
             </Button>
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!restart.available} title={restart.reason} onClick={() => {
-                const { stackId, service } = item;
-                if (stackId && service) requestServiceRestart([{ stackId, stackName: String(item.values.stack ?? stackId), service, containerId: item.containerId }], () => cmd.restartService(stackId, service));
-              }}>
-              {t("actions.restart")}
-            </Button>
+            <AttentionServiceRestart item={item} />
           </>
         );
       case "offline":

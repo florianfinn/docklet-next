@@ -23,6 +23,7 @@ export function snapshot(host = "0", patch: Partial<RuntimeSnapshot> = {}): Runt
 export const runtimeDetail = (run: RuntimeSnapshot, patch: Partial<RuntimeDetail> = {}): RuntimeDetail => ({ activity: run, messages: [], stepTrace: [], output: [], outputTruncated: false, retainedStartSeq: 0, recovery: { executorState: "pending", releaseAcknowledged: false }, ...patch });
 export function runtimeFixture() {
   const state = {
+    stopMode: "down" as "down" | "stop" | undefined,
     run: snapshot(), detailStatus: 200, admin: true,
     permissions: ["activities:read", "activities:cancel"],
     recovery: { executorState: "pending", releaseAcknowledged: false } as RuntimeDetail["recovery"],
@@ -47,6 +48,7 @@ export function runtimeFixture() {
       if (init.method === "POST") return envelope({ ...state.run, cancelRequested: true });
       return state.detailStatus === 200 ? envelope(runtimeDetail(state.run, { recovery: state.recovery })) : response({ code: "http.error" }, state.detailStatus);
     }
+    if (url.pathname.endsWith("/settings")) return response(state.stopMode ? [{ key: "stackStopMode", value: state.stopMode }] : []);
     if (state.command) return state.command(url, init);
     return envelope({ activityId: state.run.id, code: "run.started", activity: state.run }, 202);
   });

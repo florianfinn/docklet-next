@@ -1,6 +1,7 @@
 // American English texts of the stacks feature: overview, stack page, logs and deployments.
 
 export const enStacks = {
+  stopMode: {"down": "Shut down (remove containers)", "stop-containers": "Stop containers", "containersRemoved": "Containers removed", "definitionInvalid": "The Compose definition cannot be resolved. Repair it to restore the services list."},
   inventory: { readError: "Inventory could not be read", mappingError: "Invalid inventory data", host: "{name}: {reason}.", asOf: "Stale values, as of {time}.", noSnapshot: "No retained values available yet.", updateRequired: "Agent update required", credentialRejected: "Agent token invalid", unavailable: "Host unreachable" },
   serviceState: { "not-created": "Containers removed" },
   definitionHint: { "definition-invalid": "The Compose definition could not be resolved." },
