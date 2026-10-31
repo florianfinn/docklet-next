@@ -142,7 +142,11 @@ func TestShellDialFailureAuditRealDirectAndEdge(t *testing.T) {
 			exit := readShellExit(t, browser)
 			require.Empty(t, exit.Reason)
 			require.Nil(t, exit.Code)
-			_, _, _ = browser.Read(t.Context())
+			_, _, closeErr := browser.Read(t.Context())
+			require.Contains(t, []websocket.StatusCode{websocket.StatusNormalClosure, websocket.StatusPolicyViolation}, websocket.CloseStatus(closeErr))
+			var closed websocket.CloseError
+			require.ErrorAs(t, closeErr, &closed)
+			require.Empty(t, closed.Reason, "generic tunnel errors are not shell reasons")
 			entry := completed()
 			require.Equal(t, "Shell ended", entry.LatestMessage)
 			require.Equal(t, activityDTO.StatusCancelled, entry.Status)

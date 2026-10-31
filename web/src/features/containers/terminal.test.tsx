@@ -46,7 +46,7 @@ it("keeps the exit authoritative and fences late callbacks after reconnect", asy
   f.sessions[0]!.push({ type: "exit", code: 0, reason: "" });
   expect(screen.queryByText("Shell beendet (Exit-Code 0).")).toBe(null);
   await user.click(screen.getByRole("button", { name: "Neu verbinden" })); await waitFor(() => expect(f.sessions.length).toBe(2)); await screen.findByText("Verbunden");
-  f.sessions[0]!.push({ type: "exit", code: 17, reason: "container.shell-unavailable" }); expect(screen.queryByText(/Eine Shell konnte nicht/)).toBe(null);
+  f.sessions[0]!.push({ type: "exit", code: 17, reason: "container.shell-unavailable" }); expect(screen.queryByText("Im Container fehlt /bin/sh.")).toBe(null); expect(screen.getByText("Verbunden") instanceof HTMLElement).toBe(true);
   f.unmount(); f.sessions[1]!.push({ type: "output", data: new TextEncoder().encode("late") });
 });
 it("disables stopped containers with a visible reason", async () => {
