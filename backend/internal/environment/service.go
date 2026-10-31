@@ -310,6 +310,10 @@ func (s *EnvironmentService) GetEnvironmentByID(ctx context.Context, id string) 
 
 var editableHostColumns = map[string]struct{}{"name": {}, "color": {}, "api_url": {}, "enabled": {}, "access_token": {}, "api_key_id": {}}
 
+// The sink's final write selects only these columns, so a key added after validation
+// cannot reach the host status either.
+var hostSinkColumns = []string{"name", "color", "api_url", "enabled", "access_token", "api_key_id", "updated_at", "credential_revision"}
+
 func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, updates map[string]any, userID, username *string) (*Environment, error) {
 	// The generic sink writes only editable columns; the host status (any spelling) and
 	// liveness columns belong to their reviewed writers.
@@ -359,7 +363,7 @@ func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, u
 				return err
 			}
 		}
-		return tx.Model(&Environment{}).Where("id = ?", id).Updates(updates).Error
+		return tx.Model(&Environment{}).Where("id = ?", id).Select(hostSinkColumns).Updates(updates).Error
 	}); updateEnvironmentErr != nil {
 		return nil, fmt.Errorf("failed to update environment: %w", updateEnvironmentErr)
 	}
