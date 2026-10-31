@@ -23,6 +23,7 @@ import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
+import { createSystemComponents } from "./system-components";
 import { createHostRestarts } from "./host-restarts";
 import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
@@ -667,6 +668,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }, getCapability, () => identityGeneration),
     ...createHostChecks({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { invalidateCapabilities(); invalidateEnvironments(); actions.invalidate(true); changeListeners.forEach((listener) => listener(["hosts"])); } }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
+    listSystemComponents: createSystemComponents({ baseUrl, client, hosts: listHosts, capability: getCapability, generation: () => identityGeneration }),
     restartAgent: restarts.restartAgent,
     installStackUpdates: runtime.installStackUpdates,
     restoreRestorePoint: runtime.restoreRestorePoint,

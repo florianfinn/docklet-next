@@ -52,6 +52,7 @@ export function mapHost(row: Environment): Host {
     status: row.enabled ? status : "offline",
     connection: row.isEdge ? "edge" : "direct", address: row.isEdge ? "" : row.apiUrl,
     agentVersion: row.agentReport?.version.currentVersion ?? "",
+    ...(row.agentReport ? { componentVersion: row.agentReport.version } : {}),
     projectDir: checks?.projectDirectory ?? "", installDir: "",
     os: "", dockerVersion: "", cpuCores: 0, memTotalGb: 0, diskTotalGb: 0,
     detailsUnavailable: true,

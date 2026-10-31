@@ -1,3 +1,4 @@
+import { SystemMetadata } from "./SystemMetadata";
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
 import { isHostAvailable } from "@/domain/hosts";
@@ -51,7 +52,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
   const online = isHostAvailable(host);
   return (
     <div className="flex flex-col gap-4" data-slot="agent-container">
-      {component ? <>
+      {component?.metadataOnly ? <SystemMetadata component={component} /> : component ? <>
       <p className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/15 p-3 text-xs text-muted-foreground">
         <Bot className="mt-0.5 size-4 shrink-0" aria-hidden />
         {t("agentIntro", { label: `${SYSTEM_LABEL}=agent` })}

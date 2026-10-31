@@ -41,7 +41,7 @@ export function InstallArtifacts({ plan, onRegenerateToken }: { plan: AgentInsta
         {onRegenerateToken && (
           <Button variant="outline" size="sm" className="group" onClick={onRegenerateToken}>
             <RefreshCw data-icon="inline-start" className="spin-on-hover" />
-            {t("regenerateToken")}
+            {t("generate")}
           </Button>
         )}
       </div>

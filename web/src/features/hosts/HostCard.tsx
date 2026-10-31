@@ -20,6 +20,7 @@ import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
+import { SystemMetadata } from "./SystemMetadata";
 import { AgentReportSection } from "./AgentReportSection";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 import { useHostAction, useHostCommands } from "./use-host-commands";
@@ -37,6 +38,7 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
 function SystemSection({ component }: { component: SystemComponent | undefined }) {
   const t = useTranslations("hosts.card.systemComponent");
   const ts = useTranslations("common.status");
+  if (component?.metadataOnly) return <SystemMetadata component={component} />;
   return (
     <section aria-label={t("title")} data-slot="system-component" className="flex items-start gap-2.5 rounded-xl border border-dashed bg-muted/15 p-3">
       <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -147,7 +149,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       </dl>
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />
-      {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents"><SystemSection component={system} /></CapabilityGate>}
+      {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents" resourceRef={{ kind: "host", id: host.id }}><SystemSection component={system} /></CapabilityGate>}
       <p className="text-xs text-muted-foreground">{t("card.usage", { stacks: stacks ?? 0, containers: containers ?? 0 })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
         {pending ? (
@@ -168,7 +170,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           </BusyButton>
         )}
         <RotateTokenButton host={host} />
-        {onFiles && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
+        {onFiles && host.id !== "0" && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
           <FileArchive data-icon="inline-start" />
           {t("card.files")}
         </Button>}

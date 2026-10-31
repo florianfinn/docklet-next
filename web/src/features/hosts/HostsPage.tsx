@@ -13,7 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { HostCard } from "./HostCard";
-const InstallSheet = import.meta.env.DEV ? lazy(() => import("./InstallSheet.dev")) : null;
+const InstallSheet = lazy(() => import("./InstallSheet"));
 
 export default function HostsPage() {
   const t = useTranslations("hosts");
@@ -72,7 +72,7 @@ export default function HostsPage() {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,34rem),1fr))] gap-4">
           {hosts.all.map((h) => (
-            <HostCard key={h.id} host={h} system={system.data?.find((c) => c.hostId === h.id)} {...count(h.id)} allIds={ids} onFiles={import.meta.env.DEV ? setFilesFor : undefined} />
+            <HostCard key={h.id} host={h} system={system.data?.find((c) => c.hostId === h.id)} {...count(h.id)} allIds={ids} onFiles={setFilesFor} />
           ))}
         </div>
       )}

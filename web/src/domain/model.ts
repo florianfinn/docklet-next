@@ -69,6 +69,8 @@ export interface Host {
   os: string;
   dockerVersion: string;
   agentVersion: string;
+  /** Historical display metadata; never evidence of current credentials or connectivity. */
+  componentVersion?: import("@/api/generated/schema").components["schemas"]["VersionInfo"];
   address: string;
   projectDir: string;
   /** Directory holding the agent's own compose.yaml and .env; never a stack directory. */
