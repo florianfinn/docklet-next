@@ -1,3 +1,4 @@
+import { openScriptedShell } from "./shell-fixture";
 import { sameImageReference } from "@/domain/docker-reference";
 import { createDemoRegistries } from "./demo-registries";
 import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack } from "@/domain/model";
@@ -126,6 +127,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    openContainerShell: openScriptedShell,
     ...createDemoRegistries(() => db.changed("registries")),
     getAuthMode: async () => db.settings.auth.mode,
     getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false }),

@@ -59,6 +59,15 @@ func forwardTerminalAgentToClient(viewer, stream context.Context, browser *webso
 			if sessionlife.Check(viewer) != nil {
 				beginClose(true)
 			}
+			if timer == nil {
+				pingCtx, cancel := context.WithTimeout(stream, tunnelWSPingWait)
+				err := browser.Ping(pingCtx)
+				cancel()
+				if err != nil {
+					relay.BrowserClosed()
+					beginClose(true)
+				}
+			}
 		case msg, ok := <-pending.ResponseCh:
 			if !ok {
 				return

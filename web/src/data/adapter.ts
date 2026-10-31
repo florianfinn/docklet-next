@@ -12,6 +12,8 @@ import type {
   Stack,
 } from "@/domain/model";
 
+import type { OpenShell } from "./shell";
+
 import type { UpdatesApi, LifecycleInput } from "@/domain/stack-updates";
 import type { AuthApi, AutoHealApi, HostsApi, HubApi, ImagesApi, NetworksApi, NotificationsApi, SettingsApi, VolumesApi } from "./api";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-code";
@@ -130,6 +132,8 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, HostsApi, VolumesAp
   restartService(stackId: string, service: string): Promise<string>;
   importSource(request: ImportRequest): Promise<ImportResult>;
   convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
+
+  openContainerShell: OpenShell;
 
   runContainerCommand(containerId: string, command: ContainerCommand): Promise<string>;
   recreateContainer(containerId: string, input: RecreateInput): Promise<string>;

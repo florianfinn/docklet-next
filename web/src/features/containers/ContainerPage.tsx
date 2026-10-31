@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Toggle } from "@/shared/ui/toggle";
 
+import { ContainerTerminalTabs } from "./ContainerTerminalTabs";
 import { ContainerFacts, ContainerProvenance } from "./ContainerFacts";
 import { useContainerRestart } from "./container-restart";
 import { OriginBadge } from "./OriginBadge";
@@ -192,7 +193,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
         </Card>
       </div>
       <div className="mt-4">
-        <ContainerLogs key={c.id} c={c} />
+        <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>
       </div>
       {c.origin === "standalone" && <RecreateDialog container={editing ? c : undefined} open={editing} onOpenChange={setEditing} />}
     </>

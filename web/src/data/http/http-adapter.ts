@@ -32,6 +32,7 @@ import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
 import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
+import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
@@ -114,6 +115,7 @@ const IMPLEMENTED = new Set<string>([
   "renameVolume",
   "subscribeLogs",
   "subscribeContainerLogs",
+  "openContainerShell",
   "runStackCommand",
   "runContainerCommand",
   "deployStack",
@@ -155,6 +157,7 @@ export interface HttpAdapterOptions {
   fetch?: typeof globalThis.fetch;
   eventSource?: (url: string) => Source;
   webSocket?: (url: string) => MetricsSocket;
+  shellWebSocket?: (url: string) => ShellSocket;
   uploadFactory?: () => XMLHttpRequest;
 }
 
@@ -259,6 +262,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     runtime.reset(retain);
     targets.reset(retain);
     logs.reset();
+    shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
@@ -378,6 +382,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
+  const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const actions = createActivityReader({
@@ -781,6 +786,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     subscribeMetrics: metrics,
     subscribeLogs: logs.subscribeLogs,
     subscribeContainerLogs: logs.subscribeContainerLogs,
+    openContainerShell: (...args) => { invalidateCapabilities(); return shells.open(...args); },
   };
   registerIdentityLifetime(adapter.subscribeChanges, {
     version: () => lifetimeGeneration,

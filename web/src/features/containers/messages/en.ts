@@ -1,6 +1,16 @@
 // American English texts of the containers overview and inspector.
 
 export const enContainers = {
+  terminal: {
+    title: "Terminal", shell: "Shell", auto: "Automatic (bash or sh)", sh: "sh", bash: "bash", reconnect: "Reconnect",
+    checking: "Checking shell availability…", connecting: "Connecting…", live: "Connected", ended: "Shell ended (exit code {code}).", unknownCode: "unknown", input: "Container terminal input",
+    invalid: "The shell choice or terminal size is invalid.", protocol: "The shell closed because a terminal control message was invalid. Reconnect to try again.",
+    connectionEnded: "The shell connection ended.", unavailable: "The container is missing /bin/sh.", orphaned: "The shell connection closed. Its process may still be running in the container.",
+    notRunning: "The terminal is available when the container is running.", hostUnavailable: "The host is unavailable. Reconnect the host to open a terminal.",
+    updateRequired: "Update the agent to use the terminal.", credentialsRejected: "The host rejected its credentials. Reconnect the host with its current token.",
+    signIn: "Sign in again to open a terminal.", permission: "Shell access is unavailable for this user or container.",
+  },
+
   title: "Containers",
   description: "{scope} · all containers including Compose services, containers created with docker run and Unraid templates.",
   strip: { total: "Containers", running: "Running", unhealthy: "Problems", standalone: "Without Compose" },

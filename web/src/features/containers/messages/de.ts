@@ -2,6 +2,15 @@
 import type { enContainers } from "./en";
 
 export const deContainers: typeof enContainers = {
+  terminal: {
+    title: "Terminal", shell: "Shell", auto: "Automatisch (bash oder sh)", sh: "sh", bash: "bash", reconnect: "Neu verbinden",
+    checking: "Shell-Verfügbarkeit wird geprüft…", connecting: "Verbindung wird hergestellt…", live: "Verbunden", ended: "Shell beendet (Exit-Code {code}).", unknownCode: "unbekannt", input: "Container-Terminaleingabe",
+    invalid: "Die Shell-Auswahl oder Terminalgröße ist ungültig.", protocol: "Die Shell wurde wegen einer ungültigen Terminal-Steuerung geschlossen. Verbinde dich erneut, um es noch einmal zu versuchen.",
+    connectionEnded: "Die Shell-Verbindung wurde beendet.", unavailable: "Im Container fehlt /bin/sh.", orphaned: "Die Shell-Verbindung wurde geschlossen. Ihr Prozess läuft möglicherweise noch im Container.",
+    notRunning: "Das Terminal ist verfügbar, wenn der Container läuft.", hostUnavailable: "Der Host ist nicht verfügbar. Verbinde den Host erneut, um ein Terminal zu öffnen.",
+    updateRequired: "Aktualisiere den Agent für das Terminal.", credentialsRejected: "Der Host hat seine Zugangsdaten abgelehnt. Verbinde ihn mit seinem aktuellen Token erneut.",
+    signIn: "Melde dich erneut an, um ein Terminal zu öffnen.", permission: "Der Shell-Zugriff ist für diesen Benutzer oder Container nicht verfügbar.",
+  },
   title: "Container",
   description: "{scope} · alle Container inklusive Compose-Services, mit docker run erstellten Containern und Unraid-Vorlagen.",
   strip: { total: "Container", running: "Laufend", unhealthy: "Probleme", standalone: "Ohne Compose" },

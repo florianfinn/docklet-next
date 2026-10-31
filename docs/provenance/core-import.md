@@ -174,3 +174,23 @@ corresponding-source links. PostgreSQL providers and drivers are absent. The
 two exact libc header files; unchanged historical Arcane inventories remain input
 evidence. Candidate packaging copies all listed Go and web legal texts and checks
 every extracted hash. This is not a product release or approval of other targets.
+
+## Container terminal runtime dependencies
+
+The shell uses `@xterm/xterm` 6.0.0 for terminal parsing, keyboard/IME input and
+accessible terminal rendering, and `@xterm/addon-fit` 0.11.0 for terminal geometry.
+These avoid a second terminal parser and measurement implementation. Both are MIT,
+compatible with the Apache-2.0 application; neither requires a premium UI block.
+Only the Terminal tab loads their code. The terminal payload has a 160 KiB gzip
+budget, checked by `terminal-bundle.test.ts`; terminal modules must stay outside
+the initial entry chunk.
+
+The npm packages record upstream commit
+`f447274f430fd22513f6adbf9862d19524471c04` and include their full MIT texts.
+The existing `scripts/package-web-licenses.mjs` inventory and distribution bundle
+include both packages and verify their legal files alongside other web dependencies.
+
+| Package | Licence file SHA-256 | Upstream source |
+| --- | --- | --- |
+| `@xterm/xterm` 6.0.0 | `b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd` | [xterm.js](https://github.com/xtermjs/xterm.js/tree/f447274f430fd22513f6adbf9862d19524471c04) |
+| `@xterm/addon-fit` 0.11.0 | `e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f` | [fit addon](https://github.com/xtermjs/xterm.js/tree/f447274f430fd22513f6adbf9862d19524471c04/addons/addon-fit) |
