@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; typed host edit validation.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; typed host edit validation; pairing confirms without a status write.
 
 package environment
 
@@ -472,15 +472,8 @@ func (h *EnvironmentHandler) PairEnvironment(ctx context.Context, input *PairEnv
 		return nil, huma.Error400BadRequest("Environment is not in pending status")
 	}
 
-	updates := map[string]any{
-		"status": string(EnvironmentStatusPending),
-	}
-	_, err = h.environmentService.UpdateEnvironment(ctx, *envID, updates, nil, nil)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to update environment status", "environmentId", *envID, "error", err.Error())
-		return nil, huma.Error500InternalServerError("Failed to complete pairing")
-	}
-
+	// Pairing confirms the pending registration without a status write: only a
+	// compatibility check or a registration transition owns the host status.
 	slog.InfoContext(ctx, "Environment pairing completed", "environmentId", *envID, "environmentName", env.Name)
 	h.triggerEnvironmentResourceSyncInternal(ctx, *envID, env.Name, "environment pairing")
 

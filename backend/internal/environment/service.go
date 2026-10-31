@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status.
 
 package environment
 
@@ -309,6 +309,9 @@ func (s *EnvironmentService) GetEnvironmentByID(ctx context.Context, id string) 
 }
 
 func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, updates map[string]any, userID, username *string) (*Environment, error) {
+	if _, ok := updates["status"]; ok {
+		return nil, errors.New("host status is owned by its status writers")
+	}
 	if name, ok := updates["name"].(string); ok {
 		updates["name"] = normalization.Text(name, true, true)
 	}

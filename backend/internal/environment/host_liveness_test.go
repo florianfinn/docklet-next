@@ -7,6 +7,8 @@
 package environment
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/apikey"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/types/contract"
 	dto "github.com/florianfinn/docklet-next/types/environment"
@@ -112,4 +114,34 @@ func TestHostVerdictSurvivesInterleavedTransportLossWrite(t *testing.T) {
 			require.Equal(t, "update-required", row.Status)
 		})
 	}
+}
+
+// A pairing callback that read the pending row before a verdict was stored must
+// not write pending over it; pairing confirms the registration without a status write.
+func TestPairingNeverReplacesNewerVerdict(t *testing.T) {
+	f := newAgentFixture(t, "edge", version.Info{})
+	keys := apikey.NewApiKeyService(f.service.db, user.NewUserService(f.service.db, nil, nil), nil)
+	key, err := keys.CreateEnvironmentApiKey(t.Context(), f.id)
+	require.NoError(t, err)
+	require.NoError(t, f.service.db.Model(&Environment{}).Where("id = ?", f.id).Updates(map[string]any{"api_key_id": key.ID, "access_token": key.Key, "status": "pending"}).Error)
+	// No transport: the pairing's background check fails and may not touch the verdict either.
+	edge.GetRegistry().Unregister(f.id)
+	flipped := false
+	require.NoError(t, f.service.db.Callback().Query().After("gorm:query").Register("test:pairing-verdict", func(tx *gorm.DB) {
+		row, ok := tx.Statement.Dest.(*Environment)
+		if !ok || flipped || row.ID != f.id || row.Status != "pending" {
+			return
+		}
+		flipped = true
+		require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE environments SET status = ? WHERE id = ?", "update-required", f.id).Error)
+	}))
+	t.Cleanup(func() { _ = f.service.db.Callback().Query().Remove("test:pairing-verdict") })
+	h := &EnvironmentHandler{environmentService: f.service, apiKeyService: keys}
+	_, err = h.PairEnvironment(t.Context(), &PairEnvironmentInput{XAPIKey: key.Key})
+	require.NoError(t, err)
+	h.background.Wait()
+	require.True(t, flipped)
+	row, err := f.service.GetEnvironmentByID(t.Context(), f.id)
+	require.NoError(t, err)
+	require.Equal(t, "update-required", row.Status)
 }
