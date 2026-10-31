@@ -82,6 +82,43 @@ func TestHostVerdictSurvivesTransportLossBeforePoll(t *testing.T) {
 	}
 }
 
+// A disconnected Edge host projects offline while its stored verdict stays; the
+// returning tunnel shows update-required again without a new compatibility probe (K18).
+func TestHostVerdictReturnsWithTunnelWithoutProbe(t *testing.T) {
+	for _, path := range []string{"disconnect", "restart"} {
+		t.Run(path, func(t *testing.T) {
+			f := newAgentFixture(t, "edge", version.Info{AgentContractVersion: 10, AgentContractFingerprint: contract.AgentHubFingerprint})
+			_, err := f.service.CheckAgentCompatibility(t.Context(), f.id)
+			require.ErrorIs(t, err, ErrAgentUpdateRequired)
+			edge.GetRegistry().Unregister(f.id)
+			service := f.service
+			if path == "disconnect" {
+				require.NoError(t, service.UpdateEnvironmentConnectionState(t.Context(), f.id, false))
+			} else {
+				service = NewEnvironmentService(f.service.db, f.service.httpClient, nil, nil, nil, nil)
+				require.NoError(t, service.ReconcileEdgeStatusesOnStartup(t.Context()))
+			}
+			handler := NewHandler(service, nil, nil, nil, nil, nil)
+			detail, err := handler.GetEnvironment(t.Context(), &GetEnvironmentInput{ID: f.id})
+			require.NoError(t, err)
+			require.Equal(t, "offline", detail.Body.Data.Status)
+			row, err := service.GetEnvironmentByID(t.Context(), f.id)
+			require.NoError(t, err)
+			require.Equal(t, "update-required", row.Status)
+
+			probes := f.count("/api/app-version")
+			// The agent reconnects with a new tunnel; unregistering closed the old one.
+			returned := edge.NewAgentTunnelWithConn(f.id, &agentMemoryConn{})
+			returned.APIKeyID, returned.TokenHash = f.tunnel.APIKeyID, f.tunnel.TokenHash
+			edge.GetRegistry().Register(f.id, returned)
+			detail, err = handler.GetEnvironment(t.Context(), &GetEnvironmentInput{ID: f.id})
+			require.NoError(t, err)
+			require.Equal(t, "update-required", detail.Body.Data.Status)
+			require.Equal(t, probes, f.count("/api/app-version"))
+		})
+	}
+}
+
 // A transport-loss write that read the row earlier must not replace a verdict
 // stored in between; the write re-checks the protected status itself.
 func TestHostVerdictSurvivesInterleavedTransportLossWrite(t *testing.T) {
