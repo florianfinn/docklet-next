@@ -310,7 +310,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 	var shellSessions *containershell.Registry
 	if hubMode {
-		shellSessions = containershell.New(deps.Activity.Service())
+		shellSessions = containershell.New(deps.Activity.Service(), ctx)
 	}
 	envProxyMiddleware := middleware.NewEnvProxyMiddlewareWithParamAndRegistry(
 		types.LocalDockerEnvironmentID,

@@ -53,10 +53,15 @@ type Registry struct {
 	mu       sync.Mutex
 	handles  map[*Handle]struct{}
 	activity activitylib.Service
+	owner    context.Context
 }
 
-func New(service activitylib.Service) *Registry {
-	return &Registry{handles: map[*Handle]struct{}{}, activity: service}
+func New(service activitylib.Service, owners ...context.Context) *Registry {
+	r := &Registry{handles: map[*Handle]struct{}{}, activity: service}
+	if len(owners) > 0 {
+		r.owner = owners[0]
+	}
+	return r
 }
 
 type Handle struct {
@@ -72,6 +77,7 @@ type Handle struct {
 	activityID string
 	lease      *sessionlife.Lease
 	stop       func() bool
+	stopOwner  func() bool
 }
 
 // Accept validates before creating any activity or upgrading. Its returned context
@@ -98,6 +104,9 @@ func (r *Registry) Accept(ctx context.Context, values url.Values, actor *user.Ac
 	r.handles[h] = struct{}{}
 	r.mu.Unlock()
 	h.stop = context.AfterFunc(ctx, h.Close)
+	if r.owner != nil {
+		h.stopOwner = context.AfterFunc(r.owner, h.Close)
+	}
 	lease, err := sessionlife.Register(ctx, h.Close)
 	h.lease = lease
 	if err != nil {
@@ -147,6 +156,9 @@ func (h *Handle) Close() {
 func (h *Handle) Release() {
 	h.once.Do(func() {
 		h.Close()
+		if h.stopOwner != nil {
+			h.stopOwner()
+		}
 		if h.stop != nil {
 			h.stop()
 		}

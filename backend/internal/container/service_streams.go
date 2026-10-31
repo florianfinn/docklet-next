@@ -10,8 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	"io"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -51,28 +51,40 @@ type ExecSession struct {
 	hijackedResp client.HijackedResponse
 	dockerClient *client.Client
 	closeOnce    sync.Once
+	closeErr     error
 }
 
 func (e *ExecSession) Stdin() io.WriteCloser { return e.hijackedResp.Conn }
 
 func (e *ExecSession) Stdout() io.Reader { return e.hijackedResp.Reader }
 
-// Close terminates the exec session and kills the process if still running.
+// Close requests graceful shell exit, inspects after two seconds and closes
+// the hijack even if the process ignored exit. Docker cannot kill an exec alone.
 func (e *ExecSession) Close(ctx context.Context) error {
-	var closeErr error
 	e.closeOnce.Do(func() {
-		slog.DebugContext(ctx, "Closing exec session", "execId", e.execID, "containerId", e.containerID)
-
-		// Send EOF (Ctrl-D) then exit to terminate the shell gracefully.
+		_ = e.hijackedResp.Conn.SetWriteDeadline(time.Now().Add(time.Second))
 		_, _ = e.hijackedResp.Conn.Write([]byte{0x04})
-		time.Sleep(50 * time.Millisecond)
 		_, _ = e.hijackedResp.Conn.Write([]byte("exit\n"))
-		time.Sleep(100 * time.Millisecond)
-
+		timer := sessionlife.NewTimer(ctx, 2*time.Second)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+		}
+		timer.Stop()
+		state, err := e.dockerClient.ExecInspect(ctx, e.execID, client.ExecInspectOptions{})
+		if err != nil || state.Running {
+			e.closeErr = errors.New("container.shell-orphaned")
+		}
 		e.hijackedResp.Close()
 	})
-
-	return closeErr
+	return e.closeErr
+}
+func (e *ExecSession) Resize(ctx context.Context, cols, rows int) error {
+	_, err := e.dockerClient.ExecResize(ctx, e.execID, client.ExecResizeOptions{Width: uint(cols), Height: uint(rows)})
+	return err
+}
+func (e *ExecSession) Inspect(ctx context.Context) (client.ExecInspectResult, error) {
+	return e.dockerClient.ExecInspect(ctx, e.execID, client.ExecInspectOptions{})
 }
 
 // AttachExec attaches to an exec instance and returns an ExecSession for lifecycle management.

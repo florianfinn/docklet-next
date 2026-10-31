@@ -100,3 +100,17 @@ func TestCloseByUserIsolationAndBeforeBind(t *testing.T) {
 	a.Close()
 	require.EqualValues(t, 1, closes.Load())
 }
+
+func TestApplicationShutdownClosesOwnedSession(t *testing.T) {
+	owner, stop := context.WithCancel(t.Context())
+	r := New(nil, owner)
+	ctx, h, err := r.Accept(t.Context(), url.Values{}, &user.Actor{ID: "example-user"}, "example-host", "example-container")
+	require.NoError(t, err)
+	closed := make(chan struct{})
+	h.SetCloser(func() { close(closed) })
+	stop()
+	<-closed
+	require.Error(t, ctx.Err())
+	h.Release()
+	require.Empty(t, r.handles)
+}

@@ -138,7 +138,10 @@ func (h *WebSocketHandler) acceptWSInternal(c *echo.Context, kind, resourceID st
 		slog.DebugContext(c.Request().Context(), "websocket accept failed", "kind", kind, "resourceId", resourceID, "error", err)
 		return nil, nil, false
 	}
-	lease, err := sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+	var lease *sessionlife.Lease
+	if kind != systemtypes.WSKindContainerExec || wshub.Terminal(c.Request().Context()) == nil {
+		lease, err = sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+	}
 	if err != nil {
 		_ = conn.CloseNow()
 		return nil, nil, false
@@ -171,7 +174,9 @@ func keepWSConnAliveInternal(ctx context.Context, cancel context.CancelFunc, con
 		case <-ticker.C:
 			if sessionlife.Check(ctx) != nil {
 				cancel()
-				_ = conn.CloseNow()
+				if wshub.Terminal(ctx) == nil {
+					_ = conn.CloseNow()
+				}
 				return
 			}
 			pctx, pcancel := context.WithTimeout(ctx, 10*time.Second)
