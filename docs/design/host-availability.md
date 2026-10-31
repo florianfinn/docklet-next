@@ -73,3 +73,17 @@ The 90 s window follows the existing WebSocket read wait.
 | AV8 | codes | `edge.heartbeat-stale`, `agent.ui-configuration-disabled`, `settings.ui-configuration-disabled`, standby label | types, OpenAPI, v11 fixture, EN/DE | catalogue and mapper tests |
 | AV9 | healthy and replaced sessions | not reaped | sweeper | a healthy peer beyond 90 s stays; a replacement during the scan survives (mutation: close by environment ID) |
 | AV10 | producers emit codes | exact problem at the agent | agent guard | a producer with framework text only fails (mutation) |
+
+## Web availability consumers
+
+The shared availability predicate admits online and standby hosts for deliberate
+container, stack, image, volume, network, backup and per-host settings operations.
+Producer capability refusals still disable their controls. Standby keeps its own
+neutral status in host cards, the host filter and topology labels; it is excluded
+from disconnected-host attention counts.
+
+Metrics subscriptions and load sorting remain online-only because they require a
+live sample stream. Connection completion still requires online; standby is not
+proof of an authenticated connection. A disabled host projects offline. Typed
+agent configuration refusals are translated without changing browser identity;
+`edge.heartbeat-stale` remains internal and has no web reason mapping.

@@ -2,7 +2,7 @@
 // Revision: fdb37e836f708bd9ff76f75075bbb3e60ae2f0b3
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original host outcome localization.
+// Deviations: Original host outcome localization. M14 host maintenance and availability.
 
 import { useTranslations } from "use-intl";
 

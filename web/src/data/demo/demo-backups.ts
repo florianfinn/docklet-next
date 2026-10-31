@@ -1,8 +1,9 @@
+import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/284
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original development-only backup model matching live target and restore contracts.
+// Deviations: Original development-only backup model matching live target and restore contracts. M14 host maintenance and availability.
 
 import type { VolumesApi } from "../api";
 import { BackupError } from "../backup-error";
@@ -281,7 +282,7 @@ export function createDemoBackups(
       return api.restoreBackup(v.id, run.id, mode, name);
     },
     async getBackupOverview(host) {
-      const online = db.host(host)?.status === "online";
+      const online = isHostAvailable(db.host(host));
       return {
         hostId: host,
         unavailable: !online,
@@ -370,7 +371,7 @@ export function createDemoBackups(
         [...db.backupPolicies.values()].some((p) => p.targetId === id)
       )
         return fail("backup.target.in-use");
-      if (db.hosts.some((h) => h.status !== "online" && (!target(id).hostId || h.id === target(id).hostId)))
+      if (db.hosts.some((h) => !isHostAvailable(h) && (!target(id).hostId || h.id === target(id).hostId)))
         return fail("backup.target.hosts-unknown");
       target(id).retiredAt = now();
       db.changed("settings");

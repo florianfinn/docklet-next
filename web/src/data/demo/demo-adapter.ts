@@ -1,3 +1,5 @@
+import { SettingsProblemError } from "../settings-error";
+import { isHostAvailable } from "@/domain/hosts";
 import { createDemoContainerOperations } from "./demo-container-operations";
 import { openScriptedShell } from "./shell-fixture";
 import { sameImageReference } from "@/domain/docker-reference";
@@ -46,6 +48,7 @@ const clone = <T>(v: T): T => structuredClone(v);
 /** In-memory adapter: synthetic data, simulated actions, no Docker calls. */
 export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdapter {
   const db = new DemoDb();
+  if (options.hosts) db.hosts = structuredClone([...options.hosts]);
   const composeTarget = (stack: Stack): ComposeTarget => ({ project: stack.id, services: stack.services.map((s) => ({ name: s.name, image: imageRef(s.image) })), hostName: db.host(stack.hostId)?.name ?? stack.hostId });
   const runner = new ActionRunner(options.seedRuns ?? SEED_RUNS, (run) => {
     const stack = run.stackId ? db.stack(run.stackId) : undefined;
@@ -147,7 +150,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id)) ||
         (resourceRef.kind === "image" && (await adapter.listImages()).some((item) => item.id === resourceRef.id)) ||
         (resourceRef.kind === "registry" && (await adapter.listContainerRegistries()).some((item) => item.id === resourceRef.id));
-      const reason = containerOperations.capabilityReason(operationId, resourceRef);
+      const reason = maintenanceReason(operationId, resourceRef) || containerOperations.capabilityReason(operationId, resourceRef);
       const available = knownResource && supportedOperations.has(operationId) && !reason;
       return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: reason || GENERIC_REASON }) };
     },
@@ -492,8 +495,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
           { key: "validate", label: "Hub-Endpunkt prüfen", detail: host?.address },
           { key: "collect", label: "Agent-Status abfragen" },
         ],
-        failAt: host?.status === "offline" ? "collect" : undefined,
-        failMessage: "Edge-Agent meldet sich nicht (Simulation). Agent auf dem Host prüfen.",
+        failAt: !isHostAvailable(host) ? "collect" : undefined,
+        failMessage: host?.status === "token-rejected" ? "agent.invalid-token" : host?.status === "update-required" ? "agent.update-required" : "host.unreachable",
+        onSuccess: () => { if (host?.status === "standby") { db.hosts = db.hosts.map(h => h.id === hostId ? { ...h, status: "online" } : h); db.changed("hosts"); } },
         onFailure: () => db.pushEvent({ kind: "host", level: "warn", title: `${host?.name}: weiterhin nicht verbunden`, hostId }),
       });
     },
@@ -556,6 +560,49 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     return c;
   }
 
+  const maintenanceOperations = new Set(["updateHost", "connectHost", "reconnectHost", "restartAgent"]);
+  const runtimeOperations = new Set(["runStackCommand", "runContainerCommand", "recreateContainer", "restartService", "setContainerOrigin", "deployStack", "installStackUpdates", "installContainerUpdate"]);
+  function hostFor(operation: string, value: unknown): string | undefined {
+    if (maintenanceOperations.has(operation)) return typeof value === "string" ? value : undefined;
+    if (operation === "deployStack" && value && typeof value === "object") return (value as { hostId?: string }).hostId;
+    if (/Stack|Service/.test(operation)) return db.stack(String(value))?.hostId;
+    return db.containers().find(c => c.id === value)?.hostId;
+  }
+  function maintenanceReason(operation: string, ref: { kind: string; id: string }): string | undefined {
+    if (operation === "saveSettings" && options.uiConfigurationDisabledHosts?.includes("0")) return "settings.ui-configuration-disabled";
+    if (!maintenanceOperations.has(operation) && !runtimeOperations.has(operation)) return undefined;
+    const hostId = ref.kind === "host" ? ref.id : hostFor(operation, ref.id);
+    if (operation === "restartAgent" && hostId === "0") return "capability.unavailable";
+    const host = db.host(hostId);
+    if (!host) return "capability.unavailable";
+    if (runner.list().some(run => run.hostId === hostId && run.kind === "agent-restart" && run.status === "running")) return "host.restarting";
+    if (host.status === "update-required") return "agent.update-required";
+    if ((runtimeOperations.has(operation) || operation === "restartAgent") && !isHostAvailable(host)) {
+      if (host.status === "token-rejected") return "agent.invalid-token";
+      return "host.unreachable";
+    }
+    return undefined;
+  }
+  for (const operation of [...maintenanceOperations, ...runtimeOperations]) {
+    const method = (adapter as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[operation];
+    if (!method) continue;
+    (adapter as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[operation] = async (...args) => {
+      const host = hostFor(operation, args[0]);
+      const code = maintenanceReason(operation, { kind: "host", id: host ?? "" });
+      if (code) throw new AdapterOutcomeError({ kind: "error", code, status: 409 });
+      return method(...args);
+    };
+  }
+  const saveAutoHeal = adapter.saveAutoHealSettings;
+  adapter.saveAutoHealSettings = async (host, input) => {
+    if (options.uiConfigurationDisabledHosts?.includes(host)) throw new SettingsProblemError("agent.ui-configuration-disabled", 502);
+    return saveAutoHeal.call(adapter, host, input);
+  };
+  const saveSettings = adapter.saveSettings;
+  adapter.saveSettings = async (section, value) => {
+    if (options.uiConfigurationDisabledHosts?.includes("0")) throw new SettingsProblemError("settings.ui-configuration-disabled", 403);
+    return saveSettings(section, value);
+  };
   for (const [operationId, value] of Object.entries(adapter)) {
     if (operationId !== "getCapability" && typeof value === "function") supportedOperations.add(operationId);
   }

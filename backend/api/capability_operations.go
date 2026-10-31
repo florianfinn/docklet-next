@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original wiring of fresh container and host readers for D6/D7 and shared restart admission checks.
+// Deviations: Original wiring of fresh container and host readers for D6/D7 and shared restart admission checks. M14 host maintenance and availability.
 
 package api
 
@@ -18,9 +18,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/types/base"
 	dto "github.com/florianfinn/docklet-next/types/container"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 )
 
-func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReaders {
+func operationCapabilityReaders(d HandlerDeps, cfg *config.Config) activity.OperationCapabilityReaders {
 	containers, hosts := d.Container.Service(), d.Environment.Service()
 	return activity.OperationCapabilityReaders{
 		GuardOrigin: containers.GuardRuntimeOrigin,
@@ -31,7 +32,7 @@ func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReade
 			return activity.RestartCapabilityReason(ctx, hosts.GetDB().DB, env)
 		},
 		SettingsWriteReason: func(context.Context) string {
-			if config.Load().UIConfigurationDisabled {
+			if cfg != nil && cfg.UIConfigurationDisabled {
 				return "settings.ui-configuration-disabled"
 			}
 			return ""
@@ -60,7 +61,12 @@ func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReade
 			if err != nil || !host.Enabled {
 				return "agent.unavailable"
 			}
-			return operationHostStatus(host.Status)
+			if host.Status == string(environment.EnvironmentStatusUpdateRequired) {
+				return "agent.update-required"
+			}
+			projected := environmentDTO.Environment{ID: env, Status: host.Status, IsEdge: host.IsEdge, Enabled: host.Enabled}
+			hosts.ApplyHostRuntimeState(ctx, &projected)
+			return operationHostStatus(projected.Status)
 		},
 		Origin: func(ctx context.Context, env, id string) (dto.OriginFields, error) {
 			var response base.ApiResponse[dto.Details]

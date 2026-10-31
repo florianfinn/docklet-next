@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host HTTP mapping and report tests.
+// Deviations: Original host HTTP mapping and report tests. M14 host maintenance and availability.
 
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";

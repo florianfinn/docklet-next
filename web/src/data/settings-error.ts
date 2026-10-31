@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original typed notification and Auto Heal problem presentation.
+// Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability.
 
 import type { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "./capability";

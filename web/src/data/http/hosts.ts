@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host read projection; persisted colour and palette defaults.
+// Deviations: Original host read projection; persisted colour and palette defaults. M14 host maintenance and availability.
 
 import type { components } from "@/api/generated/schema";
 import type { AgentReport, Host, HostStatus } from "@/domain/model";

@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original focused activity source isolation and read-health projection; bounded discovery and shared generation-scoped notification coalescing (#211).
+// Deviations: Original focused activity source isolation and read-health projection; bounded discovery and shared generation-scoped notification coalescing (#211). M14 host maintenance and availability.
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 

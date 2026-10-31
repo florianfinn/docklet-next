@@ -2,7 +2,7 @@
 // Revision: fdb37e836f708bd9ff76f75075bbb3e60ae2f0b3
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original host error and connected onboarding regressions.
+// Deviations: Original host error and connected onboarding regressions. M14 host maintenance and availability.
 
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

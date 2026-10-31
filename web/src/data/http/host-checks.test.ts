@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original request and typed connection result matrix.
+// Deviations: Original request and typed connection result matrix. M14 host maintenance and availability.
 
 import { expect, it, vi } from "vitest";
 import { createHostChecks } from "./host-checks";

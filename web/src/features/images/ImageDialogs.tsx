@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 export { PruneDialog } from "./PruneDialog";
 import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { sameImageReference } from "@/domain/docker-reference";
@@ -32,7 +33,7 @@ const SUGGESTIONS = ["redis:7.4-alpine", "postgres:17-alpine", "traefik/whoami:v
 export function PullDialog({ open, onOpenChange, hosts, images, initial }: { open: boolean; onOpenChange: (o: boolean) => void; hosts: Host[]; images: DockerImage[]; initial?: { hostId: string; reference: string } }) {
   const t = useTranslations("images.pullDialog");
   const cmd = useImageCommands();
-  const firstOnline = hosts.find((h) => h.status === "online")?.id ?? "";
+  const firstOnline = hosts.find((h) => isHostAvailable(h))?.id ?? "";
   const [hostId, setHostId] = useState(initial?.hostId ?? firstOnline);
   const [registryId, setRegistryId] = useState("auto");
   const owner = `${hosts.map((host) => host.id).sort().join("|")}|${hostId}|${registryId}`;
@@ -62,7 +63,7 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
   const parsed = parseImageReference(effectiveReference);
   const known = parsed ? images.some((i) => i.hostId === hostId && i.tag !== null && sameImageReference(`${i.repository}:${i.tag}`, effectiveReference)) : false;
   const host = hosts.find((h) => h.id === hostId);
-  const valid = !!parsed && host?.status === "online" && capability.available && (registryId === "auto" || !!selectedRegistry);
+  const valid = !!parsed && isHostAvailable(host) && capability.available && (registryId === "auto" || !!selectedRegistry);
 
   // The request stays busy until the stream settles; detached attempts report their outcome by toast.
   const pull = useBusyAction(async () => {
@@ -101,8 +102,8 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
               <SelectContent>
                 <SelectGroup>
                   {hosts.map((h) => (
-                    <SelectItem key={h.id} value={h.id} disabled={h.status !== "online" || !capabilities.get(h.id)}>
-                      {h.status === "online" ? h.name : t("hostOffline", { name: h.name })}
+                    <SelectItem key={h.id} value={h.id} disabled={!isHostAvailable(h) || !capabilities.get(h.id)}>
+                      {isHostAvailable(h) ? h.name : t("hostOffline", { name: h.name })}
                     </SelectItem>
                   ))}
                 </SelectGroup>

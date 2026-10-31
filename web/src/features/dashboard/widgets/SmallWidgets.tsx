@@ -18,6 +18,7 @@ import { Button } from "@/shared/ui/button";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 
 export function CapacityWidget({ hosts }: { hosts: Host[] }) {
+  const status = useTranslations("common.host");
   const t = useTranslations("dashboard.capacity");
   const td = useTranslations("dashboard");
   const metrics = useMetrics((s) => s?.hosts);
@@ -37,7 +38,7 @@ export function CapacityWidget({ hosts }: { hosts: Host[] }) {
             <Meter label={h.name} value={m?.disk ?? 0} color={h.color} sub={t("used", { used: formatGb(used), total: formatGb(total) })} />
             <div className="flex items-center justify-between text-[11px]">
               <span data-tone={h.status !== "online" ? "gray" : tone} className="font-medium text-(--tone)">
-                {m.inventory?.stale || h.status !== "online" ? t("offline") : m.growthUnavailable ? "" : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
+                {h.status === "standby" ? status("standby") : m.inventory?.stale || h.status !== "online" ? t("offline") : m.growthUnavailable ? "" : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
               </span>
               <span className="text-muted-foreground tabular">{m.growthUnavailable ? td("growthUnavailable") : t("growth", { gb: formatNumber(m.diskGrowthGbPerDay) })}</span>
             </div>

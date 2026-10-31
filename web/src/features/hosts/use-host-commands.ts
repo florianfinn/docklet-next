@@ -1,4 +1,5 @@
 import { captureCommandFailure } from "@/shared/components/command-failure";
+import { isCancelledError } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 import { useCallback } from "react";
@@ -25,7 +26,7 @@ export function useHostCommands() {
         return await fn();
       } catch (e) {
         // The gate already reported the busy target once (see ActionToasts).
-        if (isRunBusy(e)) return undefined;
+        if (isCancelledError(e) || isRunBusy(e)) return undefined;
         failure.error(errorText(e));
         return undefined;
       }

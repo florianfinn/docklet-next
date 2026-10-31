@@ -333,7 +333,7 @@ function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: strin
             <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="color-mix(in oklch, var(--muted-foreground) 25%, transparent)" />
             <Controls showInteractive={false} position="bottom-left" fitViewOptions={FIT_ALL} />
           </ReactFlow>
-          <div className="pointer-events-none absolute top-3 left-4 text-[11px] font-semibold tracking-[0.08em] text-(--host) uppercase">{t("zone", { name: host.name, status: online ? t("online") : t("offline") })}</div>
+          <div className="pointer-events-none absolute top-3 left-4 text-[11px] font-semibold tracking-[0.08em] text-(--host) uppercase">{t("zone", { name: host.name, status: host.status === "standby" ? t("standby") : online ? t("online") : t("offline") })}</div>
           <ul aria-label={t("legend.label")} data-slot="topology-legend" className="pointer-events-none absolute right-3 bottom-3 flex flex-col gap-1 rounded-lg border bg-card/95 px-2.5 py-1.5 text-[10.5px] text-muted-foreground shadow-sm">
             <li className="flex items-center gap-2">
               <svg width="26" height="8" aria-hidden>

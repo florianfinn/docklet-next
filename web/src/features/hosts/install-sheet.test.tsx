@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original production sheet lifecycle and IPv6/Edge artifact tests.
+// Deviations: Original production sheet lifecycle and IPv6/Edge artifact tests. M14 host maintenance and availability.
 
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

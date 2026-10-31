@@ -93,7 +93,7 @@ export class DemoDb {
   /** Stacks as discovery finds them, including the agent's project when it sits in the project directory. */
   discoveredStacks(): Stack[] {
     const agents = this.hosts.filter((h) => h.status !== "pending" && agentInsideProject(h)).map(agentStack);
-    return [...this.stacks.map((stack) => this.stoppedDefinition(stack)), ...agents];
+    return [...this.stacks.filter(stack => this.host(stack.hostId)).map((stack) => this.stoppedDefinition(stack)), ...agents];
   }
 
   /** Removed containers leave definition services; invalid text never drops the stack. */
@@ -118,7 +118,7 @@ export class DemoDb {
 
   /** User workloads only: the system label rule removes the agent from every list and count. */
   containers(): ContainerInfo[] {
-    return withoutSystem(this.discoveredContainers());
+    return withoutSystem(this.discoveredContainers()).filter(container => this.host(container.hostId));
   }
 
   /** Network names from the topology attachments, which connect and disconnect change. */

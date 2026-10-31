@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original restart confirmation and runtime refusal gestures.
+// Deviations: Original restart confirmation and runtime refusal gestures. M14 host maintenance and availability.
 
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -24,8 +24,8 @@ it.each(["atlas", "0"])("H3 requires confirmation for remote restart and offers 
   await userEvent.click(screen.getByRole("tab", { name: "Agent container" }));
   if (id === "0") { expect(screen.queryByRole("button", { name: "Restart agent" }) === null).toBe(true); return; }
   await userEvent.click(screen.getByRole("button", { name: "Restart agent" }));
-  const confirm = await screen.findByRole("alertdialog", { name: "Restart agent on Example?" });
   expect(restart).not.toHaveBeenCalled();
+  const confirm = await screen.findByRole("alertdialog", { name: "Restart agent on Example?" });
   await userEvent.click(within(confirm).getByRole("button", { name: "Restart agent" }));
   await waitFor(() => expect(restart).toHaveBeenCalledExactlyOnceWith("atlas"));
 });

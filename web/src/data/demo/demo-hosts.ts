@@ -1,4 +1,5 @@
-import { defaultHostColor } from "@/domain/hosts";
+import { AdapterOutcomeError } from "../capability";
+import { isHostAvailable, defaultHostColor } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
 import { agentHubUrl } from "@/domain/settings";
 import { slugify } from "@/domain/validation";
@@ -31,12 +32,15 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
       return url;
     }
   };
+  const revisions = new Map<string, number>();
+  const problem = (code: string) => new AdapterOutcomeError({ kind: "error", code, status: 409 });
   const manualSocket = new Set<string>();
 
   return {
     async registerHost(input) {
       await wait(350);
-      if (db.hosts.some((h) => h.name.toLowerCase() === input.name.trim().toLowerCase())) throw new DemoError("exists");
+      if (!input.name.trim() || input.name.trim().length > 40) throw problem("host.name-invalid");
+      if (db.hosts.some((h) => h.name.toLowerCase() === input.name.trim().toLowerCase())) throw problem("host.name-taken");
       const base = slugify(input.name);
       let id = base;
       for (let n = 2; db.host(id); n++) id = `${base}-${n}`;
@@ -119,7 +123,7 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
       await wait(250);
       const host = db.host(hostId);
       if (!host) throw new DemoError("not-found");
-      if (db.stacks.some((s) => s.hostId === hostId) || db.standalone.some((c) => c.hostId === hostId)) throw new DemoError("host-in-use");
+      revisions.set(hostId, (revisions.get(hostId) ?? 0) + 1);
       db.hosts = db.hosts.filter((h) => h.id !== hostId);
       for (const [id, v] of db.createdVolumes) if (v.hostId === hostId) db.createdVolumes.delete(id);
       db.pushEvent({ kind: "host", level: "info", title: `${host.name} entfernt` });
@@ -131,8 +135,8 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
       const host = db.host(hostId);
       if (!host) throw new DemoError("not-found");
       const name = input.name.trim();
-      if (!name || name.length > 40) throw new DemoError("invalid-name");
-      if (db.hosts.some((h) => h.id !== hostId && h.name.toLowerCase() === name.toLowerCase())) throw new DemoError("exists");
+      if (!name || name.length > 40) throw problem("host.name-invalid");
+      if (db.hosts.some((h) => h.id !== hostId && h.name.toLowerCase() === name.toLowerCase())) throw problem("host.name-taken");
       if (!/^#[0-9a-f]{6}$/i.test(input.color ?? defaultHostColor(hostId))) throw new DemoError("invalid-color");
       const next: Host = { ...host, name, color: input.color?.toLowerCase() ?? defaultHostColor(hostId) };
       db.hosts = db.hosts.map((h) => (h.id === hostId ? next : h));
@@ -144,10 +148,21 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
     async restartAgent(hostId) {
       const host = db.host(hostId);
       if (!host) throw new DemoError("not-found");
+      if (hostId === "0") throw problem("agent.restart-unsupported");
+      if (host.status === "update-required") throw problem("agent.update-required");
+      if (!isHostAvailable(host)) {
+        if (host.status === "token-rejected") throw problem("agent.invalid-token");
+        throw problem("host.unreachable");
+      }
+      if (runner.list().some(run => run.hostId === hostId && run.status === "running" && !["backup", "volume-restore", "auto-heal"].includes(run.kind))) throw problem("host.busy");
+      const revision = revisions.get(hostId) ?? 0;
       const component = systemComponent(host);
-      const offline = host.status !== "online";
+      const offline = !isHostAvailable(host);
       return runner.start({
         kind: "agent-restart",
+        refusal: () => !db.host(hostId) || (revisions.get(hostId) ?? 0) !== revision ? "agent.restart-superseded" : undefined,
+        onStart: () => db.changed("hosts"),
+        onFailure: () => db.changed("hosts"),
         title: `Agent neu starten · ${host.name}`,
         target: `${component.containerName} · ${host.name}`,
         hostId,
@@ -171,12 +186,15 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
 
     async listSystemComponents() {
       await wait(120);
-      return db.hosts.filter((h) => h.status !== "pending").map(systemComponent);
+      return db.hosts.filter((h) => h.status !== "pending").map(h => ({ ...systemComponent(h), agentVersion: h.agentVersion, contractVersion: h.status === "update-required" ? 10 : 11, toolsImage: "registry.example.com/docklet/tools:1.2.3", updateRequired: h.status === "update-required" }));
     },
 
     async issueAgentToken(hostId) {
       const hostName = db.host(hostId)?.name ?? hostId;
       await wait(150);
+      revisions.set(hostId, (revisions.get(hostId) ?? 0) + 1);
+      db.hosts = db.hosts.map(h => h.id === hostId ? { ...h, status: "pending" } : h);
+      db.changed("hosts");
       return demoAgentToken(hostName);
     },
   };

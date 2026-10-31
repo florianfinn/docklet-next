@@ -93,7 +93,6 @@ export const enHosts = {
     invalidFields: "Check the host address, absolute directories and numeric file IDs before generating files.",
     sheetTitle: "Installation files for {name}",
     sheetDescription: "Installation files from saved host fields and hub defaults. Opening this sheet leaves the current credential unchanged.",
-    demoNote: (import.meta.env.DEV ? "Demo artifacts: the token is a placeholder, the hub address an example. The files can really be downloaded but don’t connect anything." : ""),
     httpWarning: "HTTP sends the token without encryption. Use a trusted network and restrict the direct agent port to the hub with a firewall.",
     historyWarning: "Copied commands contain the token and may remain in shell history. The package avoids this entry; delete the archive after installation.",
     wayLabel: "Installation method",

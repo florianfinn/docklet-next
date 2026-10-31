@@ -184,3 +184,27 @@ and the `/health` `instanceId`.
 | HM13 | fencing | credential revision and registration, checked per observation and at settlement | run observer → settlement transaction | endpoint edit, key rotation, manual token replacement with unchanged key ID and endpoint, delete and re-register, delayed old 200 (mutation: compare registration, key and endpoint only) |
 | HM14 | installation sheet credentials | opening mutates nothing; explicit rotation once | sheet lifecycle → token route → file generator | open, close and switch → no rotation; rotate once; URL, IPv6 and Edge files valid (mutation: rotate on mount, or naive split) |
 | HM15 | no replay | hub restart, lost 202 | startup recovery | restart call count stays 1 (mutation: resend on resume) |
+
+## Web consumers
+
+Host edits send only name and colour; a null colour restores the stable palette
+selection derived from the host ID. Check and reconnect return the typed status
+from the existing activity-producing check endpoint. They do not invent an
+activity ID when the producer does not return one.
+
+Agent restart uses the durable restart endpoint for phase following. The browser
+submits once and only repeats reads after a transport failure. Closing the host
+dialog does not cancel observation; an identity change clears its timers and
+cached observations. The hub remains the authority for new-instance completion,
+credential supersession and unknown outcomes.
+
+Component rows combine historical agent reports, the hub version and existing
+system-image hints. They show version, contract, tools image and per-host errors
+without inventing Docker inspect fields. Settings and installation controls parse
+only their own needed settings and save only the six host-default keys.
+
+Installation artifacts use the saved Direct origin, including IPv6 and its port,
+or Edge mode, plus locally editable directory and file-ID defaults. Opening and
+editing these files do not write to the host. The example token is a placeholder;
+a confirmed rotation inserts a real token once. The sheet owns that token only in
+memory and discards it on close, host switch or identity change.

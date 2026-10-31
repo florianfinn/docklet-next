@@ -42,6 +42,7 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
 function AgentPanel({ host, component, feedback }: { host: Host; component: SystemComponent | undefined; feedback: DialogCommand }) {
   const t = useTranslations("hosts.settings");
   const ts = useTranslations("common.status");
+  const stage = useTranslations("hosts.onboarding.stageState");
   const cmd = useHostCommands();
   const restartCapability = useCapability("restartAgent", { kind: "host", id: host.id });
   const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
@@ -53,6 +54,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
   return (
     <div className="flex flex-col gap-4" data-slot="agent-container">
       {component?.metadataOnly ? <SystemMetadata component={component} /> : component ? <>
+      <SystemMetadata component={component} />
       <p className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/15 p-3 text-xs text-muted-foreground">
         <Bot className="mt-0.5 size-4 shrink-0" aria-hidden />
         {t("agentIntro", { label: `${SYSTEM_LABEL}=agent` })}
@@ -122,7 +124,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
         <span className="text-xs text-muted-foreground">{online ? t("restartHint") : t("restartBlocked")}</span>
       </div>
       {latestRestart && <section aria-label={t("restartProgress")}>
-        <ol className="flex flex-col gap-1 text-sm">{latestRestart.steps.map(step => <li key={step.key} data-state={step.state}>{step.label}</li>)}</ol>
+        <ol className="flex flex-col gap-1 text-sm">{latestRestart.steps.map(step => <li key={step.key} data-state={step.state}>{step.label} · {stage(step.state === "skipped" ? "pending" : step.state)}</li>)}</ol>
         {latestRestart.error && <p role="alert" className="text-sm text-destructive">{latestRestart.error}</p>}
       </section>}
       <ConfirmDialog open={confirmRestart} onOpenChange={setConfirmRestart} title={t("restartTitle", { name: host.name })} description={t("restartBody")} confirmLabel={t("restart")} onConfirm={async () => (await restart.run()) ?? false} />
@@ -151,9 +153,12 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const [serverError, setServerError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [seen, setSeen] = useState(open);
-  if (open !== seen) {
+  const [seenHost, setSeenHost] = useState(host.id);
+  if (open !== seen || host.id !== seenHost) {
+    setSeenHost(host.id);
     setSeen(open);
     if (open) {
+      setSaving(false);
       setName(host.name);
       setColor(host.color);
       setHex(host.color);
@@ -167,19 +172,21 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const dirty = resetColor || name.trim() !== host.name || color.toLowerCase() !== host.color.toLowerCase();
 
   const save = async () => {
-    if (!update.available) return;
+    if (saving || !update.available) return;
     setTouched(true);
     if (error || !dirty) return;
     setServerError(null);
     setSaving(true);
+    const current = feedback.checkpoint();
     try {
       const saved = await adapter.updateHost(host.id, { name: name.trim(), color: resetColor ? null : color });
+      if (!current()) return;
       toast.success(t("saved", { name: saved.name }));
       change(false);
     } catch (e) {
-      setServerError(errorText(e));
+      if (current()) setServerError(errorText(e));
     } finally {
-      setSaving(false);
+      if (current()) setSaving(false);
     }
   };
 

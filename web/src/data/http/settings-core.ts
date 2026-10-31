@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections.
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability.
 
 import { settingsProblem } from "../settings-error";
 import { discardResponse } from "./identity-reads";

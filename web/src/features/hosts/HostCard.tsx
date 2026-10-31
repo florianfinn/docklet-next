@@ -196,7 +196,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         open={confirm}
         onOpenChange={setConfirm}
         title={t("card.removeTitle", { name: host.name })}
-        description={`${t("card.removeCounts", { stacks: isHostAvailable(host) ? String(stacks ?? t("card.unknown")) : t("card.unknown"), containers: isHostAvailable(host) ? String(containers ?? t("card.unknown")) : t("card.unknown") })} ${t("card.removeBody")}`}
+        description={`${t("card.removeCounts", { stacks: isHostAvailable(host) && !host.inventory?.stale ? String(stacks ?? t("card.unknown")) : t("card.unknown"), containers: isHostAvailable(host) && !host.inventory?.stale ? String(containers ?? t("card.unknown")) : t("card.unknown") })} ${t("card.removeBody")}`}
         confirmLabel={t("card.removeConfirm")}
         destructive
         onConfirm={async () => (await cmd.remove(host.id)) ?? false}

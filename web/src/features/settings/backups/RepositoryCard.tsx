@@ -3,7 +3,7 @@ import { isHostAvailable } from "@/domain/hosts";
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original per-host local repository status with read-only engine image.
+// Deviations: Original per-host local repository status with read-only engine image. M14 host maintenance and availability.
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";

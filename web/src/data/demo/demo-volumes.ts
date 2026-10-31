@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { createDemoBackups } from "./demo-backups";
 import { collectMountUsage, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
 import { planVolumePrune, pruneBlock } from "@/domain/volume-prune";
@@ -86,7 +87,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
 
   /** File access goes through the host agent; disconnected hosts cannot be browsed. */
   function online(v: Volume): Volume {
-    if (db.host(v.hostId)?.status !== "online") throw new DemoError("host-offline");
+    if (!isHostAvailable(db.host(v.hostId))) throw new DemoError("host-offline");
     return v;
   }
 
@@ -115,7 +116,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
 
     async createVolume(input) {
       await wait(300);
-      if (db.host(input.hostId)?.status !== "online") throw new DemoError("host-offline");
+      if (!isHostAvailable(db.host(input.hostId))) throw new DemoError("host-offline");
       const taken = all()
         .filter((v) => v.hostId === input.hostId && v.kind === "volume")
         .map((v) => v.name);
@@ -148,7 +149,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       const v = find(id);
       if (v.kind === "bind") throw new DemoError("bind-not-deletable");
       if (v.consumers.length) throw new DemoError("in-use");
-      if (db.host(v.hostId)?.status !== "online") throw new DemoError("host-offline");
+      if (!isHostAvailable(db.host(v.hostId))) throw new DemoError("host-offline");
       db.createdVolumes.delete(id);
       db.files.drop(id);
       db.backupPolicies.delete(id);

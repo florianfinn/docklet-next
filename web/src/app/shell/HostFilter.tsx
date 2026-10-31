@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { ChevronDown, ChevronsUpDown, Server, Unplug } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -73,7 +74,7 @@ function StatusText({ host }: { host: Host }) {
 function HostToggle({ host, on, label, onClick, variant, className, trailing }: { host: Host; on: boolean; label: string; onClick: () => void; variant: "row" | "chip"; className?: string; trailing?: React.ReactNode }) {
   const tc = useTranslations("common.host");
   const tone = hostTone(host);
-  const problem = host.status !== "online";
+  const problem = !isHostAvailable(host);
   return (
     <button
       type="button"
@@ -219,7 +220,7 @@ function DotStack({ m }: { m: FilterModel }) {
 /** Design 3: one compact trigger with the grouped list in a popover. */
 function MenuDesign({ m }: { m: FilterModel }) {
   const t = useTranslations("shell.hostFilter");
-  const problems = m.hosts.filter((h) => h.status !== "online").length;
+  const problems = m.hosts.filter((h) => !isHostAvailable(h)).length;
   return (
     <Popover>
       <PopoverTrigger className="flex h-10 w-full items-center gap-2 rounded-xl border bg-background/60 px-2.5 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-sidebar-accent" aria-label={`${t("title")}: ${m.summary}`}>

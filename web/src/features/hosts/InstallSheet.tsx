@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original production read-only installation sheet and explicitly confirmed ephemeral token rotation.
+// Deviations: Original production read-only installation sheet and explicitly confirmed ephemeral token rotation. M14 host maintenance and availability.
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";

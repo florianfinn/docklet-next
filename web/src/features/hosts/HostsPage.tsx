@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { Plus, Radio, Server, ServerCog, Unplug } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
@@ -48,7 +49,7 @@ export default function HostsPage() {
           { label: t("strip.total"), value: hosts.isPending ? "–" : hosts.all.length, icon: <Server /> },
           { label: t("strip.online"), value: hosts.isPending ? "–" : hosts.all.filter((h) => h.status === "online").length, icon: <ServerCog />, tone: "ok" },
           { label: t("strip.edge"), value: hosts.isPending ? "–" : hosts.all.filter((h) => h.connection === "edge").length, icon: <Radio />, tone: "info" },
-          { label: t("strip.attention"), value: hosts.isPending ? "–" : hosts.all.filter((h) => h.status !== "online").length, icon: <Unplug />, tone: hosts.all.some((h) => h.status === "offline") ? "err" : hosts.all.some((h) => h.status === "pending") ? "info" : undefined },
+          { label: t("strip.attention"), value: hosts.isPending ? "–" : hosts.all.filter((h) => !isHostAvailable(h)).length, icon: <Unplug />, tone: hosts.all.some((h) => h.status === "offline") ? "err" : hosts.all.some((h) => h.status === "pending") ? "info" : undefined },
         ]}
       />
       {hosts.isPending ? (

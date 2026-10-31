@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original host edit and removal gesture coverage.
+// Deviations: Original host edit and removal gesture coverage. M14 host maintenance and availability.
 
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -42,4 +42,19 @@ it.each(["online", "offline"] as const)("H6 shows honest workload counts for %s 
   expect(dialog.textContent).toContain(status === "online" ? "Stacks: 2 · Containers: 3." : "Stacks: unknown · Containers: unknown.");
   expect(dialog.textContent).toContain("Containers and stacks keep running");
   expect(within(dialog).getByRole("button", { name: "Remove host" }) !== null).toBe(true);
+});
+it("H1 ignores a save response after the dialog closes", async () => {
+  setAppLocale("en-US"); const adapter = createDemoAdapter();
+  let release!: (host: import("@/domain/model").Host) => void;
+  vi.spyOn(adapter, "updateHost").mockImplementation(() => new Promise(resolve => { release = resolve; }));
+  const changed = vi.fn();
+  const { rerender } = renderWithApp(<HostSettingsDialog host={host} component={undefined} open onOpenChange={changed} />, adapter);
+  const name = screen.getByLabelText("Display name"); await userEvent.clear(name); await userEvent.type(name, "Renamed");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(release).toBeTypeOf("function"));
+  // Unmount represents navigation; the old response must not close a later dialog.
+  rerender(<div />);
+  const { act } = await import("@testing-library/react");
+  await act(async () => { release({ ...host, name: "Renamed" }); });
+  expect(changed).not.toHaveBeenCalled();
 });
