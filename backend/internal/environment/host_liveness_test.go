@@ -34,3 +34,16 @@ func TestHostProjectionRejectsStaleHeartbeatAndPreservesStandby(t *testing.T) {
 	require.Equal(t, "standby", projected.Status)
 	require.False(t, *projected.Connected)
 }
+
+// A polling agent below the minimum protocol keeps update-required instead of
+// standby, as the tunnel branch already does (UP1, #100).
+func TestHostProjectionKeepsUpdateRequiredForPollingAgent(t *testing.T) {
+	f := newAgentFixture(t, "edge", version.Info{})
+	now := f.tunnel.GetLastHeartbeat()
+	edge.GetPollRuntimeRegistry().Update(f.id, time.Hour, now)
+	projected := dto.Environment{ID: f.id, IsEdge: true, Status: "update-required"}
+	f.service.ApplyHostRuntimeStateAt(t.Context(), &projected, now.Add(91*time.Second))
+	require.Equal(t, "update-required", projected.Status)
+	require.False(t, *projected.Connected)
+	require.NotNil(t, projected.LastPollAt)
+}
