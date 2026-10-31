@@ -8,11 +8,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 
 import { GENERIC_REASON, HUB_REF, type ResourceRef } from "./capability";
+import { operationReasonKey } from "./operation-reason";
 import { useAdapter } from "./use-adapter";
 
 /** A control remains disabled until both its adapter mapping and server descriptor are readable. */
 export function useCapability(operationId: string, resourceRef: ResourceRef = HUB_REF) {
   const adapter = useAdapter();
+  const operation = useTranslations("containers.operationReasons");
   const t = useTranslations("activity.capability");
   const query = useQuery({
     queryKey: ["capability", operationId, resourceRef.kind, resourceRef.id],
@@ -20,6 +22,7 @@ export function useCapability(operationId: string, resourceRef: ResourceRef = HU
   });
   const available = adapter.kind === "demo" ? query.data?.available !== false : query.data?.available === true;
   const code = query.data?.disabledReasonCode ?? GENERIC_REASON;
-  const reason = code === "capability.mapping-unavailable" ? t("mappingUnavailable") : t("unavailable");
+  const specific = operationReasonKey(code);
+  const reason = specific ? operation(specific) : code === "capability.mapping-unavailable" ? t("mappingUnavailable") : t("unavailable");
   return { available, pending: query.isPending, reason: available ? undefined : reason };
 }

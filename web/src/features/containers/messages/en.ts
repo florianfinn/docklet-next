@@ -33,6 +33,7 @@ export const enContainers = {
     unknownTitle: "Origin unclear",
     unknownBody: "Neither Compose labels nor an Unraid template were found. Editing is locked until it is assigned manually.",
   },
+  assignment: {"title": "Assign origin", "hint": "Choose the manager for this container. The assignment applies to its current Docker identity.", "target": "Origin", "partialCompose": "Incomplete Compose labels prevent standalone assignment. Editing stays locked; choose Unraid or keep detection.", "unconfirmed": "Origin needs confirmation", "unconfirmedHint": "The Docker identity changed outside Docklet. Confirm an allowed assignment or reset to detection before editing.", "manual": "Manually assigned origin", "confirm": "Confirm origin", "reset": "Reset to detection", "save": "Assign"},
   select: { label: "Select {name}", all: "Select all visible", selected: "{count, plural, one {# container selected} other {# containers selected}}", clear: "Clear selection" },
   bulk: { start: "Start", stop: "Stop", restart: "Restart" },
   empty: { title: "No containers for these filters", reset: "Reset filters" },
@@ -100,6 +101,7 @@ export const enContainers = {
     submit: "Recreate",
     failDemo: (import.meta.env.DEV ? "With error (demo)" : ""),
   },
+  operationReasons: {"originLocked": "Editing is locked by the container origin or system protection. Refresh its origin before trying again.", "recreateRecovered": "Recreation failed and the original configuration was recovered. Inspect the run before retrying.", "recreateAmbiguous": "Recreation needs manual inspection. Check the original and replacement containers before taking action.", "idempotencyMismatch": "This retry key belongs to a different edit. Start a new edit to continue.", "hostUnavailable": "The host is unavailable. Check its connection.", "credentialRejected": "The host rejected its credentials.", "updateRequired": "Update the agent before using this action."},
   errors: {
     "recreate-not-allowed": "Recreating is not allowed for this container.",
     "managed-by-unraid": "Updates of this container are managed by Unraid.",

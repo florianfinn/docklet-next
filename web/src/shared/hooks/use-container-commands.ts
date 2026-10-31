@@ -42,6 +42,6 @@ export function useContainerCommands() {
     }),
     update: (id: string) => guard(() => adapter.installContainerUpdate(id)),
     check: (id: string) => guard(() => adapter.checkUpdates({ containerId: id })),
-    setOrigin: (id: string, origin: ContainerOrigin) => guard(() => adapter.setContainerOrigin(id, origin)),
+    setOrigin: (id: string, origin: ContainerOrigin) => guard(async () => { await adapter.setContainerOrigin(id, origin); return true; }),
   };
 }

@@ -294,6 +294,7 @@ export interface ContainerInfo {
   stackName?: string;
   serviceName?: string;
   origin: ContainerOrigin;
+  originSource?: "detected" | "manual" | "unconfirmed";
   /** Why origin is unclear or how it was detected; shown in explanations. */
   originNote?: string;
   image: ImageVersion;

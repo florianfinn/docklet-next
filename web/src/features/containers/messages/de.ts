@@ -33,6 +33,7 @@ export const deContainers: typeof enContainers = {
     unknownTitle: "Herkunft unklar",
     unknownBody: "Weder Compose-Labels noch eine Unraid-Vorlage gefunden. Bis zur manuellen Zuordnung ist Bearbeiten gesperrt.",
   },
+  assignment: {"title": "Herkunft zuweisen", "hint": "Wähle die Verwaltung dieses Containers. Die Zuweisung gilt für seine aktuelle Docker-Identität.", "target": "Herkunft", "partialCompose": "Unvollständige Compose-Labels verhindern die Zuweisung als Run-Container. Bearbeiten bleibt gesperrt; wähle Unraid oder behalte die Erkennung.", "unconfirmed": "Herkunft muss bestätigt werden", "unconfirmedHint": "Die Docker-Identität wurde außerhalb von Docklet geändert. Bestätige eine erlaubte Zuweisung oder setze auf die Erkennung zurück.", "manual": "Manuell zugewiesene Herkunft", "confirm": "Herkunft bestätigen", "reset": "Auf Erkennung zurücksetzen", "save": "Zuweisen"},
   select: { label: "{name} auswählen", all: "Alle sichtbaren auswählen", selected: "{count, plural, one {# Container ausgewählt} other {# Container ausgewählt}}", clear: "Auswahl aufheben" },
   bulk: { start: "Starten", stop: "Stoppen", restart: "Neustart" },
   empty: { title: "Keine Container für diese Filter", reset: "Filter zurücksetzen" },
@@ -100,6 +101,7 @@ export const deContainers: typeof enContainers = {
     submit: "Neu erstellen",
     failDemo: (import.meta.env.DEV ? "Mit Fehler (Demo)" : ""),
   },
+  operationReasons: {"originLocked": "Bearbeiten ist durch Herkunft oder Systemschutz gesperrt. Aktualisiere die Herkunft vor einem weiteren Versuch.", "recreateRecovered": "Die Neuerstellung ist fehlgeschlagen; die ursprüngliche Konfiguration wurde wiederhergestellt. Prüfe den Lauf vor einem weiteren Versuch.", "recreateAmbiguous": "Die Neuerstellung muss manuell geprüft werden. Prüfe den ursprünglichen und den Ersatz-Container vor weiteren Aktionen.", "idempotencyMismatch": "Dieser Wiederholungsschlüssel gehört zu einer anderen Bearbeitung. Beginne eine neue Bearbeitung.", "hostUnavailable": "Der Host ist nicht erreichbar. Prüfe seine Verbindung.", "credentialRejected": "Der Host hat seine Zugangsdaten abgelehnt.", "updateRequired": "Aktualisiere den Agenten, bevor du diese Aktion nutzt."},
   errors: {
     "recreate-not-allowed": "Neu erstellen ist für diesen Container nicht erlaubt.",
     "managed-by-unraid": "Updates dieses Containers verwaltet Unraid.",

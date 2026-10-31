@@ -1,5 +1,3 @@
-import { useCapability } from "@/data/use-capability";
-import { Lock } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -8,9 +6,6 @@ import type { ContainerInfo, Host } from "@/domain/model";
 import { versionLabel } from "@/domain/updates";
 import { isFileBind, mountRef } from "@/domain/volumes";
 import { filesHref } from "@/features/volumes/files/files-href";
-import { useContainerCommands } from "@/shared/hooks/use-container-commands";
-import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
-import { Button } from "@/shared/ui/button";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -83,37 +78,4 @@ export function ContainerFacts({ c, host, env = true }: { c: ContainerInfo; host
   );
 }
 
-/** Origin notes: Unraid keeps editing locked; unclear containers can be assigned. */
-export function ContainerProvenance({ c }: { c: ContainerInfo }) {
-  const t = useTranslations("containers.inspector");
-  const to = useTranslations("containers.origin");
-  const cmd = useContainerCommands();
-  const origin = useCapability("setContainerOrigin");
-  if (c.origin === "unraid")
-    return (
-      <Alert className="border-orange/30 bg-orange/8">
-        <Lock className="text-orange" />
-        <AlertTitle className="text-orange">{to("unraidTitle")}</AlertTitle>
-        <AlertDescription>{to("unraidBody")}</AlertDescription>
-      </Alert>
-    );
-  if (c.origin === "unknown")
-    return (
-      <Alert className="border-warning/30 bg-warning/8">
-        <Lock className="text-warning" />
-        <AlertTitle className="text-warning">{t("assign")}</AlertTitle>
-        <AlertDescription className="flex flex-col items-start gap-2">
-          {t("assignHint")}
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={!origin.available} title={origin.reason} onClick={() => void cmd.setOrigin(c.id, "unraid")}>
-              {t("assignUnraid")}
-            </Button>
-            <Button size="sm" variant="outline" disabled={!origin.available} title={origin.reason} onClick={() => void cmd.setOrigin(c.id, "standalone")}>
-              {t("assignStandalone")}
-            </Button>
-          </div>
-        </AlertDescription>
-      </Alert>
-    );
-  return null;
-}
+export { ContainerProvenance } from "./ContainerProvenance";

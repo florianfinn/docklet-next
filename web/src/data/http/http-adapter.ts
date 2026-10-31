@@ -49,6 +49,7 @@ import { createVolumeWorkspace } from "./volume-workspace";
 import { BACKUP_OPERATIONS, createBackups } from "./backups";
 import { createNotificationSettings, NOTIFICATION_SETTINGS_OPERATIONS } from "./notification-settings";
 import { createVolumeReads } from "./volumes";
+import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -144,6 +145,7 @@ const IMPLEMENTED = new Set<string>([
   "completeSetup",
   "getConnectedSettings",
   "saveSettings",
+  "setContainerOrigin",
   "listImages",
   "listVolumes",
   "getVolume",
@@ -662,6 +664,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     cancelRuntimeRun: runtime.cancelRuntimeRun,
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,
+    ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
     ...createSettingsCore(baseUrl, client),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),

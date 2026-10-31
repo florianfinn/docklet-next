@@ -66,6 +66,7 @@ export const enDashboard = {
     of: "of {total}",
   },
   ring: {
+    showUnraid: "Show Unraid containers",
     roleDescription: "Stack ring",
     segment: "{name} on {host}: {state}",
     popupLabel: "Details for {name}",
