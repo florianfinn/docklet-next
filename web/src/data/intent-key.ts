@@ -13,3 +13,13 @@ export function commandUUID(): string {
   const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+/** Arrays keep order and absent sections stay absent; object key order is immaterial. */
+export function intentFingerprint(value: unknown): string {
+  const ordered = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(ordered);
+    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, entry]) => [key, ordered(entry)]));
+    return item;
+  };
+  return JSON.stringify(ordered(value));
+}

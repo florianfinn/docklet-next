@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original partial edit mapping and per-intent idempotency ownership.
 
-import { commandUUID } from "@/data/intent-key";
+import { commandUUID, intentFingerprint } from "@/data/intent-key";
 import type { components } from "@/api/generated/schema";
 export type EditConfig = components["schemas"]["ContainerEditConfig"];
 export type ContainerEdit = components["schemas"]["ContainerRecreateRequest"]["edit"];
@@ -42,7 +42,7 @@ export function recreateEdit(initial: RecreateDraft, draft: RecreateDraft): Cont
 export function recreateIntent(uuid: () => string = commandUUID) {
   let previous: { edit: string; key: string } | undefined;
   return (edit: ContainerEdit) => {
-    const fingerprint = JSON.stringify(edit);
+    const fingerprint = intentFingerprint(edit);
     if (previous?.edit !== fingerprint) previous = { edit: fingerprint, key: uuid() };
     return previous.key;
   };

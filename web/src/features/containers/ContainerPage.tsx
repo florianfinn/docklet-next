@@ -143,7 +143,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
         description={
           <span className="flex flex-wrap items-center gap-2 pt-1">
             <ToneBadge tone={RUNTIME_TONE[rt]}>{ts(rt)}</ToneBadge>
-            <OriginBadge origin={c.origin} note={c.originNote} />
+            <OriginBadge origin={c.origin} source={c.originSource} note={c.originNote} />
             <HostChip host={host} />
             {c.stackId && (
               <Link to={`/stacks/${c.stackId}`} className="text-primary-text underline-offset-4 hover:underline">

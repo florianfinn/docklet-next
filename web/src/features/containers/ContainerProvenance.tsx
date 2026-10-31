@@ -18,7 +18,7 @@ import { Label } from "@/shared/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
 export function ContainerProvenance({ c }: { c: ContainerInfo }) {
-  return c.origin === "compose" ? <ComposeContainerHint c={c} /> : <OriginControls key={c.id} c={c} />;
+  return <>{c.origin === "compose" && <ComposeContainerHint c={c} />}{(c.origin !== "compose" || c.originSource === "unconfirmed") && <OriginControls key={c.id} c={c} />}</>;
 }
 
 function OriginControls({ c }: { c: ContainerInfo }) {
@@ -32,6 +32,7 @@ function OriginControls({ c }: { c: ContainerInfo }) {
   const partialCompose = Object.keys(c.dockerLabels ?? {}).some((key) => key.startsWith("com.docker.compose."));
   const unconfirmed = c.originSource === "unconfirmed";
   const manual = c.originSource === "manual";
+  const canAssign = c.origin === "unknown" || manual;
   if (c.origin !== "unknown" && c.origin !== "unraid" && !manual && !unconfirmed) return null;
   const submit = async (reset = false) => {
     setPending(true);
@@ -44,13 +45,13 @@ function OriginControls({ c }: { c: ContainerInfo }) {
       <AlertTitle>{unconfirmed ? t("unconfirmed") : manual ? t("manual") : to(`${c.origin}Title`)}</AlertTitle>
       <AlertDescription className="flex flex-col items-start gap-2">
         <p>{unconfirmed ? t("unconfirmedHint") : to(`${c.origin}Body`)}</p>
-        {(c.origin === "unknown" || manual || unconfirmed) && <Button size="sm" variant="outline" disabled={!capability.available || !!c.inventory?.stale} title={capability.reason} onClick={() => setOpen(true)}>{unconfirmed ? t("confirm") : t("title")}</Button>}
+        {(c.origin === "unknown" || manual || unconfirmed) && <Button size="sm" variant="outline" disabled={!capability.available || !!c.inventory?.stale} title={capability.reason} onClick={() => setOpen(true)}>{unconfirmed ? t(canAssign ? "confirm" : "review") : t("title")}</Button>}
       </AlertDescription>
     </Alert>
     <Dialog open={open} onOpenChange={(next) => { if (!pending) setOpen(next); }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{t("title")}</DialogTitle><DialogDescription>{t("hint")}</DialogDescription></DialogHeader>
-        <div className="flex flex-col gap-2">
+        {canAssign ? <div className="flex flex-col gap-2">
           <Label htmlFor="container-origin">{t("target")}</Label>
           <Select value={target} onValueChange={(value) => setTarget(value as "unraid" | "standalone")} disabled={pending}>
             <SelectTrigger id="container-origin"><SelectValue /></SelectTrigger>
@@ -60,10 +61,10 @@ function OriginControls({ c }: { c: ContainerInfo }) {
             </SelectContent>
           </Select>
           {partialCompose && <p className="text-sm text-muted-foreground">{t("partialCompose")}</p>}
-        </div>
+        </div> : <p className="text-sm text-muted-foreground">{t("detectionOnly")}</p>}
         <DialogFooter>
           {(manual || unconfirmed) && <Button variant="outline" disabled={pending || !capability.available} onClick={() => void submit(true)}>{t("reset")}</Button>}
-          <Button disabled={pending || !capability.available} onClick={() => void submit()}>{unconfirmed ? t("confirm") : t("save")}</Button>
+          {canAssign && <Button disabled={pending || !capability.available} onClick={() => void submit()}>{unconfirmed ? t("confirm") : t("save")}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

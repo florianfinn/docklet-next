@@ -1,3 +1,4 @@
+import { createDemoContainerOperations } from "./demo-container-operations";
 import { openScriptedShell } from "./shell-fixture";
 import { sameImageReference } from "@/domain/docker-reference";
 import { createDemoRegistries } from "./demo-registries";
@@ -28,7 +29,7 @@ import { encodeDemoEvent, encodeDemoRuns, encodeDemoStackDetail } from "./encode
 import type { CodedStackDetail } from "../message-code";
 import { registerDemoOptions, takeDemoFailure, type DemoAdapterOptions, type FailAt } from "./options";
 import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from "./simulation";
-import { GENERIC_REASON, HUB_REF, unavailable } from "../capability";
+import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable } from "../capability";
 import { createDemoHubBackups } from "./demo-hub-backups";
 
 export class DemoCommandError extends Error {
@@ -125,7 +126,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const setServices = (stackId: string, fn: (s: Service) => Service) => db.patchStack(stackId, (s) => ({ ...s, services: s.services.map(fn) }));
 
+  const containerOperations = createDemoContainerOperations(ctx, failStep);
   const adapter: DockletAdapter = {
+    ...containerOperations.api,
     kind: "demo",
     openContainerShell: openScriptedShell,
     ...createDemoRegistries(() => db.changed("registries")),
@@ -144,8 +147,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id)) ||
         (resourceRef.kind === "image" && (await adapter.listImages()).some((item) => item.id === resourceRef.id)) ||
         (resourceRef.kind === "registry" && (await adapter.listContainerRegistries()).some((item) => item.id === resourceRef.id));
-      const available = knownResource && supportedOperations.has(operationId);
-      return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: GENERIC_REASON }) };
+      const reason = containerOperations.capabilityReason(operationId, resourceRef);
+      const available = knownResource && supportedOperations.has(operationId) && !reason;
+      return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: reason || GENERIC_REASON }) };
     },
     ...createHostsApi(ctx),
     ...createImagesApi(ctx),
@@ -163,7 +167,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     listStacks: () => simulateRead("stacks", () => (empty() ? [] : clone(withoutSystem(db.discoveredStacks())))),
     getStack: (id) =>
       simulateRead("stacks", (): CodedStackDetail => {
-        const s = db.stack(id);
+        const s = db.discoveredStacks().find((stack) => stack.id === id);
         if (!s) throw new DemoCommandError("not-found");
         return encodeDemoStackDetail(clone({
           ...s,
@@ -184,6 +188,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         throw unavailable("runStackCommand", { kind: "stack", id: stackId });
       }
       const stack = requireStack(stackId);
+      const removesContainers = command === "down" || (command === "stop" && (db.settings.general.stackStopMode ?? "down") === "down");
       const names = stack.services.map((s) => s.name).join(", ");
       const fail = failStep(takeDemoFailure(adapter, "runStackCommand")?.at);
       const effectiveCommand = command === "down" || command === "stop-containers" ? "stop" : command;
@@ -218,8 +223,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         restorePointId: rp?.id,
         onSuccess: () => {
           const now = new Date().toISOString();
-          setServices(stackId, (s) => ({ ...s, state: effectiveCommand === "stop" ? "stopped" : "running", startedAt: effectiveCommand === "stop" ? undefined : now }));
+          setServices(stackId, (s) => ({ ...s, state: effectiveCommand === "stop" ? "stopped" : "running", containersRemoved: effectiveCommand === "stop" ? removesContainers : false, startedAt: effectiveCommand === "stop" ? undefined : now }));
           for (const s of stack.services) logs.append(stackId, s.name, "info", command === "stop" ? "Container gestoppt (SIGTERM)" : "Container gestartet");
+          if (command === "start") db.syncServicesFromCompose(stackId);
           if (command === "redeploy") db.patchStack(stackId, (s) => ({ ...s, lastDeployAt: now }));
         },
         onFailure: (_run, step) => {
@@ -407,6 +413,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     async restartService(stackId, service) {
       const stack = requireStack(stackId);
       const svc = stack.services.find((s) => s.name === service);
+      if (!svc || svc.containersRemoved) throw new AdapterOutcomeError({ kind: "error", code: "runtime.target-unavailable", status: 409 });
       const unhealthy = svc?.health === "unhealthy";
       return runForStack(
         stack,
@@ -463,45 +470,6 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
           db.changed("containers", "stacks");
         },
       });
-    },
-
-    async recreateContainer(id, input) {
-      const c = findContainer(id);
-      if (c.origin !== "standalone") throw new DemoCommandError("recreate-not-allowed");
-      const [repository = c.image.repository, tag = "latest"] = (input.image ?? imageRef(c.image)).split(/:(?=[^:/]+$)/);
-      const fail = failStep(takeDemoFailure(adapter, "recreateContainer")?.at);
-      return runner.start({
-        kind: "recreate",
-        title: `Neu erstellen · ${c.name}`,
-        target: `${c.name} · ${db.host(c.hostId)?.name ?? ""}`,
-        hostId: c.hostId,
-        containerId: c.id,
-        services: [c.name],
-        steps: [
-          { key: "validate", label: "Prüfung", detail: "Konfiguration gültig, vorherige gesichert" },
-          { key: "pull", label: "Image-Pull", detail: input.image ?? imageRef(c.image) },
-          { key: "create", label: "Neu erstellen" },
-          { key: "start", label: "Start" },
-          { key: "health", label: "Zustandsprüfung" },
-        ],
-        output: containerScript(c.name, input.image ?? imageRef(c.image)),
-        failAt: fail,
-        failMessage: fail ? "Simulierter Fehler (Design-Labor)" : undefined,
-        onSuccess: () => {
-          db.patchContainer(c.id, (x) => {
-            const image = { repository, tag, version: tag.replace(/^v/, ""), published: new Date().toISOString() };
-            return { ...x, image, ports: x.ports, env: input.environment ? Object.fromEntries(input.environment.map((entry) => { const index = entry.indexOf("="); return [entry.slice(0, index), entry.slice(index + 1)]; })) : x.env, restartPolicy: input.hostConfig?.restartPolicy?.name ?? x.restartPolicy, state: "running", startedAt: new Date().toISOString(), update: { state: "current", current: image, checkedAt: new Date().toISOString(), registry: "Docker Hub · anonym" } };
-          });
-          db.pushEvent({ kind: "deploy", level: "ok", title: `${c.name} neu erstellt`, hostId: c.hostId });
-          db.changed("containers");
-        },
-        onFailure: () => db.pushEvent({ kind: "deploy", level: "error", title: `${c.name}: Neu erstellen fehlgeschlagen`, hostId: c.hostId }),
-      });
-    },
-
-    async setContainerOrigin(id, origin) {
-      db.patchContainer(id, (c) => ({ ...c, origin, originNote: "Manuell zugeordnet" }));
-      db.changed("containers");
     },
 
     async installContainerUpdate(id) {

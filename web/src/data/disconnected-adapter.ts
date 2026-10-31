@@ -50,6 +50,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     openContainerShell: () => { throw new Error(BACKEND_DISCONNECTED); },
     runContainerCommand: unavailable,
     recreateContainer: unavailable,
+    getContainerEditConfig: unavailable,
     setContainerOrigin: unavailable,
     installContainerUpdate: unavailable,
     reconnectHost: unavailable,

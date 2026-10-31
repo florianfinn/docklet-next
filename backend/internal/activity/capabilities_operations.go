@@ -53,6 +53,9 @@ func operationCapability(ctx context.Context, operation string, ref capability.R
 	}
 	env, raw, scoped := strings.Cut(ref.ID, "~")
 	kind, grants := "container", []string{authz.PermContainersEdit}
+	if operation == "recreateContainer" {
+		grants = append(grants, authz.PermActivitiesRead)
+	}
 	if operation == "restartService" {
 		kind, grants = "stack", deployRuntimeGrantsInternal
 	}

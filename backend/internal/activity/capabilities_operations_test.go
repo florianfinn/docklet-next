@@ -22,6 +22,9 @@ func TestD6OperationDescriptors(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			ref := capability.ResourceRef{Kind: "container", ID: "example~target"}
 			grants := []string{authz.PermContainersEdit}
+			if operation == "recreateContainer" {
+				grants = append(grants, authz.PermActivitiesRead)
+			}
 			if operation == "restartService" {
 				ref.Kind, grants = "stack", deployRuntimeGrantsInternal
 			}
@@ -150,4 +153,15 @@ func TestD6ReaderIsFreshAndRequired(t *testing.T) {
 	require.Empty(t, operationCapability(ctx, "recreateContainer", ref, ps))
 	locked = true
 	require.Equal(t, "container.origin-locked", operationCapability(ctx, "recreateContainer", ref, ps))
+}
+
+func TestD6RecreateRequiresRuntimeReadGrant(t *testing.T) {
+	ps := &authz.PermissionSet{PerEnv: map[string]map[string]struct{}{"example": {authz.PermContainersEdit: {}}}}
+	reads := 0
+	ctx := WithOperationCapabilityReaders(t.Context(), OperationCapabilityReaders{
+		HostReason:  func(context.Context, string) string { reads++; return "" },
+		GuardOrigin: func(context.Context, string, string) error { return nil },
+	})
+	require.Equal(t, "capability.unavailable", operationCapability(ctx, "recreateContainer", capability.ResourceRef{Kind: "container", ID: "example~target"}, ps))
+	require.Zero(t, reads)
 }

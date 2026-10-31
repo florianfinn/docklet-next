@@ -54,10 +54,10 @@ describe("host inventory HTTP reads", () => {
     [{ "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, "compose"],
     [{}, "standalone"],
     [{ "com.docker.compose.project": "app" }, "unknown"],
-  ] as const)("maps origin and restrictions: %s → %s", (labels, origin) => {
-    const mapped = mapContainer({ ...container, labels }, "first", [project], { stale: false });
+  ] as const)("maps the backend origin without granting edit authority: %s → %s", (labels, origin) => {
+    const mapped = mapContainer({ ...container, labels, origin }, "first", [project], { stale: false });
     expect(mapped.origin).toBe(origin);
-    expect(mapped.restrictions?.recreate).toBe(origin !== "standalone");
+    expect(mapped.restrictions).toBeUndefined();
     expect(mapped.ports).toEqual([{ host: "8080", container: "80", protocol: "tcp" }]);
   });
 

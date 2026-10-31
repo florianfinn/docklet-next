@@ -55,6 +55,26 @@ migration items are in [container and host operations](container-host-operations
 6. Version 10 agents are update-required; actions are disabled with the typed
    reason.
 
+## Web
+
+The general settings page stores the hub-wide stop mode. Both a filtered view
+and the Stop command read environment 0. Missing values from older settings
+responses preserve the down default; unknown values fail the read. The stack
+page and row menu label the alternate action explicitly. Version-incompatible
+hosts disable actions with the update-required explanation.
+
+Service restart controls use a stack-scoped capability from the services card,
+attention queue and Compose-child hint. The public restart route takes the
+selected service through its existing `services` query parameter, which the
+hub maps to `restartServices: [service]`; this route accepts no request body.
+Both pending and run-gate keys include the selected service, while admission
+continues to exclude parallel stack actions.
+
+Definition services with `not-created` state render as stopped with the
+containers-removed explanation and no container links or log controls. An
+invalid-definition hint leaves the stack visible in the list and explains the
+repair on its detail page.
+
 Codes and states: `stop-project`, `not-created`, `definition-invalid`.
 
 ## Break map

@@ -11,13 +11,15 @@ import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { STANDALONE } from "@/data/demo/fixtures/containers";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
 import { mapContainer, type ContainerRow } from "@/data/http/inventory-mapping";
-import { preferencesStore } from "@/shared/preferences/preferences-store";
+import { createStore, mergeKnown } from "@/shared/lib/store";
+import { DEFAULT_PREFERENCES, preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
+import { OriginBadge } from "./OriginBadge";
 import { ContainerProvenance } from "./ContainerProvenance";
 import { FleetRing } from "../dashboard/FleetRing";
 import { fleetUnits } from "../dashboard/fleet-status";
 
-const base = STANDALONE[0]!;
+const base = STANDALONE.find((c) => c.origin === "unknown")!;
 afterEach(() => { preferencesStore.reset(); localStorage.clear(); });
 
 it("W1 uses the backend origin and source, with unknown as an older-data fallback", () => {
@@ -36,7 +38,10 @@ it("W1 hides Unraid ring segments by default and persists the personal toggle", 
   expect(rendered.container.querySelectorAll("path[data-runtime]").length).toBe(0);
   await userEvent.click(screen.getByRole("checkbox", { name: "Unraid-Container anzeigen" }));
   expect(rendered.container.querySelectorAll("path[data-runtime]").length).toBe(1);
-  expect(JSON.parse(localStorage.getItem("docklet-react-opus.preferences")!).data.showUnraidRing).toBe(true);
+  const stored = JSON.parse(localStorage.getItem("docklet-react-opus.preferences") ?? "null");
+  expect(stored?.data?.showUnraidRing).toBe(true);
+  const reloaded = createStore(DEFAULT_PREFERENCES, { key: "docklet-react-opus.preferences", version: 1, merge: mergeKnown });
+  expect(reloaded.get().showUnraidRing).toBe(true);
   rendered.unmount();
   const again = renderWithApp(view());
   expect(again.container.querySelectorAll("path[data-runtime]").length).toBe(1);
@@ -56,4 +61,20 @@ it("W2 excludes standalone for any partial Compose label and confirms the curren
   expect(within(dialog).getByText(/Unvollständige Compose-Labels/) !== null).toBe(true);
   await userEvent.click(within(dialog).getByRole("button", { name: "Herkunft bestätigen" }));
   await waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith(c.id, "unraid"));
+});
+
+it("W1 displays the backend unconfirmed source on the origin badge", () => {
+  renderWithApp(<OriginBadge origin="standalone" source="unconfirmed" />);
+  expect(screen.getByText(/Bestätigung erforderlich/) !== null).toBe(true);
+});
+
+it("W2 offers detection reset without invalid assignment targets for an unconfirmed detected manager", async () => {
+  const adapter = createDemoAdapter();
+  const assign = vi.spyOn(adapter, "setContainerOrigin").mockResolvedValue();
+  renderWithApp(<ContainerProvenance c={{ ...base, origin: "standalone", originSource: "unconfirmed" }} />, adapter);
+  await userEvent.click(await screen.findByRole("button", { name: "Herkunft prüfen" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).queryByRole("combobox") === null).toBe(true);
+  await userEvent.click(within(dialog).getByRole("button", { name: "Auf Erkennung zurücksetzen" }));
+  await waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith(base.id, "unknown"));
 });

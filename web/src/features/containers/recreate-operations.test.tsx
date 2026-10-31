@@ -12,6 +12,8 @@ import { AdapterOutcomeError } from "@/data/capability";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { STANDALONE } from "@/data/demo/fixtures/containers";
 import { renderRoutes, renderWithApp } from "@/test/render";
+import { RecreateRun } from "./RecreateRun";
+import { registerIdentityLifetime } from "@/data/identity-lifetime";
 import { RecreateDialog } from "./RecreateDialog";
 import { recreateDraft, recreateEdit, recreateIntent } from "./recreate-edit";
 import { useContainerMenu } from "./container-menu";
@@ -84,4 +86,19 @@ function ComposeMenu() {
 it("W4 omits the container edit/recreate entry for Compose children", () => {
   renderWithApp(<ComposeMenu />);
   expect(screen.queryByRole("button", { name: "Bearbeiten & neu erstellen" }) === null).toBe(true);
+});
+
+it("W3 ignores a late replacement result after the viewing identity changes", async () => {
+  const adapter = createDemoAdapter();
+  let version = 0;
+  const listeners = new Set<() => void>();
+  const receivers: ((state: ActionDetailState) => void)[] = [];
+  registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => true, listen: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; } });
+  adapter.observeActionDetail = (_host, _id, listener) => { receivers.push(listener); return () => {}; };
+  const { router } = renderRoutes([{ path: "*", element: <RecreateRun hostId="0" runId="run" /> }], ["/containers/old"], adapter);
+  await waitFor(() => expect(receivers.length).toBe(1));
+  act(() => { version++; listeners.forEach((listener) => listener()); });
+  act(() => receivers[0]!({ status: "ready", run: { id: "run", kind: "recreate", title: { code: "runMessages.value", params: { value: "Recreate" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status: "succeeded", steps: [], progress: 100, startedAt: "2026-10-31T00:00:00Z", log: [], output: [], recreateResult: { oldId: "old", newId: "replacement", oldName: "app", newName: "renamed" } } }));
+  expect(router.state.location.pathname).toBe("/containers/old");
+  expect(screen.queryByRole("link", { name: "Ersatz-Container öffnen" }) === null).toBe(true);
 });

@@ -171,6 +171,22 @@ admission. Shared contract and migration items are in
     edit dialog with the standalone warning. Disabled actions show the lock
     reason from the capability descriptor.
 
+    The backend origin and origin source are authoritative. Older responses
+    without these fields fall back to unknown/detected; labels never grant
+    browser-side editing authority. Assignment and reset use the current scoped
+    Docker identity and refresh inventory after success. Any partial Compose
+    label hides the standalone target and explains the lock.
+
+    The edit form reads the current edit configuration and submits only changed
+    name, environment, restart policy and port-binding sections, plus the image.
+    Other configuration remains owned by the host. One submitted edit owns one
+    idempotency key, including retries; changing the submitted edit creates a
+    new key. Progress uses the run status and server-provided step trace.
+    Replacement navigation and activity links use the compact result's new ID
+    and host identity. Closing the form stops its navigation observer while the
+    run continues in activity history. Compose children offer stack redeploy
+    and single-service restart instead of a container recreate entry.
+
 Codes and shapes: `container.origin-locked`, `container.recreate-recovered`,
 `container.recreate-ambiguous`, `runtime.idempotency-mismatch`, the origin
 enums, recreate options and result.

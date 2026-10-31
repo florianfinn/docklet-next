@@ -13,6 +13,7 @@ export interface StepPlan {
 }
 
 export interface RunPlan {
+  recreateResult?: ActionRun["recreateResult"];
   kind: ActionKind;
   title: string;
   target: string;
@@ -129,7 +130,7 @@ export class ActionRunner {
         const progress = Math.round(((index + (failed ? 0 : 1)) / plan.steps.length) * 100);
         const log = [...run.log, failed ? `Fehler bei ${step.label}: ${plan.failMessage ?? "unbekannt"}` : `${step.label}${step.detail ? ` – ${step.detail}` : ""}`];
         if (failed) return { ...run, steps, progress, status: "failed", finishedAt: at, error: plan.failMessage, log };
-        if (last) return { ...run, steps, progress: 100, status: "succeeded", finishedAt: at, log: [...log, "Abgeschlossen"] };
+        if (last) return { ...run, recreateResult: plan.recreateResult, steps, progress: 100, status: "succeeded", finishedAt: at, log: [...log, "Abgeschlossen"] };
         return { ...run, steps, progress, log };
       });
       if (!settled) return;

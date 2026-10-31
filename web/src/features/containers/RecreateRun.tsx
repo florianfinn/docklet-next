@@ -4,10 +4,11 @@
 // License: Apache-2.0
 // Deviations: Original receipt-driven recreate progress and replacement navigation.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Link, useNavigate } from "react-router";
 import { useLocale, useTranslations } from "use-intl";
 import type { ActionDetailState } from "@/data/adapter";
+import { identityLifetime } from "@/data/identity-lifetime";
 import { renderRun } from "@/data/message-code";
 import { useAdapter } from "@/data/use-adapter";
 import type { ActionRun } from "@/domain/model";
@@ -25,23 +26,28 @@ export function RecreateResultLink({ run }: { run: ActionRun }) {
 export function RecreateRun({ hostId, runId }: { hostId: string; runId: string }) {
   const adapter = useAdapter();
   const navigate = useNavigate();
+  const lifetime = identityLifetime(adapter);
+  const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
+  const key = `${hostId}:${runId}:${generation}`;
   const locale = useLocale();
   const t = useTranslations("containers.recreate");
   const ta = useTranslations("activity");
-  const [state, setState] = useState<ActionDetailState>({ status: "loading" });
+  const [view, setView] = useState<{ key: string; state: ActionDetailState }>();
+  const state: ActionDetailState = view?.key === key ? view.state : { status: "loading" };
   useEffect(() => {
+    if (!lifetime.active()) return;
     let current = true;
-    const off = adapter.observeActionDetail?.(hostId, runId, (value) => { if (current) setState(value); });
+    const off = adapter.observeActionDetail?.(hostId, runId, (value) => { if (current && generation === lifetime.version()) setView({ key, state: value }); });
     return () => { current = false; off?.(); };
-  }, [adapter, hostId, runId]);
+  }, [adapter, hostId, runId, generation, key, lifetime]);
   const coded = state.status === "ready" || state.status === "error" ? state.run : undefined;
   const run = coded ? renderRun(coded, locale) : undefined;
   useEffect(() => {
-    if (run?.status === "succeeded" && run.recreateResult?.newId) {
+    if (lifetime.active() && generation === lifetime.version() && run?.status === "succeeded" && run.recreateResult?.newId) {
       const id = run.containerId?.includes("~") ? inventoryId(hostId, run.recreateResult.newId) : run.recreateResult.newId;
       void navigate(containerHref(id));
     }
-  }, [run, hostId, navigate]);
+  }, [run, hostId, navigate, lifetime, generation]);
   return <div role="status" className="flex flex-col gap-2 text-sm">
     <p>{run ? ta(`status.${run.status}`) : t("following")}</p>
     {run?.steps.map((step, index) => <p key={`${step.key}:${index}`}>{step.label} · {ta(`step.${step.state}`)}</p>)}

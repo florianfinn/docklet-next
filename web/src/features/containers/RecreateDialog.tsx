@@ -5,8 +5,9 @@
 // Deviations: Original runtime edit form using fresh configuration and per-intent retry keys.
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useTranslations } from "use-intl";
+import { identityLifetime } from "@/data/identity-lifetime";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import type { ContainerInfo } from "@/domain/model";
@@ -34,16 +35,18 @@ export function RecreateDialog({ container, open, onOpenChange }: { container: C
 
 function LoadForm({ c, close }: { c: ContainerInfo; close: () => void }) {
   const adapter = useAdapter();
+  const lifetime = identityLifetime(adapter);
+  const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
   const t = useTranslations("containers.recreate");
   const capability = useCapability("recreateContainer", { kind: "container", id: c.id });
-  const config = useQuery({ queryKey: ["container-edit", c.id], staleTime: 0, retry: false,
+  const config = useQuery({ queryKey: ["container-edit", c.id, generation], staleTime: 0, retry: false,
     queryFn: () => adapter.getContainerEditConfig ? adapter.getContainerEditConfig(c.id) : Promise.resolve<EditConfig>({ id: c.id, name: c.name, image: imageRef(c.image), running: c.state === "running", environment: Object.entries(c.env).map(([key, value]) => `${key}=${value}`), hostConfig: { restartPolicy: { name: c.restartPolicy }, portBindings: Object.fromEntries(c.ports.map((port) => [`${port.container}/${port.protocol ?? "tcp"}`, port.host ? [{ hostPort: port.host }] : []])) } }),
     enabled: capability.available,
   });
   if (!capability.available) return <p role="status">{capability.reason}</p>;
   if (config.isError) return <QueryError error={config.error} onRetry={() => void config.refetch()} />;
   if (!config.data) return <p role="status">{t("loading")}</p>;
-  return <EditForm c={c} config={config.data} close={close} />;
+  return <EditForm key={generation} c={c} config={config.data} close={close} />;
 }
 
 function EditForm({ c, config, close }: { c: ContainerInfo; config: EditConfig; close: () => void }) {
