@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -79,9 +81,9 @@ func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, fo
 		Code    string `json:"code"`
 	}
 	valid := json.Unmarshal(capture.body.Bytes(), &envelope) == nil
-	if capture.status == http.StatusOK && !valid {
+	if capture.status == http.StatusOK && (!valid || capture.failed) {
 		// A body cut short after its headers (the read bound or a dropped agent) is the
-		// host being unavailable, never a success; the body copy does not report it.
+		// host being unavailable, never a success, even when its bytes parse.
 		capture.status, capture.header = http.StatusBadGateway, make(http.Header)
 		capture.body.Reset()
 		capture.body.WriteString(`{"success":false,"code":"agent.unavailable"}`)
@@ -129,6 +131,30 @@ type inventoryResponse struct {
 	header http.Header
 	status int
 	body   bytes.Buffer
+	failed bool
+}
+
+// inventoryBody records a failed upstream body read on the capture; the shared body
+// copy stops on a read error without reporting it.
+type inventoryBody struct {
+	io.ReadCloser
+	capture *inventoryResponse
+}
+
+func (b inventoryBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		b.capture.failed = true
+	}
+	return n, err
+}
+
+// watchInventoryBody lets an inventory capture see an upstream body that ends in error.
+func watchInventoryBody(w http.ResponseWriter, body io.ReadCloser) io.ReadCloser {
+	if capture, ok := w.(*inventoryResponse); ok {
+		return inventoryBody{ReadCloser: body, capture: capture}
+	}
+	return body
 }
 
 func (w *inventoryResponse) Header() http.Header { return w.header }

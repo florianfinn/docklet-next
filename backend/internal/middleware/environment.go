@@ -910,6 +910,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
+	resp.Body = watchInventoryBody(c.Response(), resp.Body)
 	if isVulnerabilityRequest(c) {
 		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
 	}

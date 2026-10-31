@@ -90,6 +90,13 @@ func TestInventoryReadFromFrozenDirectAgentIsBounded(t *testing.T) {
 // The agent sends its headers and a JSON prefix, then freezes. The bound ends the body
 // transfer, which must answer like a failure before headers, not as a truncated success.
 func TestInventoryReadStalledAfterHeadersIsUnavailable(t *testing.T) {
+	// A complete envelope still fails when its transfer never finishes.
+	for name, prefix := range map[string]string{"partial": `{"success":true,"data":[`, "complete": `{"success":true,"data":[]}`} {
+		t.Run(name, func(t *testing.T) { stalledAfterHeaders(t, prefix) })
+	}
+}
+
+func stalledAfterHeaders(t *testing.T, prefix string) {
 	previous := inventoryReadTimeout
 	inventoryReadTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { inventoryReadTimeout = previous })
@@ -101,12 +108,11 @@ func TestInventoryReadStalledAfterHeadersIsUnavailable(t *testing.T) {
 			_, _ = w.Write([]byte(`{"success":true,"data":[{"id":"app"}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"success":true,"data":[`))
+		_, _ = w.Write([]byte(prefix))
 		w.(http.Flusher).Flush()
 		select {
 		case <-r.Context().Done():
 		case <-time.After(3 * time.Second):
-			_, _ = w.Write([]byte(`{"id":"late"}]}`))
 		}
 	}))
 	t.Cleanup(agent.Close)
