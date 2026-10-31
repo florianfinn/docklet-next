@@ -77,13 +77,16 @@ func TestD6OperationDescriptors(t *testing.T) {
 					fields           dto.OriginFields
 					want             string
 				}{name: "unconfirmed-unknown", fields: dto.OriginFields{Origin: dto.OriginUnknown, OriginSource: dto.OriginUnconfirmed}})
-				// The write refuses assignment once detection no longer says unknown.
-				cases = append(cases, struct {
-					name, host, lock string
-					deny, invalid    bool
-					fields           dto.OriginFields
-					want             string
-				}{name: "unconfirmed-detected-standalone", fields: dto.OriginFields{Origin: dto.OriginStandalone, OriginSource: dto.OriginUnconfirmed}, want: "container.origin-locked"})
+				// Reset must stay reachable for an unconfirmed override on a replacement
+				// detected otherwise (AUTO-5); the write refuses assignment there.
+				for _, value := range []dto.Origin{dto.OriginCompose, dto.OriginUnraid, dto.OriginStandalone} {
+					cases = append(cases, struct {
+						name, host, lock string
+						deny, invalid    bool
+						fields           dto.OriginFields
+						want             string
+					}{name: "unconfirmed-detected-" + string(value), fields: dto.OriginFields{Origin: value, OriginSource: dto.OriginUnconfirmed}})
+				}
 			}
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {

@@ -92,9 +92,9 @@ func operationCapability(ctx context.Context, operation string, ref capability.R
 	if err != nil {
 		return operationCapabilityError(err)
 	}
-	// The write admits assignment only while detection says unknown; an unconfirmed
-	// override on a replacement detected otherwise is resolved by reset.
-	if fields.Origin != dto.OriginUnknown {
+	// The operation covers assignment and reset. An unconfirmed override stays
+	// resettable; the write still assigns only while detection says unknown.
+	if fields.Origin != dto.OriginUnknown && fields.OriginSource != dto.OriginUnconfirmed {
 		return "container.origin-locked"
 	}
 	return ""

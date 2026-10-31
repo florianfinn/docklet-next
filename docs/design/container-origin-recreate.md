@@ -174,7 +174,8 @@ admission. Shared contract and migration items are in
     previous container, or restoring it), so the activity shows progress on
     every transport; the journal stays the recovery record. Assignment is
     offered only while detection says `unknown`; an unconfirmed override on a
-    replacement detected otherwise is resolved by reset.
+    replacement detected otherwise is resolved by reset, which the
+    `setContainerOrigin` descriptor keeps available.
 
     The backend origin and origin source are authoritative. Older responses
     without these fields fall back to unknown/detected; labels never grant
