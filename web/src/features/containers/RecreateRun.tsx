@@ -32,7 +32,7 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
   const adapter = useAdapter();
   const client = useQueryClient();
   const navigated = useRef(onNavigated);
-  navigated.current = onNavigated;
+  useEffect(() => { navigated.current = onNavigated; });
   const navigate = useNavigate();
   const lifetime = identityLifetime(adapter);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
