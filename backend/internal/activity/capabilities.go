@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability.
 package activity
 
 import (
