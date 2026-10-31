@@ -105,7 +105,9 @@ func TestD6OperationDescriptors(t *testing.T) {
 					ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, ps)
 					reads := 0
 					ctx = WithOperationCapabilityReaders(ctx, OperationCapabilityReaders{
-						HostReason: func(_ context.Context, got string) string { reads++; require.Equal(t, env, got); return tc.host },
+						RestartReason:       func(context.Context, string) string { return "" },
+						SettingsWriteReason: func(context.Context) string { return "" },
+						HostReason:          func(_ context.Context, got string) string { reads++; require.Equal(t, env, got); return tc.host },
 						GuardOrigin: func(_ context.Context, got, raw string) error {
 							reads++
 							require.Equal(t, env, got)
@@ -152,7 +154,9 @@ func TestD6ReaderIsFreshAndRequired(t *testing.T) {
 	require.Equal(t, "capability.unavailable", operationCapability(t.Context(), "recreateContainer", ref, ps))
 	locked := false
 	ctx := WithOperationCapabilityReaders(t.Context(), OperationCapabilityReaders{
-		HostReason: func(context.Context, string) string { return "" },
+		RestartReason:       func(context.Context, string) string { return "" },
+		SettingsWriteReason: func(context.Context) string { return "" },
+		HostReason:          func(context.Context, string) string { return "" },
 		GuardOrigin: func(context.Context, string, string) error {
 			if locked {
 				return &dto.Problem{Code: "container.origin-locked"}
@@ -169,8 +173,10 @@ func TestD6RecreateRequiresRuntimeReadGrant(t *testing.T) {
 	ps := &authz.PermissionSet{PerEnv: map[string]map[string]struct{}{"example": {authz.PermContainersEdit: {}}}}
 	reads := 0
 	ctx := WithOperationCapabilityReaders(t.Context(), OperationCapabilityReaders{
-		HostReason:  func(context.Context, string) string { reads++; return "" },
-		GuardOrigin: func(context.Context, string, string) error { return nil },
+		RestartReason:       func(context.Context, string) string { return "" },
+		SettingsWriteReason: func(context.Context) string { return "" },
+		HostReason:          func(context.Context, string) string { reads++; return "" },
+		GuardOrigin:         func(context.Context, string, string) error { return nil },
 	})
 	require.Equal(t, "capability.unavailable", operationCapability(ctx, "recreateContainer", capability.ResourceRef{Kind: "container", ID: "example~target"}, ps))
 	require.Zero(t, reads)

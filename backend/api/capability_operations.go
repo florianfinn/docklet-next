@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original wiring of fresh container and host readers for D6.
+// Deviations: Original wiring of fresh container and host readers for D6/D7 and shared restart admission checks.
 
 package api
 
@@ -13,6 +13,7 @@ import (
 	"net/url"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/types/base"
@@ -23,6 +24,34 @@ func operationCapabilityReaders(d HandlerDeps) activity.OperationCapabilityReade
 	containers, hosts := d.Container.Service(), d.Environment.Service()
 	return activity.OperationCapabilityReaders{
 		GuardOrigin: containers.GuardRuntimeOrigin,
+		RestartReason: func(ctx context.Context, env string) string {
+			if hosts == nil || hosts.GetDB() == nil {
+				return "capability.unavailable"
+			}
+			return activity.RestartCapabilityReason(ctx, hosts.GetDB().DB, env)
+		},
+		SettingsWriteReason: func(context.Context) string {
+			if config.Load().UIConfigurationDisabled {
+				return "settings.ui-configuration-disabled"
+			}
+			return ""
+		},
+		HostOperationReason: func(ctx context.Context, env string) string {
+			if env == "0" {
+				return ""
+			}
+			host, err := hosts.GetEnvironmentByID(ctx, env)
+			if err != nil {
+				return "capability.unavailable"
+			}
+			if !host.Enabled {
+				return "agent.unavailable"
+			}
+			if host.Status == string(environment.EnvironmentStatusUpdateRequired) {
+				return "agent.update-required"
+			}
+			return ""
+		},
 		HostReason: func(ctx context.Context, env string) string {
 			if env == "0" {
 				return ""

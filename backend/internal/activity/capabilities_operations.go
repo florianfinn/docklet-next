@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original D6 permission-first operation descriptors with fresh readers.
+// Deviations: Original D6 permission-first operation descriptors with fresh readers; D7 host maintenance and restart/settings refusal parity.
 
 package activity
 
@@ -17,14 +17,19 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/types/capability"
 	dto "github.com/florianfinn/docklet-next/types/container"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
+	"gorm.io/gorm"
 )
 
 // Readers use current host state and the same inspect/override guard as admission.
 // They are invoked only after the resource and grants have been validated.
 type OperationCapabilityReaders struct {
-	HostReason  func(context.Context, string) string
-	GuardOrigin func(context.Context, string, string) error
-	Origin      func(context.Context, string, string) (dto.OriginFields, error)
+	HostReason          func(context.Context, string) string
+	HostOperationReason func(context.Context, string) string
+	RestartReason       func(context.Context, string) string
+	SettingsWriteReason func(context.Context) string
+	GuardOrigin         func(context.Context, string, string) error
+	Origin              func(context.Context, string, string) (dto.OriginFields, error)
 }
 type operationCapabilityKey struct{}
 
@@ -47,9 +52,44 @@ func operationCapability(ctx context.Context, operation string, ref capability.R
 	}
 	if operation == "getSettings" || operation == "saveSettings" {
 		if ref.Kind == "hub" && ref.ID == "0" && ps.Allows(grant, "0") {
+			if operation == "saveSettings" {
+				readers, ok := ctx.Value(operationCapabilityKey{}).(OperationCapabilityReaders)
+				if !ok || readers.SettingsWriteReason == nil {
+					return "capability.unavailable"
+				}
+				return readers.SettingsWriteReason(ctx)
+			}
 			return ""
 		}
 		return "capability.unavailable"
+	}
+	if operation == "updateHost" || operation == "connectHost" || operation == "reconnectHost" || operation == "restartAgent" {
+		if ref.Kind != "host" || ref.ID == "" || strings.Contains(ref.ID, "~") || (operation == "restartAgent" && ref.ID == "0") {
+			return "capability.unavailable"
+		}
+		allowed := ps.IsGlobalAdmin()
+		if operation == "connectHost" || operation == "reconnectHost" {
+			allowed = ps.Allows(authz.PermEnvironmentsRead, ref.ID)
+		}
+		if !allowed {
+			return "capability.unavailable"
+		}
+		readers, ok := ctx.Value(operationCapabilityKey{}).(OperationCapabilityReaders)
+		if !ok || readers.HostOperationReason == nil || readers.RestartReason == nil {
+			return "capability.unavailable"
+		}
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if reason := readers.RestartReason(ctx, ref.ID); reason != "" {
+			return reason
+		}
+		if operation == "restartAgent" {
+			if readers.HostReason == nil {
+				return "capability.unavailable"
+			}
+			return readers.HostReason(ctx, ref.ID)
+		}
+		return readers.HostOperationReason(ctx, ref.ID)
 	}
 	env, raw, scoped := strings.Cut(ref.ID, "~")
 	kind, grants := "container", []string{authz.PermContainersEdit}
@@ -68,11 +108,14 @@ func operationCapability(ctx context.Context, operation string, ref capability.R
 		}
 	}
 	readers, ok := ctx.Value(operationCapabilityKey{}).(OperationCapabilityReaders)
-	if !ok || readers.HostReason == nil {
+	if !ok || readers.HostReason == nil || readers.RestartReason == nil {
 		return "capability.unavailable"
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	if reason := readers.RestartReason(ctx, env); reason != "" {
+		return reason
+	}
 	if reason := readers.HostReason(ctx, env); reason != "" {
 		return reason
 	}
@@ -114,4 +157,19 @@ func operationCapabilityError(err error) string {
 	}
 	_, code := remenv.AgentAccessFailure(err)
 	return code
+}
+
+// RestartCapabilityReason shares the admission predicate and fails closed on read errors.
+func RestartCapabilityReason(ctx context.Context, db *gorm.DB, env string) string {
+	if db == nil {
+		return "capability.unavailable"
+	}
+	if err := runtimeCheckRestartTx(db.WithContext(ctx), env); err != nil {
+		var problem *environmentDTO.HostProblem
+		if errors.As(err, &problem) && problem.Code == "host.restarting" {
+			return "host.restarting"
+		}
+		return "capability.unavailable"
+	}
+	return ""
 }

@@ -123,7 +123,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
-		case "recreateContainer", "setContainerOrigin", "restartService", "getSettings", "saveSettings":
+		case "recreateContainer", "setContainerOrigin", "restartService", "getSettings", "saveSettings", "updateHost", "connectHost", "reconnectHost", "restartAgent":
 			reason := operationCapability(ctx, descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			descriptors[i].Available = reason == ""
 			descriptors[i].DisabledReasonCode = reason
