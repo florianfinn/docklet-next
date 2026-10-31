@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live onboarding adapter lifecycle tests.
 
+import { CancelledError } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { createHttpAdapter } from "./http-adapter";
 
@@ -81,5 +82,36 @@ describe("host creation HTTP adapter", () => {
   it.each(["latest", "unsafe-url", "invalid-reach"])("rejects %s metadata", async mode => {
     const f = fixture(true, { ...discovery, ...(mode === "latest" ? { agentImage: "agent:latest" } : { candidates: [{ ...discovery.candidates[0], ...(mode === "unsafe-url" ? { url: "https://operator:example@hub.example.com" } : { reach: "lan" }) }] }) });
     await expect(f.adapter.discoverHub()).rejects.toBeDefined();
+  });
+});
+
+// The optional colour edit never hides an identity change: no token crosses it.
+describe("host creation colour follow-up", () => {
+  it.each(["logout", "401"] as const)("discards the registration token after %s during the colour edit", async (loss) => {
+    const f = fixture();
+    const original = f.fetcher.getMockImplementation()!;
+    let started!: () => void, release!: () => void;
+    const waiting = new Promise<void>(resolve => { started = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    f.fetcher.mockImplementation(async (url, init) => {
+      const path = new URL(String(url), "https://hub.example.com").pathname;
+      if (path === "/api/auth/logout") return new Response(JSON.stringify({ success: true, data: {} }), { headers: { "Content-Type": "application/json" } });
+      if (init?.method === "PUT" && path === "/api/environments/example-host") {
+        if (loss === "401") return new Response(JSON.stringify({ success: false, error: { code: "auth.required" } }), { status: 401, headers: { "Content-Type": "application/json" } });
+        started(); await released;
+      }
+      return original(url, init);
+    });
+    const registration = f.adapter.registerHost(input);
+    if (loss === "logout") { await waiting; await f.adapter.logout(); release(); }
+    await expect(registration).rejects.toBeInstanceOf(CancelledError);
+  });
+  it("keeps the registration and its palette default when the colour edit fails", async () => {
+    const f = fixture();
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (url, init) => init?.method === "PUT" ? new Response(JSON.stringify({ success: false, error: { code: "http.error" } }), { status: 500, headers: { "Content-Type": "application/json" } }) : original(url, init));
+    const result = await f.adapter.registerHost(input);
+    expect(result.token).toBe("example");
+    expect(result.host.id).toBe("example-host");
   });
 });

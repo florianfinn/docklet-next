@@ -50,3 +50,20 @@ it("H3 keeps typed admission failure in the active confirmation", async () => {
   expect((await within(confirm).findByRole("alert")).textContent).toBe("Runtime work is active on this host. Wait before restarting the agent.");
   expect(adapter.restartAgent).toHaveBeenCalledOnce();
 });
+it("H3 offers no runtime-run controls for an unknown agent restart outcome", async () => {
+  setAppLocale("en-US");
+  const { createHostRestarts } = await import("@/data/http/host-restarts");
+  const { renderRun } = await import("@/data/message-code");
+  const { RuntimeControls } = await import("@/features/activity/RuntimeControls");
+  const at = "2026-10-31T00:00:00Z";
+  const row = { runId: "example-run", createdAt: at, deadline: "2026-10-31T00:03:00Z", state: "unknown", settledAt: at, code: "agent.restart-unconfirmed" };
+  const published: import("@/data/message-code").CodedActionRun[] = [];
+  const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: true, data: row }), { status: 202 }));
+  const restarts = createHostRestarts({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability: async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }), generation: () => 0, publish: run => published.push(run), changed: () => {} });
+  await restarts.restartAgent("atlas");
+  const adapter = createDemoAdapter(); const runtime = vi.spyOn(adapter, "getRuntimeRun");
+  renderWithApp(<RuntimeControls run={renderRun(published.at(-1)!, "en-US")} />, adapter);
+  expect(screen.queryByRole("button", { name: "Refresh run" }) === null).toBe(true);
+  expect(runtime).not.toHaveBeenCalled();
+  restarts.reset();
+});

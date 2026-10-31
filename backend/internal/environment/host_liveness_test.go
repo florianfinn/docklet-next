@@ -12,6 +12,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"testing"
 	"time"
 )
@@ -75,6 +76,40 @@ func TestHostVerdictSurvivesTransportLossBeforePoll(t *testing.T) {
 			detail, err := NewHandler(service, nil, nil, nil, nil, nil).GetEnvironment(t.Context(), &GetEnvironmentInput{ID: f.id})
 			require.NoError(t, err)
 			require.Equal(t, "update-required", detail.Body.Data.Status)
+		})
+	}
+}
+
+// A transport-loss write that read the row earlier must not replace a verdict
+// stored in between; the write re-checks the protected status itself.
+func TestHostVerdictSurvivesInterleavedTransportLossWrite(t *testing.T) {
+	for _, path := range []string{"disconnect", "health"} {
+		t.Run(path, func(t *testing.T) {
+			f := newAgentFixture(t, "edge", version.Info{})
+			require.NoError(t, f.service.db.Model(&Environment{}).Where("id = ?", f.id).Update("status", "online").Error)
+			name := "test:verdict-interleave-" + path
+			flipped := false
+			require.NoError(t, f.service.db.Callback().Update().Before("gorm:begin_transaction").Register(name, func(tx *gorm.DB) {
+				updates, ok := tx.Statement.Dest.(map[string]any)
+				if !ok || flipped {
+					return
+				}
+				if _, writesStatus := updates["status"]; !writesStatus {
+					return
+				}
+				flipped = true
+				require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE environments SET status = ? WHERE id = ?", "update-required", f.id).Error)
+			}))
+			t.Cleanup(func() { _ = f.service.db.Callback().Update().Remove(name) })
+			if path == "disconnect" {
+				require.NoError(t, f.service.UpdateEnvironmentConnectionState(t.Context(), f.id, false))
+			} else {
+				require.NoError(t, f.service.updateEnvironmentStatusInternal(t.Context(), f.id, string(EnvironmentStatusOffline)))
+			}
+			require.True(t, flipped)
+			row, err := f.service.GetEnvironmentByID(t.Context(), f.id)
+			require.NoError(t, err)
+			require.Equal(t, "update-required", row.Status)
 		})
 	}
 }

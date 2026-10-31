@@ -41,7 +41,6 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       id: row.runId, hostId: host, kind: "agent-restart", title: message("activity.runKind.agent-restart"),
       target: { code: "runMessages.value", params: { value: host } },
       services: [], status: row.state === "connected" ? "succeeded" : done ? "failed" : "running",
-      ...(row.state === "unknown" ? { outcomeState: "unknown" as const } : {}),
       startedAt: row.createdAt, finishedAt: row.settledAt,
       progress: row.state === "connected" ? 100 : phase < 0 ? 0 : phase * 25,
       steps: phases.map((name, index) => ({ key: ["validate", "stop", "wait", "connect"][index] as "validate" | "stop" | "wait" | "connect", label: message(`hosts.restart.phases.${name}`), state: row.state === "connected" ? "done" : done ? failedStep(index) : index < phase ? "done" : index === phase ? "running" : "pending" })),
@@ -75,9 +74,9 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       timers.delete(id);
       if (version !== epoch || owner !== generation()) return;
       let stop = false;
-      // A removed run or host, or a read failing past the follow budget, keeps the last observation.
-      void detail(host, id).catch((error: unknown) => { stop = (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 404) || Date.now() > (rows.get(id)?.until ?? 0); })
-        .finally(() => { if (!stop && version === epoch && owner === generation()) schedule(host, id); });
+      // A removed run or host, or any read past the follow budget, keeps the last observation.
+      void detail(host, id).catch((error: unknown) => { stop = (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 404); })
+        .finally(() => { if (!stop && Date.now() <= (rows.get(id)?.until ?? 0) && version === epoch && owner === generation()) schedule(host, id); });
     }, 1000));
   }
   async function detail(host: string, id: string, signal?: AbortSignal): Promise<CodedActionRun> {

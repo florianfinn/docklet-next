@@ -58,13 +58,17 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
       return mapHost(row);
     },
     async registerHost(input) {
+      const owner = generation();
       await access("registerHost");
       const isEdge = input.connection === "edge";
       const apiUrl = isEdge ? "edge://pending" : new URL(input.address.includes("://") ? input.address : `http://${input.address}`).toString().replace(/\/$/, "");
       const row = await request<Environment>("/environments", "POST", { name: input.name, apiUrl, isEdge, useApiKey: true });
       let host = mapHost(row);
       // The create contract has no colour; a failed follow-up edit leaves the palette default.
-      if (input.color) host = await request<Environment>(`/environments/${encodeURIComponent(row.id)}`, "PUT", { name: row.name, color: input.color.toLowerCase() }).then(mapHost, () => host);
+      // Identity loss is never absorbed: the token must not cross an identity change.
+      if (input.color) host = await request<Environment>(`/environments/${encodeURIComponent(row.id)}`, "PUT", { name: row.name, color: input.color.toLowerCase() })
+        .then(mapHost, (error: unknown) => { if (error instanceof CancelledError || owner !== generation()) throw error; return host; });
+      if (owner !== generation()) throw new CancelledError();
       const result = { host, token: token(row.apiKey) };
       changed();
       return result;

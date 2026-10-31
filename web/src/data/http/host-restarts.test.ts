@@ -67,7 +67,9 @@ it("H3 marks only observed phases done when a restart fails before sending", asy
   const f = failing(() => new Response(JSON.stringify({ success: true, data: { ...row, state: "unknown", settledAt: at, code: "agent.restart-unconfirmed" } })));
   await f.api.restartAgent("example"); await vi.advanceTimersByTimeAsync(1000);
   expect(f.runs.at(-1)?.steps.map(step => step.state)).toEqual(["error", "skipped", "skipped", "skipped"]);
-  expect(f.runs.at(-1)?.outcomeState).toBe("unknown");
+  // Restart runs are not runtime receipts; generic runtime controls must not claim them.
+  expect(f.runs.at(-1)?.outcomeState).toBeUndefined();
+  expect(f.runs.at(-1)?.error).toEqual({ code: `containers.operationReasons.${operationReasonKey("agent.restart-unconfirmed")}`, params: {} });
   f.api.reset();
 });
 it("H3 stops following a restart whose reads keep failing", async () => {
@@ -79,6 +81,13 @@ it("H3 stops following a restart whose reads keep failing", async () => {
   // Deadline span (3 min) plus a bounded grace, then the last observation stays.
   const stopped = g.reads(); await vi.advanceTimersByTimeAsync(100_000);
   expect(g.reads()).toBe(stopped);
+  // A settlement that never lands keeps returning the active row; the budget still ends following.
+  const h = failing(() => new Response(JSON.stringify({ success: true, data: row })));
+  await h.api.restartAgent("example"); await vi.advanceTimersByTimeAsync(300_000);
+  const settled = h.reads(); await vi.advanceTimersByTimeAsync(100_000);
+  expect(h.reads()).toBe(settled);
+  expect(h.runs.at(-1)?.status).toBe("running");
+  h.api.reset();
   expect(g.runs.at(-1)?.status).toBe("running");
   f.api.reset(); g.api.reset();
 });

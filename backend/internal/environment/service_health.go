@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"go.getarcane.app/kit/pkg"
+	"gorm.io/gorm"
 	"log/slog"
 	"net/http"
 	"time"
@@ -283,7 +284,16 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 	if status == string(EnvironmentStatusOnline) || status == string(EnvironmentStatusUpdateRequired) {
 		updates["last_seen"] = &now
 	}
-	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+	// The write re-checks the protected states itself: a probe that read the row earlier must not
+	// replace a pending registration or an Edge verdict stored since.
+	write := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id)
+	if status == string(EnvironmentStatusOnline) {
+		write = write.Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusPending))
+	} else {
+		write = write.Where("status <> ?", string(EnvironmentStatusPending)).
+			Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusUpdateRequired))
+	}
+	if err := write.Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to update environment status: %w", err)
 	}
 	// Direct environments have no tunnel callback, so this health-check write is
@@ -338,14 +348,10 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 			updates["last_edge_transport"] = state.Transport
 		}
 	} else {
-		var current Environment
-		if err := s.db.WithContext(ctx).Select("status").Where("id = ?", id).First(&current).Error; err != nil {
-			return err
-		}
-		// The incompatible verdict belongs to the registration, not the tunnel; the next probe replaces it.
-		if current.Status != string(EnvironmentStatusPending) && current.Status != string(EnvironmentStatusUpdateRequired) {
-			updates["status"] = string(EnvironmentStatusOffline)
-		}
+		// Pending and the incompatible verdict belong to the registration, not the tunnel; the
+		// next probe replaces them. Evaluated in the write so a concurrent verdict is kept.
+		updates["status"] = gorm.Expr("CASE WHEN status IN (?, ?) THEN status ELSE ? END",
+			string(EnvironmentStatusPending), string(EnvironmentStatusUpdateRequired), string(EnvironmentStatusOffline))
 	}
 
 	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {
