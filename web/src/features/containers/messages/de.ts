@@ -93,6 +93,7 @@ export const deContainers: typeof enContainers = {
     logsInStack: "Alle Stack-Logs",
   },
   recreate: {
+    steps: {"renaming": "Container wird umbenannt", "creating": "Ersatz wird erstellt", "starting": "Ersatz wird gestartet", "removing": "Vorheriger Container wird entfernt", "restoring": "Vorheriger Container wird wiederhergestellt"},
     invalidPorts: "Gib ein JSON-Objekt mit Container-Ports und Host-Bindungen ein.",
     readFailed: "Der Lauf konnte nicht aktualisiert werden. Öffne seinen Aktivitätseintrag, um das gespeicherte Ergebnis zu prüfen.",
     openReplacement: "Ersatz-Container öffnen",
@@ -111,7 +112,7 @@ export const deContainers: typeof enContainers = {
     submit: "Neu erstellen",
     failDemo: (import.meta.env.DEV ? "Mit Fehler (Demo)" : ""),
   },
-  operationReasons: {"originLocked": "Bearbeiten ist durch Herkunft oder Systemschutz gesperrt. Aktualisiere die Herkunft vor einem weiteren Versuch.", "recreateRecovered": "Die Neuerstellung ist fehlgeschlagen; die ursprüngliche Konfiguration wurde wiederhergestellt. Prüfe den Lauf vor einem weiteren Versuch.", "recreateAmbiguous": "Die Neuerstellung muss manuell geprüft werden. Prüfe den ursprünglichen und den Ersatz-Container vor weiteren Aktionen.", "idempotencyMismatch": "Dieser Wiederholungsschlüssel gehört zu einer anderen Bearbeitung. Beginne eine neue Bearbeitung.", "hostUnavailable": "Der Host ist nicht erreichbar. Prüfe seine Verbindung.", "credentialRejected": "Der Host hat seine Zugangsdaten abgelehnt.", "updateRequired": "Aktualisiere den Agenten, bevor du diese Aktion nutzt."},
+  operationReasons: {"originAssignLocked": "Die Erkennung bestimmt diesen Container bereits, daher kann keine Herkunft manuell zugewiesen werden.", "originLocked": "Bearbeiten ist durch Herkunft oder Systemschutz gesperrt. Aktualisiere die Herkunft vor einem weiteren Versuch.", "recreateRecovered": "Die Neuerstellung ist fehlgeschlagen; die ursprüngliche Konfiguration wurde wiederhergestellt. Prüfe den Lauf vor einem weiteren Versuch.", "recreateAmbiguous": "Die Neuerstellung muss manuell geprüft werden. Prüfe den ursprünglichen und den Ersatz-Container vor weiteren Aktionen.", "idempotencyMismatch": "Dieser Wiederholungsschlüssel gehört zu einer anderen Bearbeitung. Beginne eine neue Bearbeitung.", "hostUnavailable": "Der Host ist nicht erreichbar. Prüfe seine Verbindung.", "credentialRejected": "Der Host hat seine Zugangsdaten abgelehnt.", "updateRequired": "Aktualisiere den Agenten, bevor du diese Aktion nutzt."},
   errors: {
     "recreate-not-allowed": "Neu erstellen ist für diesen Container nicht erlaubt.",
     "managed-by-unraid": "Updates dieses Containers verwaltet Unraid.",

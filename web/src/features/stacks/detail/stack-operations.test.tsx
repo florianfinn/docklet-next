@@ -93,3 +93,16 @@ it("W6 exposes the other explicit stop action in the stack menu", async () => {
   await userEvent.click(await screen.findByRole("menuitem", { name: "Herunterfahren (Container entfernen)" }));
   await waitFor(() => expect(run).toHaveBeenCalledExactlyOnceWith(stack.id, "down"));
 });
+
+it("W6 fails closed when the hub stop mode cannot be read and offers both explicit actions", async () => {
+  const adapter = createDemoAdapter(); const stack = renderStackDetail(await adapter.getStack("media"), "de");
+  vi.spyOn(adapter, "getConnectedSettings").mockRejectedValue(new Error("settings.read.403"));
+  const run = vi.spyOn(adapter, "runStackCommand").mockResolvedValue("stop-run");
+  renderWithApp(<StackMenuFixture stack={stack} />, adapter);
+  await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+  const stop = await screen.findByRole("menuitem", { name: "Stoppen" });
+  await waitFor(() => expect(stop.getAttribute("aria-disabled") === "true").toBe(true));
+  expect(screen.queryByRole("menuitem", { name: "Herunterfahren (Container entfernen)" }) !== null).toBe(true);
+  await userEvent.click(screen.getByRole("menuitem", { name: "Container stoppen" }));
+  await waitFor(() => expect(run).toHaveBeenCalledExactlyOnceWith(stack.id, "stop-containers"));
+});

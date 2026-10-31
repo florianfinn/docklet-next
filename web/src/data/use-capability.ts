@@ -22,7 +22,8 @@ export function useCapability(operationId: string, resourceRef: ResourceRef = HU
   });
   const available = adapter.kind === "demo" ? query.data?.available !== false : query.data?.available === true;
   const code = query.data?.disabledReasonCode ?? GENERIC_REASON;
-  const specific = operationReasonKey(code);
+  // Origin assignment has its own refusal text; the shared one describes edit locks.
+  const specific = operationId === "setContainerOrigin" && code === "container.origin-locked" ? "originAssignLocked" : operationReasonKey(code);
   const reason = specific ? operation(specific) : code === "capability.mapping-unavailable" ? t("mappingUnavailable") : t("unavailable");
   return { available, pending: query.isPending, reason: available ? undefined : reason };
 }

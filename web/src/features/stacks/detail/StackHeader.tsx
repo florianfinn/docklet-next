@@ -1,8 +1,8 @@
-import { useConnectedSettings } from "@/data/queries";
 import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
 import { ChevronDown, FlaskConical, Globe, Layers, Play, RefreshCw, RotateCw, ScanSearch, Square, TriangleAlert } from "lucide-react";
 import { useTranslations } from "use-intl";
+import { useStackStopMode } from "../stop-mode";
 
 import { formatRelative } from "@/domain/format";
 import type { Host, StackDetail } from "@/domain/model";
@@ -34,8 +34,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const command = useStackCapability(stack.id, stack.hostId);
   const check = useCapability("checkUpdates", { kind: "stack", id: stack.id });
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
-  const stopMode = useConnectedSettings().data?.general.stackStopMode ?? "down";
-  const alternate = stopMode === "down" ? "stop-containers" : "down";
+  const stopMode = useStackStopMode();
   const stopText = useTranslations("stacks.stopMode");
   const busy = !!stack.busyActionId;
   const updateTimes = useStackUpdateTimes(stack);
@@ -74,7 +73,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           ) : (
             <>
               <HelpTarget topic="action.stop">
-                <Button size="sm" variant="outline" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => void cmd.run(stack.id, "stop")}>
+                <Button size="sm" variant="outline" disabled={busy || stopMode.unavailable || !command.available || !!stack.inventory?.stale} title={stopMode.unavailable ? stopText("modeUnavailable") : command.reason} onClick={() => void cmd.run(stack.id, "stop")}>
                   <Square data-icon="inline-start" /> {t("actions.stop")}
                 </Button>
               </HelpTarget>
@@ -99,7 +98,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
-                  <DropdownMenuItem disabled={!command.available || !!stack.inventory?.stale} title={command.reason} onSelect={() => void cmd.run(stack.id, alternate)}><Square /> {stopText(alternate)}</DropdownMenuItem>
+                  {stopMode.alternates.map((alternate) => <DropdownMenuItem key={alternate} disabled={!command.available || !!stack.inventory?.stale} title={command.reason} onSelect={() => void cmd.run(stack.id, alternate)}><Square /> {stopText(alternate)}</DropdownMenuItem>)}
                   <DropdownMenuItem disabled={!check.available} title={check.reason} onSelect={() => void cmd.checkUpdates(stack.id)}>
                     <ScanSearch /> {t("actions.check")}
                   </DropdownMenuItem>

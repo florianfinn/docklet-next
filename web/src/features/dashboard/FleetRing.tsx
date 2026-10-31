@@ -27,6 +27,21 @@ interface FleetRingProps {
   size?: number;
   /** Hovered or focused segment moves outward; the info card opens on that side when there is room. */
   fan?: boolean;
+  /** Per-host rings share one toggle rendered by their parent. */
+  unraidToggle?: boolean;
+}
+
+/** Personal preference: Unraid units are hidden from the ring by default. */
+export function UnraidRingToggle() {
+  const t = useTranslations("dashboard.ring");
+  const showUnraid = usePreference("showUnraidRing");
+  const uid = useId().replace(/:/g, "");
+  return (
+    <Field orientation="horizontal" className="justify-center">
+      <Checkbox id={`${uid}-unraid`} checked={showUnraid} onCheckedChange={(value) => setPreference("showUnraidRing", value === true)} />
+      <FieldLabel htmlFor={`${uid}-unraid`}>{t("showUnraid")}</FieldLabel>
+    </Field>
+  );
 }
 
 /**
@@ -43,7 +58,7 @@ interface FleetRingProps {
  * Pointer input lands on a static hit cell per segment that covers both the
  * resting and the fanned position, so the target never slips away mid-move.
  */
-export function FleetRing({ hosts, units, label, center, size = 220, fan = true }: FleetRingProps) {
+export function FleetRing({ hosts, units, label, center, size = 220, fan = true, unraidToggle = true }: FleetRingProps) {
   const t = useTranslations("dashboard.ring");
   const showUnraid = usePreference("showUnraidRing");
   const visibleUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
@@ -254,10 +269,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
           document.body,
         )}
     </div>
-      <Field orientation="horizontal" className="justify-center">
-        <Checkbox id={`${uid}-unraid`} checked={showUnraid} onCheckedChange={(value) => setPreference("showUnraidRing", value === true)} />
-        <FieldLabel htmlFor={`${uid}-unraid`}>{t("showUnraid")}</FieldLabel>
-      </Field>
+      {unraidToggle && <UnraidRingToggle />}
     </div>
   );
 }

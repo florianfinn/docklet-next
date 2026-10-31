@@ -17,7 +17,8 @@ import type { AttentionItem } from "./attention";
 import { fleetBreakdown, fleetUnits, problemCounts, problemItems, type FleetBreakdown, type FleetUnit } from "./fleet-status";
 import { orderHosts, useFleetView, type HostAreaSize } from "./fleet-view-store";
 import { FleetLine } from "./FleetLine";
-import { FleetRing } from "./FleetRing";
+import { FleetRing, UnraidRingToggle } from "./FleetRing";
+import { usePreference } from "@/shared/preferences/preferences-store";
 import { HostCards } from "./HostCards";
 
 function PulseChip({ tone, icon, children, to, onClick }: { tone: Tone; icon: ReactNode; children: ReactNode; to?: string; onClick?: () => void }) {
@@ -161,8 +162,9 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
         {hosts.map((h) => {
           const own = units.filter((u) => u.hostId === h.id);
           const running = own.filter((u) => u.state === "running").length;
-          return <FleetRing key={h.id} hosts={[h]} units={own} size={size} fan={view.fan} label={t("hostRingLabel", { host: h.name, running, total: own.length })} center={{ value: `${running}/${own.length}`, caption: h.name }} />;
+          return <FleetRing key={h.id} hosts={[h]} units={own} size={size} fan={view.fan} unraidToggle={false} label={t("hostRingLabel", { host: h.name, running, total: own.length })} center={{ value: `${running}/${own.length}`, caption: h.name }} />;
         })}
+        <div className="basis-full"><UnraidRingToggle /></div>
       </div>
     );
   }
@@ -180,6 +182,11 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
   const hosts = orderHosts(byName, view.hostOrder);
   const units = fleetUnits(hosts, stacks, containers);
   const breakdown = fleetBreakdown(hosts, units);
+  // The ring and its centre count only what the ring shows; the verdict keeps every unit.
+  const showUnraid = usePreference("showUnraidRing");
+  const ringUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
+  const ringBreakdown = fleetBreakdown(hosts, ringUnits);
+  const ringRunning = ringBreakdown.running + ringBreakdown.starting;
   const running = breakdown.running + breakdown.starting;
   const problems = problemItems(attention).length;
   const online = hosts.filter((h) => h.status === "online").length;
@@ -236,7 +243,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
     </div>
   );
   const visual = (
-    <FleetVisual hosts={hosts} units={units} label={view.mode === "line" ? tr("lineLabel", counts) : t("ringLabel", counts)} center={{ value: `${running}/${units.length}`, caption: t("ringCaption") }} />
+    <FleetVisual hosts={hosts} units={view.mode === "line" ? units : ringUnits} label={view.mode === "line" ? tr("lineLabel", counts) : t("ringLabel", { running: ringRunning, partial: ringBreakdown.partial, problems: ringBreakdown.problem, unreachable: ringBreakdown.unreachable, stopped: ringBreakdown.stopped })} center={{ value: `${ringRunning}/${ringUnits.length}`, caption: t("ringCaption") }} />
   );
   const right = view.placement === "right";
 

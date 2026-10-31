@@ -70,7 +70,8 @@ export default function ContainersPage() {
   // The page follows live values only while sorting by load.
   const snapshot = useMetrics((snap) => (sort.key === "load" ? snap : undefined));
   const { selecting, selected, setSelected, onSelect, clear: clearSelection } = useOverviewSelection(mode);
-  const [editing, setEditing] = useState<string | null>(null);
+  // A snapshot keeps the dialog and its run alive after the old ID leaves the list.
+  const [editing, setEditing] = useState<ContainerInfo | null>(null);
   const openId = params.get("c");
 
   // Origin filters exist only for origins present on the selected hosts; a search never removes them.
@@ -93,6 +94,7 @@ export default function ContainersPage() {
   }, [containers.visible, hosts.byId]);
 
   const open = useCallback((id: string) => setParams((p) => ({ ...Object.fromEntries(p), c: id })), [setParams]);
+  const editById = useCallback((id: string) => setEditing(containers.data?.find((c) => c.id === id) ?? null), [containers.data]);
   const close = () =>
     setParams((p) => {
       const next = new URLSearchParams(p);
@@ -130,7 +132,6 @@ export default function ContainersPage() {
   };
   const scope = hosts.filtered ? ts("scopeSome", { hosts: hosts.visible.map((h) => h.name).join(", ") }) : ts("scopeAll");
   const current = containers.visible.find((c) => c.id === openId) ?? containers.data?.find((c) => c.id === openId);
-  const editTarget = containers.data?.find((c) => c.id === editing);
   const key = (k: ContainerSortKey) => ({ key: k, label: k === "load" ? to("loadOption", { metric: to(`metric.${metric}`) }) : t(`columns.${k}`) });
   const loadHead = <LoadSortHead loadKey="load" sort={sort} onSort={onSort} metric={metric} onMetric={onMetric} label={t("columns.load")} />;
   // Condensed merges secondary columns into fewer cells; every value stays visible and sortable.
@@ -242,7 +243,7 @@ export default function ContainersPage() {
             {...headProps}
           >
             {(h, own, view, cols) =>
-              own.map((c) => <ContainerRow key={c.id} container={c} host={h} mode={mode} view={view} columns={cols} selecting={selecting} selected={selected.includes(c.id)} onSelect={onSelect} onOpen={open} onEdit={setEditing} inBlock />)
+              own.map((c) => <ContainerRow key={c.id} container={c} host={h} mode={mode} view={view} columns={cols} selecting={selecting} selected={selected.includes(c.id)} onSelect={onSelect} onOpen={open} onEdit={editById} inBlock />)
             }
           </HostBlocks>
         ) : (
@@ -250,7 +251,7 @@ export default function ContainersPage() {
             <OverviewTable fitKey={`${fitKey}|${rows.length}`} columns={columns(false)} select={selectAll(rows, t("select.all"))} listLabel={t("title")} liveSort={sort.key === "load"} {...headProps}>
               {(view, cols) =>
                 rows.map((c) => (
-                  <ContainerRow key={c.id} container={c} host={hosts.byId.get(c.hostId)} mode={mode} view={view} columns={cols} selecting={selecting} selected={selected.includes(c.id)} onSelect={onSelect} onOpen={open} onEdit={setEditing} />
+                  <ContainerRow key={c.id} container={c} host={hosts.byId.get(c.hostId)} mode={mode} view={view} columns={cols} selecting={selecting} selected={selected.includes(c.id)} onSelect={onSelect} onOpen={open} onEdit={editById} />
                 ))
               }
             </OverviewTable>
@@ -260,7 +261,7 @@ export default function ContainersPage() {
         {!containers.isPending && !containers.isError && <p className="px-1 text-xs text-muted-foreground">{t("footer", { shown: rows.length, total: containers.visible.length, hidden: hiddenTotal })}</p>}
       </Card>
       <ContainerInspector container={current} host={current ? hosts.byId.get(current.hostId) : undefined} onClose={close} />
-      <RecreateDialog container={editTarget} open={!!editTarget} onOpenChange={(o) => !o && setEditing(null)} />
+      <RecreateDialog container={editing ?? undefined} open={!!editing} onOpenChange={(o) => !o && setEditing(null)} />
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
         <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("start")}>
           <Play data-icon="inline-start" /> {t("bulk.start")}

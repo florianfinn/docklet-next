@@ -69,7 +69,7 @@ function EditForm({ c, config, close }: { c: ContainerInfo; config: EditConfig; 
     try { const id = await cmd.recreate(c.id, edit, undefined, intent(edit)); if (id) setRunId(id); }
     finally { setPending(false); }
   };
-  if (runId) return <><RecreateRun hostId={c.hostId} runId={runId} /><DialogFooter><Button variant="outline" onClick={close}>{tc("close")}</Button></DialogFooter></>;
+  if (runId) return <><RecreateRun hostId={c.hostId} runId={runId} onNavigated={close} /><DialogFooter><Button variant="outline" onClick={close}>{tc("close")}</Button></DialogFooter></>;
   return <>
     <Alert><AlertDescription>{t("warning")}</AlertDescription></Alert>
     <FieldGroup>

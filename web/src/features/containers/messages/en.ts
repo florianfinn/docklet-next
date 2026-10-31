@@ -93,6 +93,7 @@ export const enContainers = {
     logsInStack: "All stack logs",
   },
   recreate: {
+    steps: {"renaming": "Renaming container", "creating": "Creating replacement", "starting": "Starting replacement", "removing": "Removing previous container", "restoring": "Restoring previous container"},
     invalidPorts: "Enter a JSON object of container ports and host bindings.",
     readFailed: "The run could not be refreshed. Open its activity entry to inspect the retained result.",
     openReplacement: "Open replacement container",
@@ -111,7 +112,7 @@ export const enContainers = {
     submit: "Recreate",
     failDemo: (import.meta.env.DEV ? "With error (demo)" : ""),
   },
-  operationReasons: {"originLocked": "Editing is locked by the container origin or system protection. Refresh its origin before trying again.", "recreateRecovered": "Recreation failed and the original configuration was recovered. Inspect the run before retrying.", "recreateAmbiguous": "Recreation needs manual inspection. Check the original and replacement containers before taking action.", "idempotencyMismatch": "This retry key belongs to a different edit. Start a new edit to continue.", "hostUnavailable": "The host is unavailable. Check its connection.", "credentialRejected": "The host rejected its credentials.", "updateRequired": "Update the agent before using this action."},
+  operationReasons: {"originAssignLocked": "Detection already identifies this container, so it cannot be assigned an origin manually.", "originLocked": "Editing is locked by the container origin or system protection. Refresh its origin before trying again.", "recreateRecovered": "Recreation failed and the original configuration was recovered. Inspect the run before retrying.", "recreateAmbiguous": "Recreation needs manual inspection. Check the original and replacement containers before taking action.", "idempotencyMismatch": "This retry key belongs to a different edit. Start a new edit to continue.", "hostUnavailable": "The host is unavailable. Check its connection.", "credentialRejected": "The host rejected its credentials.", "updateRequired": "Update the agent before using this action."},
   errors: {
     "recreate-not-allowed": "Recreating is not allowed for this container.",
     "managed-by-unraid": "Updates of this container are managed by Unraid.",

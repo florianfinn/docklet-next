@@ -124,11 +124,10 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   );
 }
 
-function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
+function Body({ c, host, onEdit }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void }) {
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
-  const [editing, setEditing] = useState(false);
   const m = useMetrics((s) => s?.containers[c.id]);
   const rt = containerRuntime(c, host);
   return (
@@ -152,7 +151,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
             )}
           </span>
         }
-        actions={<ContainerActions c={c} onEdit={() => setEditing(true)} />}
+        actions={<ContainerActions c={c} onEdit={onEdit} />}
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
@@ -195,7 +194,6 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
       <div className="mt-4">
         <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>
       </div>
-      {c.origin === "standalone" && <RecreateDialog container={editing ? c : undefined} open={editing} onOpenChange={setEditing} />}
     </>
   );
 }
@@ -207,25 +205,32 @@ export default function ContainerPage() {
   const containers = useContainers();
   const hosts = useHostScope();
   const c = containers.data?.find((x) => x.id === containerId);
-  if (containers.isPending || hosts.isPending)
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-64 w-full rounded-2xl" />
-      </div>
-    );
-  if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
-  if (!c)
-    return (
-      <EmptyState
-        icon={<Boxes />}
-        title={t("missing")}
-        action={
-          <Button variant="outline" asChild>
-            <Link to="/containers">{t("back")}</Link>
-          </Button>
-        }
-      />
-    );
-  return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body c={c} host={hosts.byId.get(c.hostId)} /></>;
+  // The page owns the recreate run at a stable position: the old ID leaves the
+  // list before the run settles, and the run must survive that to navigate.
+  const [recreating, setRecreating] = useState<ContainerInfo>();
+  return <>{content()}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
+
+  function content() {
+    if (containers.isPending || hosts.isPending)
+      return (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
+      );
+    if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
+    if (!c)
+      return (
+        <EmptyState
+          icon={<Boxes />}
+          title={t("missing")}
+          action={
+            <Button variant="outline" asChild>
+              <Link to="/containers">{t("back")}</Link>
+            </Button>
+          }
+        />
+      );
+    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
+  }
 }
