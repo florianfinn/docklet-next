@@ -53,3 +53,11 @@ export function labelTone(label: string): Tone {
   for (const ch of label) h = (h * 31 + ch.charCodeAt(0)) % 997;
   return LABEL_CYCLE[h % LABEL_CYCLE.length] ?? "gray";
 }
+
+/** Stable palette defaults survive reloads and do not depend on list order. */
+export const HOST_COLORS = ["#8b5cf6", "#22c55e", "#eab308", "#ec4899", "#06b6d4", "#ef4444", "#84cc16", "#6366f1"];
+export function defaultHostColor(id: string): string {
+  let hash = 0;
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return HOST_COLORS[hash % HOST_COLORS.length]!;
+}

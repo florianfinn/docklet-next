@@ -25,8 +25,8 @@ export default function HostsPage() {
   const [filesFor, setFilesFor] = useState<Host | null>(null);
   const ids = hosts.all.map((h) => h.id);
   const count = (hostId: string) => ({
-    stacks: (stacks.data ?? []).filter((s) => s.hostId === hostId).length,
-    containers: (containers.data ?? []).filter((c) => c.hostId === hostId).length,
+    stacks: stacks.data && !stacks.isError ? stacks.data.filter((s) => s.hostId === hostId).length : undefined,
+    containers: containers.data && !containers.isError ? containers.data.filter((c) => c.hostId === hostId).length : undefined,
   });
 
   return (

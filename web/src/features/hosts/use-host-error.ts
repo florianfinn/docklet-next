@@ -19,6 +19,8 @@ export function useHostError() {
       if (outcome.kind === "not-available") return capability(outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable");
       if (outcome.kind === "conflict") return t("busy");
       switch (outcome.code) {
+        case "host.name-invalid": return t("invalid-name");
+        case "host.name-taken": return t("exists");
         case "agent.unavailable": return t("unreachable");
         case "agent.invalid-token": return t("credentialRejected");
         case "agent.update-required": return t("updateRequired");

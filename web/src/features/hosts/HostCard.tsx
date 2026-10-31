@@ -65,8 +65,8 @@ function SystemSection({ component }: { component: SystemComponent | undefined }
 interface HostCardProps {
   host: Host;
   system: SystemComponent | undefined;
-  stacks: number;
-  containers: number;
+  stacks?: number;
+  containers?: number;
   allIds: string[];
   onFiles?: (host: Host) => void;
 }
@@ -147,7 +147,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />
       {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents"><SystemSection component={system} /></CapabilityGate>}
-      <p className="text-xs text-muted-foreground">{t("card.usage", { stacks, containers })}</p>
+      <p className="text-xs text-muted-foreground">{t("card.usage", { stacks: stacks ?? 0, containers: containers ?? 0 })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
         {pending ? (import.meta.env.DEV ? (
           <BusyButton size="sm" busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>
@@ -193,7 +193,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         open={confirm}
         onOpenChange={setConfirm}
         title={t("card.removeTitle", { name: host.name })}
-        description={t("card.removeBody")}
+        description={`${t("card.removeCounts", { stacks: host.status === "online" ? String(stacks ?? t("card.unknown")) : t("card.unknown"), containers: host.status === "online" ? String(containers ?? t("card.unknown")) : t("card.unknown") })} ${t("card.removeBody")}`}
         confirmLabel={t("card.removeConfirm")}
         destructive
         onConfirm={async () => (await cmd.remove(host.id)) ?? false}

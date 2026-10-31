@@ -1,3 +1,4 @@
+import { defaultHostColor } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
 import { agentHubUrl } from "@/domain/settings";
 import { slugify } from "@/domain/validation";
@@ -132,8 +133,8 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
       const name = input.name.trim();
       if (!name || name.length > 40) throw new DemoError("invalid-name");
       if (db.hosts.some((h) => h.id !== hostId && h.name.toLowerCase() === name.toLowerCase())) throw new DemoError("exists");
-      if (!/^#[0-9a-f]{6}$/i.test(input.color)) throw new DemoError("invalid-color");
-      const next: Host = { ...host, name, color: input.color.toLowerCase() };
+      if (!/^#[0-9a-f]{6}$/i.test(input.color ?? defaultHostColor(hostId))) throw new DemoError("invalid-color");
+      const next: Host = { ...host, name, color: input.color?.toLowerCase() ?? defaultHostColor(hostId) };
       db.hosts = db.hosts.map((h) => (h.id === hostId ? next : h));
       if (host.name !== name) db.pushEvent({ kind: "config", level: "info", title: `Host ${host.name} heißt jetzt ${name}`, hostId });
       db.changed("hosts", "stacks", "containers", "topology", "volumes", "images");

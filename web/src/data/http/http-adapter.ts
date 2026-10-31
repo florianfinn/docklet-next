@@ -123,6 +123,7 @@ const IMPLEMENTED = new Set<string>([
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
+  "updateHost",
   "registerHost",
   "issueAgentToken",
   "removeHost",
@@ -656,7 +657,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       invalidateCapabilities();
       invalidateEnvironments();
       changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics]));
-    }),
+    }, getCapability, () => identityGeneration),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
     installStackUpdates: runtime.installStackUpdates,
     restoreRestorePoint: runtime.restoreRestorePoint,

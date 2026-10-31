@@ -86,8 +86,8 @@ export interface RegisterHostInput {
 
 export interface UpdateHostInput {
   name: string;
-  /** "#rrggbb"; used for host bars, chips, blocks and topology zones. */
-  color: string;
+  /** Lowercase hex; null resets the stable palette default. */
+  color: string | null;
 }
 
 export interface HostsApi {

@@ -4,7 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original live host credential lifecycle and discovery mapping.
 
-import { discardResponse } from "./identity-reads";
+import { runtimeResponseError } from "./runtime-mapping";
+import { CancelledError } from "@tanstack/react-query";
+import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { components } from "@/api/generated/schema";
 import type { HostsApi, HubApi } from "@/data/api";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -15,15 +17,18 @@ type Environment = components["schemas"]["EnvironmentEnvironment"];
 type Discovery = components["schemas"]["EnvironmentHubDiscovery"];
 const PINNED_IMAGE = /^[a-zA-Z0-9./:_-]+:\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:@sha256:[a-f0-9]{64})?$/;
 
-export function createHostCommands(baseUrl: string, client: CsrfClient, requireCapability: (operation: string) => Promise<void>, changed: () => void): Pick<HostsApi, "registerHost" | "issueAgentToken" | "removeHost"> & HubApi {
+export function createHostCommands(baseUrl: string, client: CsrfClient, requireCapability: (operation: string) => Promise<void>, changed: () => void, capability?: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>, generation: () => number = () => 0): Pick<HostsApi, "registerHost" | "issueAgentToken" | "removeHost" | "updateHost"> & HubApi {
   async function request<T>(path: string, method = "GET", body?: object): Promise<T> {
+    const owner = generation();
     const response = await client.fetch(`${baseUrl}${path}`, {
       method, credentials: "same-origin", cache: "no-store",
       headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
-    const payload = await response.json() as { success?: boolean; data?: T };
+    if (owner !== generation()) throw new CancelledError();
+    const payload = await response.json();
+    if (owner !== generation()) throw new CancelledError();
+    if (!response.ok) throw runtimeResponseError(payload, response.status);
     if (payload.success !== true || !payload.data) throw new Error("hosts.invalid-response");
     return payload.data;
   }
@@ -32,6 +37,14 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
     return value;
   }
   return {
+    async updateHost(hostId, input) {
+      const ref: ResourceRef = { kind: "host", id: hostId };
+      const cap = await capability?.("updateHost", ref);
+      if (!cap?.available) throw new AdapterOutcomeError({ kind: "not-available", operationId: "updateHost", resourceRef: ref, reasonCode: cap?.disabledReasonCode ?? "capability.unavailable" });
+      const row = await request<Environment>(`/environments/${encodeURIComponent(hostId)}`, "PUT", { name: input.name.trim(), color: input.color?.toLowerCase() ?? null });
+      changed();
+      return mapHost(row);
+    },
     async registerHost(input) {
       await requireCapability("registerHost");
       const isEdge = input.connection === "edge";

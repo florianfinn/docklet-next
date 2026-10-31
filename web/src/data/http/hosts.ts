@@ -2,10 +2,12 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host read projection.
+// Deviations: Original host read projection; persisted colour and palette defaults.
 
 import type { components } from "@/api/generated/schema";
 import type { AgentReport, Host, HostStatus } from "@/domain/model";
+
+import { defaultHostColor } from "@/domain/hosts";
 
 type Environment = components["schemas"]["EnvironmentEnvironment"];
 
@@ -46,7 +48,7 @@ export function mapHost(row: Environment): Host {
   const report = mapReport(row);
   const checks = row.agentReport?.version.onboardingChecks;
   return {
-    id: row.id, name: row.name || row.id, color: "#737373",
+    id: row.id, name: row.name || row.id, color: row.color ?? defaultHostColor(row.id),
     status: row.enabled ? status : "offline",
     connection: row.isEdge ? "edge" : "direct", address: row.isEdge ? "" : row.apiUrl,
     agentVersion: row.agentReport?.version.currentVersion ?? "",

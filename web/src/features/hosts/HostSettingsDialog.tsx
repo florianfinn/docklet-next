@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/shared/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
+import { defaultHostColor } from "@/domain/hosts";
 import { HEX, hostDraftError } from "./host-draft";
 import { HOST_COLORS } from "./onboarding/onboarding-draft";
 import { useHostAction, useHostCommands } from "./use-host-commands";
@@ -130,8 +131,9 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const change = (next: boolean) => feedback.change(next, onOpenChange);
   const adapter = useAdapter();
   const [name, setName] = useState(host.name);
-  const update = useCapability("updateHost");
+  const update = useCapability("updateHost", { kind: "host", id: host.id });
   const [color, setColor] = useState(host.color);
+  const [resetColor, setResetColor] = useState(false);
   const [hex, setHex] = useState(host.color);
   const [tab, setTab] = useState("general");
   const [saving, setSaving] = useState(false);
@@ -144,13 +146,14 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
       setName(host.name);
       setColor(host.color);
       setHex(host.color);
+      setResetColor(false);
       setServerError(null);
       setTouched(false);
       setTab("general");
     }
   }
   const error = hostDraftError(name, color);
-  const dirty = name.trim() !== host.name || color.toLowerCase() !== host.color.toLowerCase();
+  const dirty = resetColor || name.trim() !== host.name || color.toLowerCase() !== host.color.toLowerCase();
 
   const save = async () => {
     if (!update.available) return;
@@ -159,7 +162,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
     setServerError(null);
     setSaving(true);
     try {
-      const saved = await adapter.updateHost(host.id, { name: name.trim(), color });
+      const saved = await adapter.updateHost(host.id, { name: name.trim(), color: resetColor ? null : color });
       toast.success(t("saved", { name: saved.name }));
       change(false);
     } catch (e) {
@@ -217,6 +220,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
                         aria-checked={color.toLowerCase() === c.toLowerCase()}
                         aria-label={t("colorOption", { color: c })}
                         onClick={() => {
+                          setResetColor(false);
                           setColor(c);
                           setHex(c);
                         }}
@@ -232,12 +236,14 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
                     aria-invalid={!HEX.test(hex) || undefined}
                     value={hex}
                     onChange={(e) => {
+                      setResetColor(false);
                       setHex(e.target.value);
                       if (HEX.test(e.target.value)) setColor(e.target.value.toLowerCase());
                     }}
                     className="h-8 w-28 font-mono text-xs"
                   />
                 </div>
+                <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => { const value = defaultHostColor(host.id); setColor(value); setHex(value); setResetColor(true); }}>{t("resetColor")}</Button>
                 {!HEX.test(hex) && <p className="text-xs text-destructive">{t("colorInvalid")}</p>}
               </fieldset>
               <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3 text-sm" aria-label={t("preview")}>
@@ -260,7 +266,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
             {tab === "general" ? t("cancel") : t("close")}
           </Button>
           {tab === "general" && (
-            <Button type="submit" form={`host-settings-${host.id}`} disabled={!update.available || !dirty || !!error || saving} title={update.reason}>
+            <Button type="submit" form={`host-settings-${host.id}`} disabled={!update.available || !dirty || !!error || !HEX.test(hex) || saving} title={update.reason}>
               {t("save")}
             </Button>
           )}
