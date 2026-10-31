@@ -72,9 +72,11 @@ export function createDemoContainerOperations({ db, runner, demoFailure }: DemoC
               restartPolicy: input.hostConfig?.restartPolicy?.name ?? item.restartPolicy, state: c.state,
               update: { state: "current", current: image, checkedAt: new Date().toISOString(), registry: "Docker Hub · anonym" } };
           });
+          db.topology = { ...db.topology, attachments: db.topology.attachments.map((attachment) => attachment.containerId === id ? { ...attachment, containerId: replacement } : attachment) };
+          if (db.isolated.delete(id)) db.isolated.add(replacement);
           detected.set(replacement, detected.get(id) ?? c.origin); detected.delete(id);
           if (scope) receipts.set(scope, { digest, run });
-          db.pushEvent({ kind: "deploy", level: "ok", title: `${c.name} neu erstellt`, hostId: c.hostId }); db.changed("containers");
+          db.pushEvent({ kind: "deploy", level: "ok", title: `${c.name} neu erstellt`, hostId: c.hostId }); db.changed("containers", "topology");
         },
         onFailure: (run) => { if (scope) receipts.set(scope, { digest, run }); db.pushEvent({ kind: "deploy", level: "error", title: `${c.name}: Neu erstellen fehlgeschlagen`, hostId: c.hostId }); },
       });

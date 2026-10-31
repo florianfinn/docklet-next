@@ -25,7 +25,9 @@ describe("stored lab preferences", () => {
       ["preferences", preferencesStore], ["ui-style", uiStyleStore], ["visual-style", visualStyleStore], ["help", helpStore],
       ["hidden", hiddenStore], ["dashboard", layoutStore], ["fleet-view", fleetViewStore],
     ] as const) {
-      expect(store.get()).toEqual(records[`docklet-react-opus.${suffix}`].data);
+      const stored = records[`docklet-react-opus.${suffix}`].data;
+      // Older records acquire the new personal toggle without rewriting the fixture.
+      expect(store.get()).toEqual(suffix === "preferences" ? { ...stored, showUnraidRing: false } : stored);
     }
   });
 

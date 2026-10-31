@@ -60,3 +60,24 @@ it("W8 down retains definition services without containers, start restores them,
   await adapter.saveStackFiles("media", "services:\n  repaired:\n    image: example/app:1\n", "");
   expect((await adapter.getStack("media")).services.map((service) => service.name)).toEqual(["repaired"]);
 });
+
+it.each([false, true])("W8 replacement preserves network attachment and isolation identity (isolated=%s)", async (isolated) => {
+  const adapter = createDemoAdapter();
+  const oldId = "c-netdata";
+  await adapter.setContainerOrigin(oldId, "standalone");
+  const before = (await adapter.getTopology()).attachments.filter((attachment) => attachment.containerId === oldId);
+  expect(before.length).toBeGreaterThan(0);
+  if (isolated) for (const attachment of before) {
+    const disconnect = adapter.disconnectNetwork({ containerId: oldId, networkId: attachment.networkId });
+    await vi.advanceTimersByTimeAsync(300); await disconnect;
+  }
+  const old = (await adapter.listContainers()).find((container) => container.id === oldId)!;
+  const runId = await adapter.recreateContainer(oldId, { image: "example/app:2" });
+  await vi.runAllTimersAsync();
+  const run = await adapter.getRuntimeRun!(old.hostId, runId);
+  const newId = run.recreateResult!.newId;
+  const topology = await adapter.getTopology();
+  expect(topology.attachments.some((attachment) => attachment.containerId === oldId)).toBe(false);
+  expect(topology.attachments.filter((attachment) => attachment.containerId === newId)).toEqual(isolated ? [] : before.map((attachment) => ({ ...attachment, containerId: newId })));
+  expect((await adapter.listContainers()).find((container) => container.id === newId)!.networks).toEqual(old.networks);
+});

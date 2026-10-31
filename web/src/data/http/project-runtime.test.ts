@@ -79,9 +79,9 @@ describe("explicit backend runtime membership", () => {
     }
   });
 
-  it("retains no-label and partial-label container origin semantics despite explicit IDs", () => {
+  it("retains backend non-Compose origins despite explicit runtime IDs", () => {
     for (const [ownLabels, origin] of [[{}, "standalone"], [{ "com.docker.compose.service": "app" }, "unknown"], [{ "com.docker.compose.project": "manual_p" }, "unknown"]] as const) {
-      const c = mapContainer({ ...container, labels: ownLabels }, "h1", [project], inventory);
+      const c = mapContainer({ ...container, labels: ownLabels, origin }, "h1", [project], inventory);
       expect(c.origin).toBe(origin);
       expect(c.stackId).toBeUndefined();
       expect(mapStack(project, "h1", [c], inventory).services).toHaveLength(1);
