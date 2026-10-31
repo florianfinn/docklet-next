@@ -8,6 +8,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"net/http"
 	"strings"
@@ -17,6 +18,18 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/labstack/echo/v5"
 )
+
+// forwardOnContext runs the proxied request on the fenced agent-access context until the
+// returned restore runs; wrappers acting after forwarding (inventory origin overlay) then
+// get the caller's request back instead of a cancelled one.
+func forwardOnContext(c *echo.Context, ctx context.Context, cancel context.CancelFunc) func() {
+	caller := c.Request()
+	c.SetRequest(caller.WithContext(ctx))
+	return func() {
+		c.SetRequest(caller)
+		cancel()
+	}
+}
 
 // A cold inventory read waits at most one second for an Edge agent to reconnect.
 func (m *EnvironmentMiddleware) recoverInventoryTunnel(c *echo.Context, hostID, suffix string) bool {

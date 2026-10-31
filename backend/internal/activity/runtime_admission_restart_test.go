@@ -2,17 +2,22 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original transactional runtime restart exclusion tests.
+// Deviations: Original transactional and HTTP-intake runtime restart exclusion tests.
 
 package activity
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	dto "github.com/florianfinn/docklet-next/types/environment"
+	userDTO "github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,4 +75,34 @@ func TestRuntimeRestartGuardKeepsKnownKeyAnswer(t *testing.T) {
 	var p *dto.HostProblem
 	require.ErrorAs(t, err, &p)
 	require.Equal(t, "host.restarting", p.Code)
+}
+
+// While the agent of a restarting host is away, the HTTP intake refuses a new command
+// with the typed answer before any remote preparation could fail or wait first.
+func TestRuntimeHTTPIntakeRefusesRestartBeforeRemotePreparation(t *testing.T) {
+	f := b1Fixture(t)
+	c := f.command()
+	var remote atomic.Int32
+	unreachable := errors.New("agent unavailable")
+	intake, err := NewRuntimeHTTPService(f.service, RuntimeHTTPPorts{ApplicationContext: t.Context(),
+		Store: func(context.Context, string) (RuntimeStoreBinding, error) {
+			remote.Add(1)
+			return RuntimeStoreBinding{}, unreachable
+		},
+		PrepareTarget: func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error) {
+			remote.Add(1)
+			return RuntimeResolvedTarget{}, unreachable
+		}})
+	require.NoError(t, err)
+	intake.SetReady(true)
+	now := time.Now()
+	require.NoError(t, f.store.svc.db.Create(&environment.AgentRestartRequest{RunID: "example-restart", EnvironmentID: c.Store.EnvironmentID, RegistrationID: c.Store.RegistrationID, State: "awaiting", CreatedAt: now, UpdatedAt: now, Deadline: now.Add(3 * time.Minute)}).Error)
+	ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())
+	ctx = context.WithValue(ctx, userDTO.CurrentUserContextKey{}, &c.Actor)
+	_, _, err = intake.admit(ctx, c.Store.EnvironmentID, c.Key, c.Operation, c.Target, c.Options)
+	var p *dto.HostProblem
+	require.ErrorAs(t, err, &p)
+	require.Equal(t, "host.restarting", p.Code)
+	require.Equal(t, 409, p.Status)
+	require.Zero(t, remote.Load(), "no remote preparation while the host restarts")
 }

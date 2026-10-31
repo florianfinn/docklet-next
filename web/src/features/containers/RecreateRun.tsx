@@ -25,9 +25,6 @@ export function RecreateResultLink({ run }: { run: ActionRun }) {
   return <Button asChild variant="outline" size="sm"><Link to={containerHref(id)}>{t("openReplacement")}</Link></Button>;
 }
 
-// Backend run step names (recreate_journal.go) with catalogued EN/DE text.
-const STEP_KEYS = { "Renaming container": "renaming", "Creating replacement": "creating", "Starting replacement": "starting", "Removing previous container": "removing", "Restoring previous container": "restoring" } as const;
-
 export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; runId: string; onNavigated?: () => void }) {
   const adapter = useAdapter();
   const client = useQueryClient();
@@ -40,7 +37,6 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
   const locale = useLocale();
   const t = useTranslations("containers.recreate");
   const ta = useTranslations("activity");
-  const stepText = (label: string) => Object.hasOwn(STEP_KEYS, label) ? t(`steps.${STEP_KEYS[label as keyof typeof STEP_KEYS]}`) : label;
   const [view, setView] = useState<{ key: string; state: ActionDetailState }>();
   const state: ActionDetailState = view?.key === key ? view.state : { status: "loading" };
   useEffect(() => {
@@ -65,7 +61,7 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
   }, [target, navigate, lifetime, generation, client]);
   return <div role="status" className="flex flex-col gap-2 text-sm">
     <p>{run ? ta(`status.${run.status}`) : t("following")}</p>
-    {run?.steps.map((step, index) => <p key={`${step.key}:${index}`}>{stepText(step.label)} · {ta(`step.${step.state}`)}</p>)}
+    {run?.steps.map((step, index) => <p key={`${step.key}:${index}`}>{step.label} · {ta(`step.${step.state}`)}</p>)}
     {run?.error && <p className="text-destructive">{run.error}</p>}
     {state.status === "error" && <p>{t("readFailed")}</p>}
     {run && <RecreateResultLink run={run} />}

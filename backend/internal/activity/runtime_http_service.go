@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Legacy and stack image routes share durable admission and application-owned execution.
+// Deviations: Legacy and stack image routes share durable admission and application-owned execution; a restarting host is refused before remote preparation.
 
 package activity
 
@@ -143,6 +143,9 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	}
 	if !retained {
 		if err := h.service.refuseRemovedEnvironmentInternal(ctx, environmentID); err != nil {
+			return empty, noRef, err
+		}
+		if err := h.service.refuseRestartingEnvironmentInternal(ctx, environmentID); err != nil {
 			return empty, noRef, err
 		}
 		command.Store, err = h.ports.Store(ctx, environmentID)

@@ -2,11 +2,13 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original host restart exclusion for every runtime intake.
+// Deviations: Original host restart exclusion for every runtime intake, also before remote preparation.
 
 package activity
 
 import (
+	"context"
+
 	dto "github.com/florianfinn/docklet-next/types/environment"
 	"gorm.io/gorm"
 )
@@ -22,4 +24,11 @@ func runtimeCheckRestartTx(tx *gorm.DB, environment string) error {
 		return &dto.HostProblem{Code: "host.restarting", Status: 409}
 	}
 	return nil
+}
+
+// refuseRestartingEnvironmentInternal answers a new HTTP command before remote store or
+// target preparation, which would fail or wait while the agent restarts; admission
+// repeats the check inside its write transaction.
+func (s *RuntimeService) refuseRestartingEnvironmentInternal(ctx context.Context, environment string) error {
+	return runtimeCheckRestartTx(s.activity.db.WithContext(ctx), environment)
 }

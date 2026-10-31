@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original hub origin overlay through real Direct and Edge inventory senders.
+// Deviations: Original hub origin overlay through real Direct and Edge inventory senders with cancelling agent access.
 
 package middleware
 
@@ -82,9 +82,15 @@ func TestOriginOverlayRealDirectAndEdgeListAndDetail(t *testing.T) {
 					t.Fatal("Edge registration barrier not reached")
 				}
 				endpoint = "edge://example"
-				mw.agentAccess = func(ctx context.Context, _ string, _ *string, _, _ string) (context.Context, context.CancelFunc, error) {
-					return edge.WithSessionCredential(ctx, "example-key", token, nil), func() {}, nil
+			}
+			// Like production, agent access returns a child context that is cancelled when
+			// forwarding ends; the overlay must still read the origin store afterwards.
+			mw.agentAccess = func(ctx context.Context, _ string, _ *string, _, _ string) (context.Context, context.CancelFunc, error) {
+				child, cancel := context.WithCancel(ctx)
+				if mode == "edge" {
+					child = edge.WithSessionCredential(child, "example-key", token, nil)
 				}
+				return child, cancel, nil
 			}
 			mw.resolver = func(context.Context, string) (string, *string, bool, error) { return endpoint, &token, true, nil }
 			router := echo.New()
