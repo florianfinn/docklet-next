@@ -45,7 +45,7 @@ if (process.argv.includes("--prove")) {
   await assert.rejects(inspect("@/test/layout"), /Production boundary: forbidden module/);
   console.log("Red proof passed: test helper rejected in production build.");
   for (const module of [
-    "@/features/hosts/InstallSheet.dev",
+    "@/runtime.dev",
     "@/features/auth/login/login-model",
     "@/app/preview/PreviewPage",
   ]) {
