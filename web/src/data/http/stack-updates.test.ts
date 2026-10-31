@@ -25,6 +25,11 @@ describe("update decoder boundaries", () => {
     for (const locale of ["de", "en-US"] as const) expect(typeof (catalogs[locale].images.errors as Record<string, string>)[key]).toBe("string");
     expect(reason("undeclared.raw-diagnostic")).toBe("http.error");
   });
+  it("retains host.restarting in decoded policy status channels", () => {
+    const code = "host.restarting";
+    expect(policy({ ...storedPolicy, code, applyCode: code, bookkeepingCode: code }, "direct", "project")).toMatchObject({ code, applyCode: code, bookkeepingCode: code });
+    expect(reason("undeclared.raw-diagnostic")).toBe("http.error");
+  });
   it.each([
     () => baseline({ ...base, available: "false" }), () => baseline({ ...base, savedRevision: "old" }),
     () => points([{ ...point, targetId: "replacement" }], "project"), () => points([{ ...point, volumeDataIncluded: true }], "project"),
