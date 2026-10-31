@@ -38,6 +38,8 @@ import (
 type shellDocker struct {
 	running      atomic.Bool
 	inspections  atomic.Int32
+	exitCode     atomic.Int32
+	execEnded    atomic.Bool
 	orphan       bool
 	stopped      bool
 	failure      string
@@ -55,7 +57,7 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/containers/example/json":
 		_, _ = fmt.Fprintf(w, `{"Id":"example","State":{"Running":%t}}`, !f.stopped && f.running.Load())
 	case path == "/containers/example/archive":
-		if f.failure == "missing-sh" {
+		if f.failure == "missing-sh" || f.failure == "missing-sh-stream" {
 			w.WriteHeader(404)
 		} else {
 			w.WriteHeader(500)
@@ -94,6 +96,13 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = rw.WriteString("HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
 		_ = rw.Flush()
+		if f.failure == "missing-sh-stream" || f.failure == "exit-127" {
+			// The daemon hijacks first, then writes the exec start error and ends the stream.
+			_, _ = conn.Write([]byte("OCI runtime exec failed: exec failed: stat /bin/sh: no such file or directory\r\n"))
+			f.exitCode.Store(127)
+			f.execEnded.Store(true)
+			return
+		}
 		_, _ = conn.Write([]byte("ready"))
 		buffer := make([]byte, 4096)
 		for {
@@ -123,7 +132,11 @@ func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(500)
 			return
 		}
-		_, _ = fmt.Fprintf(w, `{"ID":"example-exec","Running":%t,"ExitCode":23}`, f.running.Load())
+		exitCode := f.exitCode.Load()
+		if exitCode == 0 {
+			exitCode = 23
+		}
+		_, _ = fmt.Fprintf(w, `{"ID":"example-exec","Running":%t,"ExitCode":%d}`, f.running.Load() && !f.execEnded.Load(), exitCode)
 	default:
 		w.WriteHeader(404)
 	}
@@ -217,12 +230,12 @@ func TestShellResizeRealWebSocketDockerHTTP(t *testing.T) {
 	require.GreaterOrEqual(t, f.inspections.Load(), int32(2))
 }
 func TestShellEarlyFailuresAndEOF(t *testing.T) {
-	for _, failure := range []string{"create", "attach", "missing-sh", "stopped", "stop-create", "EOF"} {
+	for _, failure := range []string{"create", "attach", "missing-sh", "missing-sh-stream", "exit-127", "stopped", "stop-create", "EOF"} {
 		t.Run(failure, func(t *testing.T) {
 			f := &shellDocker{failure: failure, stopped: failure == "stopped"}
 			conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "sh"})
 			want := ""
-			if failure == "missing-sh" {
+			if failure == "missing-sh" || failure == "missing-sh-stream" {
 				want = "container.shell-unavailable"
 			}
 			if failure == "stopped" || failure == "stop-create" {
@@ -238,6 +251,10 @@ func TestShellEarlyFailuresAndEOF(t *testing.T) {
 			if failure == "EOF" {
 				require.NotNil(t, exit.Code)
 				require.Equal(t, 23, *exit.Code)
+			}
+			if failure == "missing-sh-stream" || failure == "exit-127" {
+				require.NotNil(t, exit.Code)
+				require.Equal(t, 127, *exit.Code)
 			}
 			_, _, err := conn.Read(t.Context())
 			status := websocket.StatusPolicyViolation

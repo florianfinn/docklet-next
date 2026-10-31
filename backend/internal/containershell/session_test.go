@@ -51,9 +51,13 @@ func TestQueryBeforeActivity(t *testing.T) {
 	require.Equal(t, 80, *q.Cols)
 }
 func mustQuery(raw string) url.Values { q, _ := url.ParseQuery(raw); return q }
-func TestSessionMatrixReleaseAndReplacementIdentity(t *testing.T) {
-	for _, event := range []string{"upgrade-failure", "dial-failure", "EOF", "client-close", "container-stop", "revocation", "credential-change", "removal", "replacement", "shutdown"} {
-		t.Run(event, func(t *testing.T) {
+
+// Each trigger ends the old session through its real entry: explicit release (upgrade or
+// dial failure, EOF, client close, container stop), the ended request context (remote
+// credential change or removal) and revocation. Stale repeats never reach the replacement.
+func TestStaleHandleNeverTouchesReplacement(t *testing.T) {
+	for _, trigger := range []string{"release", "request-ended", "revocation"} {
+		t.Run(trigger, func(t *testing.T) {
 			a := &audit{ends: map[string]int{}}
 			r := New(a)
 			parent, cancel := context.WithCancel(t.Context())
@@ -61,14 +65,29 @@ func TestSessionMatrixReleaseAndReplacementIdentity(t *testing.T) {
 			_, old, err := r.Accept(parent, url.Values{}, &user.Actor{ID: "example-user"}, "example-host", "example-container")
 			require.NoError(t, err)
 			var oldCloses, newCloses atomic.Int32
-			old.SetCloser(func() { oldCloses.Add(1) })
-			old.Close()
+			closed := make(chan struct{}, 1)
+			old.SetCloser(func() {
+				oldCloses.Add(1)
+				select {
+				case closed <- struct{}{}:
+				default:
+				}
+			})
+			switch trigger {
+			case "release":
+				old.Release()
+			case "request-ended":
+				cancel()
+			case "revocation":
+				r.CloseByUser("example-user")
+			}
+			<-closed
 			_, replacement, err := r.Accept(t.Context(), url.Values{}, &user.Actor{ID: "example-user"}, "example-host", "example-container")
 			require.NoError(t, err)
 			replacement.SetCloser(func() { newCloses.Add(1) })
 			var workers sync.WaitGroup
 			for range 20 {
-				workers.Go(func() { old.Close(); old.Release() })
+				workers.Go(func() { cancel(); old.Close(); old.Release() })
 			}
 			workers.Wait()
 			require.EqualValues(t, 1, oldCloses.Load())

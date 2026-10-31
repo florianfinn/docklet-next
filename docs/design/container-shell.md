@@ -27,11 +27,16 @@ contract and migration items are in
    an upgrade. It records the hub user as actor (never the agent's manager
    identity), opens the activity entry and returns a release handle that runs
    exactly once on any end: failed upgrade, failed dial, close, EOF or
-   revocation.
+   revocation. A disallowed Origin is refused before the activity opens on
+   every transport, and a failed activity write refuses with HTTP 503 before
+   the upgrade.
 2. **Command**: `auto` runs
    `/bin/sh -c 'if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi'`;
    `sh` and `bash` run `exec <name>` under `/bin/sh -c`. A missing `/bin/sh`
-   ends the session with `container.shell-unavailable`.
+   ends the session with `container.shell-unavailable`. Docker may report the
+   failed start inside the attached stream and end it with exit code 126 or
+   127; the agent then names the reason only after it finds `/bin/sh` missing
+   in a container that still runs.
 3. **Frame protocol v1**: binary frames carry stdin and stdout; text frames carry
    JSON control. The client sends `{"type":"resize","cols":N,"rows":M}` with
    each dimension in 1–1000, or `{"type":"close"}` to request process cleanup
@@ -72,7 +77,9 @@ contract and migration items are in
    rights change. The registry lives in `internal/containershell`; each acceptance
    owns a distinct handle and activity. Application shutdown, session revocation
    and remote credential changes cancel that handle, and repeated or delayed
-   release cannot touch a replacement session.
+   release cannot touch a replacement session. An activity cancel or restore
+   drain ends the session as cancelled; a shell activity still open when the
+   hub process ends is closed by startup repair.
 
 Codes: `container.shell-invalid`, `container.shell-protocol`,
 `container.shell-unavailable`, `container.shell-orphaned`,

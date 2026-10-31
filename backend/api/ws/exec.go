@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; session-bound viewer lifetime and durable validation; M14 hub shell acceptance and container-owned terminal delegation.
+// Deviations: Local module namespace; session-bound viewer lifetime and durable validation; M14 hub shell acceptance after an Origin check and container-owned terminal delegation.
 
 package ws
 
@@ -44,13 +44,19 @@ func (h *WebSocketHandler) ContainerExec(c *echo.Context) error {
 	if _, err := containershell.ParseQuery(c.QueryParams()); err != nil {
 		return c.JSON(400, map[string]any{"code": "container.shell-invalid", "status": 400})
 	}
+	upgrade := httpx.IsWebSocketUpgradeRequest(c.Request())
+	if upgrade && h.checkWSOrigin != nil && !h.checkWSOrigin(c.Request()) {
+		// Refuse as wshub.Accept would, before the shell activity opens; remote hosts check Origin first too.
+		http.Error(c.Response(), "websocket origin not allowed", http.StatusForbidden)
+		return nil
+	}
 	if h.shellSessions != nil {
 		authenticatedUser, _ := c.Get(string(middleware.ContextKeyCurrentUser)).(user.ActorProvider)
 		var actor *user.Actor
 		if authenticatedUser != nil {
 			actor = authenticatedUser.Actor()
 		}
-		ctx, handle, err := h.shellSessions.Accept(c.Request().Context(), c.QueryParams(), actor, c.Param("id"), containerID, httpx.IsWebSocketUpgradeRequest(c.Request()))
+		ctx, handle, err := h.shellSessions.Accept(c.Request().Context(), c.QueryParams(), actor, c.Param("id"), containerID, upgrade)
 		if err != nil {
 			return c.NoContent(http.StatusServiceUnavailable)
 		}

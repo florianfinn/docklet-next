@@ -122,6 +122,11 @@ func (s *ContainerService) ServeTerminal(ctx context.Context, conn *websocket.Co
 	if outputEnded && inspectErr == nil && !inspected.Running {
 		code = &inspected.ExitCode
 		session.hijackedResp.Close()
+		// Docker reports a failed exec start inside the hijacked stream, then
+		// ends it with 126 or 127; only a verified missing /bin/sh names the reason.
+		if (inspected.ExitCode == 126 || inspected.ExitCode == 127) && s.shellMissing(cleanupCtx, containerID) {
+			reason = "container.shell-unavailable"
+		}
 	} else {
 		if err := session.Close(cleanupCtx); errors.Is(err, errShellOrphaned) {
 			reason = "container.shell-orphaned"
@@ -205,11 +210,8 @@ func (s *ContainerService) shellFailureReason(ctx context.Context, containerID s
 		}
 		// ExecAttach discards a non-101 response body in the Docker SDK. Check
 		// the executable path rather than inventing a reason from its HTTP code.
-		if _, statErr := cli.ContainerStatPath(ctx, containerID, client.ContainerStatPathOptions{Path: "/bin/sh"}); errdefs.IsNotFound(statErr) {
-			current, verifyErr := cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
-			if verifyErr == nil && current.Container.State != nil && current.Container.State.Running {
-				return "container.shell-unavailable"
-			}
+		if s.shellMissing(ctx, containerID) {
+			return "container.shell-unavailable"
 		}
 	}
 	// Only an explicit missing shell executable proves shell-unavailable.
@@ -218,4 +220,17 @@ func (s *ContainerService) shellFailureReason(ctx context.Context, containerID s
 		return "container.shell-unavailable"
 	}
 	return ""
+}
+
+// shellMissing proves a missing /bin/sh in a container that still runs.
+func (s *ContainerService) shellMissing(ctx context.Context, containerID string) bool {
+	cli, err := s.dockerService.GetClient(ctx)
+	if err != nil {
+		return false
+	}
+	if _, statErr := cli.ContainerStatPath(ctx, containerID, client.ContainerStatPathOptions{Path: "/bin/sh"}); !errdefs.IsNotFound(statErr) {
+		return false
+	}
+	current, err := cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	return err == nil && current.Container.State != nil && current.Container.State.Running
 }

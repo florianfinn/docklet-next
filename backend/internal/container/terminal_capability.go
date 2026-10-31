@@ -8,6 +8,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"time"
@@ -53,6 +54,11 @@ func (s *ContainerService) ShellCapabilityReader(hosts *environment.EnvironmentS
 			}
 			var response base.ApiResponse[dto.Details]
 			if err := hosts.ProxyJSONRequest(ctx, env, http.MethodGet, "/api/environments/0/containers/"+url.PathEscape(containerID), nil, &response); err != nil {
+				var status *remenv.StatusError
+				if errors.As(err, &status) && status.StatusCode == http.StatusNotFound {
+					// A container removed meanwhile is not a host failure; hub-local reads agree.
+					return "capability.unavailable"
+				}
 				_, code := remenv.AgentAccessFailure(err)
 				return code
 			}

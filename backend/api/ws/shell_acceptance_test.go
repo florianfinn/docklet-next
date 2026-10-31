@@ -8,6 +8,7 @@ package ws
 
 import (
 	"context"
+	"errors"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	"io"
@@ -75,10 +76,14 @@ func TestShellQueryRejectedBeforeUpgradeThroughHubURL(t *testing.T) {
 type shellPreflightAudit struct {
 	starts atomic.Int32
 	ended  chan struct{}
+	fail   bool
 }
 
 func (a *shellPreflightAudit) StartActivity(_ context.Context, _ activitylib.StartRequest) (*activityDTO.Activity, error) {
 	a.starts.Add(1)
+	if a.fail {
+		return nil, errors.New("synthetic activity write failure")
+	}
 	return &activityDTO.Activity{ID: "example"}, nil
 }
 func (a *shellPreflightAudit) CompleteActivity(_ context.Context, _ string, _ activityDTO.Status, _ string, _ *string, _ ...string) (*activityDTO.Activity, error) {
@@ -136,4 +141,79 @@ func TestShellLocalUpgradeFailureReleasesAcceptedHandle(t *testing.T) {
 	<-audit.ended
 	require.EqualValues(t, 1, audit.starts.Load())
 	require.Zero(t, sessions.ActiveCount())
+}
+
+func TestShellCrossOriginRefusedBeforeActivity(t *testing.T) {
+	for _, transport := range []string{"local", "direct"} {
+		t.Run(transport, func(t *testing.T) {
+			audit := &shellPreflightAudit{}
+			sessions := containershell.New(audit)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Error("cross-origin shell reached upstream")
+				w.WriteHeader(500)
+			}))
+			defer upstream.Close()
+			refuse := func(*http.Request) bool { return false }
+			e := echo.New()
+			e.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", func(context.Context, string) (string, *string, bool, error) {
+				return upstream.URL, new("test-only"), true, nil
+			}, func(context.Context, *echo.Context) (*authz.PermissionSet, *user.Actor, bool) {
+				return authz.SudoPermissionSet(), &user.Actor{ID: "example-user"}, true
+			}, authz.NewPermissionMatcher(), nil, refuse, middleware.EnvironmentProxySecurity{ShellSessions: sessions}))
+			h := &WebSocketHandler{shellSessions: sessions, checkWSOrigin: refuse}
+			e.GET("/api/environments/:id/ws/containers/:containerId/terminal", h.ContainerExec)
+			server := httptest.NewServer(e)
+			defer server.Close()
+			env := "example-host"
+			if transport == "local" {
+				env = "0"
+			}
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/environments/"+env+"/ws/containers/example/terminal?shell=auto", nil)
+			require.NoError(t, err)
+			request.Header = http.Header{"Connection": {"Upgrade"}, "Upgrade": {"websocket"}, "Sec-WebSocket-Version": {"13"}, "Sec-WebSocket-Key": {"MDEyMzQ1Njc4OWFiY2RlZg=="}, "Origin": {"https://other.example.com"}}
+			response, err := http.DefaultClient.Do(request)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			require.Equal(t, http.StatusForbidden, response.StatusCode)
+			require.Zero(t, audit.starts.Load())
+			require.Zero(t, sessions.ActiveCount())
+		})
+	}
+}
+
+func TestShellActivityStartFailureRefusesBeforeUpgrade(t *testing.T) {
+	for _, transport := range []string{"local", "direct"} {
+		t.Run(transport, func(t *testing.T) {
+			audit := &shellPreflightAudit{fail: true}
+			sessions := containershell.New(audit)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Error("shell without activity reached upstream")
+				w.WriteHeader(500)
+			}))
+			defer upstream.Close()
+			e := echo.New()
+			e.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", func(context.Context, string) (string, *string, bool, error) {
+				return upstream.URL, new("test-only"), true, nil
+			}, func(context.Context, *echo.Context) (*authz.PermissionSet, *user.Actor, bool) {
+				return authz.SudoPermissionSet(), &user.Actor{ID: "example-user"}, true
+			}, authz.NewPermissionMatcher(), nil, func(*http.Request) bool { return true }, middleware.EnvironmentProxySecurity{ShellSessions: sessions}))
+			h := &WebSocketHandler{shellSessions: sessions}
+			e.GET("/api/environments/:id/ws/containers/:containerId/terminal", h.ContainerExec)
+			server := httptest.NewServer(e)
+			defer server.Close()
+			env := "example-host"
+			if transport == "local" {
+				env = "0"
+			}
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/environments/"+env+"/ws/containers/example/terminal?shell=auto", nil)
+			require.NoError(t, err)
+			request.Header = http.Header{"Connection": {"Upgrade"}, "Upgrade": {"websocket"}, "Sec-WebSocket-Version": {"13"}, "Sec-WebSocket-Key": {"MDEyMzQ1Njc4OWFiY2RlZg=="}}
+			response, err := http.DefaultClient.Do(request)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			require.Equal(t, http.StatusServiceUnavailable, response.StatusCode)
+			require.EqualValues(t, 1, audit.starts.Load())
+			require.Zero(t, sessions.ActiveCount())
+		})
+	}
 }

@@ -58,6 +58,11 @@ func TestShellCapabilityHostAvailabilityAndStopped(t *testing.T) {
 			_ = json.MarshalWrite(w, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
 		case "/api/environments/0/system/health":
 			w.WriteHeader(204)
+		case "/api/environments/0/containers/missing":
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.MarshalWrite(w, map[string]any{"success": false})
+		case "/api/environments/0/containers/broken":
+			w.WriteHeader(http.StatusInternalServerError)
 		default:
 			_ = json.MarshalWrite(w, map[string]any{"success": true, "data": map[string]any{"state": map[string]any{"running": running}}})
 		}
@@ -79,4 +84,7 @@ func TestShellCapabilityHostAvailabilityAndStopped(t *testing.T) {
 		require.NoError(t, db.Create(&environment.Environment{ID: id, Name: "Example " + id, ApiUrl: agent.URL, Status: tc.status, Enabled: true, AccessToken: new("test-only"), ApiKeyID: new("example-key")}).Error)
 		require.Equal(t, tc.reason, reader(t.Context(), id, "example"), tc.status)
 	}
+	require.NoError(t, db.Create(&environment.Environment{ID: "z", Name: "Example z", ApiUrl: agent.URL, Status: "online", Enabled: true, AccessToken: new("test-only"), ApiKeyID: new("example-key")}).Error)
+	require.Equal(t, "capability.unavailable", reader(t.Context(), "z", "missing"))
+	require.Equal(t, "agent.unavailable", reader(t.Context(), "z", "broken"))
 }
