@@ -17,21 +17,6 @@ contract and migration items are in
   environment, container, times and end reason. It never records content.
 - The shell is allowed for Compose, standalone, Unraid and unknown containers.
 
-## Baseline
-
-- Route `GET /api/environments/{id}/ws/containers/{containerId}/terminal` with
-  permission `containers:exec`. The hub checks authentication, Origin and the
-  per-environment permission before proxying.
-- Remote bridges upgrade the browser connection before the agent sees the
-  request (`backend/pkg/libarcane/ws/proxy.go`, `backend/pkg/libarcane/edge/ws_proxy.go`).
-  The Edge client discards the upstream close status and reason; the hub
-  invents 1000 or 1011.
-- Frame types survive the tunnel in both directions. The Docker client exposes
-  `ExecResize` and `ExecInspect`.
-- The legacy Edge `ws_start` message is not validated against the allowlist.
-- `?shell=` accepts any path; stdin is raw; there is no resize; close writes
-  Ctrl-D and `exit` and never kills the exec process.
-
 ## Design
 
 1. **Hub acceptance hook**, one function called before any upgrade: for
@@ -48,27 +33,46 @@ contract and migration items are in
    `sh` and `bash` run `exec <name>` under `/bin/sh -c`. A missing `/bin/sh`
    ends the session with `container.shell-unavailable`.
 3. **Frame protocol v1**: binary frames carry stdin and stdout; text frames carry
-   JSON control. The client sends `{"type":"resize","cols":N,"rows":M}`; any
-   other control ends the session with `container.shell-protocol`. The server
-   sends a final `{"type":"exit","code":N|null,"reason":"<code>"}` before every
-   close, including failures after the upgrade (container not running, create
-   or attach failure, revocation). The browser treats the exit frame as
-   authoritative; WebSocket close codes are 1000 or 1008 only.
+   JSON control. The client sends `{"type":"resize","cols":N,"rows":M}` with
+   each dimension in 1–1000, or `{"type":"close"}` to request process cleanup
+   while keeping the exit channel open. Unknown members or other controls end
+   the session with `container.shell-protocol`. The server
+   writes a final `{"type":"exit","code":N|null,"reason":"<code>"}` before
+   initiating close while the connection remains writable, including failures
+   after the upgrade (container not running, create or attach failure, revocation). The browser treats the exit frame as
+   authoritative; WebSocket close codes are 1000 or 1008 only. An unknown end
+   has `code:null` and an empty reason; `container.shell-unavailable` means only
+   a missing `/bin/sh`. A plain HTTP GET may recover an upgrade refusal without
+   creating another shell activity.
 4. **Close-reason transport**: the Edge tunnel close message carries the
    upstream close code and reason, and the hub bridge forwards them. Direct
-   proxying relays frames already.
+   proxying preserves binary and text frames. Close metadata uses the existing
+   tunnel close error field; older plain error strings remain readable.
 5. **Process end**: Ctrl-D, `exit`, then `ExecInspect` after 2 s. A process that
    still runs has its hijacked connection closed and the activity records
    `container.shell-orphaned` (an accepted limit: such a process may survive).
+   An inspect error cannot prove an orphan. When the browser closes first, the
+   Direct or Edge hub bridge sends `{"type":"close"}` to the agent and keeps
+   that channel open for its final exit, for at most five seconds after browser
+   close. The final agent reason reaches activity persistence even though the
+   browser is gone. A dropped agent connection or expired bound ends the existing
+   activity without a shell-specific code; it never invents shell-unavailable.
+   Cleanup joins the input/output pumps and releases the exact accepted handle.
 6. **Edge `ws_start`**: the agent validates it with `ValidateEdgeCommand` like a
    stream open; absent and mismatched commands are refused.
 7. **Web**: `@xterm/xterm` and `@xterm/addon-fit` (MIT, recorded licences, bundle
    size budget). A Terminal tab in container detail maps HTTP problems and exit
    reasons to EN/DE texts, offers reconnect and is disabled with a reason when
-   the container is not running or the host is unavailable. The demo adapter
+   the container is not running or the host is unavailable; standby is available.
+   The `openContainerShell` descriptor requires `containers:exec` without an
+   origin restriction. The terminal loads lazily, with a 160 KiB gzip budget for
+   its JavaScript and CSS assets. The demo adapter
    plays a scripted echo session.
 8. **Revocation**: a session registry closes sessions by user; M15 uses it when
-   rights change.
+   rights change. The registry lives in `internal/containershell`; each acceptance
+   owns a distinct handle and activity. Application shutdown, session revocation
+   and remote credential changes cancel that handle, and repeated or delayed
+   release cannot touch a replacement session.
 
 Codes: `container.shell-invalid`, `container.shell-protocol`,
 `container.shell-unavailable`, `container.shell-orphaned`,
@@ -88,3 +92,8 @@ Codes: `container.shell-invalid`, `container.shell-protocol`,
 | SH9 | EOF | exit frame, then close | attach read loop, remote too | real Direct and Edge close delivery (mutation: suppress the exit frame) |
 | SH10 | early failure semantics | pre-upgrade HTTP versus post-upgrade exit frame, preserved through Direct and Edge | hook → bridge → agent → terminal | create failure, invalid control, idle session over real transports (mutation: invent a close code) |
 | SH11 | single release, handle identity | release once per handle; a stale callback never touches a replacement session | registry and cleanup over real Direct and Edge paths | concurrent EOF, cancel and logout; held output, then a host token change or removal and re-registration, an immediate replacement session and delayed old cleanup → the replacement stays live, actors are correct, one close per session, counters correct (mutation: release twice, or release by user and container instead of handle) |
+
+D4 adds the shell capability descriptor as an authorized foundation change. D5
+adds the explicit close control and bounded exit drain to the unreleased v11
+contract. The generated schema, v11 fixture and fingerprint include the control;
+contract version and minimum remain 11. No database migration changes.

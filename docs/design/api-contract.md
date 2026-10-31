@@ -284,8 +284,15 @@ with at most four concurrent Compose reads. Single-service restart remains
 selection and admission remains stack-scoped.
 
 The `x-docklet-container-host-v11` OpenAPI extension retains the shared shell,
-host-maintenance and availability DTOs before those behavior owners register
-their routes. It includes shell query/control/exit protocol v1, host name/colour,
+host-maintenance and availability DTOs. Shell protocol v1 includes binary
+stdin/stdout, strict resize and close client controls, and the authoritative
+server exit. D5 adds `ContainerShellClose` to the unreleased v11 fixture and
+fingerprint while keeping version/minimum 11. Browser-first closure drains the
+agent exit for at most five seconds; unknown ends carry no shell-specific code.
+The `openContainerShell` descriptor uses `containers:exec`, current running/host
+availability, standby eligibility and no origin lock (D4).
+See [container shell](container-shell.md) for the complete protocol.
+The extension also includes host name/colour,
 restart run states and typed problem codes. The agent-only POST `/api/system/agent/restart` now answers 202
 `{instanceId}` after resolving and inspecting self; unsupported receivers return
 409 `agent.restart-unsupported` before any restart effect. The hub-only POST

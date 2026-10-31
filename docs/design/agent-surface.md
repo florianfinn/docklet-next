@@ -111,7 +111,7 @@ their stable status and code envelope on both transports.
 
 Version and minimum are 11. The fingerprint includes the strict recreate edit,
 replacement result, origins, stop-project, stopped definition services, hub stop
-setting and the reserved host/shell vocabulary. Version 10 and mismatched
+setting and the host/shell vocabulary, including the v1 explicit close control. Version 10 and mismatched
 fingerprints are update-required before ordinary Direct or Edge sends.
 
 Both agent modes register recreate/redeploy and stack stop through the existing
@@ -157,3 +157,13 @@ UI-disabled Auto Heal and generic settings writes emit 403
 Shell query and protocol v1 frame DTOs remain reserved for their behavior owner.
 `stackStopMode` stays in environment 0 on the hub; agent settings responses omit
 it and remote or agent writes refuse before forwarding.
+
+The container terminal retains `containers:exec` on hub-local, Direct and Edge
+paths. The hub validates shell choice and dimensions before upgrading, then
+owns the activity actor and session handle. The agent accepts binary stdin and
+strict resize/close controls, writes binary stdout and a final typed exit, and
+performs joined exec cleanup. A browser-first close becomes a close control at
+the hub; the agent socket remains open for at most five seconds to deliver its
+exit. Lost agent connections end activity without a shell-specific code. Both
+Edge stream opens and legacy `ws_start` require the existing command allowlist.
+See [container shell](container-shell.md) for frame protocol v1 and cleanup limits.
