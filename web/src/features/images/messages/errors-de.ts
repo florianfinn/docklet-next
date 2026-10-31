@@ -5,8 +5,10 @@
 // Deviations: Original production image and registry UI implementation for issue #230.
 
 import { deBackend } from "@/data/messages/de";
+import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "host_restarting": deRunMessages.codes.host["restarting"],
   "update_permission-denied": deBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": deBackend.errors.update["schedule-owner-unset"],
   "autoheal_interrupted": deBackend.errors.autoheal["interrupted"],
