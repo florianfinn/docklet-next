@@ -211,8 +211,8 @@ func accessibleEnvironmentIDsInternal(ps *authz.PermissionSet) []string {
 	if ps == nil {
 		return []string{}
 	}
-	ids := slices.Sorted(maps.Keys(ps.PerEnv))
-	return ids
+	// slices.Sorted returns nil for an empty map, and nil means "unrestricted" to the list query.
+	return append([]string{}, slices.Sorted(maps.Keys(ps.PerEnv))...)
 }
 
 // visibleEnvironmentsForInternal filters the shared environment snapshot down
