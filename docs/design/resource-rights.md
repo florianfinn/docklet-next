@@ -83,7 +83,7 @@ project workspace, logs, shell and capability consumers):
 - `Self`: `get-current-user` (extended with `isAdmin` and the caller's assignments), `update-my-profile`,
   `upload-my-avatar`, `delete-my-avatar`, `change-password`, `logout`,
   `logout-all-other-sessions`, `list-my-api-keys`, `create-my-api-key`, `delete-my-api-key`,
-  `get-capabilities`, `get-settings` (only setup status, #268), `streamClient`.
+  `get-capabilities`, `get-settings` (only setup status, #268, and the hub Stop mode the stack Stop action follows), `streamClient`.
 - `/stream`: users receive only the `environments` channel, projected (§6); `activities`, `events`,
   `dashboard` are not delivered to users.
 
@@ -150,7 +150,7 @@ the same `NotFound`.
 
 - #255: the agent registry sync receiver requires the create and delete grants for those effects (tested
   through its real authenticated receiver; the route is agent-only).
-- #268: setup status becomes a `Self` read; other internal settings stay filtered.
+- #268: setup status becomes a `Self` read, together with the hub Stop mode; other internal settings stay filtered.
 - #275: user-originated scan requests (including the administrator's own) are forced to `origin: manual`
   in the local handler and the remote canonicalisation; hub-dispatched scans keep `scheduled`.
 - #276: the embedded `vulnerabilityScan` summary is removed from image list responses.

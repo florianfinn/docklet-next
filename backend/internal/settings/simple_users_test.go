@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestUserSettingsReadContainsOnlySetupStatus(t *testing.T) {
+func TestUserSettingsReadContainsOnlySetupStatusAndStopMode(t *testing.T) {
 	require.Equal(t, access.Self, access.Rules["get-settings"].Kind)
 	svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
 	require.NoError(t, err)
@@ -22,6 +22,8 @@ func TestUserSettingsReadContainsOnlySetupStatus(t *testing.T) {
 	ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, access.Synthesize("viewer", nil))
 	out, err := h.GetSettings(ctx, &GetSettingsInput{EnvironmentID: "0"})
 	require.NoError(t, err)
-	require.Len(t, out.Body, 1)
+	require.Len(t, out.Body, 2)
 	require.Equal(t, "setupCompleted", out.Body[0].Key)
+	require.Equal(t, "stackStopMode", out.Body[1].Key)
+	require.Equal(t, "down", out.Body[1].Value)
 }

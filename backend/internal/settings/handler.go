@@ -247,7 +247,11 @@ func (h *SettingsHandler) GetPublicSettings(ctx context.Context, input *GetPubli
 func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInput) (*GetSettingsOutput, error) {
 	ps, _ := middleware.PermissionsFromContext(ctx)
 	if ps != nil && ps.UserID != "" {
-		return &GetSettingsOutput{Body: []settings.PublicSetting{{Key: "setupCompleted", Value: h.settingsService.GetStringSetting(ctx, "setupCompleted", "false"), Type: "boolean"}}}, nil
+		// Users read only what their own screens need: setup status and the Stop mode their Stop action follows.
+		return &GetSettingsOutput{Body: []settings.PublicSetting{
+			{Key: "setupCompleted", Value: h.settingsService.GetStringSetting(ctx, "setupCompleted", "false"), Type: "boolean"},
+			{Key: "stackStopMode", Value: h.settingsService.GetStringSetting(ctx, "stackStopMode", "down"), Type: "select"},
+		}}, nil
 	}
 	isAdmin := ps.IsGlobalAdmin()
 	visibility := kit.Ternary(isAdmin, SettingVisibilityAll, SettingVisibilityNonAdmin)
