@@ -2,13 +2,15 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M15 simple-user rights and identity contracts.
 
 package user
 
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"strings"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 
 // UserHandler handles user management endpoints.
 type UserHandler struct {
+	cfg                      *config.Config
 	userService              *UserService
 	invalidateUserTokenCache func(string)
 	settingsService          *settings.SettingsService
@@ -100,24 +103,35 @@ func (h *UserHandler) CreateUser(ctx context.Context, input *CreateUserInput) (*
 	}
 	input.Body.Email = normalizedEmail
 
+	proxy := h.cfg != nil && h.cfg.SignInMode() == "proxy"
+	if !proxy && strings.Contains(input.Body.Username, "@") {
+		return nil, huma.Error400BadRequest("Local usernames cannot contain @")
+	}
+	if proxy && input.Body.Password != "" {
+		return nil, huma.Error400BadRequest("Proxy users have no password")
+	}
 	passwordPolicy := h.passwordPolicyInternal(ctx)
-	if validatePasswordPolicyErr := validation.ValidatePasswordPolicy(input.Body.Password, passwordPolicy); validatePasswordPolicyErr != nil {
+	if validatePasswordPolicyErr := validation.ValidatePasswordPolicy(input.Body.Password, passwordPolicy); !proxy && validatePasswordPolicyErr != nil {
 		return nil, handlerutil.Error400BadRequestWithType(validatePasswordPolicyErr.Error(), validation.PasswordPolicyProblemType(passwordPolicy))
 	}
 
-	hashedPassword, err := h.userService.HashPassword(input.Body.Password)
+	hashedPassword := ""
+	if !proxy {
+		hashedPassword, err = h.userService.HashPassword(input.Body.Password)
+	}
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to hash password")
 	}
 
 	userModel := &User{
-		Username:     input.Body.Username,
-		PasswordHash: hashedPassword,
-		DisplayName:  input.Body.DisplayName,
-		Email:        input.Body.Email,
-		Locale:       input.Body.Locale,
-		TimeFormat:   user.TimeFormatAuto,
-		CreatedAt:    time.Now(),
+		Username:               input.Body.Username,
+		PasswordHash:           hashedPassword,
+		RequiresPasswordChange: !proxy,
+		DisplayName:            input.Body.DisplayName,
+		Email:                  input.Body.Email,
+		Locale:                 input.Body.Locale,
+		TimeFormat:             user.TimeFormatAuto,
+		CreatedAt:              time.Now(),
 	}
 	if input.Body.TimeFormat != nil {
 		userModel.TimeFormat = *input.Body.TimeFormat
@@ -151,6 +165,15 @@ func (h *UserHandler) GetUser(ctx context.Context, input *GetUserInput) (*handle
 		return nil, huma.Error404NotFound("User not found")
 	}
 
+	rows, err := h.userService.AppAssignments(ctx, input.UserID)
+	if err != nil {
+		return nil, access.Problem(503, "access.unavailable")
+	}
+	if clean, changed := access.CleanAssignments(ctx, rows); changed {
+		if err := h.userService.SetAppAssignments(ctx, input.UserID, clean); err != nil {
+			return nil, access.Problem(503, "access.unavailable")
+		}
+	}
 	out, err := h.userService.ToUserResponseDto(ctx, *userModel)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to map user")
@@ -182,6 +205,9 @@ func (h *UserHandler) UpdateUser(ctx context.Context, input *UpdateUserInput) (*
 		if normalizeUsernameErr != nil {
 			return nil, huma.Error400BadRequest(normalizeUsernameErr.Error())
 		}
+		if (h.cfg == nil || h.cfg.SignInMode() != "proxy") && strings.Contains(normalizedUsername, "@") {
+			return nil, huma.Error400BadRequest("Local usernames cannot contain @")
+		}
 		userModel.Username = normalizedUsername
 	}
 	if input.Body.DisplayName != nil {
@@ -205,6 +231,9 @@ func (h *UserHandler) UpdateUser(ctx context.Context, input *UpdateUserInput) (*
 	}
 
 	if input.Body.Password != nil && *input.Body.Password != "" {
+		if h.cfg != nil && h.cfg.SignInMode() != "local" {
+			return nil, huma.Error403Forbidden("Local password management is disabled")
+		}
 		passwordPolicy := h.passwordPolicyInternal(ctx)
 		if validatePasswordPolicyErr := validation.ValidatePasswordPolicy(*input.Body.Password, passwordPolicy); validatePasswordPolicyErr != nil {
 			return nil, handlerutil.Error400BadRequestWithType(validatePasswordPolicyErr.Error(), validation.PasswordPolicyProblemType(passwordPolicy))
@@ -214,7 +243,7 @@ func (h *UserHandler) UpdateUser(ctx context.Context, input *UpdateUserInput) (*
 			return nil, huma.Error500InternalServerError("Failed to hash password")
 		}
 		userModel.PasswordHash = hashedPassword
-		userModel.RequiresPasswordChange = false
+		userModel.RequiresPasswordChange = true
 	}
 
 	updatedUser, err := h.userService.UpdateUser(ctx, userModel, callerPerms)

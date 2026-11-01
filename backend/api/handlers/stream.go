@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; session-bound viewer lifetime and durable validation.
+// Deviations: Local module namespace; session-bound viewer lifetime and durable validation; M15 simple-user rights and identity contracts.
 
 package handlers
 
@@ -156,6 +156,9 @@ func (h *StreamHandler) streamClientInternal(ctx context.Context, ps *authz.Perm
 // dropping any the caller lacks permission for.
 func (h *StreamHandler) producersForInternal(ps *authz.PermissionSet, input *StreamClientInput) []agg.Producer[streamtypes.Event] {
 	requested := parseStreamChannelsInternal(input.Channels)
+	if ps != nil && ps.UserID != "" {
+		requested = map[string]bool{streamtypes.ChannelEnvironments: requested[streamtypes.ChannelEnvironments]}
+	}
 	producers := make([]agg.Producer[streamtypes.Event], 0, 5)
 
 	if requested[streamtypes.ChannelEnvironments] {

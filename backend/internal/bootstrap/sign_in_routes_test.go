@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
@@ -36,6 +37,7 @@ import (
 )
 
 type signInRoutingFixture struct {
+	db                        *database.DB
 	cfg                       *config.Config
 	svc                       *auth.AuthService
 	roles                     *role.RoleService
@@ -73,7 +75,7 @@ func newSignInRoutingFixture(t *testing.T) signInRoutingFixture {
 	require.NoError(t, err)
 	personalKey, err := keys.CreatePersonalApiKey(t.Context(), admin.ID, apikeytypes.CreateUserApiKey{Name: "example"})
 	require.NoError(t, err)
-	return signInRoutingFixture{cfg, svc, roles, keys, tokens, bootstrapKey.Key, personalKey.Key, admin.ID, users}
+	return signInRoutingFixture{db, cfg, svc, roles, keys, tokens, bootstrapKey.Key, personalKey.Key, admin.ID, users}
 }
 
 func TestSignInForwardingAndStreamMatrix(t *testing.T) {

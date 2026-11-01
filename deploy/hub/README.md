@@ -174,3 +174,5 @@ consume local space and are retained for operator removal after verification.
 The UI round-trip acceptance waits for M4 sign-in; a browser check with a synthetic
 session is implementation evidence only. See the indexed backup design and
 practical acceptance procedure.
+
+`AUTH_PROXY_ADMIN_USERS` optionally lists exact, case-sensitive proxy identities separated by commas. Unset preserves the default administrator mapping. Other identities require a matching enabled username. `AUTH_PROXY_LOGOUT_URL` optionally names an absolute HTTP or HTTPS proxy sign-out URL. Both support `_FILE` and `__FILE` secret-file variants. Hub logout clears the CSRF cookie; the browser then follows the configured proxy URL.

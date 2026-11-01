@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M15 resource authorization and isolated transport helpers.
 
 package authz
 
@@ -51,7 +51,7 @@ func (m *PermissionMatcher) CollectFromHumaAPI(humaAPI huma.API) {
 				continue
 			}
 			if perm, localOk := requiredPermissionInternal(op).Get(); localOk {
-				m.Add(method, suffix, perm)
+				m.AddOperation(method, suffix, perm, op.OperationID)
 				continue
 			}
 			// An environment-scoped operation that declares no required
@@ -59,7 +59,7 @@ func (m *PermissionMatcher) CollectFromHumaAPI(humaAPI huma.API) {
 			// explicitly public endpoint (empty Security). Anything else is
 			// left unmapped and denied by default.
 			if isPublicOperationInternal(op) {
-				m.AddPublic(method, suffix)
+				m.AddOperation(method, suffix, "", op.OperationID)
 			}
 		}
 	}

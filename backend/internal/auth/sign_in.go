@@ -2,7 +2,7 @@
 // Revision: 92e896e926aaaf0189c72dcec6e3b15a52ddbd5d
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original request policy shared by API, streams and environment proxy.
+// Deviations: Original request policy shared by API, streams and environment proxy; M15 simple-user rights and identity contracts.
 
 package auth
 
@@ -19,6 +19,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
@@ -56,6 +57,22 @@ func (s *AuthService) ModeRequestUser(ctx context.Context, req *http.Request) (*
 		}
 	default:
 		return nil, common.ErrInvalidToken
+	}
+	if identity != "" && s.config.AuthProxyAdminUsers != nil {
+		listed := false
+		for _, name := range strings.Split(*s.config.AuthProxyAdminUsers, ",") {
+			listed = listed || strings.TrimSpace(name) == identity
+		}
+		if !listed {
+			u, err := s.userService.GetUserByUsername(ctx, identity)
+			if err != nil {
+				return nil, errors.New("access.not-registered")
+			}
+			if u.DisabledAt != nil {
+				return nil, errors.New("access.disabled")
+			}
+			return u, nil
+		}
 	}
 	admin, err := s.userService.GlobalAdministrator(ctx)
 	if err != nil {
@@ -109,10 +126,15 @@ func handleModeAuthInternal(api huma.API, ctx huma.Context, service *AuthService
 	}
 	requestUser, err := service.ModeRequestUser(ctx.Context(), humaecho.Unwrap(ctx).Request())
 	if err != nil {
-		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Sign-in required")
+		status, code := modeAuthError(err)
+		if strings.HasPrefix(code, "access.") {
+			_ = access.WriteProblem(ctx, status, code)
+		} else {
+			_ = huma.WriteErr(api, ctx, status, code)
+		}
 		return true
 	}
-	next(huma.WithContext(ctx, setUserInContextInternal(ctx.Context(), requestUser, authz.SudoPermissionSet())))
+	next(huma.WithContext(ctx, setUserInContextInternal(ctx.Context(), requestUser, service.modePermissions(ctx.Context(), requestUser))))
 	return true
 }
 

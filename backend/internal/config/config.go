@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts.
 
 package config
 
@@ -55,6 +55,8 @@ type Config struct {
 	EncryptionKey          string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
 	AdminStaticAPIKey      string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
 	AuthMode               string         `env:"AUTH_MODE" default:"local" options:"file"`
+	AuthProxyAdminUsers    *string        `env:"AUTH_PROXY_ADMIN_USERS" options:"file"`
+	AuthProxyLogoutURL     string         `env:"AUTH_PROXY_LOGOUT_URL" default:"" options:"file"`
 	AuthProxyHeader        string         `env:"AUTH_PROXY_HEADER" default:"Remote-User" options:"file"`
 	AuthTrustedProxies     string         `env:"AUTH_TRUSTED_PROXIES" default:"" options:"file"`
 	AuthResetAdminPassword string         `env:"AUTH_RESET_ADMIN_PASSWORD" default:"" options:"file"`
@@ -205,6 +207,12 @@ func loadFromEnv(cfg *Config) {
 		}
 
 		envValue := os.Getenv(envTag)
+		if field.Kind() == reflect.Pointer {
+			_, present, _ := utils.LookupEnvOrFile(envTag)
+			if !present {
+				return
+			}
+		}
 		var fromFile bool
 		if hasOptionInternal(fieldType, "file") {
 			envValue, _, fromFile = utils.LookupEnvOrFile(envTag)
@@ -312,6 +320,11 @@ func setFieldValueInternal(field reflect.Value, fieldType reflect.StructField, v
 		return
 	}
 
+	if field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.String {
+		v := value
+		field.Set(reflect.ValueOf(&v))
+		return
+	}
 	if field.Kind() == reflect.String {
 		field.SetString(value)
 		return

@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; M15 simple-user rights and identity contracts.
 
 package environment
 
 import (
 	"context"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
@@ -179,6 +180,10 @@ func (h *EnvironmentHandler) ListEnvironments(ctx context.Context, input *ListEn
 	}
 	for i := range envs {
 		h.applyEdgeRuntimeStateInternal(ctx, &envs[i])
+		if access.FromPermissions(ps).IsUser() {
+			v := envs[i]
+			envs[i] = environment.Environment{ID: v.ID, Name: v.Name, Status: v.Status, Color: v.Color, DisplayOnly: true}
+		}
 	}
 
 	return &handlerutil.Page[environment.Environment]{
@@ -228,7 +233,11 @@ func visibleEnvironmentsForInternal(envs []environment.Environment, ps *authz.Pe
 	filtered := make([]environment.Environment, 0, len(allowed))
 	for _, env := range envs {
 		if _, ok := allowed[env.ID]; ok {
-			filtered = append(filtered, env)
+			if access.FromPermissions(ps).IsUser() {
+				filtered = append(filtered, environment.Environment{ID: env.ID, Name: env.Name, Status: env.Status, Color: env.Color, DisplayOnly: true})
+			} else {
+				filtered = append(filtered, env)
+			}
 		}
 	}
 	return filtered

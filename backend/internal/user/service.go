@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut; M15 simple-user rights and identity contracts.
 
 package user
 
@@ -269,11 +269,17 @@ func (s *UserService) UpdateUser(ctx context.Context, localUser *User, actorPerm
 	if err := normalization.Normalize(localUser); err != nil {
 		return nil, err
 	}
+	passwordReset := false
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		if err := s.checkTargetPrivilegeInternal(ctx, tx, actorPerms, localUser.ID); err != nil {
 			return err
 		}
-		result := tx.Model(&User{}).Where("id = ?", localUser.ID).Select("*").Updates(localUser)
+		var current User
+		if err := tx.First(&current, "id = ?", localUser.ID).Error; err != nil {
+			return err
+		}
+		passwordReset = localUser.RequiresPasswordChange && localUser.PasswordHash != current.PasswordHash
+		result := tx.Model(&User{}).Where("id = ?", localUser.ID).Select("*").Omit("disabled_at").Updates(localUser)
 		if err := result.Error; err != nil {
 			if isDuplicateKeyErrorInternal(tx, err) {
 				return ErrUsernameTaken
@@ -283,10 +289,20 @@ func (s *UserService) UpdateUser(ctx context.Context, localUser *User, actorPerm
 		if result.RowsAffected != 1 {
 			return common.ErrUserNotFound
 		}
+		if passwordReset && s.revokeSessionsExcept != nil {
+			return s.revokeSessionsExcept(ctx, tx, localUser.ID, "")
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if passwordReset {
+		s.RightsChanged(localUser.ID)
+	} else if s.roleService != nil {
+		if ps, e := s.roleService.ResolvePermissions(ctx, localUser.ID); e == nil && !ps.IsGlobalAdmin() {
+			s.RightsChanged(localUser.ID)
+		}
 	}
 	return localUser, nil
 }
@@ -370,6 +386,11 @@ func (s *UserService) SetPasswordAndRevokeSessionsExcept(ctx context.Context, lo
 		return nil, err
 	}
 
+	if s.roleService != nil {
+		if ps, e := s.roleService.ResolvePermissions(ctx, localUser.ID); e == nil && !ps.IsGlobalAdmin() {
+			s.RightsChanged(localUser.ID)
+		}
+	}
 	*localUser = updatedUser
 	return localUser, nil
 }
@@ -488,7 +509,7 @@ func (s *UserService) grantDefaultAdminRoleInternal(ctx context.Context, adminUs
 // be present in ctx. Pass nil for internal service-to-service calls. A
 // non-admin caller may not delete a global admin target.
 func (s *UserService) DeleteUser(ctx context.Context, id string, actorPerms *authz.PermissionSet) error {
-	return dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
+	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		if s.roleService != nil {
 			ps, err := s.roleService.ResolveUserPermissionsInDB(ctx, tx, id)
 			if err != nil {
@@ -512,6 +533,10 @@ func (s *UserService) DeleteUser(ctx context.Context, id string, actorPerms *aut
 		}
 		return nil
 	})
+	if err == nil {
+		s.RightsChanged(id)
+	}
+	return err
 }
 
 func (s *UserService) ListUsersPaginated(ctx context.Context, params pagination.QueryParams) ([]user.User, pagination.Response, error) {
@@ -582,6 +607,8 @@ func (s *UserService) toUserResponseDtoInternal(ctx context.Context, u User) use
 		FontSize:               u.FontSize,
 		Preferences:            u.Preferences,
 		RequiresPasswordChange: u.RequiresPasswordChange,
+		DisabledAt:             u.DisabledAt,
+		Assignments:            []user.AppAssignment{},
 		CreatedAt:              u.CreatedAt.Format("2006-01-02T15:04:05.999999Z"),
 		UpdatedAt:              u.UpdatedAt.Format("2006-01-02T15:04:05.999999Z"),
 		RoleAssignments:        []user.RoleAssignmentSummary{},
@@ -612,6 +639,10 @@ func (s *UserService) toUserResponseDtoInternal(ctx context.Context, u User) use
 	if ps, err := s.roleService.ResolvePermissions(ctx, u.ID); err == nil && ps != nil {
 		dto.IsGlobalAdmin = ps.IsGlobalAdmin()
 		dto.PermissionsByEnv = permissionSetToMap(ps)
+	}
+	dto.IsAdmin = dto.IsGlobalAdmin
+	if rows, err := s.AppAssignments(ctx, u.ID); err == nil {
+		dto.Assignments = rows
 	}
 	return dto
 }

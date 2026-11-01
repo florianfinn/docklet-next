@@ -2,11 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.; Service-account fixture removed with the federated account cut.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.; Service-account fixture removed with the federated account cut; M15 simple-user rights and identity contracts.
 
 package role_test
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"testing"
 	"time"
 
@@ -138,6 +139,7 @@ func setupAuthServiceTestDB(t *testing.T) *database.DB {
 		&user.User{},
 		&session.UserSession{},
 		&testEnvironmentRow{},
+		&access.Assignment{},
 		&role.Role{},
 		&role.UserRoleAssignment{},
 		&testApiKeyRow{},
@@ -232,6 +234,7 @@ func TestResolveExecutionPermissions(t *testing.T) {
 	t.Run("scoped keys bypass cached grants", func(t *testing.T) {
 		db, service := setupUserAndRoleServices(t)
 		owner := createTestUser(t, db, "owner", "owner")
+		grantGlobalAdmin(t, service, owner.ID)
 		environmentID := "env-1"
 		key := testApiKeyRow{ID: "scoped", Kind: "scoped", UserID: &owner.ID, EnvironmentID: &environmentID}
 		require.NoError(t, db.Create(&key).Error)

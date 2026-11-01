@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status; M15 simple-user rights and identity contracts.
 
 package environment
 
@@ -39,19 +39,20 @@ import (
 )
 
 type EnvironmentService struct {
-	restarts         *restartController
-	runtimeRemoval   RuntimeRemoval
-	snapshots        hoststate.Store
-	agentRuntime     agentRuntime
-	db               *database.DB
-	httpClient       *http.Client
-	dockerService    *docker.DockerClientService
-	eventService     *event.EventService
-	settingsService  *settings.SettingsService
-	edgeTokens       *edgeTokenCacheInternal
-	remoteEnvs       *remoteEnvSnapshotCacheInternal
-	environmentCache *hot.HotCache[environmentCacheKeyInternal, Environment]
-	environmentGens  [environmentCacheStripes]atomic.Uint64
+	AssignmentUserChanged func(string)
+	restarts              *restartController
+	runtimeRemoval        RuntimeRemoval
+	snapshots             hoststate.Store
+	agentRuntime          agentRuntime
+	db                    *database.DB
+	httpClient            *http.Client
+	dockerService         *docker.DockerClientService
+	eventService          *event.EventService
+	settingsService       *settings.SettingsService
+	edgeTokens            *edgeTokenCacheInternal
+	remoteEnvs            *remoteEnvSnapshotCacheInternal
+	environmentCache      *hot.HotCache[environmentCacheKeyInternal, Environment]
+	environmentGens       [environmentCacheStripes]atomic.Uint64
 
 	// jobs carries the scheduler and app lifecycle context, injected
 	// post-construction via SetScheduler (manager-only). Each enabled environment
@@ -432,12 +433,21 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 	// Stop the per-environment health job before the row is removed.
 	s.removeHealthJobInternal(ctx, id)
 
-	remove := func(tx *gorm.DB) error { return tx.Delete(&Environment{}, "id = ?", id).Error }
+	var affected []string
+	remove := func(tx *gorm.DB) error {
+		if err := tx.Table("user_app_assignments").Where("environment_id = ?", id).Distinct().Pluck("user_id", &affected).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM user_app_assignments WHERE environment_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&Environment{}, "id = ?", id).Error
+	}
 	var deleteEnvironmentErr error
 	if s.runtimeRemoval != nil {
 		deleteEnvironmentErr = s.runtimeRemoval(ctx, id, remove)
 	} else {
-		deleteEnvironmentErr = remove(s.db.WithContext(ctx))
+		deleteEnvironmentErr = s.db.WithContext(ctx).Transaction(remove)
 	}
 	if deleteEnvironmentErr != nil {
 		if env.Enabled {
@@ -446,6 +456,11 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 		return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
 	}
 
+	for _, userID := range affected {
+		if s.AssignmentUserChanged != nil {
+			s.AssignmentUserChanged(userID)
+		}
+	}
 	s.revokeAgentSessions(id)
 	s.edgeTokens.invalidate(id)
 	s.ForgetSyncState(id)

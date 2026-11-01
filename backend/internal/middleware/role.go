@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts.
 
 package middleware
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"log/slog"
 	"net/http"
 
@@ -45,6 +46,9 @@ func RequireEchoPermission(perm string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			ps, _ := c.Get(string(ContextKeyUserPermissions)).(*authz.PermissionSet)
+			if d := echoAccessDecision(c, ps); d != access.Allow {
+				return c.JSON(d.Status(), common.APIError{Code: common.APIErrorCode(d), Message: string(d)})
+			}
 			envID := ""
 			if authz.IsEnvScoped(perm) {
 				envID = authz.EnvIDFromPath(c.Request().URL.Path)
@@ -71,6 +75,13 @@ func RequireEchoPermission(perm string) echo.MiddlewareFunc {
 func RequirePermission(api huma.API, perm string) huma.Middlewares {
 	return huma.Middlewares{func(ctx huma.Context, next func(huma.Context)) {
 		ps, _ := PermissionsFromContext(ctx.Context())
+		if ps != nil && ps.UserID != "" {
+			r := access.Rules[ctx.Operation().OperationID]
+			if r.Kind == access.OwnRun || r.Kind == access.Self {
+				next(ctx)
+				return
+			}
+		}
 		envID := ""
 		if authz.IsEnvScoped(perm) {
 			envID = authz.EnvIDFromPath(ctx.URL().Path)

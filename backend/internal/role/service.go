@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut; M15 simple-user rights and identity contracts.
 
 package role
 
@@ -11,6 +11,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
 	"maps"
 	"slices"
 	"strings"
@@ -35,6 +37,7 @@ const (
 )
 
 type RoleService struct {
+	UserChanged    func(string)
 	db             *database.DB
 	userCache      *hot.HotCache[string, *authz.PermissionSet]
 	apiKeyCache    *hot.HotCache[string, *authz.PermissionSet]
@@ -341,6 +344,10 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 			}
 			return fmt.Errorf("failed to read user for assignment update: %w", err)
 		}
+		before, err := s.ResolveUserPermissionsInDB(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
 		if err := validateAssignmentsExistInternal(tx, desired); err != nil {
 			return err
 		}
@@ -352,6 +359,13 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 			if err := tx.Create(&desired).Error; err != nil {
 				return fmt.Errorf("failed to insert %s assignments: %w", source, err)
 			}
+		}
+		after, err := s.ResolveUserPermissionsInDB(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if actor, ok := userctx.CurrentUserFromContext(ctx); ok && actor.ID == userID && before.IsGlobalAdmin() != after.IsGlobalAdmin() {
+			return errors.New("cannot change your own administrator status")
 		}
 		count, err := s.CountGlobalAdminsExcludingUserInDB(ctx, tx, "")
 		if err != nil {
@@ -440,7 +454,7 @@ func (s *RoleService) CountGlobalAdminsExcludingUserInDB(ctx context.Context, tx
 		Table("users AS u").
 		Select("u.id AS user_id, r.permissions AS permissions").
 		Joins("INNER JOIN user_role_assignments ura ON ura.user_id = u.id AND ura.environment_id IS NULL").
-		Joins("INNER JOIN roles r ON r.id = ura.role_id")
+		Joins("INNER JOIN roles r ON r.id = ura.role_id").Where("u.disabled_at IS NULL")
 	if strings.TrimSpace(excludedUserID) != "" {
 		query = query.Where("u.id <> ?", excludedUserID)
 	}
@@ -496,7 +510,7 @@ func (s *RoleService) ResolvePermissions(ctx context.Context, userID string) (*a
 }
 
 // ResolveUserPermissionsInDB resolves permissions using the supplied transaction or database handle.
-func (s *RoleService) ResolveUserPermissionsInDB(_ context.Context, tx *gorm.DB, userID string) (*authz.PermissionSet, error) {
+func (s *RoleService) ResolveUserPermissionsInDB(ctx context.Context, tx *gorm.DB, userID string) (*authz.PermissionSet, error) {
 	// Scan into raw string for the permissions JSON column to avoid GORM's
 	// schema-introspection on anonymous local structs (which can't see the
 	// type tags needed to wire database.StringSlice's Scanner).
@@ -524,7 +538,14 @@ func (s *RoleService) ResolveUserPermissionsInDB(_ context.Context, tx *gorm.DB,
 			ps.AddEnv(*r.EnvironmentID, perms...)
 		}
 	}
-	return ps, nil
+	if ps.IsGlobalAdmin() {
+		return ps, nil
+	}
+	rowsApp, err := access.Assignments(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return access.Synthesize(userID, rowsApp), nil
 }
 
 // decodePermissionsJSONInternal parses the JSON-encoded `roles.permissions` column
@@ -538,62 +559,6 @@ func decodePermissionsJSONInternal(raw string) ([]string, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-// ResolveExecutionPermissions revalidates durable work against current users,
-// key ownership, expiry and permissions without using authentication caches.
-func (s *RoleService) ResolveExecutionPermissions(ctx context.Context, userID, keyID string) (*authz.PermissionSet, error) {
-	if userID == "" {
-		return nil, errors.New("requesting user unavailable")
-	}
-	db := s.db.WithContext(ctx)
-	var user struct{ ID string }
-	if err := db.Table("users").Select("id").Where("id = ?", userID).Take(&user).Error; err != nil {
-		return nil, fmt.Errorf("failed to load requesting user: %w", err)
-	}
-	if keyID == "" {
-		return s.ResolveUserPermissionsInDB(ctx, db, userID)
-	}
-	var key struct {
-		ID            string
-		Kind          string
-		UserID        *string
-		EnvironmentID *string
-		ExpiresAt     *time.Time
-	}
-	if err := db.Table("api_keys").Select("id, kind, user_id, environment_id, expires_at").Where("id = ?", keyID).Take(&key).Error; err != nil {
-		return nil, fmt.Errorf("failed to load requesting API key: %w", err)
-	}
-	if key.UserID == nil || *key.UserID != userID || (key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now())) {
-		return nil, errors.New("requesting API key is no longer valid")
-	}
-	var permissions *authz.PermissionSet
-	var err error
-	switch key.Kind {
-	case "personal":
-		permissions, err = s.ResolveUserPermissionsInDB(ctx, db, userID)
-	case "scoped":
-		permissions, err = s.resolveApiKeyPermissionsInDBInternal(db, keyID)
-	default:
-		return nil, errors.New("requesting API key kind is invalid")
-	}
-	if err != nil {
-		return nil, err
-	}
-	if key.EnvironmentID == nil {
-		return permissions, nil
-	}
-	if *key.EnvironmentID == "" {
-		return nil, errors.New("requesting API key environment scope is invalid")
-	}
-	restricted := authz.NewPermissionSet()
-	for permission := range permissions.Global {
-		restricted.AddEnv(*key.EnvironmentID, permission)
-	}
-	for permission := range permissions.PerEnv[*key.EnvironmentID] {
-		restricted.AddEnv(*key.EnvironmentID, permission)
-	}
-	return restricted, nil
 }
 
 // ResolveApiKeyPermissions returns the PermissionSet for an API key. Caches
@@ -663,9 +628,13 @@ func (s *RoleService) SetApiKeyPermissionsInDB(ctx context.Context, tx *gorm.DB,
 
 func (s *RoleService) InvalidateUser(userID string) {
 	s.cacheFillMu.Lock()
-	defer s.cacheFillMu.Unlock()
 	s.userCacheGen.Add(1)
 	s.userCache.Delete(userID)
+	s.cacheFillMu.Unlock()
+	access.Revoke(userID)
+	if s.UserChanged != nil {
+		s.UserChanged(userID)
+	}
 }
 
 // InvalidateApiKey drops the cached PermissionSet for one API key.

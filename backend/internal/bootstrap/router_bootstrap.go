@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts.
 
 package bootstrap
 
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/types/features"
 	"log/slog"
 	"net"
@@ -132,14 +133,27 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 					return authz.EnvironmentPermissionSet(*envID), nil, true
 				}
 			}
-			actor, ok := verifyRouterRequestUserInternal(ctx, deps.Auth.Service(), req)
-			return authz.SudoPermissionSet(), actor, ok
+			requestUser, err := deps.Auth.Service().ModeRequestUser(ctx, req)
+			if err != nil {
+				if strings.HasPrefix(err.Error(), "access.") {
+					c.Set("accessAuthError", err.Error())
+				}
+				return nil, nil, false
+			}
+			*req = *req.WithContext(deps.Auth.Service().ViewerContext(req.Context(), "", requestUser.ID))
+			actor := requestUser.Actor()
+			ps := resolveUser(ctx, actor)
+			if ps.IsGlobalAdmin() {
+				ps = authz.SudoPermissionSet()
+			}
+			return ps, actor, true
 		}
 		// Check for API key authentication
 		if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
 			// User-owned API key: personal keys inherit the owner's role
 			// permissions; scoped keys are limited to their own grants.
 			if user, key, err := deps.ApiKey.Service().ValidateApiKeyWithID(ctx, apiKey); err == nil && user != nil {
+				*req = *req.WithContext(deps.Auth.Service().ViewerContext(req.Context(), "", user.ID))
 				if key != nil && key.Kind != apikey.ApiKeyKindPersonal {
 					return resolveKey(ctx, key.ID), user.Actor(), true
 				}
@@ -164,6 +178,9 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.AuthService, req *http.Request) (*usertypes.Actor, bool) {
 	if authService.SignInMode() != "local" {
 		requestUser, err := authService.ModeRequestUser(ctx, req)
+		if err == nil && requestUser != nil {
+			*req = *req.WithContext(authService.ViewerContext(ctx, "", requestUser.ID))
+		}
 		return requestUser.Actor(), err == nil && requestUser != nil
 	}
 	if token, ok := auth.BearerToken(req.Header.Get("Authorization")); ok {
@@ -217,6 +234,15 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	hubMode := !cfg.AgentMode && !cfg.EdgeAgent
 
 	e := newEchoInternal()
+	if hubMode {
+		controller := resourceAccessController(deps)
+		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c *echo.Context) error {
+				c.SetRequest(c.Request().WithContext(access.WithController(c.Request().Context(), controller)))
+				return next(c)
+			}
+		})
+	}
 
 	trustedProxyNets := parseTrustedProxyCIDRsInternal(cfg.TrustedProxies)
 	if cfg.TrustedProxies != "" && len(trustedProxyNets) == 0 {

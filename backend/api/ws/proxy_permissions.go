@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed Swarm.; M15 resource authorization and isolated transport helpers.
 
 package ws
 
@@ -45,6 +45,6 @@ func (h *WebSocketHandler) proxiedRoutes() []proxiedWSRoute {
 func AddProxiedPermissions(m *authz.PermissionMatcher) {
 	var h WebSocketHandler
 	for _, r := range h.proxiedRoutes() {
-		m.Add(http.MethodGet, "/ws"+r.path, r.perm)
+		m.AddOperation(http.MethodGet, "/ws"+r.path, r.perm, "GET /api/environments/:id/ws"+r.path)
 	}
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity.
+// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts.
 
 package auth
 
@@ -163,8 +163,12 @@ func (h *AuthHandler) Logout(ctx context.Context, input *struct{}) (*LogoutOutpu
 		}
 	}
 
+	cookies := cookie.BuildClearTokenCookieStringsFor(cookie.SecureCookieFromContext(ctx))
+	if h.authService != nil && h.authService.SignInMode() == "proxy" {
+		cookies = append(cookies, middleware.ClearCSRFCookie(ctx))
+	}
 	return &LogoutOutput{
-		SetCookie: cookie.BuildClearTokenCookieStringsFor(cookie.SecureCookieFromContext(ctx)),
+		SetCookie: cookies,
 		Body: base.ApiResponse[base.MessageResponse]{
 			Success: true,
 			Data: base.MessageResponse{
@@ -889,30 +893,6 @@ func handleBearerAuthInternal(api huma.API, ctx huma.Context, authService *AuthS
 // PermissionSet. If RoleService is unavailable or the lookup fails (boot-time
 // edge cases, broken DB) it returns nil and logs a warning — handlers then
 // see deny-all, which is the safe default.
-func resolveUserPermissionsInternal(ctx context.Context, permResolver PermissionResolver, authenticatedUser *userdomain.User) *authz.PermissionSet {
-	if permResolver == nil || authenticatedUser == nil {
-		return nil
-	}
-	ps, err := permResolver.ResolvePermissions(ctx, authenticatedUser.ID)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to resolve user permissions", "error", err, "userId", authenticatedUser.ID)
-		return nil
-	}
-	return ps
-}
-
-func resolveApiKeyPermissionsInternal(ctx context.Context, permResolver PermissionResolver, apiKeyID string) *authz.PermissionSet {
-	if permResolver == nil || apiKeyID == "" {
-		return nil
-	}
-	ps, err := permResolver.ResolveApiKeyPermissions(ctx, apiKeyID)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to resolve api key permissions", "error", err, "apiKeyId", apiKeyID)
-		return nil
-	}
-	return ps
-}
-
 // extractBearerTokenInternal extracts the JWT token and reports whether it came from a cookie.
 func extractBearerTokenInternal(ctx huma.Context) (string, bool) {
 	// Try Authorization header first
@@ -938,6 +918,7 @@ func setUserInContextInternal(ctx context.Context, authenticatedUser *userdomain
 	if ps == nil {
 		ps = authz.NewPermissionSet()
 	}
+
 	ctx = context.WithValue(ctx, middleware.ContextKeyUserID, authenticatedUser.ID)
 	ctx = context.WithValue(ctx, user.CurrentUserContextKey{}, authenticatedUser)
 	ctx = context.WithValue(ctx, middleware.ContextKeyUserPermissions, ps)

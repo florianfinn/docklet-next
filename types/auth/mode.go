@@ -2,7 +2,7 @@
 // Revision: 92e896e926aaaf0189c72dcec6e3b15a52ddbd5d
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original sign-in mode vocabulary.
+// Deviations: Original sign-in mode vocabulary; M15 simple-user rights and identity contracts.
 
 package auth
 
@@ -15,5 +15,6 @@ const (
 )
 
 type SignInConfiguration struct {
-	Mode SignInMode `json:"mode" enum:"none,local,proxy" readOnly:"true" doc:"Active startup sign-in mode; changes require operator configuration and restart"`
+	LogoutURL *string    `json:"logoutUrl,omitempty" readOnly:"true"`
+	Mode      SignInMode `json:"mode" enum:"none,local,proxy" readOnly:"true" doc:"Active startup sign-in mode; changes require operator configuration and restart"`
 }

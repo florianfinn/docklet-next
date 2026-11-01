@@ -56,14 +56,17 @@ diagnostics streams, `/debug/pprof`, uploads). Kinds:
 | `AppList` | allowed; the response contains only assigned items |
 | `OwnRun` | allowed only for runtime runs the caller started (persisted caller ID) |
 
-Allowlist (exact operation IDs; S1 confirms them against the stack page's real calls):
+Allowlist (exact operation IDs, confirmed against `web/src/data/http` inventory, runtime commands,
+project workspace, logs, shell and capability consumers):
 
 - Restricted, `ProjectPath` (`{projectId}`): `get-project`, `get-project-runtime`, `deploy-project` (Start:
   see options rule below), `stop-project`, `down-project` (configured Stop mode), `restart-project` (stack or
-  single service), WebSocket `projects/:projectId/logs`.
+  single service), WebSocket `GET /api/environments/:id/ws/projects/:projectId/logs`.
 - Restricted, `ContainerPath` (`{containerId}`): `get-container`, `get-container-processes`,
   `start-container`, `stop-container`, `restart-container`, `download-container-logs`, WebSockets
-  `containers/:id/logs`, `containers/:id/stats`, `containers/:id/terminal`.
+  `GET /api/environments/:id/ws/containers/:containerId/logs`,
+  `GET /api/environments/:id/ws/containers/:containerId/stats`,
+  `GET /api/environments/:id/ws/containers/:containerId/terminal`.
 - Full, `ProjectPath`: `get-project-compose`, `update-project`, `redeploy-project`, `pull-project-images`,
   `build-project-images`, `update-project-services`, `get-project-updates`, `get-project-workspace`,
   `update-project-workspace`, `get-project-workspace-file`, `download-project-workspace-file`,
@@ -73,12 +76,14 @@ Allowlist (exact operation IDs; S1 confirms them against the stack page's real c
   `restore-update`, host restore points), `release-runtime-run` (administrator recovery acknowledgement),
   stack create/delete/destroy, every host-wide operation.
 - `AppList`: `list-projects`, `listEnvironments`.
-- `OwnRun`: `get-hub-runtime-run`, `cancel-hub-runtime-run` (and the env-0 equivalents
-  `get-runtime-run-outcome`, `cancel-runtime-run`). The activity list and activity detail routes stay
+- `OwnRun`: `get-hub-runtime-run`, `cancel-hub-runtime-run`, including the hub host `0`.
+  `get-runtime-run-outcome` and `cancel-runtime-run` are agent-only receiver operations with existing
+  machine authentication; they are not hub user routes. The activity list and activity detail routes stay
   administrator-only; a user follows their own action through the runtime run.
 - `Self`: `get-current-user` (extended with `isAdmin` and the caller's assignments), `update-my-profile`,
-  avatar, `change-password`, `logout`, `logout-all-other-sessions`, `list/create/delete-my-api-key`,
-  `get-capabilities`, the setup-status read (#268).
+  `upload-my-avatar`, `delete-my-avatar`, `change-password`, `logout`,
+  `logout-all-other-sessions`, `list-my-api-keys`, `create-my-api-key`, `delete-my-api-key`,
+  `get-capabilities`, `get-settings` (only setup status, #268), `streamClient`.
 - `/stream`: users receive only the `environments` channel, projected (§6); `activities`, `events`,
   `dashboard` are not delivered to users.
 
@@ -112,8 +117,10 @@ the same `NotFound`.
   (`get-project-runtime`, the same producer the stack page uses) of an assigned project on that host. The
   hub obtains that view with agent authority (local service call for the hub host, the normal Direct HTTP /
   Edge request path for remote hosts), decoded into a fresh value, never through the inventory snapshot.
-  The path's container reference is matched against the canonical ID and the names in that view. A read
-  failure answers 503 `access.unavailable`; absence answers 404.
+  The path's container reference is matched against the canonical ID and the names in that view. A failed read answers 503
+  `access.unavailable`; a view that does not list the container, also an empty one, answers 404
+  `access.not-found`. Successful empty views remain denials even when the existing producer hid a
+  Docker or Compose read error.
 - `list-projects` for a user: the hub reads the host's complete project list with agent authority (fresh
   value, never written to the snapshot or a shared flight), keeps assigned project IDs, then applies the
   caller's search, sort and pagination and computes totals from the filtered set. Snapshot and coalesced

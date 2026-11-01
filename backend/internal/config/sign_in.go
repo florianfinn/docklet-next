@@ -2,13 +2,14 @@
 // Revision: 92e896e926aaaf0189c72dcec6e3b15a52ddbd5d
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original startup sign-in policy.
+// Deviations: Original startup sign-in policy; M15 simple-user rights and identity contracts.
 
 package config
 
 import (
 	"errors"
 	"net/netip"
+	"net/url"
 	"strings"
 
 	"github.com/florianfinn/docklet-next/types/auth"
@@ -32,6 +33,12 @@ func (c *Config) ValidateSignIn() error {
 	c.AppUrl = normalizedAppURL(c.AppUrl)
 	if c.AgentMode || c.EdgeAgent {
 		return nil
+	}
+	if c.AuthProxyLogoutURL != "" {
+		u, err := url.Parse(c.AuthProxyLogoutURL)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return errors.New("AUTH_PROXY_LOGOUT_URL must be an absolute http or https URL")
+		}
 	}
 	switch c.SignInMode() {
 	case auth.SignInModeNone, auth.SignInModeLocal:

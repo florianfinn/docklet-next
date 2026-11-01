@@ -5,6 +5,11 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["POST /users/{userId}/disable", "disable-user"],
+  ["POST /users/{userId}/enable", "enable-user"],
+  ["POST /users/{userId}/reset-password", "reset-user-password"],
+  ["PUT /users/{userId}/administrator", "set-user-admin"],
+  ["PUT /users/{userId}/app-assignments", "set-user-app-assignments"],
   ["POST /environments/{id}/agent/restart", "restartEnvironmentAgent"],
   ["GET /environments/{id}/agent/restarts/{runId}", "getEnvironmentAgentRestart"],
   ["PUT /environments/{id}/containers/{containerId}/origin", "assign-container-origin"],

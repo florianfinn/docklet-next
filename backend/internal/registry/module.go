@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M15 simple-user rights and identity contracts.
 
 // Package registry owns registry credentials, digest inspection, pull usage,
 // synchronization, and the registry HTTP surface.
@@ -78,7 +78,7 @@ func registerSyncRoute(api huma.API, h *ContainerRegistryHandler) {
 		Description: "Sync container registries from a remote source",
 		Tags:        []string{"Container Registries"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermRegistriesUpdate),
+		Middlewares: append(append(middleware.RequirePermission(api, authz.PermRegistriesUpdate), middleware.RequirePermission(api, authz.PermRegistriesCreate)...), middleware.RequirePermission(api, authz.PermRegistriesDelete)...),
 	}, h.SyncRegistries)
 }
 
