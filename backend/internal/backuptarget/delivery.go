@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original metadata-only full-set delivery and authority receipt verification.
+// Deviations: Original metadata-only full-set delivery and authority receipt verification; M16 bind mounts and backup completion.
 
 package backuptarget
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dto "github.com/florianfinn/docklet-next/types/backup"
@@ -26,12 +27,27 @@ func SyncHost(ctx context.Context, db *database.DB, hostID string, proxy JSONPro
 	if err != nil {
 		return dto.TargetSetReceipt{}, err
 	}
+	revision, err := registrationRevision(db.WithContext(ctx), hostID)
+	if err != nil {
+		return dto.TargetSetReceipt{}, err
+	}
+	started := time.Now().UTC()
 	payload, err := json.Marshal(set)
 	if err != nil {
 		return dto.TargetSetReceipt{}, err
 	}
 	var response base.ApiResponse[dto.TargetSetReceipt]
 	if err = proxy(ctx, hostID, http.MethodPut, "/api/environments/0/volumes/backups/targets", payload, &response); err != nil {
+		outcome := "backup.target.sync-failed"
+		if p := RemoteProblem(err); p != nil && (p.Code == "backup.target.stale-set" || p.Code == "backup.target.wrong-host") {
+			outcome = p.Code
+		}
+		if saveErr := saveDelivery(ctx, store, hostID, set, revision, nil, outcome, started); saveErr != nil {
+			return dto.TargetSetReceipt{}, saveErr
+		}
+		if p := RemoteProblem(err); p != nil {
+			return dto.TargetSetReceipt{}, p
+		}
 		if access := AgentAccess(err); access != nil {
 			return dto.TargetSetReceipt{}, access
 		}
@@ -41,13 +57,10 @@ func SyncHost(ctx context.Context, db *database.DB, hostID string, proxy JSONPro
 	if !response.Success || receipt.Authority != set.Authority || receipt.SetVersion != set.SetVersion || receipt.ContentHash != set.ContentHash {
 		return receipt, dto.NewProblem(409, "backup.target.stale-set", nil)
 	}
-	encoded, err := json.Marshal(receipt)
-	if err != nil {
+	if err = saveDelivery(ctx, store, hostID, set, revision, &receipt, "ok", started); err != nil {
 		return receipt, err
 	}
-	if err = writeSetting(db.WithContext(ctx), "backupTargetDelivery:"+hostID, string(encoded)); err != nil {
-		return receipt, err
-	}
+
 	if len(receipt.Conflicts) > 0 {
 		return receipt, dto.NewProblem(409, "backup.target.conflict", nil)
 	}

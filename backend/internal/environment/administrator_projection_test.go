@@ -2,12 +2,13 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
 
 package environment
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	dto "github.com/florianfinn/docklet-next/types/environment"
@@ -21,7 +22,7 @@ func TestAdministratorKeyEnvironmentPayloadPreserved(t *testing.T) {
 		t.Run(transport, func(t *testing.T) {
 			db := setupEnvironmentServiceTestDB(t)
 			svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-			require.NoError(t, db.Create(&Environment{ID: "assigned", Name: "Example", ApiUrl: "https://agent.example.com", Enabled: true, Status: "online", AccessToken: new("example")}).Error)
+			require.NoError(t, db.Create(&Environment{ID: "assigned", CredentialRevision: 9, Name: "Example", ApiUrl: "https://agent.example.com", Enabled: true, Status: "online", AccessToken: new("example")}).Error)
 			h := NewHandler(svc, nil, nil, nil, nil, nil)
 			// Scoped administrator keys carry grants without a simple-user identity.
 			ps := authz.NewPermissionSet()
@@ -47,6 +48,10 @@ func TestAdministratorKeyEnvironmentPayloadPreserved(t *testing.T) {
 				}
 			}
 			require.Len(t, rows, 1)
+			encoded, err := json.Marshal(rows[0])
+			require.NoError(t, err)
+			require.Contains(t, string(encoded), `"registrationRevision":9`)
+			require.NotContains(t, string(encoded), "accessToken")
 			require.False(t, rows[0].DisplayOnly)
 			require.Equal(t, "https://agent.example.com", rows[0].ApiUrl)
 			require.True(t, rows[0].Enabled)

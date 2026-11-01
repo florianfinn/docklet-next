@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion.
 
 package settings
 
@@ -102,6 +102,7 @@ type Settings struct {
 	DockerClientRefreshInterval    SettingVariable `key:"dockerClientRefreshInterval" meta:"label=Docker Client Refresh Interval;type=cron;keywords=docker,client,refresh,daemon,api,version,reconnect,renegotiate,schedule;category=internal;description=How often to refresh the cached Docker client API version (cron expression)"`
 	EventCleanupInterval           SettingVariable `key:"eventCleanupInterval" meta:"label=Event Cleanup Interval;type=cron;keywords=events,cleanup,retention,interval,frequency,schedule,history,logs,jobs;description=How often to trim event and activity history to its count limits (cron expression)"`
 	ExpiredSessionsCleanupInterval SettingVariable `key:"expiredSessionsCleanupInterval" meta:"label=Expired Sessions Cleanup Interval;type=cron;keywords=sessions,cleanup,retention,expired,revoked,interval,frequency,schedule,auth,jobs;description=How often to delete expired and old revoked sessions (cron expression)"`
+	BackupDefaultRetentionCount    SettingVariable `key:"backupDefaultRetentionCount" meta:"label=Default Backup Retention;type=number;category=backups;description=Initial retention count for new plans; zero keeps all snapshots"`
 	UpgradeLogRetentionDays        SettingVariable `key:"upgradeLogRetentionDays" meta:"label=Upgrade Log Retention;type=number;keywords=upgrade,logs,retention,days,cleanup;category=activity;description=Delete upgrade log files older than this many days. Cleanup runs hourly. Default: 3 days. Set 0 to keep logs indefinitely."`
 	MaxConcurrentActivities        SettingVariable `key:"maxConcurrentActivities" meta:"label=Concurrent Activity Limit;type=number;keywords=activity,concurrency,limit,queue,parallel,bulk,background,tasks;category=activity;description=Maximum long-running activities per environment before new ones queue. Set 0 for unlimited."`
 	KeepActionOutput               SettingVariable `key:"keepActionOutput" meta:"label=Keep Action Output;type=boolean;category=activity;description=Configured action output retention"`

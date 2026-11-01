@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296; M14 stack stop mode override validation.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296; M14 stack stop mode override validation; M16 bind mounts and backup completion.
 
 package settings
 
@@ -198,7 +198,7 @@ func (s *SettingsService) IsEnvOverrideActive(key string) bool {
 // validEnvSettingInternal keeps an invalid stop mode from the environment out of
 // effective and persisted settings; the stored or default value applies instead.
 func validEnvSettingInternal(ctx context.Context, key, envVarName, value string) bool {
-	if key != "stackStopMode" {
+	if key != "stackStopMode" && key != "backupDefaultRetentionCount" {
 		return true
 	}
 	if err := validateSettingValueInternal(key, kit.TrimQuotes(value)); err != nil {

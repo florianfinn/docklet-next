@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts.
+// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts; M16 bind mounts and backup completion.
 
 package settings
 
@@ -51,6 +51,12 @@ func validateSettingValueInternal(key, value string) error {
 	}
 	if key == "actionPresentation" && value != "dialog" && value != "toast" {
 		return common.Classify(common.ErrValidation, errors.New("actionPresentation must be dialog or toast"))
+	}
+	if key == "backupDefaultRetentionCount" {
+		count, err := strconv.Atoi(value)
+		if err != nil || count < 0 || count > 3650 {
+			return common.Classify(common.ErrValidation, errors.New("backupDefaultRetentionCount must be a whole number between 0 and 3650"))
+		}
 	}
 	if key == "upgradeLogRetentionDays" && value != "" {
 		days, err := strconv.Atoi(value)
