@@ -458,6 +458,8 @@ export const enSettings = {
     sessionProxy: "Signed in via the reverse proxy (header {header}). The proxy manages profile and password.",
     language: "Language",
     languageHint: "Saved for your administrator account and used on your next visit.",
+    languageHintUser: "Saved for your account and used on your next visit.",
+    localSignIn: "Local sign-in",
     languageSaving: "Saving language …",
     languageError: "Could not save the language. Try again.",
     currentPassword: "Current password",

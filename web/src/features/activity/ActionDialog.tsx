@@ -181,7 +181,7 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
         </>}</ActionDetail>
       </div>
       <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
-        <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t("dialog.closeHint")}</p>
+        <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t(user ? "dialog.closeHintUser" : "dialog.closeHint")}</p>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {!user && run.status === "failed" && run.restorePointId && run.stackId && (
             <Button asChild size="sm" variant="outline">

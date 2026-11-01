@@ -15,6 +15,7 @@ import { UsersSection } from "./UsersSection";
 import { UserDialog } from "./UserDialog";
 import { AssignmentsDialog } from "./AssignmentsDialog";
 import { PersonalApiKeys } from "../PersonalApiKeys";
+import { ConnectedProfilePage } from "../ConnectedProfilePage";
 
 beforeEach(() => { setAppLocale("en-US"); simulationStore.set((s) => ({ ...s, latency: "instant", live: false })); });
 afterEach(() => { setAppLocale("de"); simulationStore.reset(); });
@@ -105,4 +106,14 @@ it("W6 shows the secret once, discards it on close, and never re-fetches or re-s
   await userEvent.click(screen.getByRole("button", { name: "Create API key" }));
   expect(screen.queryByTestId("api-key-secret") === null).toBe(true);
   expect(create).toHaveBeenCalledTimes(1);
+});
+
+it("describes a user's profile without administrator wording", async () => {
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, kind: "http" as const, getAuthMode: async () => "local" as const, getCurrentUser: vi.fn(async () => ({ id: "member", username: "member", isAdmin: false, assignments: [], requiresPasswordChange: false })) };
+  renderWithApp(<ConnectedProfilePage />, adapter);
+  await screen.findByText("Local sign-in");
+  expect(screen.queryByText("Saved for your account and used on your next visit.") !== null).toBe(true);
+  expect(screen.queryByText("Local admin") === null).toBe(true);
+  expect(document.body.textContent?.includes("administrator account")).toBe(false);
 });

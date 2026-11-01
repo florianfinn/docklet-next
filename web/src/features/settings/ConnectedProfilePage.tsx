@@ -30,6 +30,7 @@ export function ConnectedProfilePage() {
   const adapter = useAdapter();
   const client = useQueryClient();
   const user = useCurrentUser();
+  const isUser = user.data?.isAdmin === false;
   const mode = useAuthMode();
   const locale = useAppLocale();
   const [savingLocale, setSavingLocale] = useState(false);
@@ -80,11 +81,11 @@ export function ConnectedProfilePage() {
         <CardContent className="flex flex-col gap-4 px-5">
           <p className="font-semibold">{user.data.username}</p>
           <p className="text-sm text-muted-foreground">{tu(user.data.isAdmin === false ? "userRole" : "role")}</p>
-          <p className="text-sm text-muted-foreground">{tm(mode.data)}</p>
+          <p className="text-sm text-muted-foreground">{isUser && mode.data === "local" ? t("localSignIn") : tm(mode.data)}</p>
           <div>
             <h2 className="mb-2 text-sm font-medium">{t("language")}</h2>
             <fieldset disabled={savingLocale}><LanguageSwitch onChange={changeLocale} /></fieldset>
-            <p className="mt-2 text-xs text-muted-foreground">{t("languageHint")}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t(isUser ? "languageHintUser" : "languageHint")}</p>
             {savingLocale && <p role="status">{t("languageSaving")}</p>}
             {localeError && <p role="alert">{t("languageError")}</p>}
           </div>

@@ -44,6 +44,7 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
       detail={toastDetail(scale)}
       now={now}
       major={major}
+      opensDialog={user}
       onClose={() => toast.dismiss(toastId)}
       onOpen={() => (major || user ? openActionDialog(run.id) : openActivity(run.id))}
     />

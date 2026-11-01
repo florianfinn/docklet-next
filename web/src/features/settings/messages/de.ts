@@ -459,6 +459,8 @@ export const deSettings: typeof enSettings = {
     sessionProxy: "Angemeldet über den Reverse Proxy (Header {header}). Profil und Passwort verwaltet der Proxy.",
     language: "Sprache",
     languageHint: "Wird für dein Administratorkonto gespeichert und beim nächsten Besuch verwendet.",
+    languageHintUser: "Wird für dein Konto gespeichert und beim nächsten Besuch verwendet.",
+    localSignIn: "Lokale Anmeldung",
     languageSaving: "Speichere Sprache …",
     languageError: "Die Sprache konnte nicht gespeichert werden. Bitte erneut versuchen.",
     currentPassword: "Bisheriges Passwort",

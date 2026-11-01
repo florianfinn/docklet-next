@@ -125,6 +125,7 @@ export const deActivity: typeof enActivity = {
     close: "Ablauffenster schließen",
     closeShort: "Schließen",
     closeHint: "Schließen beendet die Aktion nicht. Wieder öffnen über die Meldung oben rechts oder das Aktionszentrum.",
+    closeHintUser: "Schließen beendet die Aktion nicht. Wieder öffnen über die Meldung oben rechts, solange sie angezeigt wird.",
     openCentre: "Im Aktionszentrum anzeigen",
     waiting: "{count, plural, one {Weitere wichtige Aktion gestartet} other {# weitere wichtige Aktionen gestartet}}: {title}",
     showWaiting: "Anzeigen",
