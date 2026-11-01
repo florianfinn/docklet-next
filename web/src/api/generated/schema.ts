@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 9650b7a219ef5b94136187dd81436166a73125d2000adf1045f30ad14151a6f1
+// Revision: 6ec950abe440327ae220340846e2a0b75f71d8e06d288939bc2e559ea61b0e85
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -31071,7 +31071,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"]) | components["schemas"]["BackupProblem"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -31194,7 +31194,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"]) | components["schemas"]["BackupProblem"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -31312,7 +31312,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"]) | components["schemas"]["BackupProblem"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -31428,7 +31428,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": (components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"]) | components["schemas"]["BackupProblem"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Volume backup operation refused */

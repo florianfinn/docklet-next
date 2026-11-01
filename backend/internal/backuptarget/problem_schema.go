@@ -45,7 +45,10 @@ func RegisterProblemSchemas(api huma.API) {
 					old := existing.Content["application/problem+json"].Schema
 					if old != nil {
 						responseSchema = old
-						if !containsProblemSchema(old, schema.Ref) {
+						// Workspace 503 responses already describe both helper failure types.
+						// The bind helper-unavailable response has that same wire shape.
+						preserveHelper := status == 503 && strings.Contains(path, "/workspace")
+						if !preserveHelper && !containsProblemSchema(old, schema.Ref) {
 							responseSchema = &huma.Schema{OneOf: []*huma.Schema{old, schema}}
 						}
 					}
