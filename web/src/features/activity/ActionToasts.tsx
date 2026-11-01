@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/activity/ActionToasts.tsx
+// Revision: d1d32cd1ff7e653ebe5f7fc1ad4151740a091bb2bddbc473680d83f761496ee0
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected identity and hub settings. #102 identity-scoped toast history and owned-notice cleanup. #102 source-local initial notification history and consumer regression coverage. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. Issue #77: session-bound closure and identity generation cleanup. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -23,6 +30,7 @@ import { runtimePresentation } from "./runtime-presentation";
 import { hasPresentationIntent, presentationStore, RunToastCoordinator } from "./run-presentation";
 
 function ActionToast({ id, toastId }: { id: string; toastId: string | number }) {
+  const user = useIsUser();
   const run = useActionRun(id);
   const scale = useUiStyle("toastScale");
   const design = useUiStyle("toastDesign");
@@ -37,7 +45,7 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
       now={now}
       major={major}
       onClose={() => toast.dismiss(toastId)}
-      onOpen={() => (major ? openActionDialog(run.id) : openActivity(run.id))}
+      onOpen={() => (major || user ? openActionDialog(run.id) : openActivity(run.id))}
     />
   );
 }
@@ -62,9 +70,10 @@ export function ActionToasts() {
     localeRef.current = locale;
   });
   // The hub setting decides for new runs; the design-lab override wins in this browser.
+  const user = useIsUser();
   const connected = adapter.kind === "http";
   const demoPresentation = useSettings(!connected).data?.activity.actionPresentation;
-  const corePresentation = useConnectedSettings(connected).data?.activity.actionPresentation;
+  const corePresentation = useConnectedSettings(connected && !user).data?.activity.actionPresentation;
   const hubPresentation = connected ? corePresentation : demoPresentation;
   const hubRef = useRef(hubPresentation);
   useLayoutEffect(() => {

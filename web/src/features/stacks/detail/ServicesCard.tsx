@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/detail/ServicesCard.tsx
+// Revision: f8eda509ac4ee01f09962b84a53fabbcfd8954381a94036c10f10ce141f3b6ad
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
 import { useCapability } from "@/data/use-capability";
 import { Boxes, FileText, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -25,6 +32,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
   const ts = useTranslations("common.status");
   const navigate = useNavigate();
   const cmd = useStackCommands();
+  const user = useIsUser();
   const restart = useCapability("restartService", { kind: "stack", id: stack.id });
   const rowFor = (svc: Service) => {
     const rt = serviceRuntime(svc, host);
@@ -53,7 +61,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           <UpdateIndicator
             name={svc.name}
             update={svc.update}
-            actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
+            actions={{ resourceRef: user ? { kind: "stack", id: stack.id } : undefined, updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
           />
         </TableCell>
         <TableCell className="text-right">

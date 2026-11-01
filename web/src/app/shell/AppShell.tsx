@@ -1,3 +1,11 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/AppShell.tsx
+// Revision: 456cdcb0ad7dee6695b8162d0c9f779b26842f736c418f31b877c9caa5f20d91
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Product preference/demo boundary after the historical L4 import: build-selected runtime, shared preference modules and regression coverage; existing UI catalogue bytes and storage contracts preserved; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
+import { UserShell } from "./UserShell";
 import { StackUpdateDialogController } from "@/shared/components/updates/stack-update-dialog";
 import { Activity } from "lucide-react";
 import { Fragment, Suspense } from "react";
@@ -72,6 +80,10 @@ function PageFallback() {
 }
 
 export function AppShell({ navigation = NAV }: { navigation?: NavGroup[] }) {
+  return useIsUser() ? <UserShell /> : <AdministratorShell navigation={navigation} />;
+}
+
+function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
   const t = useTranslations("shell");
   const ta = useTranslations("activity");
   const crumbs = useCrumbs();

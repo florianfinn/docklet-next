@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { useIsUser } from "@/data/use-principal";
+import { openActionDialog } from "@/features/activity/action-dialog-store";
 import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { formatDateTime } from "@/domain/format";
 
@@ -24,6 +26,7 @@ import { useImageError } from "@/features/images/use-image-error";
 import { UpdateUnavailable } from "./live-state";
 
 export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string; point?: UpdatePoint; onClose: () => void }) {
+  const user = useIsUser();
   const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), errorText = useImageError();
   const read = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
   const write = useCapability(point ? "restoreRestorePoint" : "installStackUpdates", { kind: "stack", id: stackId });
@@ -43,7 +46,7 @@ export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string
       {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} /><span className="min-w-0 flex-1 break-all">{t("replace", { revision: data.savedRevision })}</span></label></>}
     </>}
     {action.error && <p role="alert">{action.error}</p>}
-    {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=deployments`}>{t("openRun", { id: runId })}</Link></p>}
+    {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=${user ? "overview" : "deployments"}`} onClick={() => { if (user) openActionDialog(runId); }}>{t("openRun", { id: runId })}</Link></p>}
     <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision }), (id) => setReceipt({ id, identity: data!.targetIdentity }))}>{t(point ? "restore" : "update")}</Button></div>
   </DialogContent></Dialog>;
 }

@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/detail/StackPage.tsx
+// Revision: d6c87ce35acb0a517963f61e62852640a9dce5d99a34d2a2575077660b53bae0
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Guard rejected host queries before mounting the stack editor; preserves the historical L4 import and existing UI catalogue values. See web/PROVENANCE.md. #82 host inventory observations, localized stale notices and read-only controls. #27 production text, source errors and capability boundaries. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+
 import { isHostAvailable } from "@/domain/hosts";
 import { InventoryNotice } from "../InventoryNotice";
 import { ArrowLeft, FileCode2, FileText, History, LayoutGrid, Layers } from "lucide-react";
@@ -13,6 +19,8 @@ import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { Button } from "@/shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
+import { useIsUser } from "@/data/use-principal";
+import { UserStack } from "./UserStack";
 import { NEW_STACK_DRAFT } from "../editor/new-stack-draft";
 import { StackWorkspace, type EditorMode } from "../editor/StackWorkspace";
 import { useComposeDraft } from "../editor/use-compose-draft";
@@ -138,6 +146,7 @@ function NewStack() {
 export default function StackPage() {
   const { stackId } = useParams();
   const t = useTranslations("stacks.detail");
+  const user = useIsUser();
   const isNew = !stackId;
   const stack = useStack(isNew ? undefined : stackId);
   const hosts = useHostScope();
@@ -164,7 +173,7 @@ export default function StackPage() {
           <QueryError error={stack.error} onRetry={() => void stack.refetch()} />
         )
       ) : (
-        <ExistingStack key={stack.data.id} stack={stack.data} onRetry={() => void stack.refetch()} />
+        user ? <UserStack key={stack.data.id} stack={stack.data} /> : <ExistingStack key={stack.data.id} stack={stack.data} onRetry={() => void stack.refetch()} />
       )}
     </>
   );

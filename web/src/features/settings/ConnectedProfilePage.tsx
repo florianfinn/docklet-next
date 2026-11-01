@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original connected administrator language and password profile.
 
+import { PersonalApiKeys } from "./PersonalApiKeys";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
@@ -24,6 +25,7 @@ import { Skeleton } from "@/shared/ui/skeleton";
 
 export function ConnectedProfilePage() {
   const t = useTranslations("settings.profile");
+  const tu = useTranslations("shell.user");
   const tm = useTranslations("settings.auth");
   const adapter = useAdapter();
   const client = useQueryClient();
@@ -77,6 +79,7 @@ export function ConnectedProfilePage() {
         <CardHeader className="px-5"><CardTitle>{t("account")}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4 px-5">
           <p className="font-semibold">{user.data.username}</p>
+          <p className="text-sm text-muted-foreground">{tu(user.data.isAdmin === false ? "userRole" : "role")}</p>
           <p className="text-sm text-muted-foreground">{tm(mode.data)}</p>
           <div>
             <h2 className="mb-2 text-sm font-medium">{t("language")}</h2>
@@ -86,8 +89,8 @@ export function ConnectedProfilePage() {
             {localeError && <p role="alert">{t("languageError")}</p>}
           </div>
           <div className="flex flex-wrap gap-2 border-t pt-3">
-            <Button asChild variant="outline" size="sm"><Link to="/settings/appearance">{t("appearanceLink")}</Link></Button>
-            {mode.data === "local" && <Button variant="ghost" size="sm" onClick={() => setLogout(true)}>{t("logout")}</Button>}
+            {user.data.isAdmin !== false && <Button asChild variant="outline" size="sm"><Link to="/settings/appearance">{t("appearanceLink")}</Link></Button>}
+            {mode.data !== "none" && <Button variant="ghost" size="sm" onClick={() => setLogout(true)}>{t("logout")}</Button>}
           </div>
         </CardContent>
       </Card>
@@ -105,6 +108,7 @@ export function ConnectedProfilePage() {
           </form>
         </CardContent>
       </Card>}
+      <PersonalApiKeys key={user.data.id} mode={mode.data} />
     </div>}
     <LogoutDialog open={logout} onOpenChange={setLogout} />
   </>;

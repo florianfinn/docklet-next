@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/data/api.ts
+// Revision: 357dd6dee16118e0880ca694d222699556389d977c3d15d6148e23e2acee23d7
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
 
@@ -15,7 +21,28 @@ import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "
 import type { BackupBrowse, BackupOverview, BackupPolicy, BackupRepository, BackupSelection, Volume, VolumeDetail } from "@/domain/volumes";
 import type { AuthMode } from "@/domain/settings";
 
+export type AppAssignment = components["schemas"]["UserAppAssignment"];
+export type ManagedUser = Pick<components["schemas"]["UserUser"], "id" | "username" | "isAdmin" | "disabledAt" | "requiresPasswordChange"> & { assignments: AppAssignment[] };
+export type PersonalApiKey = Pick<components["schemas"]["ApikeyApiKey"], "id" | "name" | "keyPrefix" | "createdAt" | "expiresAt" | "lastUsedAt">;
+
+export interface UsersApi {
+  listUsers(): Promise<ManagedUser[]>;
+  createUser(input: Pick<components["schemas"]["UserCreateUser"], "username" | "password">): Promise<ManagedUser>;
+  updateUser(id: string, input: Pick<components["schemas"]["UserUpdateUser"], "username">): Promise<ManagedUser>;
+  disableUser(id: string): Promise<void>;
+  enableUser(id: string): Promise<void>;
+  resetUserPassword(id: string, password: string): Promise<void>;
+  deleteUser(id: string): Promise<void>;
+  setUserAdministrator(id: string, isAdmin: boolean): Promise<void>;
+  setUserAppAssignments(id: string, assignments: AppAssignment[]): Promise<void>;
+  listMyApiKeys(): Promise<PersonalApiKey[]>;
+  createMyApiKey(input: components["schemas"]["ApikeyCreateUserApiKey"]): Promise<PersonalApiKey & { key: string }>;
+  deleteMyApiKey(id: string): Promise<void>;
+}
+
 export interface CurrentUser {
+  isAdmin?: boolean;
+  assignments?: AppAssignment[];
   id: string;
   username: string;
   locale?: string | null;
@@ -24,6 +51,7 @@ export interface CurrentUser {
 
 export interface AuthApi {
   getAuthMode(): Promise<AuthMode>;
+  getAuthConfiguration(): Promise<components["schemas"]["AuthSignInConfiguration"]>;
   getCurrentUser(): Promise<CurrentUser>;
   login(username: string, password: string): Promise<CurrentUser>;
   logout(): Promise<void>;

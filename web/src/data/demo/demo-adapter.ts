@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/data/demo/demo-adapter.ts
+// Revision: 93a1bd85562f9c156a80280dc7b450877d71881b45f83cf5b901d6ac993ffd71
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+
 import { SettingsProblemError } from "../settings-error";
 import { isHostAvailable } from "@/domain/hosts";
 import { createDemoContainerOperations } from "./demo-container-operations";
@@ -32,6 +38,7 @@ import type { CodedStackDetail } from "../message-code";
 import { registerDemoOptions, takeDemoFailure, type DemoAdapterOptions, type FailAt } from "./options";
 import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from "./simulation";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable } from "../capability";
+import { createDemoUsers } from "./demo-users";
 import { createDemoHubBackups } from "./demo-hub-backups";
 
 export class DemoCommandError extends Error {
@@ -138,12 +145,14 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     kind: "demo",
     openContainerShell: openScriptedShell,
     ...createDemoRegistries(() => db.changed("registries")),
+    ...createDemoUsers(db),
     getAuthMode: async () => db.settings.auth.mode,
-    getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false }),
-    login: async (username) => ({ id: "demo-admin", username, requiresPasswordChange: false }),
+    getAuthConfiguration: async () => ({ mode: db.settings.auth.mode, ...(db.settings.auth.mode === "proxy" ? { logoutUrl: db.settings.auth.proxy.logoutUrl } : {}) }),
+    getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
+    login: async (username) => ({ id: "demo-admin", username, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     logout: async () => undefined,
     changePassword: async () => undefined,
-    updateMyLocale: async (locale) => ({ id: "demo-admin", username: db.settings.auth.local.username, locale, requiresPasswordChange: false }),
+    updateMyLocale: async (locale) => ({ id: "demo-admin", username: db.settings.auth.local.username, locale, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     ...createDemoHubBackups(options),
     getCapability: async (operationId, resourceRef = HUB_REF) => {
       const knownResource = resourceRef.kind === "hub" ||

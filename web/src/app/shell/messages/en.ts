@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/messages/en.ts
+// Revision: fd1ea0afb7f3373b87d565e9465f180a4244d34f7476aab43eace99b81f3ef33
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service.
+
 // American English texts of the application shell (navigation, host filter, profile menu).
 
 export const enShell = {
@@ -44,12 +50,16 @@ export const enShell = {
     on: (import.meta.env.DEV ? "Live simulation running – click to pause" : ""),
     off: (import.meta.env.DEV ? "Live simulation paused – click to resume" : ""),
   },
+  unavailable: { title: "Not available", body: "This page is available to administrators only." },
   user: {
+    userRole: "User",
+    proxyHint: "Sign out at your reverse proxy",
+    logoutError: "Sign-out failed. Try again.",
     name: import.meta.env.DEV ? "Alex Beispiel" : "",
     email: import.meta.env.DEV ? "alex@example.com" : "",
     unknownName: "Unknown user",
     unknownStatus: "No session connected",
-    role: "Hub administration",
+    role: "Administrator",
     signedInAs: "Signed in as",
     labShortcut: "Alt ⇧ D",
     menu: "Profile and hub settings",

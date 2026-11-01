@@ -1,7 +1,16 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/settings/messages/de.ts
+// Revision: cb93d80db5b6979f6ae3f3253884563643ea35ba57ac2588a380d7ed63713312
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { usersDe, keysDe } from "./users-de";
 // German texts of hub settings and the profile page.
 import type { enSettings } from "./en";
 
 export const deSettings: typeof enSettings = {
+  liveUsers: usersDe,
+  personalKeys: keysDe,
   stackStopMode: {"title": "Stopp-Modus für Stacks", "down": "Herunterfahren und Container entfernen (Standard)", "stop": "Stoppen und Container behalten", "hint": "Hub-weite Einstellung. Stoppen folgt auf jedem Host diesem Modus; das Stack-Menü bietet die andere Aktion."},
   // Texts of backend notification and Auto Heal codes, keyed by the wire code path.
   codes: {

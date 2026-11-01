@@ -34,6 +34,7 @@ export function SetupGate() {
   if (mode.isError || currentUser.isError || currentUser.data === null || setup.isError) return <main className="p-6"><p>{t("setupStatusError")}</p><Button onClick={() => { void mode.refetch(); void currentUser.refetch(); void setup.refetch(); }}>{t("retry")}</Button></main>;
   if (setup.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (setup.data && mode.data === "local" && currentUser.data?.requiresPasswordChange) return <InitialPasswordPage />;
+  if (currentUser.data?.isAdmin === false) return <Navigate to="/stacks" replace />;
   return <SetupSession completed={setup.data} />;
 }
 
