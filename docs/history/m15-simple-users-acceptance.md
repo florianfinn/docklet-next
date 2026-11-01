@@ -95,9 +95,9 @@ Four runs on merged main were needed:
 
 | Package | Result | Cause and fix |
 | --- | --- | --- |
-| `d2603df1` | Not accepted, 25 of 34 cells | The administrator regression cell on the hub-local host was incomplete in the harness. Eight cells failed only on aborted reads: 61 vulnerability reads were aborted after their body was complete. #381 stops aborting completed reads. |
+| `d2603df1` | Not accepted, 25 of 34 cells | The administrator regression cell on the hub-local host was incomplete in the harness. Eight cells failed only on aborted reads. Of 81 unmatched diagnostic entries, 61 concerned vulnerability reads; four failures had a recorded complete HTTP 200 response. #381 stops aborting completed reads. |
 | `3ddb5a89` | Not accepted, 25 of 34 cells | The first fix also cancelled the completed body. #382 releases completed vulnerability reads and image pulls without cancelling them. A stale hub-local stack page after its own lifecycle command was measured to be identical on M14 and is tracked in #383. |
-| `9e5bf789` | Not accepted, 26 of 34 cells | 78 completed HTTP 200 vulnerability reads were still reported as `net::ERR_ABORTED`. A reproduction outside the hub showed that Chromium can report a fully received `no-store` response read through a manual stream reader as cancelled. #384 reads these responses natively. |
+| `9e5bf789` | Not accepted, 26 of 34 cells | The evidence retained 78 diagnostic observations of HTTP 200 vulnerability responses with completed bodies reported as `net::ERR_ABORTED`; these are observations, not a count of unique requests. A reproduction outside the hub showed that Chromium can report a fully received `no-store` response read through a manual stream reader as cancelled. #384 reads these responses natively. |
 | `1f4578e1` | **Accepted, 34 of 34 cells** | The eight blocking cells were rerun; the other 26 passed on earlier main packages and were reused, because each later delta changed only web data reads. |
 
 On `1f4578e1` the browser made 312 vulnerability reads: 304 finished, none failed,
