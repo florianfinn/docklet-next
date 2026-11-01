@@ -12,7 +12,7 @@ import { useAdapter } from "@/data/use-adapter";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Label } from "@/shared/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
 export function AssignmentsDialog({ user, onClose, onSaved }: { user: ManagedUser; onClose: () => void; onSaved: () => void }) {
   const t = useTranslations("settings.liveUsers");
@@ -38,7 +38,7 @@ export function AssignmentsDialog({ user, onClose, onSaved }: { user: ManagedUse
       {unavailable ? <p role="alert">{t("stackLoadError")}</p> : stacks.isPending || hosts.isPending ? <p aria-busy="true">{t("loading")}</p> : <fieldset disabled={busy} className="flex flex-col gap-4">{hosts.data.map((host) => <section key={host.id}><h3 className="mb-2 text-sm font-semibold">{host.name}</h3><div className="flex flex-col gap-2">{stacks.data.filter((s) => s.hostId === host.id).map((s) => {
         const project = s.id.split("~")[1] ?? s.id;
         const value = assignments.find((a) => a.environmentId === host.id && a.projectId === project)?.level ?? "none";
-        return <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-2"><Label htmlFor={`level-${s.id}`}>{s.name}</Label><Select value={value} onValueChange={(v) => setLevel(host.id, project, v)}><SelectTrigger id={`level-${s.id}`} className="w-40"><SelectValue /></SelectTrigger><SelectContent>{(["none", "restricted", "full"] as const).map((level) => <SelectItem key={level} value={level}>{t(level)}</SelectItem>)}</SelectContent></Select></div>;
+        return <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-2"><Label htmlFor={`level-${s.id}`}>{s.name}</Label><Select value={value} onValueChange={(v) => setLevel(host.id, project, v)}><SelectTrigger id={`level-${s.id}`} className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["none", "restricted", "full"] as const).map((level) => <SelectItem key={level} value={level}>{t(level)}</SelectItem>)}</SelectGroup></SelectContent></Select></div>;
       })}</div></section>)}</fieldset>}
       {assignments.some((a) => a.level === "full") && <p className="text-xs text-warning">{t("fullHint")}</p>}
       {error && <p role="alert">{t("error")}</p>}

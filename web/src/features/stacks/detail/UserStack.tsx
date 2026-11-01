@@ -10,7 +10,7 @@ import { useTranslations } from "use-intl";
 import { useCapability } from "@/data/use-capability";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import type { StackDetail } from "@/domain/model";
-import { Button } from "@/shared/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Card } from "@/shared/ui/card";
 import { StackWorkspace, type EditorMode } from "../editor/StackWorkspace";
 import { useComposeDraft } from "../editor/use-compose-draft";
@@ -30,7 +30,13 @@ export function UserStack({ stack }: { stack: StackDetail }) {
   const draft = useComposeDraft({ compose: stack.compose, env: stack.env, hostId: stack.hostId, labels: stack.labels });
   return <>
     <StackHeader stack={stack} host={hosts.byId.get(stack.hostId)} />
-    <nav aria-label={t("tabsLabel")} className="mb-4 flex flex-wrap gap-2">{(["overview", "editor", "logs"] as const).map((key) => <Button key={key} variant={key === tab ? "secondary" : "ghost"} size="sm" disabled={key === "editor" && !edit.available} title={key === "editor" ? edit.reason : undefined} onClick={() => setParams({ tab: key }, { replace: true })}>{t(`tabs.${key}`)}</Button>)}</nav>
-    {tab === "logs" ? <StackLogs stack={stack} /> : tab === "editor" ? stack.filesUnavailable ? <Card className="p-4">{te("filesUnavailable")}</Card> : <StackWorkspace stack={stack} draft={draft} hosts={hosts.all} labelSuggestions={stack.labels} mode={mode} onMode={setMode} /> : <div className="flex flex-col gap-4"><ServicesCard stack={stack} host={hosts.byId.get(stack.hostId)} /><UserContainers stack={stack} /></div>}
+    <Tabs value={tab} onValueChange={(value) => setParams({ tab: value }, { replace: true })}>
+      <TabsList aria-label={t("tabsLabel")} className="mb-4 max-w-full flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto">
+        {(["overview", "editor", "logs"] as const).map((key) => <TabsTrigger key={key} value={key} disabled={key === "editor" && !edit.available} title={key === "editor" ? edit.reason : undefined}>{t(`tabs.${key}`)}</TabsTrigger>)}
+      </TabsList>
+      <TabsContent value="overview"><div className="flex flex-col gap-4"><ServicesCard stack={stack} host={hosts.byId.get(stack.hostId)} /><UserContainers stack={stack} /></div></TabsContent>
+      <TabsContent value="editor">{edit.available && (stack.filesUnavailable ? <Card className="p-4">{te("filesUnavailable")}</Card> : <StackWorkspace stack={stack} draft={draft} hosts={hosts.all} labelSuggestions={stack.labels} mode={mode} onMode={setMode} />)}</TabsContent>
+      <TabsContent value="logs"><StackLogs stack={stack} /></TabsContent>
+    </Tabs>
   </>;
 }
