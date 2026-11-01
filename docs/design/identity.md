@@ -9,8 +9,8 @@ require operator configuration and a restart; the API exposes no mode mutation.
 `local` authenticates the existing local administrator using a password, database
 sessions, access tokens and browser cookies. The proxy identity header has no
 meaning in this mode. The mutable legacy `authLocalEnabled` setting cannot select
-another mode; API updates to it are rejected. Additional user identities and their
-resource rights are outside this decision and belong to M15.
+another mode; API updates to it are rejected. Additional users and their resource
+rights are decided in [simple users](simple-users.md) (M15).
 Clients read the active policy from `GET /api/auth/mode`, not the legacy
 `authLocalEnabled` setting, whose stored value does not describe none/proxy mode.
 
@@ -22,8 +22,12 @@ password before completion. The administrator's profile language is stored in
 the core and applied when the UI loads.
 
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
-each accepted proxy identity to that same persisted administrator ID. Proxy names
-are request-scoped activity attribution, not local accounts, role assignments or
+each accepted proxy identity to that same persisted administrator ID unless
+`AUTH_PROXY_ADMIN_USERS` is set; then only the listed identities map to the
+administrator, other identities map to the user with exactly that username or are
+refused, and `AUTH_PROXY_LOGOUT_URL` names the proxy's sign-out address
+([simple users](simple-users.md) §6 and §8). For identities mapped to the
+administrator, proxy names are request-scoped activity attribution, not local accounts, role assignments or
 password identities. The account is resolved by effective global administrative
 permissions, so renaming its username does not change the mapping.
 
