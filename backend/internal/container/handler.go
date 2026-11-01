@@ -163,7 +163,7 @@ func (h *ContainerHandler) ListContainers(ctx context.Context, input *ListContai
 		return nil, huma.Error500InternalServerError("Failed to list containers: " + err.Error())
 	}
 
-	if err := h.containerService.overlayLocal(ctx, &result); err != nil {
+	if err := overlayLocal(ctx, h.containerService, &result); err != nil {
 		return nil, huma.Error503ServiceUnavailable("Origin overlay unavailable")
 	}
 	return &ListContainersOutput{
@@ -460,7 +460,7 @@ func (h *ContainerHandler) GetContainer(ctx context.Context, input *GetContainer
 		return nil, huma.Error404NotFound("Failed to retrieve container: " + err.Error())
 	}
 
-	if err := h.containerService.overlayLocal(ctx, &details); err != nil {
+	if err := overlayLocal(ctx, h.containerService, &details); err != nil {
 		return nil, huma.Error503ServiceUnavailable("Origin overlay unavailable")
 	}
 	return &handlerutil.Out[container.Details]{
