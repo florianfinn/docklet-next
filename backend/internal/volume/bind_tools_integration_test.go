@@ -48,7 +48,7 @@ after=$(stat -c '%i %u %g %a' "$1")
 test "$before" = "$after"
 head -c "$3" "$1"`
 		args := append(append([]string{}, base...), "-i", "--mount", "type=bind,src="+source+"/app.conf,dst=/volume/app.conf", image, "-c", script, "sh", "/volume/app.conf", "/tmp/arcane-workspace/change-0", strconv.Itoa(len(content)))
-		require.Equal(t, content, run(content, args...))
+		require.Equal(t, string(content), string(run(content, args...)))
 	}
 	restoreScript := `set -e
 mkdir /scratch
