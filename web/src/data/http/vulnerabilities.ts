@@ -42,8 +42,10 @@ async function securityDeadline<T>(read: (signal: AbortSignal) => Promise<T>): P
     const error = new VulnerabilityFailure("vulnerability.read-timeout");
     controller.abort(error); reject(error);
   }, 30_000);
+  // A settled read has drained its responses; aborting it then would report finished reads as failed.
   try { return await Promise.race([read(controller.signal), stopped]); }
-  finally { clearTimeout(timer); controller.abort(); }
+  catch (error) { controller.abort(); throw error; }
+  finally { clearTimeout(timer); }
 }
 
 /** Durable run counters are the scan progress producer; activity progress is not populated. */
