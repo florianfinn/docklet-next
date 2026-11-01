@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
 
 package bootstrap
 
@@ -69,6 +69,16 @@ func TestM15RuleCompleteness(t *testing.T) {
 			want[key] = true
 		}
 	}
+	// The draft probe is agent-only, with an explicit administrator rule.
+	agentRouter := newEchoInternal()
+	agentCfg := &config.Config{AgentMode: true, Environment: config.AppEnvironmentTest}
+	agentAPI := api.SetupAPI(agentRouter, agentRouter.Group("/api"), handlerutil.NewActivityAppContext(t.Context()), agentCfg, api.HandlerDeps{})
+	probe := agentAPI.OpenAPI().Paths["/environments/{id}/volumes/backups/targets/probe"]
+	require.NotNil(t, probe)
+	require.NotNil(t, probe.Post)
+	require.Equal(t, "probe-volume-backup-target", probe.Post.OperationID)
+	require.Equal(t, access.Admin, access.Rules[probe.Post.OperationID].Kind)
+	want[probe.Post.OperationID] = true
 	for key := range want {
 		_, ok := access.Rules[key]
 		assert.True(t, ok, "missing rule: %s", key)
