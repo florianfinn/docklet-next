@@ -29,7 +29,7 @@ function fixture() {
   const fetcher = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(String(input), "https://hub.example.com");
     if (url.pathname === "/api/capabilities") return json(["listHosts", "listStacks", "getStack", "listContainers"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })));
-    if (url.pathname === "/api/environments") return json(["first", "second"].map((id) => ({ id, name: id, color: null, apiUrl: "http://agent.example.com", enabled: true, status: state.hostStatus, isEdge: false } satisfies components["schemas"]["EnvironmentEnvironment"])), true);
+    if (url.pathname === "/api/environments") return json(["first", "second"].map((id) => ({ id, name: id, color: null, registrationRevision: 1, apiUrl: "http://agent.example.com", enabled: true, status: state.hostStatus, isEdge: false } satisfies components["schemas"]["EnvironmentEnvironment"])), true);
     if (url.pathname.endsWith("/projects/project/compose")) return json({ ...project, composeContent: "name: app\nservices: {}", envContent: "EXAMPLE=value" });
     if (url.pathname.endsWith("/projects/project")) return json(project, false, 200, true);
     if (url.pathname.endsWith("/projects")) return json(state.projects, true, 200, true);

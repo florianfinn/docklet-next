@@ -337,6 +337,7 @@ export function createDemoBackups(
         id: db.nextId("target"),
         createdAt: now(),
         configVersion: 1,
+        delivery: [{ hostId: input.hostId ?? "0", state: "current" }],
         checks: [],
         hasSecret: !!input.secret,
       };

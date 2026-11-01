@@ -22,7 +22,7 @@ it("H4 saves only host-default keys and preserves the typed settings refusal", a
   await expect(api.saveSettings("hostDefaults", { ...defaults, unexpected: "must-not-be-sent" } as typeof defaults)).rejects.toMatchObject({ outcome: { code: "settings.ui-configuration-disabled", status: 403 } });
 });
 it("H4 resolves component version, contract and tools data with isolated host errors", async () => {
-  const hosts = ["0", "example", "old"].map(id => mapHost({ id, name: id, color: null, apiUrl: "http://agent.example.com", enabled: true, isEdge: id === "example", status: id === "old" ? "update-required" : "online", ...(id !== "0" ? { agentReport: { reportedAt: "2026-10-31T00:00:00Z", version: { ...version, ...(id === "old" ? { agentContractVersion: 10 } : {}) } } } : {}) }));
+  const hosts = ["0", "example", "old"].map(id => mapHost({ id, name: id, color: null, registrationRevision: 1, apiUrl: "http://agent.example.com", enabled: true, isEdge: id === "example", status: id === "old" ? "update-required" : "online", ...(id !== "0" ? { agentReport: { reportedAt: "2026-10-31T00:00:00Z", version: { ...version, ...(id === "old" ? { agentContractVersion: 10 } : {}) } } } : {}) }));
   const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     expect(init?.method).toBeUndefined();
     if (String(url) === "/api/app-version") return new Response(JSON.stringify(version));

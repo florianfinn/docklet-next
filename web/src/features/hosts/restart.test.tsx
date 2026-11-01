@@ -15,7 +15,7 @@ import { runtimeResponseError } from "@/data/http/runtime-mapping";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { renderWithApp } from "@/test/render";
 import { HostSettingsDialog } from "./HostSettingsDialog";
-const host = mapHost({ id: "atlas", name: "Example", color: null, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
+const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
 afterEach(() => { vi.restoreAllMocks(); setAppLocale("de"); });
 it.each(["atlas", "0"])("H3 requires confirmation for remote restart and offers no restart for %s hub", async id => {
   setAppLocale("en-US"); const adapter = createDemoAdapter();

@@ -30,6 +30,7 @@ export const SETTINGS: HubSettings = {
         hasSecret: false,
         createdAt: daysAgo(10),
         configVersion: 1,
+        delivery: [{ hostId: "atlas", state: "current" }],
         checks: [{
           hostId: "atlas",
           activityId: "test",
@@ -52,6 +53,7 @@ export const SETTINGS: HubSettings = {
         hasSecret: true,
         createdAt: daysAgo(10),
         configVersion: 1,
+        delivery: [{ hostId: "atlas", state: "current" }],
         checks: [{
           hostId: "atlas",
           activityId: "test",
@@ -73,6 +75,7 @@ export const SETTINGS: HubSettings = {
         hasSecret: false,
         createdAt: daysAgo(10),
         configVersion: 1,
+        delivery: [{ hostId: "atlas", state: "current" }],
         checks: [{
           hostId: "atlas",
           activityId: "test",
@@ -91,6 +94,7 @@ export const SETTINGS: HubSettings = {
         path: "/mnt/backup-disk/docklet",
         hasSecret: false,
         configVersion: 1,
+        delivery: [{ hostId: "boreal", state: "current" }],
         createdAt: daysAgo(10),
         checks: [],
       },
