@@ -56,7 +56,9 @@ file can mount the Docker socket or host paths, run privileged containers and jo
 user with Full access can obtain control of the host. Full access is a convenience boundary for trusted
 people, not a security boundary against hostile users. Mount restrictions are not evaluated in M15
 (excluded with this visible hint in the assignment dialog). Restricted access does not allow changing
-the definition; its shell is a shell inside the stack's own containers.
+the definition; its shell is a shell inside the stack's own containers. A user with Full access also
+chooses container names, so a container can be named after another container's ID; container membership
+adds no protection beyond this boundary.
 
 ## 4. What a user sees
 
@@ -84,7 +86,7 @@ for resources the caller may see.
 
 | Mode | Administrator | Users |
 |---|---|---|
-| `local` (default) | existing account, unchanged | the administrator creates a user with username and initial password; first sign-in forces a password change (existing `requires_password_change`); the administrator can reset the password (new initial password, forced change), disable, enable and delete the user |
+| `local` (default) | existing account, unchanged | the administrator creates a user with username and initial password; first sign-in forces a password change (existing `requires_password_change`); a new or renamed username in `local` or `none` mode cannot contain `@`, because local sign-in resolves an identifier containing `@` as an email address, while existing accounts with `@` keep working; the administrator can reset the password (new initial password, forced change), disable, enable and delete the user |
 | `proxy` | **unchanged default**: if `AUTH_PROXY_ADMIN_USERS` is unset, every accepted proxy identity maps to the administrator exactly as today | only when `AUTH_PROXY_ADMIN_USERS` (comma-separated identities, startup configuration like `AUTH_MODE`) is set: listed identities map to the administrator account as today; any other identity maps to the user whose username equals the identity exactly; an identity without such a user is refused with 403 `access.not-registered`. The administrator creates proxy users by username without a password; proxy usernames may contain `@` (the proxy's identity string, no email header). No email or group headers (B5). |
 | `none` | every request is the administrator, unchanged | none; Settings › Users shows a hint instead of the list; stored users and assignments persist unused |
 
