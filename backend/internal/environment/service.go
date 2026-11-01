@@ -39,7 +39,7 @@ import (
 )
 
 type EnvironmentService struct {
-	AssignmentUserChanged func(string)
+	AssignmentUserChanged func(context.Context, string)
 	restarts              *restartController
 	runtimeRemoval        RuntimeRemoval
 	snapshots             hoststate.Store
@@ -456,9 +456,11 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 		return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
 	}
 
+	// A cancelled request must not make the user-aware check fail closed for administrators.
+	cleanupCtx := context.WithoutCancel(ctx)
 	for _, userID := range affected {
 		if s.AssignmentUserChanged != nil {
-			s.AssignmentUserChanged(userID)
+			s.AssignmentUserChanged(cleanupCtx, userID)
 		}
 	}
 	s.revokeAgentSessions(id)

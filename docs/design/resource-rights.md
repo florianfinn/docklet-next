@@ -138,13 +138,18 @@ the same `NotFound`.
   session, proxy identity, personal key) attaches a lease keyed by user ID at the three authentication entry
   paths before stream acceptance; real session IDs are kept for existing session logout semantics.
   The lease validator fails when the user is gone, disabled or its `rights_revision` changed.
-- Every user mutation (assignment change, level change, disable, delete, password reset, promotion,
-  demotion, key delete) commits, bumps the revision, invalidates caches and calls
-  `sessionlife.Revoke("", userID, "")`. This closes that user's hub-local WebSockets, Direct and Edge
-  proxied WebSockets and terminals and SSE (terminals through their existing bounded close handshake).
+- Explicit account actions (disable, delete, forced password reset, promotion, demotion, and role changes that
+  change administrator status) commit, bump the revision, invalidate caches and call
+  `sessionlife.Revoke("", userID, "")` for any account. This closes its hub-local WebSockets, Direct and
+  Edge proxied WebSockets and terminals and SSE (terminals through their existing bounded close handshake).
   Clients reconnect and are decided again.
-- Personal-key expiry blocks new requests; an already open stream ends at its next validation or close.
-- Accepted commands and their NDJSON progress continue. Administrators are unaffected.
+- Rights writes (assignment edit, assignments removed with their host, personal-key delete) revoke the same way
+  when the account is a user afterwards; an account that stays administrator keeps its streams, including one
+  whose assignment rows survive from before a promotion.
+- Personal-key expiry blocks new requests; the stream validator does not check expiry, so an open stream keeps
+  running until it closes or another revocation applies.
+- Accepted commands and their NDJSON progress continue. Ordinary administrator writes leave administrator
+  streams open.
 
 ## 8. Follow-ups folded in
 

@@ -100,7 +100,7 @@ open streams close (resource rights §6). Deleting a user removes assignments, s
 
 Personal keys (`kind = personal`) act with their owner's current rights at request time: an
 administrator key acts as administrator, a user key with the user's allowlist; a disabled or deleted
-owner invalidates the key. Expiry blocks new requests; deleting a key closes the owner's open streams. Profile: create with name and optional expiry (the secret is shown once),
+owner invalidates the key. Expiry blocks new requests; deleting a key closes a user owner's open streams (an administrator's streams stay open). Profile: create with name and optional expiry (the secret is shown once),
 list with prefix, expiry and last use, revoke (delete). Creation and revocation keep requiring a browser
 session (a key cannot mint keys). Following identity.md, proxy and none mode accept no user API keys; the
 profile shows the section only in local mode and a hint otherwise. Scoped keys (`/api-keys` with explicit
