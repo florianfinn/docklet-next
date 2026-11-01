@@ -15,6 +15,7 @@ import { inventoryId } from "./inventory-mapping";
 
 type Schema = components["schemas"];
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+const DEFAULT_CRON = "0 0 3 * * *";
 
 export function backupSchedule(cron: string): BackupSchedule {
   const parsed = parseSimpleBackupSchedule(cron);
@@ -26,7 +27,7 @@ export function backupSchedule(cron: string): BackupSchedule {
 
 export function backupCron(schedule: BackupSchedule): string {
   if (schedule.mode === "custom") return schedule.cron;
-  if (schedule.mode === "manual") return "0 0 3 * * *";
+  if (schedule.mode === "manual") return schedule.cron ?? DEFAULT_CRON;
   return formatSimpleBackupSchedule(
     schedule.mode === "daily"
       ? { frequency: "daily", time: schedule.time }
@@ -39,7 +40,8 @@ export function mapBackupPolicy(row: Schema["VolumeBackupPolicy"]): BackupPolicy
     id: row.id,
     enabled: row.enabled,
     targetId: row.targetId,
-    schedule: backupSchedule(row.schedule),
+    // A disabled plan is the manual mode; its stored cron travels with it unchanged.
+    schedule: row.enabled ? backupSchedule(row.schedule) : { mode: "manual", cron: row.schedule },
     retentionCount: row.retentionCount,
     stopContainers: row.stopContainers,
     nextRunAt: row.nextRunAt,

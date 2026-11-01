@@ -43,7 +43,7 @@ export function backupFixture() {
   });
   const capability = vi.fn(async (operationId: string, resourceRef: { kind: string; id: string }) => ({ operationId, resourceRef, available: true }));
   const accepted = vi.fn(), changed = vi.fn();
-  const hosts = ["first", "second"].map((id) => ({ ...HOSTS[0]!, id, name: id, status: "online" }) as Host);
+  const hosts = ["first", "second"].map((id) => ({ ...HOSTS[0]!, id, name: id, status: "online", connection: id === "second" ? "edge" : "direct" }) as Host);
   const service = createBackups({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "synthetic" }, generation: () => generation, capability, hosts: async () => hosts, accepted, changed });
   return { ...service, state, fetcher, accepted, changed, capability, hosts, rotate: () => ++generation, intercept: (fn: typeof intercept) => { intercept = fn; } };
 }

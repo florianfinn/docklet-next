@@ -99,6 +99,7 @@ export function BackupHistory({
                   setError(undefined);
                   try {
                     const blob = await adapter.downloadBackup(volume.id, run.id);
+                    if (!blob) return;
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement("a");
                     link.href = url;

@@ -256,7 +256,6 @@ export const deVolumes: typeof enVolumes = {
     title: "Backups",
     description: "Backups benannter Volumes je Host: Zeitpläne, Snapshots und Wiederherstellungen.",
     policy: "Backup-Plan",
-    enabled: "Backup aktiv",
     target: "Ziel",
     targetHint: "Ziele werden in den Hub-Einstellungen verwaltet: lokale Verzeichnisse, vorhandene Host-Mounts, SMB und NFS.",
     manageTargets: "Ziele verwalten",

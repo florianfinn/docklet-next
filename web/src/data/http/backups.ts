@@ -239,7 +239,7 @@ export function createBackups(options: Options) {
           ? [
               {
                 ...(policy.id ? { id: policy.id } : {}),
-                enabled: policy.enabled && policy.schedule.mode !== "manual",
+                enabled: policy.schedule.mode !== "manual",
                 localEnabled: true,
                 retentionCount: policy.retentionCount,
                 stopContainers: policy.stopContainers,
@@ -290,9 +290,21 @@ export function createBackups(options: Options) {
       return body;
     },
     async downloadBackup(id, runId) {
-      const { host } = context(id);
+      const { host, name } = context(id);
       await require("downloadBackup", { kind: "volume", id });
-      const { result, check } = await response(host, `${path(host)}/backups/${encodeURIComponent(runId)}/download`);
+      const route = `${path(host)}/backups/${encodeURIComponent(runId)}/download`;
+      // Direct and hub-local archives stream to disk through a browser download; Edge keeps the
+      // bounded buffered read with its early size refusal and typed messages.
+      if ((await options.hosts()).find((h) => h.id === host)?.connection !== "edge") {
+        const link = document.createElement("a");
+        link.href = `${baseUrl}${route}`;
+        link.download = `${name}-${runId}.tar.gz`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        return undefined;
+      }
+      const { result, check } = await response(host, route);
       const blob = await result.blob();
       check();
       return blob;

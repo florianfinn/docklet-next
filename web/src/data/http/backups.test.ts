@@ -91,7 +91,7 @@ describe("live backup contract", () => {
     const f = backupFixture(); await f.api.restoreBackup("first~data", "snapshot", "new", "data-restore-20261028"); await f.api.restoreBackupFiles("first~data", "snapshot", { paths: ["/folder"] }); await f.api.browseBackup("first~data", "snapshot", "/folder", 100);
     expect(f.state.requests.some((r) => r.path.endsWith("/restore") && (r.body as { newVolumeName: string }).newVolumeName === "data-restore-20261028")).toBe(true);
     f.state.fail = "/download"; f.state.code = "volume.backup.download-too-large";
-    await expect(f.api.downloadBackup("first~data", "snapshot")).rejects.toMatchObject({ problem: { code: "volume.backup.download-too-large" } });
+    await expect(f.api.downloadBackup("second~data", "snapshot")).rejects.toMatchObject({ problem: { code: "volume.backup.download-too-large" } });
     f.state.fail = ""; await f.api.uploadRestore("first~data", new File(["abcd"], "archive.tgz"));
     expect(f.state.requests.filter((r) => r.path.includes("/chunks/")).map((r) => r.method)).toEqual(["PUT", "PUT"]);
     expect(f.state.requests.find((r) => r.path.endsWith("/backups/upload"))?.body).toEqual({ mode: "replace", uploadId: "upload" });

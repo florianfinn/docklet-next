@@ -19,7 +19,8 @@ export interface VolumeConsumer {
 }
 
 export type { Weekday } from "./schedule";
-export type BackupSchedule = Exclude<PlanSchedule, { mode: "once" }> | { mode: "custom"; cron: string };
+/** A manual plan keeps its stored cron, so switching back or saving never replaces it. */
+export type BackupSchedule = Exclude<PlanSchedule, { mode: "once" | "manual" }> | { mode: "manual"; cron?: string } | { mode: "custom"; cron: string };
 
 export interface BackupPolicy {
   enabled: boolean;

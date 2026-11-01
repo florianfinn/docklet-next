@@ -255,7 +255,6 @@ export const enVolumes = {
     title: "Backups",
     description: "Named volume backups by host: schedules, snapshots and restore operations.",
     policy: "Backup plan",
-    enabled: "Backup active",
     target: "Target",
     targetHint: "Targets are managed in the hub settings: local directories, existing host mounts, SMB and NFS.",
     manageTargets: "Manage targets",

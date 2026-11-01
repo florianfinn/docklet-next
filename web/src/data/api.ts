@@ -213,7 +213,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   restoreBackup(volumeId: string, runId: string, mode: "replace" | "new", newVolumeName?: string): Promise<string>;
   restoreBackupFiles(volumeId: string, runId: string, selection: BackupSelection): Promise<string>;
   browseBackup(volumeId: string, runId: string, path?: string, start?: number): Promise<BackupBrowse>;
-  downloadBackup(volumeId: string, runId: string): Promise<Blob>;
+  /** Resolves without a Blob when the browser downloads the archive itself (Direct and hub-local hosts). */
+  downloadBackup(volumeId: string, runId: string): Promise<Blob | undefined>;
   deleteBackup(volumeId: string, runId: string): Promise<void>;
   uploadRestore(volumeId: string, file: File, mode?: "replace" | "new", newVolumeName?: string): Promise<string>;
   getBackupOverview(hostId: string): Promise<BackupOverview>;
