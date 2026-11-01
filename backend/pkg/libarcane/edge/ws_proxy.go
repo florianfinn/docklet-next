@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; retain browser cookies at the hub boundary; session-bound viewer lifetime and durable validation; preserve upstream close metadata and terminal exit delivery.
+// Deviations: Local module namespace; retain browser cookies at the hub boundary; session-bound viewer lifetime and durable validation; preserve upstream close metadata and terminal exit delivery; revoked terminal viewers forward no new input.
 
 package edge
 
@@ -114,7 +114,7 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	)
 
 	// Goroutine to read from client and send to agent
-	go forwardClientToAgent(ctx, streamCtx, clientWS, tunnel, streamID, clientDoneCh)
+	go forwardClientToAgent(viewerCtx, streamCtx, clientWS, tunnel, streamID, clientDoneCh)
 
 	if terminal {
 		forwardTerminalAgentToClient(viewerCtx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
@@ -157,6 +157,10 @@ func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Co
 		}
 
 		if !isForwardableWSMessage(int(msgType)) {
+			continue
+		}
+		// ctx is the viewer context: a revoked terminal may finish its close protocol but never sends new input.
+		if ctx.Err() != nil && !wshub.IsTerminalClose(msgType, data) {
 			continue
 		}
 
