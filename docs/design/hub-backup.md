@@ -20,11 +20,11 @@ recovery key stored inside it require the original encryption key after restore.
 Export repository recovery keys separately; those exports neither encrypt the
 Hub archive nor replace the key needed to decrypt its stored fields.
 
-Local archives and downloads are the recovery path. Copying to mount/SMB
-volume-backup targets is a follow-up owned by the volume-backup transfer feature.
-That interface is not delivered; target IDs are rejected and target controls stay
-hidden. Hub archive creation does not use the volume target model or its credential
-store. Volume snapshot repositories and their recovery keys remain separate.
+Local archives and downloads are the recovery path. A policy may also copy its
+archives to a hub-reachable backup target; the copy, its states and retention are
+specified in [backup completion](backup-completion.md). Archive creation itself does
+not use the target model or its credential store. Volume snapshot repositories and
+their recovery keys remain separate.
 
 ## Coordinated snapshot
 
@@ -157,7 +157,7 @@ Each enabled policy retains its newest completed scheduled archives, default
 seven, minimum one. Manual and uploaded archives are excluded. Prune oldest first
 after successful creation. A pruning failure keeps the new archive and reports a
 partial job. Deletion removes the selected file and metadata; startup reconciles
-an interrupted deletion. Target retention is outside this feature.
+an interrupted deletion. Target copies follow [backup completion](backup-completion.md).
 
 Read, manage and restore permissions keep their separate meanings; upload uses
 restore permission. Maintenance status is database-free, and during maintenance

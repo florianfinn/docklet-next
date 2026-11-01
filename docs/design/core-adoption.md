@@ -129,6 +129,18 @@ Later decisions that reverse, confirm or extend this record, newest first. Each
 entry names the owning milestone; the scope ledger above stays the target, and
 narrower behaviour in an older note is an interim state until that milestone.
 
+### 2026-11-01: M16 bind mounts and backup completion
+
+The maintainer fixed the M16 scope ([bind mounts](bind-mounts.md),
+[backup completion](backup-completion.md)). Single-file binds get the approved UI's
+single-file mode with in-place writes and backups; bind sizes come from an on-demand
+scan and the latest snapshot. Only paths a workload container mounts are admitted,
+system, Docker, Docklet and target paths are denied including their ancestors, and
+overlapping paths are not mutually locked. Hub archive copies go to hub-reachable
+targets only; deleting an archive by hand removes only the local file. Direct and
+hub-local backup downloads become browser downloads. No schema migration; agent
+contract v12.
+
 ### 2026-10-30: release roadmap and approved-interface review
 
 The maintainer approved the release roadmap M14–M21 and reviewed every
