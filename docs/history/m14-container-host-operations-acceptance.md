@@ -22,7 +22,7 @@ reviews from a different provider than its implementation:
 | Issue | Step | Review outcome |
 | --- | --- | --- |
 | #311, #222 | Roadmap decisions in the design docs; partial-host picker test and a smaller handler size ceiling | Self-check and CI |
-| #313–#317, #253 | Foundation: migration 014, agent contract v11, origins, recreate journal, stop services | R1 failed with 3 blockers; four verification rounds failed with 1, 2 and 1 blockers, and the fifth passed. The recreate-recovery class was rebuilt from a producer and consumer table. |
+| #313–#317, #253 | Foundation: migration 014, agent contract v11, origins, recreate journal, stop services | R1 failed with 3 blockers; R2, R3 and R4 failed with 1, 2 and 1 blockers; R5 passed. The recreate-recovery class was rebuilt from a producer and consumer table. |
 | #318, #302, #307, #309 | Host edits, agent restart receiver and durable one-shot restart, connection checks, heartbeat availability, typed refusals | Passed with 6 nonblockers, fixed with red proofs |
 | #312 | Container shell | Passed with 5 nonblockers, fixed with red proofs |
 | #313–#317 | Web origins, recreate and edit, service restart, stop mode | R1 failed with 1 blocker; the main-thread round failed with 1 blocker and R2 with 1 blocker; R3 passed |
@@ -32,16 +32,24 @@ reviews from a different provider than its implementation:
 ## Defects found before acceptance
 
 An early smoke on the integrated feature head found three product defects; `a3d05d7` fixed
-them. The first candidate run on `a3d05d7` passed 49 of 63 applicable cells and
-found these defects, which `356c62d`, `583acb6`, `82d9bd1`, `1159592`, `c33b39b` and `486318b` fixed:
+them. The first candidate run on `a3d05d7` passed 49 of 63 applicable cells. It found
+two product defects:
 
-- a resize on an ended shell, or the end of a shell stream, hid the typed
-  missing-shell reason;
-- a frozen Direct agent held every browser connection with an unbounded
-  inventory read, so hub-local reads timed out. Ordinary inventory reads now end
-  after 20 s and answer from their snapshot or with `agent.unavailable`, also
-  when a body transfer fails after its headers;
-- the Edge connect write replaced a stored update-required verdict with pending.
+- a container without `/bin/sh` ended its shell with an untyped exit. `356c62d`
+  types it as `container.shell-unavailable`, also when a resize hits the ended
+  shell;
+- an offline Direct host's Check stayed disabled because its capability reads
+  waited behind frozen inventory reads that held every browser connection.
+  `82d9bd1` ends ordinary inventory reads after 20 s; they answer from their
+  snapshot or with `agent.unavailable`. Two verification rounds of that fix found
+  that a body transfer failing after its headers was still published as success;
+  `1159592` and `c33b39b` fixed it.
+
+The candidate run also showed a disconnected update-required Edge host as
+offline. The maintainer clarified this as expected, and `583acb6` added a test
+that the stored verdict returns with the tunnel. The third focused rerun then
+found that the Edge connect write replaced the stored verdict with pending for a
+moment; `486318b` keeps it.
 
 Three focused reruns passed the remaining cells. During them the maintainer
 clarified the acceptance scope, matrix v6:
@@ -63,15 +71,19 @@ Package checks:
 - health UP;
 - the served bundle hash matched the local build;
 - both agents online and compatible at contract v11;
-- the main push CI passed.
+- the main push CI passed on `561c2285`. On `09fc9b8` the build, lint and package
+  image jobs passed; the full test job was still running when the rerun ended.
 
-The run applied the matrix through the production UI with Playwright Chromium,
-in German and English at 1440 and 390 px, on every applicable host type:
+The run applied the matrix on every applicable host type, through the
+production UI with Playwright Chromium in German and English at 1440 and 390 px.
+Where the matrix names it, the run used the API or named automated tests
+instead: recreate recovery, the 409 refusals for the agent's own container, the
+generic settings refusal on agents, and the Edge credential refusal. It covered:
 
-- the container shell, including a container without `/bin/sh`, shell activity
-  without content, and zero orphaned execs;
-- origin detection and manual assignment, origin locks, and the hidden agent
-  container with 409 refusals on Direct and Edge;
+- the container shell, including a container without `/bin/sh` refused with
+  zero orphaned execs, and shell activity without content;
+- origin detection and manual assignment, origin locks, and the agent's own
+  container hidden on Direct and Edge;
 - recreate and edit with recovery, and single-service restart and stop mode for
   stacks;
 - host maintenance: edits, Check with typed results, the one-shot agent restart,
@@ -84,8 +96,8 @@ in German and English at 1440 and 390 px, on every applicable host type:
 ## Result
 
 The first run on `561c2285` concluded **not accepted**: 62 cells passed, 1
-failed, none excluded and 12 do not apply. In cell OR1-H, two concurrent
-hub-local container list reads crashed the hub with a concurrent map write. Docker
+failed, none excluded and 12 do not apply. In cell OR1-H, a container list read
+during the hub-local origin flow crashed the hub with a concurrent map write. Docker
 list reads are coalesced, so concurrent requests shared label maps, and the
 origin overlay decoded its result back into them. #376 decodes into a fresh
 value, with tests that fail on the old code.
@@ -96,9 +108,9 @@ A focused rerun on `09fc9b8` concluded **accepted**:
 - 400 list and 100 detail reads at concurrency 16 against each host type
   returned 200 with origin fields, with no hub restart and no fatal log line.
 
-The composed matrix has 63 passed cells and none failed or excluded. Failed
-attempts in both runs were harness issues and are retained in the private
-evidence.
+The composed matrix has 63 passed cells and none failed or excluded. Apart
+from the OR1-H crash, the failed attempts in both runs were harness issues; all
+attempts are retained in the private evidence.
 
 Measured in the sandbox:
 - a frozen Edge agent went offline after 88 s on both listeners and returned
@@ -110,6 +122,8 @@ Measured in the sandbox:
 
 ## Limits
 
+- A shell exec that ignores the end of its session can survive it; it is
+  recorded as `container.shell-orphaned`. One Direct session showed this.
 - An idle poll-mode Edge host never reaches sustained standby with default
   settings, because the health job is standing tunnel demand. The cell used the
   verified recipe with deferred jobs and no open browser (#373).
