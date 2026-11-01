@@ -18,6 +18,8 @@ import (
 
 func (s *Service) configureDraftProbe(h *backuptarget.Handler, environments *environment.EnvironmentService) {
 	h.Probe = func(ctx context.Context, request dto.TargetProbeRequest) (dto.TargetProbeResult, error) {
+		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
 		input, err := backuptarget.Validate(request.Target)
 		if err != nil {
 			return dto.TargetProbeResult{}, err

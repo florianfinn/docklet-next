@@ -20,11 +20,12 @@ import (
 
 type TargetExec func(context.Context, string, string, []string) (string, string, error)
 type Session struct {
-	ID, Root  string
-	Plan      MountPlan
-	cli       *client.Client
-	exec      TargetExec
-	transient string
+	ID, Root        string
+	Plan            MountPlan
+	cli             *client.Client
+	exec            TargetExec
+	transient       string
+	cleanupDeadline time.Time
 }
 
 func Root(target dto.SyncedTarget) string {
@@ -36,8 +37,12 @@ func Root(target dto.SyncedTarget) string {
 
 // OpenSession owns only its helper and, for drafts, its randomly named mount volume.
 func OpenSession(ctx context.Context, cli *client.Client, image string, target dto.SyncedTarget, host string, transient bool, exec TargetExec) (session *Session, err error) {
+	return openSession(ctx, cli, image, target, host, transient, exec, time.Time{})
+}
+
+func openSession(ctx context.Context, cli *client.Client, image string, target dto.SyncedTarget, host string, transient bool, exec TargetExec, cleanupDeadline time.Time) (session *Session, err error) {
 	plan := Plan(target, host, false)
-	session = &Session{Plan: plan, Root: Root(target), cli: cli, exec: exec}
+	session = &Session{Plan: plan, Root: Root(target), cli: cli, exec: exec, cleanupDeadline: cleanupDeadline}
 	if plan.Volume != nil {
 		if transient {
 			name := "docklet-target-probe-" + uuid.New().String()
@@ -83,7 +88,7 @@ func OpenSession(ctx context.Context, cli *client.Client, image string, target d
 	return session, nil
 }
 func (s *Session) Close(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	ctx, cancel := s.cleanupContext(ctx)
 	defer cancel()
 	if s.ID != "" {
 		if _, err := s.cli.ContainerRemove(ctx, s.ID, volumehelper.RemoveOptions()); err != nil {
@@ -97,6 +102,16 @@ func (s *Session) Close(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Cleanup survives caller cancellation while respecting a probe's total budget.
+func (s *Session) cleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline := time.Now().Add(30 * time.Second)
+	if !s.cleanupDeadline.IsZero() && s.cleanupDeadline.Before(deadline) {
+		deadline = s.cleanupDeadline
+	}
+	return context.WithDeadline(context.WithoutCancel(ctx), deadline)
+}
+
 func ProbeProblem(err error) error {
 	text := strings.ToLower(err.Error())
 	code := "backup.target.mount-failed"
@@ -111,16 +126,23 @@ func ProbeProblem(err error) error {
 	return dto.NewProblem(422, code, err)
 }
 func Probe(ctx context.Context, cli *client.Client, image string, target dto.SyncedTarget, host string, exec TargetExec) (dto.TargetProbeResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	started := time.Now()
+	deadline := started.Add(60 * time.Second)
+	if parent, ok := ctx.Deadline(); ok && parent.Before(deadline) {
+		deadline = parent
+	}
+	// Reserve cleanup time inside the synchronous response budget.
+	reserve := min(15*time.Second, max(0, deadline.Sub(started)/4))
+	ctx, cancel := context.WithDeadline(ctx, deadline.Add(-reserve))
 	defer cancel()
-	session, err := OpenSession(ctx, cli, image, target, host, true, exec)
+	session, err := openSession(ctx, cli, image, target, host, true, exec, deadline)
 	if err != nil {
 		return probeResult(err), nil
 	}
 	file := path.Join(session.Root, ".docklet-probe-"+uuid.New().String())
 	_, _, err = exec(ctx, session.ID, "", []string{"sh", "-c", `set -e; printf probe > "$1"; rm -f -- "$1"`, "sh", file})
 	if err != nil {
-		cleanup, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		cleanup, cleanupCancel := session.cleanupContext(ctx)
 		_, _, _ = exec(cleanup, session.ID, "", []string{"rm", "-f", "--", file})
 		cleanupCancel()
 		err = ProbeProblem(err)

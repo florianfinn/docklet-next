@@ -13,6 +13,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -68,6 +69,9 @@ func TestDraftProbeTransientCleanupAndNoMetadata(t *testing.T) {
 					require.NoError(t, ctx.Err())
 					return "", "", nil
 				}
+				deadline, bounded := ctx.Deadline()
+				require.True(t, bounded)
+				require.LessOrEqual(t, time.Until(deadline), 45*time.Second, "reserve cleanup within the 60-second probe budget")
 				if outcome == "cancel" {
 					cancel()
 					<-ctx.Done()
@@ -113,4 +117,27 @@ func TestDraftLocalOwnerMustExecute(t *testing.T) {
 	svc := NewService(Dependencies{})
 	_, err := svc.Draft(t.Context(), dto.TargetDraftTest{Target: dto.TargetInput{TargetLocation: dto.TargetLocation{Kind: "local", HostID: new("host-a"), Path: "/srv/archive"}, Name: "Draft"}, ProbeHostID: "host-b"})
 	require.EqualError(t, err, "backup.target.probe-host-mismatch")
+}
+
+type probeTransport func(*http.Request) (*http.Response, error)
+
+func (f probeTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func TestProbeCleanupRetainsOverallDeadline(t *testing.T) {
+	deadline := time.Now().Add(5 * time.Second)
+	calls := 0
+	transport := probeTransport(func(r *http.Request) (*http.Response, error) {
+		actual, ok := r.Context().Deadline()
+		require.True(t, ok)
+		require.False(t, actual.After(deadline), "cleanup must not exceed the original probe budget")
+		calls++
+		return &http.Response{StatusCode: 204, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, nil
+	})
+	cli, err := client.New(client.WithHost("http://daemon.example.com"), client.WithAPIVersion("1.41"), client.WithHTTPClient(&http.Client{Transport: transport}))
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	session := &Session{ID: "probe", transient: "probe-volume", cli: cli, cleanupDeadline: deadline}
+	require.NoError(t, session.Close(ctx))
+	require.Equal(t, 2, calls, "helper and transient volume are removed after cancellation")
 }
