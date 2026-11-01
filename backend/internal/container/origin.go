@@ -55,7 +55,10 @@ func (s *ContainerService) OverlayInventory(ctx context.Context, environment str
 	}
 	return s.operations.origins.Overlay(ctx, environment, body)
 }
-func (s *ContainerService) overlayLocal(ctx context.Context, value any) error {
+
+// overlayLocal decodes into a fresh value: coalesced Docker list reads share label maps between
+// concurrent requests, and decoding into them in place is a concurrent map write.
+func overlayLocal[T any](ctx context.Context, s *ContainerService, value *T) error {
 	if s.operations == nil || s.operations.origins == nil {
 		return nil
 	}
@@ -67,7 +70,12 @@ func (s *ContainerService) overlayLocal(ctx context.Context, value any) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(body, value)
+	var fresh T
+	if err := json.Unmarshal(body, &fresh); err != nil {
+		return err
+	}
+	*value = fresh
+	return nil
 }
 func (s *ContainerService) OriginGuard(ctx context.Context, environment string, id origin.Identity) error {
 	if s.operations == nil || s.operations.origins == nil {
