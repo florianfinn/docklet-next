@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC, passkeys and federated accounts; SQLite BLOB avatar storage.
+// Deviations: Local module namespace; functional cut: removed OIDC, passkeys and federated accounts; SQLite BLOB avatar storage; M15 simple-user rights and identity contracts.
 
 package user
 
@@ -29,7 +29,8 @@ type User struct {
 	RequiresPasswordChange bool             `json:"requiresPasswordChange" gorm:"column:requires_password_change"`
 
 	// Avatar metadata
-	HasAvatar bool `json:"hasAvatar" gorm:"column:has_avatar;not null;default:false"`
+	HasAvatar  bool       `json:"hasAvatar" gorm:"column:has_avatar;not null;default:false"`
+	DisabledAt *time.Time `json:"disabledAt,omitempty" gorm:"column:disabled_at"`
 }
 
 func (User) TableName() string {

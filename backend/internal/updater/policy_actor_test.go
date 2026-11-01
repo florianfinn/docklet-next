@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Actual role/key rows are re-read for policy execution instead of cached or system grants.
+// Deviations: Actual role/key rows are re-read for policy execution instead of cached or system grants; M15 scoped-key owners are administrators.
 
 package updater
 
@@ -25,9 +25,8 @@ func TestPolicyActorResolvesCurrentKeyAndCompleteGrants(t *testing.T) {
 	f := newPolicyFixture(t)
 	f.s.roles = role.NewRoleService(f.db)
 	require.NoError(t, f.db.Create(&userdomain.User{BaseModel: database.BaseModel{ID: "example-actor"}, Username: "operator"}).Error)
-	grants := database.StringSlice{authz.PermJobsManage, authz.PermProjectsRead, authz.PermImageUpdatesCheck, authz.PermImageUpdatesRead, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead}
-	require.NoError(t, f.db.Create(&role.Role{ID: "example-role", Name: "Policy operator", Permissions: grants}).Error)
-	assignment := role.UserRoleAssignment{UserID: "example-actor", RoleID: "example-role"}
+	require.NoError(t, f.db.Create(&role.Role{ID: authz.BuiltInRoleAdmin, Name: "Admin", Permissions: database.StringSlice(authz.AllPermissions())}).Error)
+	assignment := role.UserRoleAssignment{UserID: "example-actor", RoleID: authz.BuiltInRoleAdmin}
 	require.NoError(t, f.db.Create(&assignment).Error)
 	owner := "example-actor"
 	key := apikey.ApiKey{BaseModel: database.BaseModel{ID: "example-key"}, Name: "Policy key", KeyHash: "synthetic-hash", KeyPrefix: "synthetic", Kind: "personal", UserID: &owner}
@@ -62,10 +61,16 @@ func TestPolicySaveRightsMatchMode(t *testing.T) {
 				if full {
 					grants = append(grants, authz.PermJobsManage, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
 				}
-				require.NoError(t, f.db.Create(&role.Role{ID: "example-role", Name: "Policy reader", Permissions: grants}).Error)
-				require.NoError(t, f.db.Create(&role.UserRoleAssignment{UserID: "example-actor", RoleID: "example-role"}).Error)
+				require.NoError(t, f.db.Create(&role.Role{ID: authz.BuiltInRoleAdmin, Name: "Admin", Permissions: database.StringSlice(authz.AllPermissions())}).Error)
+				require.NoError(t, f.db.Create(&role.UserRoleAssignment{UserID: "example-actor", RoleID: authz.BuiltInRoleAdmin}).Error)
+				owner := "example-actor"
+				key := apikey.ApiKey{BaseModel: database.BaseModel{ID: "example-key"}, Name: "Policy key", KeyHash: "synthetic-hash", KeyPrefix: "synthetic", Kind: "scoped", UserID: &owner}
+				require.NoError(t, f.db.Create(&key).Error)
+				for _, grant := range grants {
+					require.NoError(t, f.db.Create(&role.ApiKeyPermission{ApiKeyID: key.ID, Permission: grant}).Error)
+				}
 				f.p.ports.actor = f.s.imagePolicyActor
-				result, err := f.s.SaveImagePolicy(t.Context(), "0", "stack", dto.UpdatePolicyInput{Mode: mode}, "example-actor", "")
+				result, err := f.s.SaveImagePolicy(t.Context(), "0", "stack", dto.UpdatePolicyInput{Mode: mode}, "example-actor", key.ID)
 				if mode == "apply" && !full {
 					require.Error(t, err)
 				} else {

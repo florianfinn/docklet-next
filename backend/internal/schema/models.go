@@ -2,11 +2,12 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments.
 
 package schema
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
@@ -56,7 +57,7 @@ func Models() []any {
 		&system.SystemBackupRun{}, &system.SystemBackupPolicy{},
 		&upgrade.EnvironmentUpdateJob{}, &updater.AutoUpdateRecord{},
 		&updatepolicies.Policy{}, &updatepolicies.HostSchedule{}, &updatepolicies.Child{}, &updatepolicies.Candidate{}, &updatepolicies.Notice{},
-		&user.User{}, &user.UserAvatar{},
+		&user.User{}, &user.UserAvatar{}, &access.Assignment{},
 		&volume.VolumeBackup{}, &policies.VolumeBackupPolicy{}, &volumebackup.RestoreRun{}, &backuptarget.Target{}, &backuptarget.Check{},
 		&vulnerability.ScanNotification{}, &vulnerabilityDTO.ScanRun{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
 		&vulnerability.VulnerabilityScanItem{}, &vulnerability.VulnerabilityThreatIntel{},

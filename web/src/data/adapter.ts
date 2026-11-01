@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/data/adapter.ts
+// Revision: 81be6ce24058459478dde21b11c6a5605fdb3e7b4d5fc409bc2aacce9a333cfd
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. Issue #102: optional classified activity source read-health subscription. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. List summaries and owned detail reads with bounded recovery (#225, #223). Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. M11 #262: live vulnerability reads, scan controls and security settings. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+
 import type { components } from "@/api/generated/schema";
 import type {
   AutoUpdatePolicy,
@@ -15,7 +21,7 @@ import type {
 import type { OpenShell } from "./shell";
 
 import type { UpdatesApi, LifecycleInput } from "@/domain/stack-updates";
-import type { AuthApi, AutoHealApi, HostsApi, HubApi, ImagesApi, NetworksApi, NotificationsApi, SettingsApi, VolumesApi } from "./api";
+import type { AuthApi, UsersApi, AutoHealApi, HostsApi, HubApi, ImagesApi, NetworksApi, NotificationsApi, SettingsApi, VolumesApi } from "./api";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-code";
 import type { CapabilityDescriptor, ResourceRef } from "./capability";
 import type { RegistriesApi } from "@/domain/registries";
@@ -95,7 +101,7 @@ export interface RuntimeReleaseInput {
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends UpdatesApi, AuthApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi {
+export interface DockletAdapter extends UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi {
   readonly kind: "demo" | "http" | "disconnected";
   readonly mappedOperations?: ReadonlySet<string>;
 

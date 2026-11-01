@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture.; M15 resource authorization and isolated transport helpers.
 
 package auth
 
@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/mldsa"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -495,7 +496,7 @@ func setupAuthMiddlewareTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}, &user.User{}, &session.UserSession{}))
+	require.NoError(t, db.AutoMigrate(&access.Assignment{}, &settings.SettingVariable{}, &user.User{}, &session.UserSession{}))
 	return &database.DB{DB: db}
 }
 

@@ -28,6 +28,8 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Notification delivery](notifications.md) | Hub-owned delivery, credential boundaries, host ingress and availability |
 | [Auto Heal](auto-heal.md) | Per-host settings, ownership, durable restart attempts and silent recovery |
 | [Container and host operations](container-host-operations.md) | M14 shared foundation: migration 014, agent contract v11 and ownership |
+| [Simple users](simple-users.md) | M15 decision: administrators, users with two levels per assigned stack, login modes, personal keys, sign-out |
+| [Resource rights](resource-rights.md) | M15 foundation: rule table, decision points, stack/container resolution, stream revocation |
 | [Container shell](container-shell.md) | Pre-upgrade hub acceptance, shell choice, frame protocol, close reasons and session release |
 | [Container origin, recreate and edit](container-origin-recreate.md) | Unraid and manual origin, overlay, guards, idempotent recreate and journal recovery |
 | [Stack stop mode and service restart](stack-stop-service.md) | Hub stop-mode setting, stopped stacks from the resolved model and single service restart |

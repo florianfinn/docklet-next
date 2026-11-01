@@ -20,6 +20,9 @@ func (s *UserService) GlobalAdministrator(ctx context.Context) (*User, error) {
 		return nil, err
 	}
 	for _, candidate := range users {
+		if candidate.DisabledAt != nil {
+			continue
+		}
 		permissions, err := s.roleService.ResolvePermissions(ctx, candidate.ID)
 		if err != nil {
 			return nil, err

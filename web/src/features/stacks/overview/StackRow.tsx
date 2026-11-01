@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/overview/StackRow.tsx
+// Revision: 9fce7c53dd34535a701c5bca9247f35deb0ba310d9a9a5e5986e7f79757ce153
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
 import { useAdapter } from "@/data/use-adapter";
 import { Globe, Layers, TriangleAlert } from "lucide-react";
 import { memo, type ReactNode } from "react";
@@ -74,7 +81,9 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
   const compact = mode === "compact";
   const condensed = view === "condensed";
   const pad = inBlock ? (compact ? "py-2.5" : "py-1") : compact ? "py-3.5" : "py-1.5";
+  const user = useIsUser();
   const updateActions = {
+    resourceRef: user ? { kind: "stack" as const, id: stack.id } : undefined,
     onUpdate: () => void cmd.installUpdates(stack.id),
     onRecheck: () => void cmd.checkUpdates(stack.id),
     busy: !!stack.busyActionId,

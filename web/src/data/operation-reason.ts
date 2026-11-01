@@ -2,10 +2,17 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original shared presentation keys for M14 operation refusals. M14 host maintenance and availability.
+// Deviations: Original shared presentation keys for M14 operation refusals. M14 host maintenance and availability; M15 simple-user rights and identity contracts.
 
 export function operationReasonKey(code: string) {
   switch (code) {
+    case "access.not-found": return "accessNotFound";
+    case "access.admin-required": return "accessAdminRequired";
+    case "access.full-required": return "accessFullRequired";
+    case "access.disabled": return "accessDisabled";
+    case "access.not-registered": return "accessNotRegistered";
+    case "access.unavailable": return "accessUnavailable";
+
     case "container.origin-locked": return "originLocked";
     case "container.recreate-recovered": return "recreateRecovered";
     case "container.recreate-ambiguous": return "recreateAmbiguous";

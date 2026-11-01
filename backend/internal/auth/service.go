@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts.
 
 package auth
 
@@ -82,7 +82,7 @@ func NewAuthService(
 	sessionService *session.SessionService,
 	cfg *config.Config,
 ) *AuthService {
-	return &AuthService{
+	s := &AuthService{
 		userService:     userService,
 		settingsService: settingsService,
 		eventService:    eventService,
@@ -94,6 +94,10 @@ func NewAuthService(
 			WithJanitor().
 			Build(),
 	}
+	if userService != nil {
+		userService.SetRightsInvalidator(s.InvalidateUserTokenCache)
+	}
+	return s
 }
 
 func (s *AuthService) GetSessionTimeout(ctx context.Context) (int, error) {
@@ -116,65 +120,12 @@ func (s *AuthService) GetSessionTimeout(ctx context.Context) (int, error) {
 	return minutes, nil
 }
 
-// AuthenticateLocalPrimary validates the local primary factor without
-// creating a session.
-func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, password string) (*user.User, error) {
-	localEnabled, err := s.IsLocalAuthEnabled(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !localEnabled {
-		return nil, ErrLocalAuthDisabled
-	}
-
-	localUser, err := s.userService.GetUserByUsername(ctx, username)
-	if err != nil && !errors.Is(err, common.ErrUserNotFound) {
-		return nil, err
-	}
-	// When the identifier looks like an email, resolve the email identity too:
-	// a collision between one account's username and a different account's
-	// email is rejected instead of silently validating against whichever
-	// account the username lookup happened to return.
-	if strings.Contains(username, "@") {
-		emailUser, emailErr := s.userService.GetUserByEmail(ctx, username)
-		switch {
-		case errors.Is(emailErr, common.ErrAmbiguousUserEmail):
-			slog.WarnContext(ctx, "Rejecting email login: multiple accounts share this email", "email", username)
-			return nil, ErrInvalidCredentials
-		case emailErr != nil && !errors.Is(emailErr, common.ErrUserNotFound):
-			return nil, emailErr
-		case emailErr == nil && localUser != nil && emailUser.ID != localUser.ID:
-			slog.WarnContext(ctx, "Rejecting login: identifier matches one account's username and a different account's email", "identifier", username)
-			return nil, ErrInvalidCredentials
-		case emailErr == nil && localUser == nil:
-			localUser = emailUser
-		}
-	}
-	if localUser == nil {
-		return nil, ErrInvalidCredentials
-	}
-	if validatePasswordErr := s.userService.ValidatePassword(localUser.PasswordHash, password); validatePasswordErr != nil {
-		return nil, ErrInvalidCredentials
-	}
-
-	localUser.LastLogin = new(time.Now())
-	userCopy := new(*localUser)
-	s.runInBackground(ctx, "update_last_login", func(ctx context.Context) error {
-		if _, updateUserErr := s.userService.UpdateUser(ctx, userCopy, nil); updateUserErr != nil {
-			return fmt.Errorf("failed to update user's last login time: %w", updateUserErr)
-		}
-		return nil
-	})
-
-	return localUser, nil
-}
-
-// CompleteLogin creates a session after local credentials are verified.
+// CompleteLogin creates a local session after primary-factor verification.
 func (s *AuthService) CompleteLogin(ctx context.Context, localUser *user.User, meta auth.SessionMeta, source string) (*TokenPair, error) {
 	if s.SignInMode() != auth.SignInModeLocal {
 		return nil, ErrLocalAuthDisabled
 	}
-	if localUser == nil {
+	if localUser == nil || localUser.DisabledAt != nil {
 		return nil, common.ErrUserNotFound
 	}
 	if strings.TrimSpace(source) == "" {
@@ -293,6 +244,10 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string, met
 	if err != nil {
 		return nil, err
 	}
+	u, loadErr := s.userService.GetUserByID(ctx, claims.UserID)
+	if loadErr != nil || u.DisabledAt != nil {
+		return nil, common.ErrInvalidToken
+	}
 	if userSession.UserID != claims.UserID {
 		return nil, common.ErrInvalidToken
 	}
@@ -380,6 +335,9 @@ func (s *AuthService) verifyTokenClaimsInternal(ctx context.Context, tokenHash s
 		return nil, "", kit.Ternary[error](errors.Is(err, common.ErrUserNotFound), common.ErrInvalidToken, err)
 	}
 
+	if dbUser.DisabledAt != nil {
+		return nil, "", common.ErrInvalidToken
+	}
 	userSession, err := s.sessionService.GetSessionByID(ctx, claims.SessionID)
 	if err != nil {
 		return nil, "", err

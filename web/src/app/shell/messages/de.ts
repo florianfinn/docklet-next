@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/messages/de.ts
+// Revision: 44a851951c82b6e8436e9757815305a4fb8ee276ca95831902245b096fe7e362
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service.
+
 // German texts of the application shell (navigation, host filter, profile menu).
 import type { enShell } from "./en";
 
@@ -45,12 +51,16 @@ export const deShell: typeof enShell = {
     on: (import.meta.env.DEV ? "Live-Simulation läuft – zum Pausieren klicken" : ""),
     off: (import.meta.env.DEV ? "Live-Simulation pausiert – zum Fortsetzen klicken" : ""),
   },
+  unavailable: { title: "Nicht verfügbar", body: "Diese Seite ist nur für Administratoren verfügbar." },
   user: {
+    userRole: "Benutzer",
+    proxyHint: "Melde dich an deinem Reverse-Proxy ab",
+    logoutError: "Abmeldung fehlgeschlagen. Versuche es erneut.",
     name: import.meta.env.DEV ? "Alex Beispiel" : "",
     email: import.meta.env.DEV ? "alex@example.com" : "",
     unknownName: "Benutzer unbekannt",
     unknownStatus: "Keine Sitzung verbunden",
-    role: "Hub-Administration",
+    role: "Administrator",
     signedInAs: "Angemeldet als",
     labShortcut: "Alt ⇧ D",
     menu: "Profil und Hub-Einstellungen",

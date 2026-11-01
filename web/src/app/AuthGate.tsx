@@ -11,11 +11,13 @@ import { useTranslations } from "use-intl";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useAuthMode, useCurrentUser, useSetupStatus } from "@/data/queries";
+import { operationReasonKey } from "@/data/operation-reason";
 import { isLocale } from "@/domain/locale";
 import { Button } from "@/shared/ui/button";
 
 export function AuthGate() {
   const t = useTranslations("login");
+  const reasons = useTranslations("containers.operationReasons");
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
   const setup = useSetupStatus(currentUser.isSuccess && !!currentUser.data);
@@ -33,6 +35,9 @@ export function AuthGate() {
   if (currentUser.isError || unauthorized || (currentUser.isSuccess && !currentUser.data)) {
     const rejected = (currentUser.isSuccess && !currentUser.data) || unauthorized || (currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401);
     if (rejected && mode.data === "local") return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    const code = currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" ? currentUser.error.outcome.code : undefined;
+    const refusal = code === "access.not-registered" || code === "access.disabled" ? operationReasonKey(code) : undefined;
+    if (refusal) return <main className="p-6" role="alert">{reasons(refusal)}</main>;
     if (rejected && mode.data === "proxy") return <main className="p-6" role="alert">{t("proxyRejected")}</main>;
     return <main className="p-6"><p>{t("sessionError")}</p><Button onClick={() => void currentUser.refetch()}>{t("retry")}</Button></main>;
   }

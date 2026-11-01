@@ -29,7 +29,7 @@ export default function ProductLoginPage() {
   const [error, setError] = useState("");
   if (mode.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (mode.isError) return <main className="p-6"><p>{t("settingsError")}</p><Button onClick={() => void mode.refetch()}>{t("retry")}</Button></main>;
-  if (mode.data === "none" || (currentUser.isSuccess && !!currentUser.data && mode.data === "local")) return <Navigate to="/dashboard" replace />;
+  if (currentUser.data?.isAdmin === false || mode.data === "none" || (currentUser.isSuccess && !!currentUser.data && mode.data === "local")) return <Navigate to={currentUser.data?.isAdmin === false ? "/stacks" : "/dashboard"} replace />;
   if (mode.data === "proxy") return <main className="mx-auto max-w-md p-6" role="alert">{currentUser.isError || (currentUser.isSuccess && !currentUser.data) ? t("proxyRejected") : t("loading")}</main>;
   return <main className="grid min-h-svh place-items-center p-4"><Card className="w-full max-w-md p-6">
     <h1 className="text-xl font-semibold">{t("title", { hub: "Docklet" })}</h1>

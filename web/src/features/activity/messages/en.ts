@@ -124,6 +124,7 @@ export const enActivity = {
     close: "Close progress window",
     closeShort: "Close",
     closeHint: "Closing does not end the action. Reopen it via the notice at top right or the action center.",
+    closeHintUser: "Closing does not end the action. Reopen it via the notice at top right while it is shown.",
     openCentre: "Show in action center",
     waiting: "{count, plural, one {Another important action started} other {# more important actions started}}: {title}",
     showWaiting: "Show",

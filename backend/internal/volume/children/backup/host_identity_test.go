@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original backup-route Direct/Edge session revocation and late-response proofs.
+// Deviations: Original backup-route Direct/Edge session revocation and late-response proofs; M15 assignment schema in the environment fixture.
 
 package backup
 
@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
@@ -70,7 +71,7 @@ func TestBackupRoutesDropHeldDirectAndEdgeResponsesOnHostRotation(t *testing.T) 
 					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 					defer cancel()
 					f := newRuntimePlan(t)
-					require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}))
+					require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}, &access.Assignment{}))
 					entered := make(chan struct{}, 1)
 					release := make(chan struct{})
 					info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})

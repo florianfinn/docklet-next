@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts.
 
 package middleware
 
@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
@@ -168,6 +169,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if m.authValidator != nil {
 		ps, u, ok := m.authValidator(c.Request().Context(), c)
 		if !ok {
+			if code, ok := c.Get("accessAuthError").(string); ok {
+				return genericProblem(c, 403, code)
+			}
 			if vulnerabilityShape {
 				return genericProblem(c, http.StatusUnauthorized, "Authentication required to access remote environments")
 			}
@@ -178,6 +182,32 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		}
 		perms, user = ps, u
 		c.Set("pointHostAdmin", ps.IsGlobalAdmin())
+	}
+	if access.FromPermissions(perms).IsUser() {
+		op, env, params := access.Match(c.Request().Method, c.Request().URL.Path)
+		if m.matcher != nil {
+			if matched := m.matcher.LookupOperation(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)); matched != "" {
+				op = matched
+			}
+		}
+		if op == "deploy-project" {
+			if body, err := readAccessBody(c); err == nil {
+				params.Body = body
+			} else {
+				return genericProblem(c, 400, "Invalid deployment options")
+			}
+		}
+		if op == "list-projects" {
+			body, err := access.ProjectList(c.Request().Context(), access.FromPermissions(perms), env, c.QueryParams())
+			if err != nil {
+				return genericProblem(c, 503, "access.unavailable")
+			}
+			return c.JSON(200, body)
+		}
+		if d := access.Decide(c.Request().Context(), access.FromPermissions(perms), op, env, params); d != access.Allow {
+			return genericProblem(c, d.Status(), string(d))
+		}
+		c.Set("simpleUserAuthorized", true)
 	}
 	if isVulnerability {
 		if m.proxyPermissionDenied(c, perms, envID) {
@@ -428,6 +458,11 @@ func (m *EnvironmentMiddleware) setUpdateInitiatorHeadersInternal(c *echo.Contex
 // permission mapping are denied (default-deny), so a newly added proxied route
 // cannot silently bypass authorization before it is mapped.
 func (m *EnvironmentMiddleware) proxyPermissionDenied(c *echo.Context, ps *authz.PermissionSet, envID string) bool {
+	if authorized, _ := c.Get("simpleUserAuthorized").(bool); !authorized {
+		if d := echoAccessDecision(c, ps); d != access.Allow {
+			return true
+		}
+	}
 	if m.matcher == nil {
 		return false
 	}
@@ -922,79 +957,4 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		return m.writeLifecycleResponse(c, resp.StatusCode, resp.Header, resp.Body)
 	}
 	return m.writeProxyResponse(c, resp)
-}
-
-// createProxyRequest builds the HTTP request to forward to the remote environment.
-func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target string, accessToken *string) (*http.Request, error) {
-	srcReq := c.Request()
-	validatedTarget, err := httpx.ValidateOutboundHTTPURL(target)
-	if err != nil {
-		return nil, common.Classify(common.ErrEnvironmentInvalidProxyTarget, fmt.Errorf("Invalid proxy target URL: %w", err)) //nolint:staticcheck // Preserve the existing error message.
-	}
-
-	// The body is streamed straight through rather than buffered: volume backup
-	// and image import uploads run to gigabytes, and reading them into memory
-	// cost roughly twice their size per in-flight request. This drops GetBody,
-	// so the transport can no longer replay the body across a redirect or an
-	// idle-connection retry; a proxied API call has no legitimate need for
-	// either, and a failure surfaces as a 502 rather than silent corruption.
-	//
-	// A server request's ContentLength is 0 only when there is genuinely no
-	// body (-1 means chunked/unknown), so it is the safe signal for whether to
-	// forward one at all.
-	var requestBody io.ReadCloser
-	var contentLength int64
-	switch {
-	case srcReq.Body == nil:
-	case srcReq.ContentLength != 0:
-		requestBody, contentLength = srcReq.Body, srcReq.ContentLength
-	default:
-		_ = srcReq.Body.Close()
-	}
-
-	// The body is deliberately not logged: at debug level it would put compose
-	// files and registry credentials into the ring buffer served by
-	// /api/diagnostics/logs, and stringifying it allocated even when debug was off.
-	slog.DebugContext(srcReq.Context(), "Creating proxy request", "method", srcReq.Method, "target", target, "contentLength", srcReq.ContentLength, "contentType", srcReq.Header.Get("Content-Type"))
-
-	requestURL := *validatedTarget
-	req := (&http.Request{
-		Method:        srcReq.Method,
-		URL:           &requestURL,
-		Host:          requestURL.Host,
-		Header:        make(http.Header),
-		Body:          requestBody,
-		ContentLength: contentLength,
-	}).WithContext(srcReq.Context())
-
-	skip := edge.GetSkipHeaders()
-	edge.CopyRequestHeaders(srcReq.Header, req.Header, skip)
-	remenv.StripHubCredentials(req.Header, m.proxyIdentityHeader)
-	edge.SetAgentToken(req, accessToken)
-	edge.SetForwardedHeaders(req, c.RealIP(), srcReq.Host)
-
-	return req, nil
-}
-
-// writeProxyResponse copies the proxy response back to the client. An upstream
-// 401 means the agent rejected the manager's credentials; passing it through
-// makes browser clients treat it as a lost session, so it becomes a 502.
-func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.Response) error {
-	if remenv.AgentAuthRejected(resp.StatusCode) {
-		slog.WarnContext(c.Request().Context(), "Remote environment rejected the manager's credentials", "target", resp.Request.URL.Host)
-		return c.JSON(http.StatusBadGateway, map[string]any{
-			"success": false,
-			"code":    remenv.ClassifyAgentRefusal(resp.StatusCode, remenv.ReadAgentRefusalBody(resp.Body)),
-			"data":    map[string]any{"error": "Remote environment rejected the manager's credentials"},
-		})
-	}
-	w := c.Response()
-	hopByHop := edge.BuildHopByHopHeaders(resp.Header)
-	edge.CopyResponseHeaders(resp.Header, w.Header(), hopByHop)
-
-	w.WriteHeader(resp.StatusCode)
-	if c.Request().Method != http.MethodHead {
-		edge.CopyBodyWithFlush(w, resp.Body)
-	}
-	return nil
 }

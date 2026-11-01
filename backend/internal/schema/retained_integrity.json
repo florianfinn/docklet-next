@@ -1,5 +1,11 @@
 {
   "columns": [
+    {"table":"user_app_assignments","column":"id","notNull":true},
+    {"table":"user_app_assignments","column":"user_id","notNull":true},
+    {"table":"user_app_assignments","column":"environment_id","notNull":true},
+    {"table":"user_app_assignments","column":"project_id","notNull":true},
+    {"table":"user_app_assignments","column":"level","notNull":true},
+    {"table":"user_app_assignments","column":"created_at","notNull":true},
     {"table":"notification_outbox","column":"id","notNull":true},
     {"table":"notification_outbox","column":"event","notNull":true},
     {"table":"notification_outbox","column":"environment_id","notNull":true},
@@ -298,6 +304,11 @@
     {"table":"environments","column":"color","check":"CHECK (color IS NULL OR (length(color) = 7 AND substr(color,1,1) = '#' AND substr(color,2) NOT GLOB '*[^0-9a-f]*'))"}
   ],
   "constraints": {
+    "user_app_assignments": [
+      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+      "CHECK (level IN ('restricted', 'full'))",
+      "UNIQUE (user_id, environment_id, project_id)"
+    ],
     "notification_outbox": [
       "CHECK (event IN ('deploy_failed','backup_failed','host_offline','auto_heal'))",
       "CHECK (status IN ('pending','sending','sent','failed','unconfigured','expired'))",
@@ -493,6 +504,7 @@
     ]
   },
   "indexes": [
+    "CREATE INDEX user_app_assignments_environment ON user_app_assignments(environment_id);",
     "CREATE INDEX idx_notification_outbox_delivery ON notification_outbox (status,created_at);",
     "CREATE UNIQUE INDEX idx_volume_backup_policies_single_volume ON volume_backup_policies (volume_name)",
     "CREATE UNIQUE INDEX idx_backup_targets_active_name ON backup_targets (name) WHERE retired_at IS NULL",

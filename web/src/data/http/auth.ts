@@ -7,6 +7,7 @@
 import { discardResponse } from "./identity-reads";
 import { CancelledError } from "@tanstack/react-query";
 
+import type { components } from "@/api/generated/schema";
 import type { AuthApi, CurrentUser } from "@/data/api";
 import type { AuthMode } from "@/domain/settings";
 
@@ -17,14 +18,15 @@ function user(value: unknown): CurrentUser {
   if (!value || typeof value !== "object") throw new Error("auth.invalid-user");
   const item = value as Record<string, unknown>;
   if (typeof item.id !== "string" || typeof item.username !== "string" || typeof item.requiresPasswordChange !== "boolean") throw new Error("auth.invalid-user");
-  return { id: item.id, username: item.username, requiresPasswordChange: item.requiresPasswordChange, locale: typeof item.locale === "string" ? item.locale : null };
+  return { id: item.id, username: item.username, requiresPasswordChange: item.requiresPasswordChange, isAdmin: item.isAdmin !== false, assignments: (item.assignments ?? []) as components["schemas"]["UserAppAssignment"][], locale: typeof item.locale === "string" ? item.locale : null };
 }
 
 export type SessionChange = "established" | "renewed" | "confirmed" | "lost";
 
 // Replacement clears observations; renewal keeps same-user history; loss never reconnects.
-export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0): AuthApi {
+export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0, principal: (user: CurrentUser) => void = () => {}): AuthApi {
   let currentUserId: string | undefined;
+  let currentRights: string | undefined;
   let sessionVersion = 0;
   let identityEpoch = 0;
   let renewedStamp: number | undefined;
@@ -52,6 +54,12 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     } catch {
       throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
     }
+    if (response.status === 403) {
+      // Proxy refusals (access.not-registered, access.disabled) carry their code for the sign-in gate.
+      const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
+      const code = typeof problem?.code === "string" && problem.code.startsWith("access.") ? problem.code : "http.error";
+      throw new AdapterOutcomeError({ kind: "error", code, status: 403 });
+    }
     if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");
@@ -65,8 +73,11 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     try {
       const result = user(await request("/auth/me"));
       assertCurrent(version);
-      if (result.id !== currentUserId) sessionChanged("established", result.id);
+      const rights = JSON.stringify([result.isAdmin, result.assignments]);
+      principal(result);
+      if (result.id !== currentUserId || currentRights !== undefined && rights !== currentRights) sessionChanged("established", result.id);
       else onSessionChange("confirmed");
+      currentRights = rights;
       return result;
     } catch (error) {
       if (version !== sessionVersion + sessionGeneration()) {
@@ -79,12 +90,14 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     }
   }
 
-  return {
-    async getAuthMode() {
-      const payload = await request("/auth/mode") as { mode?: unknown };
+  async function getAuthConfiguration() {
+      const payload = await request("/auth/mode") as components["schemas"]["AuthSignInConfiguration"];
       if (payload.mode !== "local" && payload.mode !== "proxy" && payload.mode !== "none") throw new Error("auth.invalid-mode");
-      return payload.mode as AuthMode;
-    },
+      return { mode: payload.mode as AuthMode, ...(payload.mode === "proxy" && payload.logoutUrl ? { logoutUrl: payload.logoutUrl } : {}) };
+  }
+  return {
+    getAuthConfiguration,
+    getAuthMode: async () => (await getAuthConfiguration()).mode,
     getCurrentUser,
     async login(username, password) {
       const from = sessionVersion + sessionGeneration();
@@ -92,6 +105,8 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       const result = await request("/auth/login", "POST", { username, password }) as { user?: unknown };
       const signedIn = user(result.user);
       assertCurrent(version);
+      principal(signedIn);
+      currentRights = JSON.stringify([signedIn.isAdmin, signedIn.assignments]);
       sessionChanged(signedIn.id === currentUserId ? "renewed" : "established", signedIn.id, from);
       return signedIn;
     },

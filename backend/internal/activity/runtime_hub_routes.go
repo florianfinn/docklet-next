@@ -2,12 +2,13 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Receipt-first hub detail, cancellation and explicit administrator disposition.
+// Deviations: Receipt-first hub detail, cancellation and explicit administrator disposition; M15 simple-user rights and identity contracts.
 
 package activity
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -35,11 +36,16 @@ type runtimeReleaseInput struct {
 
 func runtimeHubReference(ctx context.Context, service *RuntimeService, environment, run string, cancel bool) (RuntimeRunReference, error) {
 	ps, _ := middleware.PermissionsFromContext(ctx)
-	if !ps.Allows(authz.PermActivitiesRead, environment) || (cancel && !ps.Allows(authz.PermActivitiesCancel, environment)) {
+	if (ps == nil || ps.UserID == "") && (!ps.Allows(authz.PermActivitiesRead, environment) || (cancel && !ps.Allows(authz.PermActivitiesCancel, environment))) {
 		return RuntimeRunReference{}, huma.Error403Forbidden("Activity access required")
 	}
 	if service == nil {
 		return RuntimeRunReference{}, huma.Error503ServiceUnavailable("Runtime is not ready")
+	}
+	if ps != nil && ps.UserID != "" {
+		if d := access.Decide(ctx, access.FromPermissions(ps), "get-hub-runtime-run", environment, access.Params{RunID: run}); d != access.Allow {
+			return RuntimeRunReference{}, access.Problem(d.Status(), string(d))
+		}
 	}
 	ref, found, err := service.Reference(ctx, environment, run)
 	if err != nil {

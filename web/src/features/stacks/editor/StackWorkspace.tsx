@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/editor/StackWorkspace.tsx
+// Revision: 8dc34a900c94d090a1c5ae85199143f6816fe69d3e3689e6fd22806a54d8505f
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. #182 workspace editing, ordering and lifecycle. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
 import { AlertTriangle, CheckCircle2, ChevronDown, Code2, FlaskConical, Import, Play, Save, Terminal, Wand2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useBlocker, useNavigate } from "react-router";
@@ -81,7 +88,8 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-  const deployCapability = useCapability("deployStack", stack ? { kind: "stack", id: stack.id } : { kind: "host", id: draft.hostId });
+  const user = useIsUser();
+  const deployCapability = useCapability(user && stack ? "saveStackFiles" : "deployStack", stack ? { kind: "stack", id: stack.id } : { kind: "host", id: draft.hostId });
   const saveCapability = useCapability("saveStackFiles", { kind: "stack", id: stack?.id ?? "" });
   const labelCapability = useCapability("setStackLabels", { kind: "stack", id: stack?.id ?? "" });
   // Save writes labels too when they differ; both descriptors must allow it.

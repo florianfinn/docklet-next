@@ -7,7 +7,7 @@ import { createRegistryCommands } from "./registry-commands";
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service.
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
@@ -21,6 +21,9 @@ import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
 import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
+import type { CurrentUser } from "../api";
+import { createHttpUsers, USER_OPERATIONS } from "./users";
+import { createUserInventory } from "./user-inventory";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
 import { createSystemComponents } from "./system-components";
@@ -61,6 +64,7 @@ type StreamPayload = operations["streamClient"]["responses"][200]["content"]["te
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
 const IMPLEMENTED = new Set<string>([
+  ...USER_OPERATIONS,
   ...BACKUP_OPERATIONS,
   ...NOTIFICATION_SETTINGS_OPERATIONS,
   "getSecurity",
@@ -222,6 +226,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let lastEventId: number | undefined;
   let sourceOpen = false;
   let authenticated = true;
+  let principal: CurrentUser | undefined;
   let identityGeneration = 0;
   let lifetimeGeneration = 0;
   const identityListeners = new Set<() => void>();
@@ -462,7 +467,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
   });
 
-  const targets = createActivityTargets({ terminal: (host) => refreshHost(host), hasConsumer: () => actionListeners.size > 0, read: (host, id, signal, expanded) => actions.readDetail(id, host, signal, expanded) });
+  const targets = createActivityTargets({ terminal: (host) => refreshHost(host), hasConsumer: () => actionListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
 
   const events = createEventReader(async () => {
     await requireCapability("listEvents");
@@ -472,18 +477,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const loadEvents = events.load;
 
   function refreshRuns(recovery = false): void {
-    if (actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || actionListeners.size === 0) return;
     void actions.refresh(recovery).catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshHost(host: string): void {
-    if (actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || actionListeners.size === 0) return;
     if (!actions.hasHost(host)) invalidateEnvironments();
     void actions.refreshHost(host).catch(() => undefined);
   }
 
   function refreshRun(activityId: string, environmentId?: string, terminal?: string, discoverOnTerminal = false): void {
-    if (actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || actionListeners.size === 0) return;
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { if (environmentId) refreshHost(environmentId); else refreshRuns(); return; }
     targets.notify(environmentId, activityId, terminal, discoverOnTerminal);
@@ -556,7 +561,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sourceOpen = false;
     let opened: Source;
     try {
-      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents%2Cenvironments`);
+      opened = sourceFactory(`${baseUrl}/stream?channels=${principal?.isAdmin === false ? "environments" : "activities%2Cevents%2Cenvironments"}`);
     } catch (error) {
       window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
       scheduleReconnect();
@@ -611,7 +616,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();
     try {
-      const hosts = rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) }));
+      const hosts = rows.map((row) => ({ ...mapHost(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row), inventory: observations.get(row.id) }));
       environmentState = environmentKey(rows);
       return hosts;
     }
@@ -633,6 +638,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     } });
   }
   const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  const userInventory = scopedObservations((observe) => createUserInventory(baseUrl, fetcher, listHosts, () => principal, observe));
   const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
   const backups = createBackups({
@@ -651,7 +657,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
-    labels: async (stackId) => (await inventory.getStack(stackId)).labels,
+    isUser: () => principal?.isAdmin === false,
+    labels: async (stackId) => (await (principal?.isAdmin === false ? userInventory : inventory).getStack(stackId)).labels,
     changed: () => changeListeners.forEach((listener) => listener(["stacks"])),
     unauthorized: () => { suspendIdentity(); actions.reset(true); },
   });
@@ -659,7 +666,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   const adapter: DockletAdapter = {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
+    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; }),
+    ...createHttpUsers(baseUrl, client),
     ...createHostCommands(baseUrl, client, requireCapability, () => {
       backups.invalidate();
       invalidateCapabilities();
@@ -689,6 +697,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     getCapability,
     listHosts,
     ...inventory,
+    listStacks: (...args) => principal?.isAdmin === false ? userInventory.listStacks(...args) : inventory.listStacks(...args),
+    getStack: (id) => principal?.isAdmin === false ? userInventory.getStack(id) : inventory.getStack(id),
     ...resourceReads,
     ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
@@ -753,7 +763,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         }
       }))).flat()];
     },
-    listActions: actions.load,
+    listActions: () => principal?.isAdmin === false ? Promise.resolve(runtime.retained()) : actions.load(),
     observeActionDetail(host, id, listener) {
       const offActions = adapter.subscribeActions(() => {});
       const owner = lifetimeGeneration;
@@ -802,7 +812,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       connect();
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
-    subscribeMetrics: metrics,
+    subscribeMetrics: (listener) => principal?.isAdmin === false ? (() => {}) : metrics(listener),
     subscribeLogs: logs.subscribeLogs,
     subscribeContainerLogs: logs.subscribeContainerLogs,
     openContainerShell: (...args) => { invalidateCapabilities(); return shells.open(...args); },

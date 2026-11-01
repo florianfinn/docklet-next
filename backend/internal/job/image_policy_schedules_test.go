@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Actual hub schedule storage and logical controls remain usable with an offline agent.
+// Deviations: Actual hub schedule storage and logical controls remain usable with an offline agent; M15 host-wide schedule owner is an administrator.
 
 package job
 
@@ -57,8 +57,8 @@ func TestImagePolicyOfflineSchedulesUseHubZoneAndControls(t *testing.T) {
 	envs := environment.NewEnvironmentService(db, &http.Client{Transport: transport}, nil, events, settings, nil)
 	require.NoError(t, db.Create(&environment.Environment{BaseModel: database.BaseModel{ID: "example-offline"}, Name: "Example offline", ApiUrl: "https://agent.example.com", Enabled: true, Status: "offline"}).Error)
 	require.NoError(t, db.Create(&userdomain.User{BaseModel: database.BaseModel{ID: "example-actor"}, Username: "operator"}).Error)
-	require.NoError(t, db.Create(&role.Role{ID: "example-jobs-role", Name: "Jobs manager", Permissions: database.StringSlice{authz.PermJobsManage}}).Error)
-	require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "example-actor", RoleID: "example-jobs-role"}).Error)
+	require.NoError(t, db.Create(&role.Role{ID: authz.BuiltInRoleAdmin, Name: "Admin", Permissions: database.StringSlice(authz.AllPermissions())}).Error)
+	require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "example-actor", RoleID: authz.BuiltInRoleAdmin}).Error)
 	roles := role.NewRoleService(db)
 	owner, err := updater.NewUpdaterService(db, settings, nil, nil, nil, nil, events, nil, nil, nil, activities, cfg, nil, nil, roles)
 	require.NoError(t, err)

@@ -66,6 +66,10 @@ func proxyTerminalHTTP(w http.ResponseWriter, r *http.Request, address string, h
 				browserEnd <- true
 				return
 			}
+			// A revoked viewer may finish the close protocol but never sends new input to the agent.
+			if viewer.Err() != nil && !IsTerminalClose(kind, data) {
+				continue
+			}
 			writeCtx, cancel := context.WithTimeout(pump, 5*time.Second)
 			err = agent.Write(writeCtx, kind, data)
 			cancel()

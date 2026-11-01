@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: eef39ce6b1ce34992f9bc8cd7ab75fa8f68069b84756f11cd0d7cd8c6ec7c91c
+// Revision: 7b7b71048f4ed56a3a9860daf65f76464982f8610aa1e0017c2ead57fe9eef68
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4799,6 +4799,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{userId}/administrator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set-user-admin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/app-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set-user-app-assignments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{userId}/avatar": {
         parameters: {
             query?: never;
@@ -4813,6 +4845,54 @@ export interface paths {
         get: operations["getUserAvatar"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disable-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enable-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reset-user-password"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5450,6 +5530,7 @@ export interface components {
             refreshToken: string;
         };
         AuthSignInConfiguration: {
+            readonly logoutUrl?: string;
             /**
              * @description Active startup sign-in mode; changes require operator configuration and restart
              * @enum {string}
@@ -9200,7 +9281,7 @@ export interface components {
         EnvironmentEnvironment: {
             agentReport?: components["schemas"]["EnvironmentAgentReport"];
             apiKey?: string;
-            apiUrl: string;
+            apiUrl?: string;
             color: string | null;
             connected?: boolean;
             /** Format: date-time */
@@ -9211,9 +9292,9 @@ export interface components {
             edgeSecurityMode?: string;
             edgeSessionId?: string;
             edgeTransport?: string;
-            enabled: boolean;
+            enabled?: boolean;
             id: string;
-            isEdge: boolean;
+            isEdge?: boolean;
             lastEdgeTransport?: string;
             /** Format: date-time */
             lastHeartbeat?: string;
@@ -9309,7 +9390,7 @@ export interface components {
             agentReport?: components["schemas"]["EnvironmentAgentReport"];
             /** @description API key for pairing (only shown once during creation) */
             apiKey?: string;
-            apiUrl: string;
+            apiUrl?: string;
             color: string | null;
             connected?: boolean;
             /** Format: date-time */
@@ -9320,9 +9401,9 @@ export interface components {
             edgeSecurityMode?: string;
             edgeSessionId?: string;
             edgeTransport?: string;
-            enabled: boolean;
+            enabled?: boolean;
             id: string;
-            isEdge: boolean;
+            isEdge?: boolean;
             lastEdgeTransport?: string;
             /** Format: date-time */
             lastHeartbeat?: string;
@@ -9612,7 +9693,6 @@ export interface components {
             usedBy?: components["schemas"]["ImageUsedBy"][] | null;
             /** Format: int64 */
             virtualSize: number;
-            vulnerabilityScan?: components["schemas"]["VulnerabilityScanSummary"];
         };
         ImageTagRequest: {
             /**
@@ -10555,6 +10635,15 @@ export interface components {
             mode?: string;
             until?: string;
         };
+        ResetPasswordInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ResetPasswordInputBody.json
+             */
+            readonly $schema?: string;
+            password: string;
+        };
         ResolveRunInputBody: {
             /**
              * Format: uri
@@ -11117,6 +11206,24 @@ export interface components {
             };
             nocopy?: boolean;
             subpath?: string;
+        };
+        SetAdminInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SetAdminInputBody.json
+             */
+            readonly $schema?: string;
+            isAdmin: boolean;
+        };
+        SetAssignmentsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SetAssignmentsInputBody.json
+             */
+            readonly $schema?: string;
+            assignments: components["schemas"]["UserAppAssignment"][] | null;
         };
         SetAutoUpdateInputBody: {
             /**
@@ -11773,6 +11880,19 @@ export interface components {
             /** Format: int64 */
             totalChunks: number;
         };
+        UserAccessProblem: {
+            /** @enum {string} */
+            code: "access.not-found" | "access.admin-required" | "access.full-required" | "access.disabled" | "access.not-registered" | "access.unavailable";
+            detail?: string;
+            /** Format: int64 */
+            status: number;
+        };
+        UserAppAssignment: {
+            environmentId: string;
+            /** @enum {string} */
+            level: "restricted" | "full";
+            projectId: string;
+        };
         UserCreateUser: {
             /**
              * Format: uri
@@ -11796,7 +11916,7 @@ export interface components {
              */
             locale?: string;
             /** @description Password of the user */
-            password: string;
+            password?: string;
             /**
              * @description Preferred time display format
              * @example auto
@@ -11804,7 +11924,7 @@ export interface components {
              */
             timeFormat?: "auto" | "12h" | "24h";
             /**
-             * @description Username; cannot contain @
+             * @description Username; proxy identities are matched exactly
              * @example johndoe
              */
             username: string;
@@ -11883,16 +12003,19 @@ export interface components {
              * @enum {string|null}
              */
             timeFormat?: "auto" | "12h" | "24h" | null;
-            /** @description Username; cannot contain @ */
+            /** @description Username; proxy identities are matched exactly */
             username?: string | null;
         };
         UserUser: {
+            assignments: components["schemas"]["UserAppAssignment"][] | null;
             /** @description URL to the user's custom avatar image; omitted when using the default profile picture */
             avatarUrl?: string;
             /** @description Whether the user can currently be deleted */
             canDelete: boolean;
             /** @description Date and time when the user was created */
             createdAt?: string;
+            /** Format: date-time */
+            disabledAt?: string;
             /**
              * @description Display name of the user
              * @example John Doe
@@ -11914,6 +12037,7 @@ export interface components {
              * @example 550e8400-e29b-41d4-a716-446655440000
              */
             id: string;
+            isAdmin: boolean;
             /** @description Whether the user effectively holds global administrator access */
             isGlobalAdmin: boolean;
             /** @description Date and time of the user's most recent sign-in; omitted when the user has never signed in */
@@ -32304,6 +32428,76 @@ export interface operations {
             };
         };
     };
+    "set-user-admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAdminInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-user-app-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAssignmentsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getUserAvatar: {
         parameters: {
             query?: never;
@@ -32326,6 +32520,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "disable-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description User ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "enable-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description User ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-user-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
             /** @description Error */

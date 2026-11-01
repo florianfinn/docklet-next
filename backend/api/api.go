@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup.
 
 package api
 
@@ -330,9 +330,22 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	// Create Huma API wrapping the Echo router group
 	api := humaecho.NewWithGroup(e, apiGroup, humaConfig)
 
+	if deps.User != nil {
+		deps.User.Config = cfg
+		if deps.Environment.Service() != nil {
+			WireAssignmentCleanup(deps.Environment.Service(), deps.User.Service())
+		}
+	}
+	if deps.Role.Service() != nil {
+		deps.Role.Service().UserChanged = func(id string) {
+			deps.Auth.Service().InvalidateUserTokenCache(id)
+			deps.ApiKey.Service().InvalidateAfterRestore()
+		}
+	}
 	// Add authentication middleware
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
 	api.UseMiddleware(deps.Auth.Service().ViewerMiddleware(api))
+	api.UseMiddleware(middleware.AccessMiddleware(api))
 	api.UseMiddleware(middleware.NewActivityBatchID())
 	api.UseMiddleware(middleware.RejectInlineImageCredentials(api))
 	registerNormalizationInternal(api)
@@ -348,6 +361,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	}
 
 	registerImageSafetyErrors(api)
+	registerAccessSchemaInternal(api)
 	return api
 }
 
@@ -356,6 +370,12 @@ func registerScalarDocs(apiGroup *echo.Group) {
 	apiGroup.GET("/docs", func(c *echo.Context) error {
 		return c.HTML(http.StatusOK, scalarDocsHTML)
 	})
+}
+
+// WireAssignmentCleanup re-evaluates each account whose assignments a host removal deleted:
+// users lose their streams, administrators with retained assignment rows keep them.
+func WireAssignmentCleanup(hosts *environment.EnvironmentService, users *user.UserService) {
+	hosts.AssignmentUserChanged = users.UserRightsChanged
 }
 
 // SetupAPIForSpec creates a Huma API instance for OpenAPI spec generation only.
@@ -415,6 +435,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	registerImageSafetyErrors(api)
+	registerAccessSchemaInternal(api)
 	return api
 }
 

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M15 simple-user rights and identity contracts.
 
 package job
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -406,10 +407,11 @@ func TestJobService_Submit_PersistsOtherJobRun(t *testing.T) {
 	fakeScheduler := newFakeJobSchedulerInternal("docker-client-refresh")
 	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
 	jobSvc.SetScheduler(ctx, fakeScheduler)
-	require.NoError(t, db.AutoMigrate(&userdomain.User{}, &role.Role{}, &role.UserRoleAssignment{}))
+	require.NoError(t, db.AutoMigrate(&userdomain.User{}, &access.Assignment{},
+		&role.Role{}, &role.UserRoleAssignment{}))
 	require.NoError(t, db.Create(&userdomain.User{Username: "operator", BaseModel: database.BaseModel{ID: "operator"}}).Error)
-	require.NoError(t, db.Create(&role.Role{ID: "jobs-manager", Name: "Jobs manager", Permissions: database.StringSlice{authz.PermJobsManage}}).Error)
-	require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "operator", RoleID: "jobs-manager"}).Error)
+	require.NoError(t, db.Create(&role.Role{ID: authz.BuiltInRoleAdmin, Name: "Admin", Permissions: database.StringSlice(authz.AllPermissions())}).Error)
+	require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "operator", RoleID: authz.BuiltInRoleAdmin}).Error)
 	jobSvc.roles = role.NewRoleService(db)
 	run, err := jobSvc.Submit(ctx, scheduler.Request{JobID: "docker-client-refresh", EnvironmentID: "0", Trigger: "manual", RequestedBy: "operator"})
 	require.NoError(t, err)

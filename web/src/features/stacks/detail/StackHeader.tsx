@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/detail/StackHeader.tsx
+// Revision: f25cf36c7495738d1c83aa44c9e20da905b50eb78fe158af11f89d4fe57c0e09
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
 import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
 import { ChevronDown, FlaskConical, Globe, Layers, Play, RefreshCw, RotateCw, ScanSearch, Square, TriangleAlert } from "lucide-react";
@@ -32,6 +39,9 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const dt = useAdapterText();
   const cmd = useStackCommands();
   const command = useStackCapability(stack.id, stack.hostId);
+  const user = useIsUser();
+  const full = useCapability("saveStackFiles", { kind: "stack", id: stack.id });
+  const redeploy = user ? full : command;
   const check = useCapability("checkUpdates", { kind: "stack", id: stack.id });
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
   const stopMode = useStackStopMode();
@@ -50,7 +60,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
             <h1 className="text-2xl font-semibold tracking-tight">{stack.name}</h1>
             <StackStatusBadge stack={stack} host={host} />
             <LabelChips labels={stack.labels} />
-            <StackUpdateIndicator name={stack.name} services={stack.services} times={updateTimes} actions={{ onUpdate: () => present(() => cmd.installUpdates(stack.id)), onRecheck: () => void cmd.checkUpdates(stack.id), busy }} />
+            <StackUpdateIndicator name={stack.name} services={stack.services} times={updateTimes} actions={{ resourceRef: user ? { kind: "stack", id: stack.id } : undefined, onUpdate: () => present(() => cmd.installUpdates(stack.id)), onRecheck: () => void cmd.checkUpdates(stack.id), busy }} />
             <HiddenBadge kind="stacks" id={stack.id} name={stack.name} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -86,7 +96,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           )}
           <div className="flex">
             <HelpTarget topic="action.redeploy">
-              <Button size="sm" className="group rounded-r-none" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => present(() => cmd.run(stack.id, "redeploy"))}>
+              <Button size="sm" className="group rounded-r-none" disabled={busy || !redeploy.available || !!stack.inventory?.stale} title={redeploy.reason} onClick={() => present(() => cmd.run(stack.id, "redeploy"))}>
                 <RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : "spin-on-hover"} /> {t("actions.redeploy")}
               </Button>
             </HelpTarget>

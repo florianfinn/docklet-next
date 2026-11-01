@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts.
+// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts; M15 simple-user rights and identity contracts.
 
 package environment
 
@@ -126,6 +126,7 @@ type AgentReport struct {
 }
 
 type Environment struct {
+	DisplayOnly bool         `json:"-"`
 	Color       *string      `json:"color"`
 	AgentReport *AgentReport `json:"agentReport,omitempty"`
 	// ID of the environment.
@@ -141,7 +142,7 @@ type Environment struct {
 	// ApiUrl is the URL of the environment API.
 	//
 	// Required: true
-	ApiUrl string `json:"apiUrl"`
+	ApiUrl string `json:"apiUrl" required:"false"`
 
 	// Status of the environment.
 	//
@@ -151,12 +152,12 @@ type Environment struct {
 	// Enabled indicates if the environment is enabled.
 	//
 	// Required: true
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" required:"false"`
 
 	// IsEdge indicates if this is an edge agent that connects outbound.
 	//
 	// Required: false
-	IsEdge bool `json:"isEdge"`
+	IsEdge bool `json:"isEdge" required:"false"`
 
 	// LastSeen is the last successful manager-side health/contact timestamp.
 	//

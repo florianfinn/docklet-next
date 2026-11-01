@@ -27,6 +27,7 @@ function adapter(mode: AuthMode, completed: boolean, change: boolean, authentica
   return createHttpAdapter({ fetch: async (input) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
     const json = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
+    if (path === "/api/auth/me/api-keys") return json([]);
     if (path === "/api/auth/mode") return json({ mode });
     if (path === "/api/auth/me") return signedIn ? json(user()) : new Response("{}", { status: 401 });
     if (allowLogin && path === "/api/auth/login") { signedIn = true; return json({ user: user() }); }

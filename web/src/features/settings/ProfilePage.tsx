@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/settings/ProfilePage.tsx
+// Revision: 3244badc507df71d6d62f2fc94e0e9b80b0a1810060ab98da944ad9b4bdddbfd
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected administrator locale preference. #27 production text, source errors and capability boundaries. Simple-user management, assigned-stack access and mode-aware self-service.
+
 import { KeyRound, LogOut, Palette, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -16,6 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { useAuthErrors } from "./field-rules";
+import { PersonalApiKeys } from "./PersonalApiKeys";
 import { ConnectedProfilePage } from "./ConnectedProfilePage";
 
 /** Own profile and session; content follows the hub's login mode. */
@@ -79,10 +86,10 @@ function DemoProfilePage() {
                     {t("appearanceLink")}
                   </Link>
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setLogout(true)}>
+                {auth.mode !== "none" && <Button variant="ghost" size="sm" onClick={() => setLogout(true)}>
                   <LogOut data-icon="inline-start" />
                   {t("logout")}
-                </Button>
+                </Button>}
               </div>
             </CardContent>
           </Card>
@@ -116,6 +123,7 @@ function DemoProfilePage() {
               </CardContent>
             )}
           </Card>
+          <PersonalApiKeys mode={auth.mode} />
         </div>
       )}
       <LogoutDialog open={logout} onOpenChange={setLogout} />

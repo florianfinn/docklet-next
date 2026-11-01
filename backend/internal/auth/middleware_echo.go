@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split Echo middleware; local module namespace; removed OIDC/passkeys; startup sign-in modes and shared reserved synthetic agent identity; session-bound viewer lifetime and durable validation.
+// Deviations: Split Echo middleware; local module namespace; removed OIDC/passkeys; startup sign-in modes and shared reserved synthetic agent identity; session-bound viewer lifetime and durable validation; M15 simple-user rights and identity contracts.
 
 package auth
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -166,9 +167,11 @@ func (m *AuthMiddleware) managerAuth(ctx context.Context, c *echo.Context, next 
 		}
 		requestUser, err := m.authService.ModeRequestUser(ctx, req)
 		if err != nil {
-			return c.JSON(http.StatusUnauthorized, common.APIError{Code: common.APIErrorCodeUnauthorized, Message: "Sign-in required"})
+			status, code := modeAuthError(err)
+			return c.JSON(status, common.APIError{Code: common.APIErrorCode(code), Message: code})
 		}
-		ps := authz.SudoPermissionSet()
+		ps := m.authService.modePermissions(ctx, requestUser)
+		c.SetRequest(req.WithContext(m.authService.ViewerContextForPermissions(req.Context(), "", requestUser.ID, ps)))
 		c.Set(string(middleware.ContextKeyUserID), requestUser.ID)
 		c.Set(string(middleware.ContextKeyCurrentUser), requestUser)
 		c.Set(string(middleware.ContextKeyUserPermissions), ps)
@@ -229,7 +232,7 @@ func (m *AuthMiddleware) managerAuth(ctx context.Context, c *echo.Context, next 
 	c.Set(string(middleware.ContextKeyUserID), authenticatedUser.ID)
 	c.Set(string(middleware.ContextKeyCurrentUser), authenticatedUser)
 	c.Set(string(middleware.ContextKeyCurrentSessionID), sessionID)
-	c.SetRequest(req.WithContext(m.authService.ViewerContext(req.Context(), sessionID, authenticatedUser.ID)))
+	c.SetRequest(req.WithContext(m.authService.ViewerContextForPermissions(req.Context(), sessionID, authenticatedUser.ID, ps)))
 	c.Set(string(middleware.ContextKeyUserPermissions), ps)
 	return m.authorizeAndContinueInternal(c, next, ps)
 }
@@ -252,6 +255,7 @@ func (m *AuthMiddleware) apiKeyHeaderAuth(ctx context.Context, c *echo.Context, 
 			c.Set(string(middleware.ContextKeyCurrentUser), authenticatedUser)
 			c.Set(string(middleware.ContextKeyUserPermissions), ps)
 			c.Set(string(middleware.ContextKeyAuthMethod), "api_key")
+			c.SetRequest(c.Request().WithContext(m.authService.ViewerContextForPermissions(c.Request().Context(), "", authenticatedUser.ID, ps)))
 			return m.authorizeAndContinueInternal(c, next, ps)
 		}
 	}
@@ -267,6 +271,9 @@ func (m *AuthMiddleware) apiKeyHeaderAuth(ctx context.Context, c *echo.Context, 
 
 func (m *AuthMiddleware) authorizeAndContinueInternal(c *echo.Context, next echo.HandlerFunc, ps *authz.PermissionSet) error {
 	if m.options.AdminRequired && !ps.IsGlobalAdmin() {
+		if ps != nil && ps.UserID != "" {
+			return c.JSON(403, common.APIError{Code: "access.admin-required", Message: "access.admin-required"})
+		}
 		return c.JSON(http.StatusForbidden, common.APIError{
 			Code:    "FORBIDDEN",
 			Message: "You don't have permission to access this resource",
@@ -279,15 +286,21 @@ func (m *AuthMiddleware) authorizeAndContinueInternal(c *echo.Context, next echo
 // (deny-all) set if the resolver is unavailable or fails. Resolver failures
 // are logged.
 func (m *AuthMiddleware) resolvePermissionsOrDeny(ctx context.Context, authenticatedUser *userdomain.User) *authz.PermissionSet {
-	if m.roleResolver == nil || authenticatedUser == nil {
+	if authenticatedUser == nil {
 		return authz.NewPermissionSet()
 	}
+	if m.roleResolver == nil {
+		return access.Synthesize(authenticatedUser.ID, nil)
+	}
+	revision := access.Revision(authenticatedUser.ID)
 	ps, err := m.roleResolver.ResolvePermissions(ctx, authenticatedUser.ID)
 	if err != nil || ps == nil {
 		slog.WarnContext(ctx, "failed to resolve user permissions for Echo auth", "error", err)
-		return authz.NewPermissionSet()
+		return access.Synthesize(authenticatedUser.ID, nil)
 	}
-	return ps
+	copy := *ps
+	copy.RightsRevision = revision
+	return &copy
 }
 
 // resolveApiKeyPermissionsOrDeny returns the API key's per-key PermissionSet,

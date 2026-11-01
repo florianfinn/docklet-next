@@ -1,3 +1,11 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/shared/components/updates/update-panel.tsx
+// Revision: 13a7ac760fa7be93eef992a9af0160a821915fd9cb12f70aff53cdbc187fe339
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #82 displays unchecked inventory update state honestly. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
+import type { ResourceRef } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { ArrowRight, Box, KeyRound, RefreshCw } from "lucide-react";
@@ -16,6 +24,7 @@ import { checkTimes, type UpdateTimes } from "./update-times";
 import { latestOf, UPDATE_ICON, UPDATE_TONE, useUpdateCopy } from "./update-visuals";
 
 export interface UpdateActions {
+  resourceRef?: ResourceRef;
   onUpdate?: () => void;
   updateOperation?: "installStackUpdates" | "installContainerUpdate";
   onRecheck?: () => void;
@@ -121,12 +130,13 @@ function Footer({ actions, pending }: { actions: UpdateActions; pending: boolean
 
 function ActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
   const adapter = useAdapter(), t = useTranslations("common.updates");
-  if (adapter.kind === "http") return pending && actions.onUpdate ? <div className="p-3"><Button size="sm" onClick={actions.onUpdate}>{actions.updateLabel ?? t("actionUpdateStack")}</Button></div> : null;
+  const user = useIsUser();
+  if (adapter.kind === "http" && !user) return pending && actions.onUpdate ? <div className="p-3"><Button size="sm" onClick={actions.onUpdate}>{actions.updateLabel ?? t("actionUpdateStack")}</Button></div> : null;
   return <DemoActionFooter actions={actions} pending={pending} />;
 }
 function DemoActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
-  const install = useCapability(actions.updateOperation ?? "installContainerUpdate");
-  const check = useCapability("checkUpdates");
+  const install = useCapability(actions.updateOperation ?? "installContainerUpdate", actions.resourceRef);
+  const check = useCapability("checkUpdates", actions.resourceRef);
   const t = useTranslations("common.updates");
   return (
     <div className="flex flex-col gap-2 border-t border-border/50 bg-muted/40 p-3">

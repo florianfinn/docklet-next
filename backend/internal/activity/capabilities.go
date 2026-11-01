@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts.
 package activity
 
 import (
@@ -63,6 +63,9 @@ func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Desc
 }
 
 func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
+	if ps, _ := middleware.PermissionsFromContext(ctx); ps != nil && ps.UserID != "" {
+		return userCapabilities(ctx, input, ps)
+	}
 	descriptors := capabilityDescriptorsInternal(capability.ResourceRef{Kind: input.Kind, ID: input.ID})
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {

@@ -43,6 +43,17 @@ it.each((["en-US", "de"] as const).flatMap((locale) => [true, false].map((cold) 
   view.unmount();
 });
 
+it.each((["en-US", "de"] as const).flatMap((locale) => (["access.not-registered", "access.disabled"] as const).map((code) => ({ locale, code }))))("proxy refusal $code shows its reason in $locale", async ({ locale, code }) => {
+  setAppLocale(locale);
+  const f = sessionFixture((url) => url.pathname.endsWith("/auth/mode") ? envelope({ mode: "proxy" }) : url.pathname.endsWith("/auth/me") ? response({ code, status: 403, detail: code }, 403) : undefined);
+  const view = renderRoutes([{ path: "/", element: <AuthGate />, children: [{ path: "stacks", element: <p>Stacks page</p> }] }], ["/stacks"], f.adapter);
+  const reasons = catalogs[locale].containers.operationReasons;
+  const expected = code === "access.disabled" ? reasons.accessDisabled : reasons.accessNotRegistered;
+  await waitFor(() => expect(screen.queryByRole("alert")?.textContent).toBe(expected));
+  expect(screen.queryByRole("button", { name: catalogs[locale].login.retry }) === null).toBe(true);
+  view.unmount();
+});
+
 it("a held currentUser replacement preserves /stacks and the confirmed query while other identity data resets", async () => {
   const held = deferred<Response>(); const started = deferred<void>();
   let replacing = false;

@@ -205,7 +205,7 @@ func TestSignInWebSocketHeaderIdentity(t *testing.T) {
 			webSocketHandshake(req)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
-			require.Equal(t, 403, rec.Code, rec.Body.String())
+			require.Equal(t, 404, rec.Code, rec.Body.String())
 		})
 	}
 }

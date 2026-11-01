@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M15 simple-user rights and identity contracts.
 
 // Package user owns user persistence, password hashing, authorization guards,
 // and the user HTTP surface.
@@ -10,6 +10,7 @@ package user
 
 import (
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -18,6 +19,7 @@ import (
 )
 
 type Module struct {
+	Config                   *config.Config
 	service                  *UserService
 	invalidateUserTokenCache func(string)
 	settings                 *settings.SettingsService
@@ -39,12 +41,16 @@ func (m *Module) RegisterRoutes(api huma.API) {
 		RegisterUsers(api, nil, nil, nil)
 		return
 	}
-	RegisterUsers(api, m.service, m.invalidateUserTokenCache, m.settings)
+	registerUsersConfigured(api, m.service, m.invalidateUserTokenCache, m.settings, m.Config)
 }
 
 // RegisterUsers registers all user management endpoints.
 func RegisterUsers(api huma.API, userService *UserService, invalidateUserTokenCache func(string), settingsService *settings.SettingsService) {
-	h := &UserHandler{userService: userService, invalidateUserTokenCache: invalidateUserTokenCache, settingsService: settingsService}
+	registerUsersConfigured(api, userService, invalidateUserTokenCache, settingsService, nil)
+}
+func registerUsersConfigured(api huma.API, userService *UserService, invalidateUserTokenCache func(string), settingsService *settings.SettingsService, cfg *config.Config) {
+	h := &UserHandler{userService: userService, invalidateUserTokenCache: invalidateUserTokenCache, settingsService: settingsService, cfg: cfg}
+	registerUserManagement(api, h)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "listUsers",

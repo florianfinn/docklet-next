@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M15 simple-user rights and identity contracts.
 
 package auth
 
@@ -12,6 +12,7 @@ import (
 	"crypto/mldsa"
 	"encoding/base64"
 	"encoding/json/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"testing"
 	"time"
 
@@ -49,6 +50,7 @@ func setupAuthServiceTestDB(t *testing.T) *database.DB {
 		&user.User{},
 		&session.UserSession{},
 		&environment.Environment{},
+		&access.Assignment{},
 		&role.Role{},
 		&role.UserRoleAssignment{},
 		&apikey.ApiKey{},

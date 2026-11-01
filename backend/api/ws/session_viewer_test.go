@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,7 +35,7 @@ func TestSessionViewerRealLocalDirectEdgeActiveIdle(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/active=%v/explicit=%v", mode, active, explicit), func(t *testing.T) {
 					db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"))
 					require.NoError(t, err)
-					require.NoError(t, db.AutoMigrate(&user.User{}, &session.UserSession{}))
+					require.NoError(t, db.AutoMigrate(&access.Assignment{}, &user.User{}, &session.UserSession{}))
 					u := &user.User{Username: "example-viewer"}
 					require.NoError(t, db.Create(u).Error)
 					service := session.NewSessionService(&database.DB{DB: db})

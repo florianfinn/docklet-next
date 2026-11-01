@@ -20,6 +20,8 @@ export interface ActionToastViewProps {
   now: number;
   /** Major actions open the centred dialog; others the action centre. */
   major: boolean;
+  /** Users have no action centre; their toasts always open the run dialog. */
+  opensDialog?: boolean;
   onClose: () => void;
   onOpen: () => void;
 }
@@ -67,7 +69,7 @@ function CloseButton({ onClose, className }: { onClose: () => void; className?: 
  * The title doubles as the keyboard entry to the details; a click anywhere
  * else on the toast does the same through the card's handler.
  */
-function OpenTitle({ run, major, onOpen, className }: Pick<ActionToastViewProps, "run" | "major" | "onOpen"> & { className?: string }) {
+function OpenTitle({ run, major, opensDialog, onOpen, className }: Pick<ActionToastViewProps, "run" | "major" | "opensDialog" | "onOpen"> & { className?: string }) {
   const t = useTranslations("activity.toast");
   return (
     <button
@@ -77,7 +79,7 @@ function OpenTitle({ run, major, onOpen, className }: Pick<ActionToastViewProps,
         own(e);
         onOpen();
       }}
-      aria-label={major ? t("openFlowFor", { title: run.title }) : t("openCentreFor", { title: run.title })}
+      aria-label={major || opensDialog ? t("openFlowFor", { title: run.title }) : t("openCentreFor", { title: run.title })}
       title={run.title}
       className={cn("block max-w-full truncate text-left font-semibold outline-none", className)}
     >
