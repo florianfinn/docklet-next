@@ -47,7 +47,7 @@ two product defects:
 
 The candidate run also showed a disconnected update-required Edge host as
 offline. The maintainer clarified this as expected, and `583acb6` added a test
-that the stored verdict returns with the tunnel. The third focused rerun then
+that the stored verdict returns with the tunnel. The second focused rerun then
 found that the Edge connect write replaced the stored verdict with pending for a
 moment; `486318b` keeps it.
 
