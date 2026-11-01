@@ -85,3 +85,27 @@ func TestStaticAdministratorKeyKeepsRuntimeAuthority(t *testing.T) {
 		})
 	}
 }
+
+// Deleting a key closes its owner's streams only for users; administrators keep theirs.
+func TestKeyDeleteRevokesOnlyUserStreams(t *testing.T) {
+	svc, _, users := setupAPIKeyService(t)
+	admin, err := users.CreateUser(t.Context(), &user.User{Username: "operator"})
+	require.NoError(t, err)
+	require.NoError(t, users.SetAdministrator(t.Context(), "fixture", admin.ID, true))
+	viewer, err := users.CreateUser(t.Context(), &user.User{Username: "viewer"})
+	require.NoError(t, err)
+	for _, owner := range []struct {
+		id         string
+		wantClosed bool
+	}{{admin.ID, false}, {viewer.ID, true}} {
+		key, err := svc.CreatePersonalApiKey(t.Context(), owner.id, dto.CreateUserApiKey{Name: "personal"})
+		require.NoError(t, err)
+		closed := false
+		ctx := sessionlife.WithSession(t.Context(), "session-"+owner.id, owner.id, func(context.Context) error { return nil })
+		lease, err := sessionlife.Register(ctx, func() { closed = true })
+		require.NoError(t, err)
+		require.NoError(t, svc.DeleteApiKey(t.Context(), key.ID))
+		require.Equal(t, owner.wantClosed, closed, owner.id)
+		lease.Release()
+	}
+}

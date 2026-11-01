@@ -9,7 +9,6 @@ package api
 import (
 	"context"
 	"encoding/json/v2"
-	userDTO "github.com/florianfinn/docklet-next/types/user"
 	"io"
 	"maps"
 	"net/http"
@@ -362,7 +361,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	}
 
 	registerImageSafetyErrors(api)
-	api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[userDTO.AccessProblem](), true, "")
+	registerAccessSchemaInternal(api)
 	return api
 }
 
@@ -430,7 +429,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	registerImageSafetyErrors(api)
-	api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[userDTO.AccessProblem](), true, "")
+	registerAccessSchemaInternal(api)
 	return api
 }
 

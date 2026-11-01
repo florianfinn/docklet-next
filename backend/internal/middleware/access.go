@@ -8,7 +8,6 @@ package middleware
 
 import (
 	"bytes"
-	"encoding/json"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/florianfinn/docklet-next/backend/internal/access"
@@ -49,7 +48,7 @@ func AccessMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
 				}
 				ctx.SetHeader("Content-Type", "application/json")
 				ctx.SetStatus(200)
-				_ = json.NewEncoder(ctx.BodyWriter()).Encode(body)
+				_ = api.Marshal(ctx.BodyWriter(), "application/json", body)
 				return
 			}
 			if d := access.Decide(ctx.Context(), p, ctx.Operation().OperationID, env, params); d != access.Allow {

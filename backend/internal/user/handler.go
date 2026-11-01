@@ -231,9 +231,6 @@ func (h *UserHandler) UpdateUser(ctx context.Context, input *UpdateUserInput) (*
 	}
 
 	if input.Body.Password != nil && *input.Body.Password != "" {
-		if h.cfg != nil && h.cfg.SignInMode() != "local" {
-			return nil, huma.Error403Forbidden("Local password management is disabled")
-		}
 		passwordPolicy := h.passwordPolicyInternal(ctx)
 		if validatePasswordPolicyErr := validation.ValidatePasswordPolicy(*input.Body.Password, passwordPolicy); validatePasswordPolicyErr != nil {
 			return nil, handlerutil.Error400BadRequestWithType(validatePasswordPolicyErr.Error(), validation.PasswordPolicyProblemType(passwordPolicy))
@@ -243,7 +240,7 @@ func (h *UserHandler) UpdateUser(ctx context.Context, input *UpdateUserInput) (*
 			return nil, huma.Error500InternalServerError("Failed to hash password")
 		}
 		userModel.PasswordHash = hashedPassword
-		userModel.RequiresPasswordChange = true
+		userModel.RequiresPasswordChange = false
 	}
 
 	updatedUser, err := h.userService.UpdateUser(ctx, userModel, callerPerms)

@@ -269,16 +269,11 @@ func (s *UserService) UpdateUser(ctx context.Context, localUser *User, actorPerm
 	if err := normalization.Normalize(localUser); err != nil {
 		return nil, err
 	}
-	passwordReset := false
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		if err := s.checkTargetPrivilegeInternal(ctx, tx, actorPerms, localUser.ID); err != nil {
 			return err
 		}
-		var current User
-		if err := tx.First(&current, "id = ?", localUser.ID).Error; err != nil {
-			return err
-		}
-		passwordReset = localUser.RequiresPasswordChange && localUser.PasswordHash != current.PasswordHash
+		// disabled_at is owned by SetDisabled; an ordinary write never restores an enabled state.
 		result := tx.Model(&User{}).Where("id = ?", localUser.ID).Select("*").Omit("disabled_at").Updates(localUser)
 		if err := result.Error; err != nil {
 			if isDuplicateKeyErrorInternal(tx, err) {
@@ -289,20 +284,10 @@ func (s *UserService) UpdateUser(ctx context.Context, localUser *User, actorPerm
 		if result.RowsAffected != 1 {
 			return common.ErrUserNotFound
 		}
-		if passwordReset && s.revokeSessionsExcept != nil {
-			return s.revokeSessionsExcept(ctx, tx, localUser.ID, "")
-		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
-	}
-	if passwordReset {
-		s.RightsChanged(localUser.ID)
-	} else if s.roleService != nil {
-		if ps, e := s.roleService.ResolvePermissions(ctx, localUser.ID); e == nil && !ps.IsGlobalAdmin() {
-			s.RightsChanged(localUser.ID)
-		}
 	}
 	return localUser, nil
 }
@@ -386,11 +371,6 @@ func (s *UserService) SetPasswordAndRevokeSessionsExcept(ctx context.Context, lo
 		return nil, err
 	}
 
-	if s.roleService != nil {
-		if ps, e := s.roleService.ResolvePermissions(ctx, localUser.ID); e == nil && !ps.IsGlobalAdmin() {
-			s.RightsChanged(localUser.ID)
-		}
-	}
 	*localUser = updatedUser
 	return localUser, nil
 }

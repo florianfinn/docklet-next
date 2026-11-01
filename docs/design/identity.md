@@ -23,9 +23,9 @@ the core and applied when the UI loads.
 
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
 each accepted proxy identity to that same persisted administrator ID unless
-`AUTH_PROXY_ADMIN_USERS` is set; then only the listed identities map to the
-administrator, other identities map to the user with exactly that username or are
-refused, and `AUTH_PROXY_LOGOUT_URL` names the proxy's sign-out address
+`AUTH_PROXY_ADMIN_USERS` is set and not blank; then the listed identities map to the
+administrator, other identities map to the account with exactly that username (with that
+account's rights, administrator included) or are refused, and `AUTH_PROXY_LOGOUT_URL` names the proxy's sign-out address
 ([simple users](simple-users.md) §6 and §8). For identities mapped to the
 administrator, proxy names are request-scoped activity attribution, not local accounts, role assignments or
 password identities. The account is resolved by effective global administrative

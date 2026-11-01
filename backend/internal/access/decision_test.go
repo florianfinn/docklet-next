@@ -55,6 +55,16 @@ func TestContainerMembershipUsesFreshRuntime(t *testing.T) {
 	require.Equal(t, 5, reads)
 	c.Runtime = func(context.Context, string, string) ([]Container, error) { return nil, errors.New("unavailable") }
 	require.Equal(t, Unavailable, Decide(ctx, p, "get-container", "0", Params{ContainerID: id}))
+	// A stale assignment whose read fails does not hide a container of another assigned stack.
+	p.Assignments = append(p.Assignments, dto.AppAssignment{EnvironmentID: "0", ProjectID: "deleted-uuid", Level: "restricted"})
+	c.Runtime = func(_ context.Context, _ string, project string) ([]Container, error) {
+		if project == "deleted-uuid" {
+			return nil, errors.New("project not found")
+		}
+		return []Container{{ID: id}}, nil
+	}
+	require.Equal(t, Allow, Decide(ctx, p, "get-container", "0", Params{ContainerID: id}))
+	require.Equal(t, Unavailable, Decide(ctx, p, "get-container", "0", Params{ContainerID: "standalone"}))
 }
 func TestOwnRunUsesCallerIdentity(t *testing.T) {
 	ctx := WithController(t.Context(), &Controller{RunOwner: func(context.Context, string, string) (string, error) { return "viewer", nil }})
@@ -81,6 +91,10 @@ func TestProjectListFiltersBeforePagination(t *testing.T) {
 	require.Len(t, rows, 2)
 	p := testPrincipal("restricted")
 	p.Assignments = nil
+	ctx = WithController(t.Context(), &Controller{Projects: func(context.Context, string, url.Values) ([]projectDTO.Details, error) {
+		t.Fatal("a host without an assignment is not read")
+		return nil, nil
+	}})
 	out, err = ProjectList(ctx, p, "0", nil)
 	require.NoError(t, err)
 	require.Empty(t, out.Data)

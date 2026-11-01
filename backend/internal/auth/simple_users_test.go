@@ -43,10 +43,12 @@ func TestProxySimpleUserExactMapping(t *testing.T) {
 	require.NoError(t, s.userService.SetDisabled(t.Context(), u.ID, true))
 	_, err = request("viewer@example.com")
 	require.EqualError(t, err, "access.disabled")
-	s.config.AuthProxyAdminUsers = nil
-	got, err = request("anything")
-	require.NoError(t, err)
-	require.NotEqual(t, u.ID, got.ID)
+	for _, list := range []*string{nil, new(""), new("  ")} {
+		s.config.AuthProxyAdminUsers = list
+		got, err = request("anything")
+		require.NoError(t, err, "an unset or blank list keeps every identity administrative")
+		require.NotEqual(t, u.ID, got.ID)
+	}
 }
 func TestDisabledUserRejectsCachedBrowserAndPassword(t *testing.T) {
 	s, _, _ := modeTestFixture(t)

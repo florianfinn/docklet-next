@@ -58,7 +58,8 @@ func (s *AuthService) ModeRequestUser(ctx context.Context, req *http.Request) (*
 	default:
 		return nil, common.ErrInvalidToken
 	}
-	if identity != "" && s.config.AuthProxyAdminUsers != nil {
+	// An empty or blank list counts as unset, so uncommenting the line without a value keeps today's mapping.
+	if identity != "" && s.config.AuthProxyAdminUsers != nil && strings.TrimSpace(*s.config.AuthProxyAdminUsers) != "" {
 		listed := false
 		for _, name := range strings.Split(*s.config.AuthProxyAdminUsers, ",") {
 			listed = listed || strings.TrimSpace(name) == identity

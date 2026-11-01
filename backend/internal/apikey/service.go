@@ -994,7 +994,7 @@ func (s *ApiKeyService) DeleteApiKey(ctx context.Context, id string) error {
 	}
 	s.invalidateValidatedKeysInternal(id)
 	if apiKey.UserID != nil {
-		s.userService.RightsChanged(*apiKey.UserID)
+		s.userService.UserRightsChanged(ctx, *apiKey.UserID)
 	}
 	return nil
 }

@@ -58,7 +58,8 @@ func TestUserManagementHTTPModeContracts(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, proxy.PasswordHash)
 	require.False(t, proxy.RequiresPasswordChange)
-	require.Equal(t, 403, request("PUT", "/users/"+proxy.ID, `{"password":"<Example-password-123!>"}`).Code)
+	// updateUser keeps its M14 password semantics in every mode; forced resets use reset-password.
+	require.Equal(t, 200, request("PUT", "/users/"+proxy.ID, `{"password":"<Example-password-123!>"}`).Code)
 	require.Equal(t, 403, request("POST", "/users/"+proxy.ID+"/reset-password", `{"password":"<Example-password-123!>"}`).Code)
 	cfg.AuthMode = "local"
 	w = request("POST", "/users/"+local.ID+"/reset-password", `{"password":"<Changed-password-123!>"}`)
@@ -67,6 +68,11 @@ func TestUserManagementHTTPModeContracts(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, stored.RequiresPasswordChange)
 	require.NotEqual(t, local.PasswordHash, stored.PasswordHash)
+	w = request("PUT", "/users/"+local.ID, `{"password":"<Updated-password-123!>"}`)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	updated, err := svc.GetUserByID(t.Context(), local.ID)
+	require.NoError(t, err)
+	require.False(t, updated.RequiresPasswordChange, "updateUser keeps the M14 password semantics")
 	w = request("PUT", "/users/"+local.ID+"/app-assignments", `{"assignments":[{"environmentId":"0","projectId":"project-uuid","level":"full"}]}`)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	w = request("GET", "/users/"+local.ID, "")

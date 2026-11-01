@@ -631,7 +631,6 @@ func (s *RoleService) InvalidateUser(userID string) {
 	s.userCacheGen.Add(1)
 	s.userCache.Delete(userID)
 	s.cacheFillMu.Unlock()
-	access.Revoke(userID)
 	if s.UserChanged != nil {
 		s.UserChanged(userID)
 	}

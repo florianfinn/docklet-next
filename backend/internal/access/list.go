@@ -30,11 +30,15 @@ func ProjectList(ctx context.Context, p Principal, env string, q url.Values) (ba
 			filters[k] = slices.Clone(v)
 		}
 	}
-	rows, err := c.Projects(ctx, env, filters)
-	if err != nil {
-		return base.Paginated[projectDTO.Details]{}, Unavailable
-	}
 	ids := p.ProjectIDs(env)
+	// Without an assignment on env the host is not read at all.
+	var rows []projectDTO.Details
+	if len(ids) > 0 {
+		var err error
+		if rows, err = c.Projects(ctx, env, filters); err != nil {
+			return base.Paginated[projectDTO.Details]{}, Unavailable
+		}
+	}
 	out := []projectDTO.Details{}
 	for _, r := range rows {
 		if slices.Contains(ids, r.ID) {

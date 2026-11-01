@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 90631ba33cee0a0b2c29717f84af4da4d8f81298088917006cd8bed67cec01b3
+// Revision: 7b7b71048f4ed56a3a9860daf65f76464982f8610aa1e0017c2ead57fe9eef68
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11879,6 +11879,13 @@ export interface components {
             size: number;
             /** Format: int64 */
             totalChunks: number;
+        };
+        UserAccessProblem: {
+            /** @enum {string} */
+            code: "access.not-found" | "access.admin-required" | "access.full-required" | "access.disabled" | "access.not-registered" | "access.unavailable";
+            detail?: string;
+            /** Format: int64 */
+            status: number;
         };
         UserAppAssignment: {
             environmentId: string;

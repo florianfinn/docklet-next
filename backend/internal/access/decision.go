@@ -123,13 +123,17 @@ func Decide(ctx context.Context, p Principal, operation, env string, params Para
 			if c == nil || c.Runtime == nil {
 				return Unavailable
 			}
+			// A failed read of one assigned stack (for example a deleted stack) does not hide
+			// the others; it answers Unavailable only when no assigned stack lists the container.
+			failed := false
 			for _, a := range p.Assignments {
 				if a.EnvironmentID != env {
 					continue
 				}
 				containers, err := c.Runtime(ctx, env, a.ProjectID)
 				if err != nil {
-					return Unavailable
+					failed = true
+					continue
 				}
 				for _, v := range containers {
 					match := params.ContainerID == v.ID
@@ -140,6 +144,9 @@ func Decide(ctx context.Context, p Principal, operation, env string, params Para
 						level = Level(a.Level)
 					}
 				}
+			}
+			if level == "" && failed {
+				return Unavailable
 			}
 		}
 		if level == "" {

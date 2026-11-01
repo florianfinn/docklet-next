@@ -24,10 +24,26 @@ func (s *UserService) SetRightsInvalidator(fn func(string)) {
 		s.roleService.UserChanged = fn
 	}
 }
+
+// RightsChanged purges cached rights and closes every open stream of id. It is
+// for mutations that target one account explicitly (disable, reset, delete,
+// administrator change); administrators acting on their own data use UserRightsChanged.
 func (s *UserService) RightsChanged(id string) {
 	if s.roleService != nil {
 		s.roleService.InvalidateUser(id)
-	} else {
+	}
+	access.Revoke(id)
+}
+
+// UserRightsChanged purges cached rights and closes streams only when id is a
+// user, so administrator streams survive key deletion and assignment cleanup.
+func (s *UserService) UserRightsChanged(ctx context.Context, id string) {
+	if s.roleService == nil {
+		access.Revoke(id)
+		return
+	}
+	s.roleService.InvalidateUser(id)
+	if ps, err := s.roleService.ResolvePermissions(ctx, id); err != nil || !ps.IsGlobalAdmin() {
 		access.Revoke(id)
 	}
 }
@@ -151,7 +167,7 @@ func (s *UserService) SetAppAssignments(ctx context.Context, id string, rows []d
 		return nil
 	})
 	if err == nil {
-		s.RightsChanged(id)
+		s.UserRightsChanged(ctx, id)
 	}
 	return err
 }
