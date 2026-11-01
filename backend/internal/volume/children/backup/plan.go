@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split capture planning; immutable target identity and target-before-host-admission fencing.
+// Deviations: Split capture planning; immutable target identity and target-before-host-admission fencing; M16 bind mounts and backup completion.
 
 package backup
 
 import (
 	"cmp"
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	dto "github.com/florianfinn/docklet-next/types/backup"
@@ -62,6 +63,21 @@ func (s *Service) resolveBackupPlanInternal(ctx context.Context, name, trigger s
 // Target fence comes before the host's policy/run admission mutex. Re-read the
 // policy after taking both; a concurrent target switch retries with its new fence.
 func (s *Service) prepareCapture(ctx context.Context, name, trigger string, request volume.CreateBackupRequest) (entry *volume.Backup, owner *operationOwnership, plan backupPlanInternal, err error) {
+	if err = volume.ValidateName(name); err != nil {
+		return
+	}
+	if volume.IsBindKey(name) {
+		var cliErr error
+		cli, cliErr := s.deps.Docker.GetClient(ctx)
+		if cliErr != nil {
+			err = cliErr
+			return
+		}
+		_, err = bindpath.Check(ctx, cli, s.deps.DB, name)
+		if err != nil {
+			return
+		}
+	}
 	for {
 		if err = ctx.Err(); err != nil {
 			return

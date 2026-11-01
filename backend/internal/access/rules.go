@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
 
 package access
 
@@ -237,6 +237,10 @@ var Rules = map[string]Rule{
 	"list-system-backups":                          Rule{Kind: Admin},
 	"list-user-role-assignments":                   Rule{Kind: Admin},
 	"list-volume-backups":                          Rule{Kind: Admin},
+	"test-backup-target-draft":                     {Kind: Admin},
+	"probe-volume-backup-target":                   {Kind: Admin},
+	"list-volume-binds":                            {Kind: Admin},
+	"measure-volume-bind":                          {Kind: Admin},
 	"list-volumes":                                 Rule{Kind: Admin},
 	"list-vulnerability-scan-runs":                 Rule{Kind: Admin},
 	"list-webhooks":                                Rule{Kind: Admin},

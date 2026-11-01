@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
 
 package middleware
 
@@ -155,6 +155,13 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 // Handle is the main middleware handler.
 func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) error {
 	envID := m.extractEnvironmentID(c)
+	if err := validateProxiedVolumeEntry(c.Request()); err != nil {
+		var problem interface{ GetStatus() int }
+		if errors.As(err, &problem) {
+			return c.JSON(problem.GetStatus(), err)
+		}
+		return err
+	}
 	isVulnerability := isVulnerabilityRequest(c)
 	// Refusals answer in the shape declared for the operation the hub router matched.
 	vulnerabilityShape := isVulnerability || isVulnerabilityOperation(c)
@@ -755,7 +762,7 @@ func isManagementPathInternal(method, suffix string) bool {
 		return true
 	}
 	// Only the hub pushes backup target sets; clients never reach an agent's receiver.
-	if method == http.MethodPut && suffix == "/volumes/backups/targets" {
+	if (method == http.MethodPut && suffix == "/volumes/backups/targets") || (method == http.MethodPost && suffix == "/volumes/backups/targets/probe") {
 		return true
 	}
 	if suffix == "/activities" || strings.HasPrefix(suffix, "/activities/") {

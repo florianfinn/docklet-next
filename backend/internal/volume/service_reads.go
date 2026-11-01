@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename; M16 bind mounts and backup completion.
 
 package volume
 
@@ -370,11 +370,23 @@ type volumeWorkspaceBusyError struct {
 }
 
 func (e *volumeWorkspaceBusyError) Error() string {
-	return "volume workspace is busy; close active operations and retry rename: " + e.name
+	return "volume workspace is busy; finish active operations and retry"
+}
+
+func (e *volumeWorkspaceBusyError) GetStatus() int            { return 409 }
+func (e *volumeWorkspaceBusyError) ContentType(string) string { return "application/problem+json" }
+func (e *volumeWorkspaceBusyError) MarshalJSON() ([]byte, error) {
+	return []byte(`{"status":409,"title":"Volume operation in progress","detail":"volume workspace is busy; finish active operations and retry","code":"volume.workspace-busy"}`), nil
 }
 
 // RenameVolume copies an unused volume to a new name and removes the source.
 func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName string, user usertypes.Actor) (*volumetypes.Volume, error) {
+	if err := volumetypes.RefuseBind(oldName); err != nil {
+		return nil, err
+	}
+	if err := volumetypes.RefuseBind(newName); err != nil {
+		return nil, err
+	}
 	oldName = strings.TrimSpace(oldName)
 	newName = strings.TrimSpace(newName)
 	if oldName == "" || newName == "" || oldName == newName {
@@ -506,4 +518,9 @@ func (s *VolumeService) logVolumeRenameErrorInternal(ctx context.Context, oldNam
 		"oldName": oldName,
 		"newName": newName,
 	})
+}
+
+func IsWorkspaceBusy(err error) bool {
+	var busy *volumeWorkspaceBusyError
+	return errors.As(err, &busy)
 }

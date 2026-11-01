@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original exact-container recovery ownership for volume operations.
+// Deviations: Original exact-container recovery ownership for volume operations; M16 bind mounts and backup completion.
 
 package backup
 
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -30,11 +31,22 @@ func (s *Service) listConsumers(ctx context.Context, name string, refuseSelf boo
 	if err != nil {
 		return nil, err
 	}
+	source := ""
+	if volume.IsBindKey(name) {
+		source, err = volume.BindSource(name)
+		if err != nil {
+			return nil, err
+		}
+	}
 	stopped := []volume.StoppedContainer{}
+	seen := map[string]bool{}
 	for _, candidate := range result.Items {
-		uses := false
+		if seen[candidate.ID] || source != "" && bindpath.Helper(candidate) {
+			continue
+		}
+		uses := source != "" && bindpath.Uses(candidate, source, true)
 		for _, m := range candidate.Mounts {
-			if m.Name == name {
+			if source == "" && m.Name == name {
 				uses = true
 				break
 			}
@@ -56,6 +68,7 @@ func (s *Service) listConsumers(ctx context.Context, name string, refuseSelf boo
 		if len(candidate.Names) > 0 {
 			display = strings.TrimPrefix(candidate.Names[0], "/")
 		}
+		seen[candidate.ID] = true
 		stopped = append(stopped, volume.StoppedContainer{ID: candidate.ID, Name: display})
 	}
 	return stopped, nil

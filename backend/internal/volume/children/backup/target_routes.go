@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original owning-host target handlers and transaction-local pairing fence.
+// Deviations: Original owning-host target handlers and transaction-local pairing fence; M16 bind mounts and backup completion.
 
 package backup
 
@@ -30,6 +30,7 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 		return h
 	}
 	h.Service = s.targets
+	s.configureDraftProbe(h, environments)
 	if (cfg == nil || !cfg.AgentMode && !cfg.EdgeAgent) && environments != nil {
 		s.configureTargetDelivery(environments)
 	}
@@ -117,3 +118,5 @@ func (s *Service) targetReferences(ctx context.Context, id string) (dto.TargetRe
 	})
 	return result, err
 }
+
+func (s *Service) TargetService() *backuptarget.Service { return s.targets }

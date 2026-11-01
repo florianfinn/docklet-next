@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Complete helper image references and typed ACFS compatibility.
+// Deviations: Local module namespace; Complete helper image references and typed ACFS compatibility; M16 bind mounts and backup completion.
 
 package volume
 
@@ -13,26 +13,29 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
-	"golang.org/x/sync/singleflight"
 	"io"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/containerd/errdefs"
-	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"github.com/samber/mo"
 	"go.getarcane.app/acfs/types"
 	"go.getarcane.app/docker"
 	"go.getarcane.app/docker/compat"
 	"go.getarcane.app/kit/pkg"
+	"golang.org/x/sync/singleflight"
 
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
+	"github.com/florianfinn/docklet-next/types/user"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
 
 // volumeHelper tracks a reused helper container and the last
@@ -44,6 +47,7 @@ type volumeHelper struct {
 	lastUsedAt time.Time
 	inUse      int
 	protocol   int
+	kind       string
 }
 
 func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, volumeName, containerID string) error {
@@ -160,6 +164,21 @@ func (s *VolumeService) acquireVolumeHelperInternal(ctx context.Context, volumeN
 		return "", nil, err
 	}
 
+	if volumetypes.IsBindKey(volumeName) {
+		source, checkErr := bindpath.Check(ctx, dockerClient, s.db, volumeName)
+		if checkErr != nil {
+			return "", nil, checkErr
+		}
+		image, imageErr := s.getVolumeHelperImageInternal(ctx, dockerClient)
+		if imageErr != nil {
+			return "", nil, imageErr
+		}
+		kind, witnessErr := bindpath.Witness(ctx, dockerClient, image, source, s.execInContainerInternal)
+		if witnessErr != nil {
+			return "", nil, witnessErr
+		}
+		ctx = context.WithValue(ctx, bindLayoutKey{}, kind)
+	}
 	// Helpers are shared and reaped when idle; the caller's cleanup
 	// releases its in-use hold instead of removing the container. The resolve →
 	// acquire gap is racy against the reaper, so retry a resolve whose helper
@@ -184,6 +203,21 @@ func (s *VolumeService) acquireVolumeHelperInternal(ctx context.Context, volumeN
 func (s *VolumeService) resolveHelperInternal(ctx context.Context, dockerClient *client.Client, volumeName string) (string, error) {
 	releaseLock := operationlock.Retain(ctx, volumeName)
 	sharedCh := s.helperGroup.DoChan(volumeName, func() (any, error) {
+		if kind, _ := ctx.Value(bindLayoutKey{}).(string); kind != "" {
+			s.helperMu.Lock()
+			old := s.helperByVolume[volumeName]
+			mismatch := old != nil && old.kind != kind
+			busy := mismatch && old.inUse > 0
+			s.helperMu.Unlock()
+			if busy {
+				return nil, &volumeWorkspaceBusyError{name: volumeName}
+			}
+			if mismatch {
+				if err := s.StopHelper(ctx, volumeName); err != nil {
+					return nil, err
+				}
+			}
+		}
 		helper, err := s.getReusableHelperInternal(ctx, dockerClient, volumeName)
 		if err != nil {
 			return nil, err
@@ -206,7 +240,7 @@ func (s *VolumeService) resolveHelperInternal(ctx context.Context, dockerClient 
 		}
 
 		s.helperMu.Lock()
-		s.helperByVolume[volumeName] = &volumeHelper{id: containerID, lastUsedAt: time.Now()}
+		s.helperByVolume[volumeName] = &volumeHelper{id: containerID, lastUsedAt: time.Now(), kind: bindKindFromContext(ctx)}
 		s.helperMu.Unlock()
 		return containerID, nil
 	})
@@ -287,6 +321,25 @@ func (s *VolumeService) startHelperContainerInternal(ctx context.Context, docker
 	}
 
 	hostConfig := volumehelper.HostConfig(helperImage, []string{volumeName + ":/volume"}, nil)
+	if volumetypes.IsBindKey(volumeName) {
+		source, err := volumetypes.BindSource(volumeName)
+		if err != nil {
+			return "", nil, err
+		}
+		kind := bindKindFromContext(ctx)
+		if kind == "" {
+			source, err = bindpath.Check(ctx, dockerClient, s.db, volumeName)
+			if err != nil {
+				return "", nil, err
+			}
+			kind, err = bindpath.Witness(ctx, dockerClient, helperImage, source, s.execInContainerInternal)
+			if err != nil {
+				return "", nil, err
+			}
+		}
+		hostConfig = volumehelper.HostConfig(helperImage, nil, []mount.Mount{bindpath.SourceMount(source, kind, false)})
+		config.Labels["docklet.bind-key"] = volumeName
+	}
 
 	resp, err := dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     config,
@@ -551,4 +604,19 @@ func (s *VolumeService) execInContainerInternal(ctx context.Context, containerID
 	}
 
 	return stdout.String(), stderr.String(), nil
+}
+
+type bindLayoutKey struct{}
+
+func bindKindFromContext(ctx context.Context) string {
+	kind, _ := ctx.Value(bindLayoutKey{}).(string)
+	return kind
+}
+func (s *VolumeService) bindKind(name string) string {
+	s.helperMu.Lock()
+	defer s.helperMu.Unlock()
+	if h := s.helperByVolume[name]; h != nil {
+		return h.kind
+	}
+	return ""
 }

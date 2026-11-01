@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original single-query host overview with bounded metadata and operation rediscovery.
+// Deviations: Original single-query host overview with bounded metadata and operation rediscovery; M16 bind mounts and backup completion.
 
 package backup
 
@@ -124,6 +124,9 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 	get := func(name string) *volume.BackupVolumeOverview {
 		if byName[name] == nil {
 			byName[name] = &volume.BackupVolumeOverview{Name: name}
+			if volume.IsBindKey(name) {
+				byName[name].DisplayName = volume.DisplayName(name)
+			}
 		}
 		return byName[name]
 	}

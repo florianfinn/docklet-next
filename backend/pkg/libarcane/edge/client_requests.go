@@ -2,15 +2,17 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation; M16 bind mounts and backup completion.
 
 package edge
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/volume"
 	"io"
 	"log/slog"
 	"net/http"
@@ -202,6 +204,20 @@ func (c *TunnelClient) handleCommandRequest(ctx context.Context, conn TunnelConn
 	}
 
 	recorder := newCommandResponseRecorderInternal(msg.ID, msg.Command, conn)
+	if strings.Contains(msg.Path, "/volumes/") {
+		for _, part := range strings.Split(msg.Path, "/") {
+			if volume.IsBindKey(part) {
+				if err := volume.ValidateName(part); err != nil {
+					recorder.Header().Set("Content-Type", "application/problem+json")
+					recorder.WriteHeader(400)
+					_ = json.NewEncoder(recorder).Encode(err)
+					_ = recorder.Close()
+					return
+				}
+			}
+		}
+
+	}
 	c.handler.ServeHTTP(recorder, req)
 	if closeErr := recorder.Close(); closeErr != nil {
 		slog.WarnContext(reqCtx, "Failed to finalize command response", "id", msg.ID, "command", msg.Command, "error", closeErr)
