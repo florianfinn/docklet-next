@@ -29,8 +29,8 @@ func TestAgentHubV11ContainerHostFixture(t *testing.T) {
 		} `json:"containerHostOperations"`
 	}
 	require.NoError(t, json.Unmarshal(data, &fixture))
-	require.Equal(t, 11, fixture.Version)
-	require.Equal(t, 11, fixture.Minimum)
+	require.Equal(t, 12, fixture.Version)
+	require.Equal(t, 12, fixture.Minimum)
 	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerRecreateResult", "ContainerProblem", "ContainerShellQuery", "ContainerShellClose", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem", "SystemHealthResponse", "ActivityRuntimeOptions", "ActivityRuntimeSnapshot"} {
 		require.Contains(t, fixture.Operations.Schemas, name)
 	}
@@ -38,7 +38,7 @@ func TestAgentHubV11ContainerHostFixture(t *testing.T) {
 	for _, operation := range []string{"recreate-container", "redeploy-container", "stop-project"} {
 		require.Contains(t, fixture.Operations.RuntimeOperations, operation)
 	}
-	require.True(t, AgentCompatible(11, AgentHubFingerprint))
-	require.False(t, AgentCompatible(10, AgentHubFingerprint))
-	require.False(t, AgentCompatible(11, "different"))
+	require.True(t, AgentCompatible(12, AgentHubFingerprint))
+	require.False(t, AgentCompatible(11, AgentHubFingerprint))
+	require.False(t, AgentCompatible(12, "different"))
 }

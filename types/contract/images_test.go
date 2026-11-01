@@ -36,7 +36,7 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 	require.Equal(t, AgentHubVersion, fixture.Version)
 	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
 	require.False(t, AgentCompatible(6, "be97c8565af13b50db70f2447a1aa47cddb38fff918ddf03c04a3670aa046e25"))
-	require.True(t, AgentCompatible(11, AgentHubFingerprint))
+	require.True(t, AgentCompatible(12, AgentHubFingerprint))
 	require.False(t, AgentCompatible(7, "mixed-intermediate-build"))
 	// Every fixture field list is checked against the real wire producer type,
 	// including optional credential/config fields populated with synthetic data.
