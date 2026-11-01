@@ -8,11 +8,11 @@ package auth
 
 import (
 	"context"
-	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
@@ -41,10 +41,15 @@ func (s *AuthService) ViewerContextForPermissions(ctx context.Context, sessionID
 	if s.SignInMode() == "local" && s.sessionService != nil && sessionID != "" {
 		ctx = s.sessionService.ViewerContext(ctx, sessionID, userID)
 	}
-	if s.userService == nil || userID == "" || ps == nil || ps.IsGlobalAdmin() {
+	if s.userService == nil || userID == "" || ps == nil {
 		return ctx
 	}
 	original := ctx
+	if ps.IsGlobalAdmin() {
+		// Administrators (also sessionless key, proxy and static principals) only join the user-ID
+		// registry, so an explicit status change can close their streams; no extra durable checks.
+		return sessionlife.WithSession(ctx, sessionID, userID, func(context.Context) error { return sessionlife.Check(original) })
+	}
 	revision := ps.RightsRevision
 	return sessionlife.WithSession(ctx, sessionID, userID, func(check context.Context) error {
 		if sessionlife.Check(original) != nil {
