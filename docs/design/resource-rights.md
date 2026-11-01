@@ -171,7 +171,7 @@ enums, generated DTOs, web reason mapping, EN/DE catalogues, contract fingerprin
 - Two Docklet stacks with the same Compose project name on one host: the runtime view of either may list
   the other's containers; Docklet already refuses runtime actions for such duplicates.
 - A request already forwarded before a revocation completes; only streams are cut.
-- Full access is not a security boundary (simple-users §3).
+- Full access is not a security boundary (simple-users §3); this includes user-chosen container names.
 
 ## 11. Break map
 

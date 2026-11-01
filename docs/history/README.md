@@ -16,3 +16,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M12 backups and restore acceptance](m12-backups-restore-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-29 |
 | [M13 notifications and Auto Heal acceptance](m13-notifications-auto-heal-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-30 |
 | [M14 container and host operations acceptance](m14-container-host-operations-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-01 |
+| [M15 simple users acceptance](m15-simple-users-acceptance.md) | Merged package, sandbox-found defects, three acceptance fixes, method and limits on 2026-11-01 |
