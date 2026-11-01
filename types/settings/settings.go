@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion.
 
 package settings
 
@@ -37,20 +37,21 @@ type SettingDto struct {
 
 // Update is used to update application settings.
 type Update struct {
-	StackStopMode          *string `json:"stackStopMode,omitzero" enum:"down,stop"`
-	SetupCompleted         *string `json:"setupCompleted,omitzero"`
-	HubName                *string `json:"hubName,omitzero"`
-	HubAddress             *string `json:"hubAddress,omitzero"`
-	DomainURL              *string `json:"domainUrl,omitzero"`
-	LinkBase               *string `json:"linkBase,omitzero"`
-	AgentProjectsDirectory *string `json:"agentProjectsDirectory,omitzero"`
-	AgentInstallDirectory  *string `json:"agentInstallDirectory,omitzero"`
-	DefaultHostConnection  *string `json:"defaultHostConnection,omitzero"`
-	DefaultPUID            *string `json:"defaultPuid,omitzero"`
-	DefaultPGID            *string `json:"defaultPgid,omitzero"`
-	DetectSocketGroup      *string `json:"detectSocketGroup,omitzero"`
-	KeepActionOutput       *string `json:"keepActionOutput,omitzero"`
-	ActionPresentation     *string `json:"actionPresentation,omitzero"`
+	BackupDefaultRetentionCount *string `json:"backupDefaultRetentionCount,omitzero"`
+	StackStopMode               *string `json:"stackStopMode,omitzero" enum:"down,stop"`
+	SetupCompleted              *string `json:"setupCompleted,omitzero"`
+	HubName                     *string `json:"hubName,omitzero"`
+	HubAddress                  *string `json:"hubAddress,omitzero"`
+	DomainURL                   *string `json:"domainUrl,omitzero"`
+	LinkBase                    *string `json:"linkBase,omitzero"`
+	AgentProjectsDirectory      *string `json:"agentProjectsDirectory,omitzero"`
+	AgentInstallDirectory       *string `json:"agentInstallDirectory,omitzero"`
+	DefaultHostConnection       *string `json:"defaultHostConnection,omitzero"`
+	DefaultPUID                 *string `json:"defaultPuid,omitzero"`
+	DefaultPGID                 *string `json:"defaultPgid,omitzero"`
+	DetectSocketGroup           *string `json:"detectSocketGroup,omitzero"`
+	KeepActionOutput            *string `json:"keepActionOutput,omitzero"`
+	ActionPresentation          *string `json:"actionPresentation,omitzero"`
 	// ProjectsDirectory is the directory path where projects are stored.
 	// Must be an absolute path.
 	//

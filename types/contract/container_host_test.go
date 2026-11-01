@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original M14 container and host operations foundation.
+// Deviations: Original M14 container and host operations foundation; M16 bind mounts and backup completion.
 
 package contract
 
@@ -16,7 +16,7 @@ import (
 )
 
 func TestAgentHubV11ContainerHostFixture(t *testing.T) {
-	data, err := os.ReadFile("testdata/agent-hub-v11.json")
+	data, err := os.ReadFile("testdata/agent-hub-v12.json")
 	require.NoError(t, err)
 	digest := sha256.Sum256(data)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(digest[:]))

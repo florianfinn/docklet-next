@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original volume backup lifecycle contract.
+// Deviations: Original volume backup lifecycle contract; M16 bind mounts and backup completion.
 
 package volume
 
@@ -46,6 +46,7 @@ type BackupRunning struct {
 }
 
 type BackupVolumeOverview struct {
+	DisplayName   string         `json:"displayName,omitempty"`
 	Name          string         `json:"name"`
 	VolumeExists  bool           `json:"volumeExists"`
 	Policy        *BackupPolicy  `json:"policy,omitempty"`

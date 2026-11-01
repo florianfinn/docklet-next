@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced the system recovery wire contract with coordinated SQLite archives; M12 backup foundation.
+// Deviations: Replaced the system recovery wire contract with coordinated SQLite archives; M12 backup foundation; M16 bind mounts and backup completion.
 
 package backup
 
@@ -74,7 +74,7 @@ type SystemBackupRun struct {
 	MigrationVersion int64                 `json:"migrationVersion,omitempty" minimum:"0"`
 	CopyTargetID     string                `json:"copyTargetId,omitempty"`
 	CopyState        SystemBackupCopyState `json:"copyState" enum:"none,pending,succeeded,failed"`
-	CopyErrorCode    string                `json:"copyErrorCode,omitempty"`
+	CopyErrorCode    string                `json:"copyErrorCode,omitempty" enum:"backup.copy.mount-failed,backup.copy.write-failed,backup.copy.insufficient-space,runtime.interrupted"`
 	ErrorCode        string                `json:"errorCode,omitempty"`
 
 	// System-managed volume policies still map their snapshot records through these Go-only fields.

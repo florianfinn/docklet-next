@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts; M15 simple-user rights and identity contracts.
+// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
 
 package environment
 
@@ -126,9 +126,10 @@ type AgentReport struct {
 }
 
 type Environment struct {
-	DisplayOnly bool         `json:"-"`
-	Color       *string      `json:"color"`
-	AgentReport *AgentReport `json:"agentReport,omitempty"`
+	CredentialRevision int64        `json:"registrationRevision"`
+	DisplayOnly        bool         `json:"-"`
+	Color              *string      `json:"color"`
+	AgentReport        *AgentReport `json:"agentReport,omitempty"`
 	// ID of the environment.
 	//
 	// Required: true

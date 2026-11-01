@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original volume backup lifecycle contract.
+// Deviations: Original volume backup lifecycle contract; M16 bind mounts and backup completion.
 
 package backup
 
@@ -16,9 +16,9 @@ type Problem struct {
 	Status     int      `json:"status"`
 	Title      string   `json:"title"`
 	Detail     string   `json:"detail"`
-	Code       string   `json:"code" enum:"volume.exists,volume.not-found,volume.backup.busy,volume.backup.interrupted,volume.backup.restart-failed,volume.backup.retention-failed,volume.backup.policy-single,volume.backup.policy-invalid,volume.backup.repository-unavailable,volume.backup.engine-unavailable,volume.backup.engine-timeout,volume.backup.engine-output-invalid,volume.backup.repository-check-failed,volume.backup.upload-too-large,volume.backup.upload-invalid,volume.backup.download-too-large,volume.backup.listing-too-large,volume.backup.snapshot-not-found,volume.backup.safety-pinned,volume.backup.writer-unconfirmed,volume.restore.self-mounted,volume.restore.safety-failed,volume.restore.failed-partial,volume.restore.interrupted,volume.restore.interrupted-before-write,volume.restore.restart-failed,backup.target.path-missing,backup.target.not-mounted,backup.target.permission-denied,backup.target.mount-failed,backup.target.unreachable,backup.target.unknown,backup.target.wrong-host,backup.target.retired,backup.target.in-use,backup.target.hosts-unknown,backup.target.duplicate,backup.target.invalid,backup.target.name-exists,backup.target.stale-set,backup.target.key-mismatch,backup.target.sync-failed,backup.target.conflict,backup.target.immutable"`
+	Code       string   `json:"code" enum:"volume.exists,volume.not-found,volume.backup.busy,volume.backup.interrupted,volume.backup.restart-failed,volume.backup.retention-failed,volume.backup.policy-single,volume.backup.policy-invalid,volume.backup.repository-unavailable,volume.backup.engine-unavailable,volume.backup.engine-timeout,volume.backup.engine-output-invalid,volume.backup.repository-check-failed,volume.backup.upload-too-large,volume.backup.upload-invalid,volume.backup.download-too-large,volume.backup.listing-too-large,volume.backup.snapshot-not-found,volume.backup.safety-pinned,volume.backup.writer-unconfirmed,volume.restore.self-mounted,volume.restore.safety-failed,volume.restore.failed-partial,volume.restore.interrupted,volume.restore.interrupted-before-write,volume.restore.restart-failed,backup.target.path-missing,backup.target.not-mounted,backup.target.permission-denied,backup.target.mount-failed,backup.target.unreachable,backup.target.unknown,backup.target.wrong-host,backup.target.retired,backup.target.in-use,backup.target.hosts-unknown,backup.target.duplicate,backup.target.invalid,backup.target.name-exists,backup.target.stale-set,backup.target.key-mismatch,backup.target.sync-failed,backup.target.conflict,backup.target.immutable,volume.bind.invalid-key,volume.bind.path-denied,volume.bind.not-mounted,volume.bind.source-missing,volume.bind.unsupported-type,volume.bind.unsupported,volume.bind.file-operation-unsupported,volume.bind.recovery-failed,volume.bind.snapshot-kind-mismatch,volume.bind.size-timeout,volume.helper-unavailable,volume.operation-failed,volume.workspace-busy,backup.copy.mount-failed,backup.copy.write-failed,backup.copy.insufficient-space,runtime.interrupted,backup.target.probe-host-mismatch,backup.target.location-conflict"`
 	ActivityID string   `json:"activityId,omitempty"`
-	Reason     string   `json:"reason,omitempty" enum:"format,path,duplicate,entry-type,link,too-many-entries,expanded-too-large,insufficient-space"`
+	Reason     string   `json:"reason,omitempty" enum:"format,path,duplicate,entry-type,link,too-many-entries,expanded-too-large,insufficient-space,system,docker,docklet"`
 	Volumes    []string `json:"volumes,omitempty"`
 	Hosts      []string `json:"hosts,omitempty"`
 	Cause      error    `json:"-"`
