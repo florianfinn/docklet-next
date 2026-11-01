@@ -9,13 +9,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { AuthGate } from "@/app/AuthGate";
+import { useAuthMode } from "@/data/queries";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import type { AuthMode } from "@/domain/settings";
 import { renderRoutes, renderWithApp } from "@/test/render";
 import { AppShell } from "./AppShell";
 import StacksPage from "@/features/stacks/overview/StacksPage";
-import { UserShell } from "./UserShell";
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { FreeUserMenu } from "./free/FreeUserMenu";
 import { LogoutDialog } from "./LogoutDialog";
@@ -64,9 +64,11 @@ it.each([{ mode: "local", url: "", calls: 1 }, { mode: "proxy", url: "", calls: 
   assign.mockRestore();
 });
 
-it("none mode has no sign-out dialog action", () => {
+it("none mode renders no sign-out dialog even when opened", async () => {
   const adapter = createDemoAdapter(); adapter.getAuthMode = async () => "none";
-  renderWithApp(<UserShell />, adapter);
+  function Mode() { return <p>mode:{useAuthMode().data}</p>; }
+  renderWithApp(<><Mode /><LogoutDialog open onOpenChange={() => {}} /></>, adapter);
+  await screen.findByText("mode:none");
   expect(screen.queryByRole("alertdialog") === null).toBe(true);
 });
 
@@ -81,4 +83,6 @@ it("W1 actual user stack list never loads the host container inventory or admini
   await screen.findByText(name);
   expect(containers).not.toHaveBeenCalled();
   expect(settings).not.toHaveBeenCalled();
+  // Administrator-only actions are hidden, not merely disabled (simple-users §4).
+  expect(screen.queryByText("New stack") === null).toBe(true);
 });

@@ -10,6 +10,7 @@ import { BulkActionBar } from "@/shared/component-set/bulk-action-bar";
 import { StatStrip } from "@/shared/component-set/stat-strip";
 import { useMetrics } from "@/data/live";
 import { useCapability } from "@/data/use-capability";
+import { useIsUser } from "@/data/use-principal";
 import { HostBlocks } from "@/shared/components/host-blocks";
 import { LoadMetricToggle, LoadSortHead } from "@/shared/components/overview/load-sort";
 import { OverviewTable, type OverviewColumn, type TableView } from "@/shared/components/overview/overview-table";
@@ -47,6 +48,8 @@ export default function StacksPage() {
   const layout = usePreference("stacksLayout");
   const cmd = useStackCommands();
   const deployCapability = useCapability("deployStack");
+  // Administrator-only actions are hidden for users (simple-users §4).
+  const isUser = useIsUser();
   const commandCapability = useCapability("runStackCommand");
   const update = useCapability("installStackUpdates");
   const [query, setQuery] = useState("");
@@ -149,7 +152,7 @@ export default function StacksPage() {
         title={t("title")}
         description={t("description", { scope })}
         actions={
-          deployCapability.available ? <Button asChild className="group">
+          isUser ? undefined : deployCapability.available ? <Button asChild className="group">
             <Link to="/stacks/new">
               <Plus data-icon="inline-start" className="transition-transform duration-(--dur) group-hover:rotate-90" />
               {t("newStack")}
@@ -191,7 +194,7 @@ export default function StacksPage() {
             title={t("emptyAll.title")}
             description={t("emptyAll.description")}
             action={
-              deployCapability.available ? <Button asChild>
+              isUser ? undefined : deployCapability.available ? <Button asChild>
                 <Link to="/stacks/new">{t("newStack")}</Link>
               </Button> : <Button disabled title={deployCapability.reason}>{t("newStack")}</Button>
             }

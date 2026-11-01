@@ -40,6 +40,8 @@ function UsersTable({ mode }: { mode: AuthMode }) {
   const [error, setError] = useState(false);
   const admins = (users.data ?? []).filter((u) => u.isAdmin && !u.disabledAt).length;
   const last = (u: ManagedUser) => u.isAdmin && !u.disabledAt && admins <= 1;
+  // Disable/delete stay locked for the caller's own row and the last enabled administrator.
+  const locked = (u: ManagedUser) => u.id === current.data?.id ? t("ownAccount") : last(u) ? t("lastAdmin") : undefined;
   const saved = () => { void users.refetch(); };
   const toggle = async (u: ManagedUser) => {
     setBusy(true); setError(false);
@@ -62,9 +64,9 @@ function UsersTable({ mode }: { mode: AuthMode }) {
         <TableCell><div className="flex flex-wrap justify-end gap-1">
           <Button size="icon" variant="ghost" aria-label={`${t("edit")}: ${u.username}`} onClick={() => setEditing(u)}><Pencil /></Button>
           <Button size="sm" variant="ghost" onClick={() => setAssigning(u)}>{t("assign")}</Button>
-          <Button size="sm" variant="ghost" disabled={busy || (!u.disabledAt && last(u))} title={last(u) ? t("lastAdmin") : undefined} onClick={() => void toggle(u)}>{t(u.disabledAt ? "enable" : "disable")}</Button>
+          <Button size="sm" variant="ghost" disabled={busy || (!u.disabledAt && !!locked(u))} title={locked(u)} onClick={() => void toggle(u)}>{t(u.disabledAt ? "enable" : "disable")}</Button>
           {mode === "local" && <Button size="sm" variant="ghost" onClick={() => setReset(u)}>{t("reset")}</Button>}
-          <Button size="icon" variant="ghost" aria-label={`${t("remove")}: ${u.username}`} disabled={last(u)} title={last(u) ? t("lastAdmin") : undefined} onClick={() => setDeleting(u)}><Trash2 /></Button>
+          <Button size="icon" variant="ghost" aria-label={`${t("remove")}: ${u.username}`} disabled={!!locked(u)} title={locked(u)} onClick={() => setDeleting(u)}><Trash2 /></Button>
         </div></TableCell>
       </TableRow>)}</TableBody>
     </Table></div>}

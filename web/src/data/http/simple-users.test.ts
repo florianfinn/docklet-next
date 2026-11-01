@@ -81,6 +81,23 @@ it("W1 builds a user's list and runtime detail over real HTTP without host conta
   await expect(f.adapter.getStack("host~foreign")).rejects.toThrow("not-found");
 });
 
+it("keeps a user's reachable host when another assigned host fails", async () => {
+  const baseUrl = await server((request, response) => {
+    const url = new URL(request.url!, "https://hub.example.com");
+    const send = (data: unknown, list = false, status = 200) => { response.writeHead(status, { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") }); response.end(JSON.stringify(status === 200 ? { success: true, data, ...(list ? { pagination: { totalItems: Array.isArray(data) ? data.length : 0 } } : {}) } : { code: "agent.unavailable" })); };
+    if (url.pathname === "/api/auth/me") return send({ id: "viewer", username: "viewer", requiresPasswordChange: false, isAdmin: false, assignments: [{ environmentId: "host", projectId: "app", level: "full" }, { environmentId: "down", projectId: "other", level: "full" }] });
+    if (url.pathname === "/api/environments") return send([{ id: "host", name: "Test host", color: "#336699", status: "online" }, { id: "down", name: "Down host", color: "#663399", status: "offline" }], true);
+    if (url.pathname === "/api/capabilities") return send(["listHosts", "listStacks", "getStack"].map((operationId) => ({ operationId, resourceRef: { kind: url.searchParams.get("kind"), id: url.searchParams.get("id") }, available: true })));
+    if (url.pathname.startsWith("/api/environments/down/")) return send(null, false, 503);
+    if (url.pathname.endsWith("/projects")) return send([project], true);
+    return send(null, false, 404);
+  });
+  const adapter = createHttpAdapter({ baseUrl, fetch: vi.fn(wireFetch) });
+  await adapter.getCurrentUser();
+  expect((await adapter.listStacks()).map((s) => s.id)).toEqual(["host~app"]);
+  expect((await adapter.listHosts()).find((h) => h.id === "down")?.inventory?.stale).toBe(true);
+});
+
 it.each(["restricted", "full"] as const)("W2 fetches Compose only for Full (%s)", async (level) => {
   const f = await fixture(level);
   await f.adapter.getStack("host~app");

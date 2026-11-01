@@ -9,7 +9,7 @@ import { useTranslations } from "use-intl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
-import { useAuthMode, useCurrentUser } from "@/data/queries";
+import { useAuthMode, useCurrentUser, useSettings } from "@/data/queries";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/shared/ui/alert-dialog";
@@ -21,12 +21,13 @@ export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const mode = useAuthMode();
   const configuration = useQuery({ queryKey: ["auth-configuration"], queryFn: () => adapter.getAuthConfiguration(), enabled: open && mode.data === "proxy" });
   const currentUser = useCurrentUser(adapter.kind === "http");
+  const demoUser = useSettings(adapter.kind === "demo").data?.auth?.local.username;
   const client = useQueryClient();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const logoutUrl = configuration.data?.logoutUrl;
-  const body = mode.data === "proxy" ? logoutUrl ? t("logoutProxy", { url: logoutUrl }) : t("proxyHint") : t("logoutLocal", { user: currentUser.data?.username ?? t("unknownName") });
+  const body = mode.data === "proxy" ? logoutUrl ? t("logoutProxy", { url: logoutUrl }) : t("proxyHint") : t("logoutLocal", { user: demoUser ?? currentUser.data?.username ?? t("unknownName") });
   if (mode.data === "none") return null;
   return <AlertDialog open={open} onOpenChange={(next) => { if (!busy) { setError(false); onOpenChange(next); } }}>
     <AlertDialogContent>

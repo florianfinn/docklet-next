@@ -8,7 +8,7 @@ import type { CurrentUser } from "../api";
 import type { DockletAdapter } from "../adapter";
 import { AdapterOutcomeError } from "../capability";
 import type { Host, InventoryObservation } from "@/domain/model";
-import { createInventoryTransport } from "./inventory-transport";
+import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapStack, splitInventoryId, type ProjectRow } from "./inventory-mapping";
 
 export function createUserInventory(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, principal: () => CurrentUser | undefined, onState: (host: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listStacks" | "getStack"> {
@@ -17,8 +17,13 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
     async listStacks(onPartial) {
       const batches: Awaited<ReturnType<DockletAdapter["listStacks"]>>[] = [];
       const result = await Promise.all((await hosts()).map(async (host) => {
-        const projects = await list("list-projects", host.id, "projects");
-        const rows = (projects.rows as ProjectRow[]).map((p) => mapStack(p, host.id, [], projects.observation));
+        let rows: Awaited<ReturnType<DockletAdapter["listStacks"]>> = [];
+        try {
+          const projects = await list("list-projects", host.id, "projects");
+          rows = (projects.rows as ProjectRow[]).map((p) => mapStack(p, host.id, [], projects.observation));
+        } catch (error) {
+          onState(host.id, inventoryFailure(host.id, error));
+        }
         batches.push(rows); onPartial?.(batches.flat()); return rows;
       }));
       return result.flat();

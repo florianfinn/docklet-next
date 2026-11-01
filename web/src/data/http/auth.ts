@@ -54,6 +54,12 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     } catch {
       throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
     }
+    if (response.status === 403) {
+      // Proxy refusals (access.not-registered, access.disabled) carry their code for the sign-in gate.
+      const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
+      const code = typeof problem?.code === "string" && problem.code.startsWith("access.") ? problem.code : "http.error";
+      throw new AdapterOutcomeError({ kind: "error", code, status: 403 });
+    }
     if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");

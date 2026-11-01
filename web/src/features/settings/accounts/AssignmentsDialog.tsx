@@ -27,8 +27,8 @@ export function AssignmentsDialog({ user, onClose, onSaved }: { user: ManagedUse
   const save = async () => {
     setBusy(true); setError(false);
     try {
-      const visible = assignments.filter((a) => stacks.data?.some((s) => s.hostId === a.environmentId && (s.id.split("~")[1] ?? s.id) === a.projectId));
-      await adapter.setUserAppAssignments(user.id, visible); onSaved(); onClose();
+      // Rows for stacks the list does not show (archived, unreadable) are kept; the request replaces all rows.
+      await adapter.setUserAppAssignments(user.id, assignments); onSaved(); onClose();
     } catch { setError(true); }
     finally { setBusy(false); }
   };

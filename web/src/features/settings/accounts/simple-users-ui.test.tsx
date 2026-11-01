@@ -13,6 +13,7 @@ import { simulationStore } from "@/data/demo/simulation";
 import { renderWithApp } from "@/test/render";
 import { UsersSection } from "./UsersSection";
 import { UserDialog } from "./UserDialog";
+import { AssignmentsDialog } from "./AssignmentsDialog";
 import { PersonalApiKeys } from "../PersonalApiKeys";
 
 beforeEach(() => { setAppLocale("en-US"); simulationStore.set((s) => ({ ...s, latency: "instant", live: false })); });
@@ -33,6 +34,19 @@ it("W4 disables own administrator switch and the last enabled administrator's sw
   expect(screen.getByRole("button", { name: "Disable" }).hasAttribute("disabled")).toBe(true);
 });
 
+it("locks disable and delete on the caller's own row while another administrator exists", async () => {
+  const adapter = createDemoAdapter();
+  const admin = (await adapter.listUsers())[0]!;
+  const self = { ...admin, id: "self", username: "self" };
+  vi.spyOn(adapter, "listUsers").mockResolvedValue([admin, self]);
+  vi.spyOn(adapter, "getCurrentUser").mockResolvedValue({ id: "self", username: "self", isAdmin: true, assignments: [], requiresPasswordChange: false });
+  renderWithApp(<UsersSection mode="local" />, adapter);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Delete: self" }).hasAttribute("disabled")).toBe(true));
+  expect(screen.getByRole("button", { name: "Delete: admin" }).hasAttribute("disabled")).toBe(false);
+  const own = screen.getByText("self").closest("tr")!;
+  expect(within(own).getByRole("button", { name: "Disable" }).getAttribute("title")).toBe("You cannot disable or delete your own account.");
+});
+
 it("creates a local user with a forced-change password, edits per-stack levels and resets/enables/disables", async () => {
   const adapter = createDemoAdapter();
   const create = vi.spyOn(adapter, "createUser"), assign = vi.spyOn(adapter, "setUserAppAssignments");
@@ -48,14 +62,26 @@ it("creates a local user with a forced-change password, edits per-stack levels a
   await userEvent.click(within(row).getByRole("button", { name: "Assign stacks" }));
   const assignment = await screen.findByRole("dialog");
   const combos = await within(assignment).findAllByRole("combobox");
-  await userEvent.click(combos[0]!); await userEvent.keyboard("{ArrowDown}{Enter}");
-  // Explicitly choose Full through the accessible listbox when another value was highlighted.
-  if (within(assignment).queryByRole("listbox")) await userEvent.keyboard("{Escape}");
-  await userEvent.click(combos[0]!); await userEvent.keyboard("{End}{Enter}");
+  combos[0]!.focus(); await userEvent.keyboard("{Enter}");
+  await screen.findByRole("listbox"); await userEvent.keyboard("{End}{Enter}");
   expect(within(assignment).queryByText("Full access can control the host through the Compose file; not a security boundary.") !== null).toBe(true);
   await userEvent.click(within(assignment).getByRole("button", { name: "Save" }));
   await waitFor(() => expect(assign).toHaveBeenCalled());
   expect(assign.mock.calls[0]?.[1][0]?.level).toBe("full");
+});
+
+it("keeps assignments to stacks the list does not show when saving", async () => {
+  const adapter = createDemoAdapter(); const assign = vi.spyOn(adapter, "setUserAppAssignments");
+  const hidden = { environmentId: "gone", projectId: "archived", level: "restricted" as const };
+  const user = { ...(await adapter.listUsers())[0]!, isAdmin: false, assignments: [hidden] };
+  renderWithApp(<AssignmentsDialog user={user} onClose={() => {}} onSaved={() => {}} />, adapter);
+  const combos = await screen.findAllByRole("combobox");
+  combos[0]!.focus(); await userEvent.keyboard("{Enter}");
+  await screen.findByRole("listbox"); await userEvent.keyboard("{End}{Enter}");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(assign).toHaveBeenCalled());
+  expect(assign.mock.calls[0]?.[1].some((a) => a.projectId === "archived" && a.level === "restricted")).toBe(true);
+  expect(assign.mock.calls[0]?.[1].some((a) => a.level === "full")).toBe(true);
 });
 
 it.each(["none", "proxy"] as const)("does not read personal keys in %s mode", async (mode) => {
