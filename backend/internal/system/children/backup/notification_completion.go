@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296; interruption is classified before the terminal save.
+// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296; interruption is classified before the terminal save; M16 bind mounts and backup completion.
 
 package backup
 
@@ -50,6 +50,15 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 		status, code = activitytypes.StatusFailed, "backup.failed"
 		detail = &code
 	}
+	var copyErr error
+	if err == nil && saveErr == nil {
+		copyErr = s.copyArchive(workCtx, run)
+		if copyErr != nil {
+			status = activitytypes.StatusSuccess
+			code = copyErr.Error()
+			detail = &code
+		}
+	}
 	// The cancelled status marks interrupted work; a determined failure notifies even when
 	// shutdown arrives while it is saved.
 	if saveErr == nil && status != activitytypes.StatusCancelled {
@@ -76,6 +85,9 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 	}
 	if activityErr != nil {
 		return errors.New("backup.failed")
+	}
+	if copyErr != nil {
+		return copyErr
 	}
 	if retentionErr != nil {
 		return ErrSystemBackupRetention

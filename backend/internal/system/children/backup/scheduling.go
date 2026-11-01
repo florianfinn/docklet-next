@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Extracted Hub policy scheduling; logs successful registration.
+// Deviations: Extracted Hub policy scheduling; logs successful registration; M16 bind mounts and backup completion.
 
 package backup
 
@@ -71,6 +71,9 @@ func (s *Service) runScheduledBackup(ctx context.Context, id string) (scheduler.
 	}
 	if errors.Is(err, ErrSystemBackupRetention) {
 		return scheduler.Outcome{Status: scheduler.Partial, ActivityID: run.ActivityID, Message: "backup.retention_failed"}, nil
+	}
+	if err != nil && run != nil && run.Status == backuptypes.SystemBackupStatusSucceeded && run.CopyState == backuptypes.SystemBackupCopyFailed {
+		return scheduler.Outcome{Status: scheduler.Partial, ActivityID: run.ActivityID, Code: run.CopyErrorCode, Message: run.CopyErrorCode}, nil
 	}
 	if err != nil {
 		return scheduler.Outcome{}, err
