@@ -111,3 +111,18 @@ it("rejects an oversized unfinished line before a later chunk can complete it", 
   expect(progress).toHaveBeenCalledExactlyOnceWith({ phase: "waiting" });
   expect(cancel).toHaveBeenCalledOnce();
 });
+it("releases a completed pull stream without cancelling it", async () => {
+  const f = imageRegistryFixture();
+  const original = f.fetcher.getMockImplementation()!;
+  let cancel: ReturnType<typeof vi.spyOn> | undefined;
+  f.fetcher.mockImplementation(async (input, init) => {
+    if (!String(input).endsWith("/pull")) return original(input, init);
+    const response = new Response('{"status":"Waiting"}\n{"done":true}\n');
+    cancel = vi.spyOn(response.body!, "cancel");
+    return response;
+  });
+  await expect(f.adapter.pullImage({ hostId: "host", reference: "example:1" })).resolves.toEqual({ actionId: undefined });
+  expect(cancel).toBeDefined();
+  expect(cancel).not.toHaveBeenCalled();
+});
+
