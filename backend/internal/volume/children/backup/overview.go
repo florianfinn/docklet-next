@@ -143,8 +143,14 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		}
 		return rows[i].CreatedAt.After(*rows[j].CreatedAt)
 	})
-	// A restore's safety capture yields to the running restore; without one it stays the volume's running backup.
-	safety := map[string]bool{}
+	// Running rows claim the volume newest first. A safety capture claims for its volume's running restore when the
+	// snapshot has one; without one it is the volume's running backup.
+	restoring := map[string]*volume.BackupRunning{}
+	for _, r := range rows {
+		if r.Kind == "restore" && r.Status == "running" && restoring[r.VolumeName] == nil {
+			restoring[r.VolumeName] = &volume.BackupRunning{Kind: "restore", ActivityID: r.ActivityID, RestoreID: r.ID}
+		}
+	}
 	for _, r := range rows {
 		switch r.Kind {
 		case "target":
@@ -165,10 +171,11 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {
 				item.LastSuccessAt = r.CreatedAt
 			}
-			if r.Status == "running" && r.Trigger == dto.VolumeBackupTriggerSafety {
-				safety[r.VolumeName] = true
-			} else if r.Status == "running" && item.Running == nil {
+			if r.Status == "running" && item.Running == nil {
 				item.Running = &volume.BackupRunning{Kind: "backup", ActivityID: r.ActivityID}
+				if owner := restoring[r.VolumeName]; owner != nil && r.Trigger == dto.VolumeBackupTriggerSafety {
+					item.Running = owner
+				}
 			}
 		case "download":
 			item := get(r.VolumeName)
@@ -194,13 +201,8 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 				}
 			}
 			if r.Status == "running" && item.Running == nil {
-				item.Running = &volume.BackupRunning{Kind: "restore", ActivityID: r.ActivityID, RestoreID: r.ID}
+				item.Running = restoring[r.VolumeName]
 			}
-		}
-	}
-	for name := range safety {
-		if item := get(name); item.Running == nil {
-			item.Running = &volume.BackupRunning{Kind: "backup"}
 		}
 	}
 	cli, err := s.deps.Docker.GetClient(ctx)
