@@ -100,6 +100,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     writeFile: unavailable,
     createEntry: unavailable,
     renameEntry: unavailable,
+    moveEntry: unavailable,
     deleteEntry: unavailable,
     uploadFile: unavailable,
     setBackupPolicy: unavailable,

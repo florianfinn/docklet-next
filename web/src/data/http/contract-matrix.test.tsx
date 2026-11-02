@@ -537,6 +537,15 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     }
   });
 
+  it("sends the policy of a manual run so its target copy applies", async () => {
+    if (kind !== "http") return;
+    const setup = backupBackend("list");
+    await setup.adapter.createHubBackup("hub-daily");
+    await setup.adapter.createHubBackup();
+    const bodies = setup.state.requests.filter((entry) => entry.path === "/api/backups" && entry.method === "POST").map((entry) => JSON.parse(entry.body!));
+    expect(bodies).toEqual([{ policyId: "hub-daily" }, {}]);
+  });
+
   it("omits an unassigned policy ID on first save", async () => {
     if (kind !== "http") return;
     const setup = backupBackend("list");

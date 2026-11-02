@@ -55,6 +55,7 @@ export const deHubBackups: typeof enHubBackups = {
   replaceSchedule: "Durch einfachen Zeitplan ersetzen",
   keepCount: "Abgeschlossene geplante Archive behalten",
   save: "Zeitplan speichern",
+  runNow: "Jetzt sichern",
   saved: "Zeitplan gespeichert",
   invalidPolicy: "Gib eine gültige Uhrzeit und eine Aufbewahrungszahl von mindestens eins ein.",
   uploadTitle: "SQLite-Archiv hochladen",

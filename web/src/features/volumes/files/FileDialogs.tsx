@@ -3,7 +3,7 @@ import { useDialogCommand, type DialogCommand } from "@/shared/components/use-di
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 
-import { validateFileName } from "@/domain/files";
+import { baseName, moveTarget, parentPath, validateFileName } from "@/domain/files";
 import { TextField } from "@/shared/components/form-field";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
@@ -58,6 +58,58 @@ function NameForm({ onOpenChange, title, submitLabel, initial = "", siblings, on
         <Button type="submit" disabled={busy}>
           {busy && <Spinner data-icon="inline-start" />}
           {submitLabel}
+        </Button>
+      </DialogCommandFooter>
+    </form>
+  );
+}
+
+interface MoveDialogProps {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  path: string;
+  onSubmit: (folder: string) => Promise<boolean>;
+}
+
+/** Destination folder input for moving an entry within its volume. */
+export function MoveDialog(props: MoveDialogProps) {
+  const feedback = useDialogCommand(props.open, props.path);
+  const change = (open: boolean) => feedback.change(open, props.onOpenChange);
+  return (
+    <Dialog open={props.open} onOpenChange={change}>
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">{props.open && <MoveForm key={props.path} {...props} onOpenChange={change} feedback={feedback} />}</DialogContent>
+    </Dialog>
+  );
+}
+
+function MoveForm({ onOpenChange, path, onSubmit, feedback }: MoveDialogProps & { feedback: DialogCommand }) {
+  const t = useTranslations("volumes.files");
+  const [folder, setFolder] = useState(parentPath(path));
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const target = moveTarget(folder, path);
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setTried(true);
+        if ("error" in target) return;
+        setBusy(true);
+        const ok = await feedback.run(() => onSubmit(target.folder));
+        setBusy(false);
+        if (ok) onOpenChange(false);
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>{t("moveTitle", { name: baseName(path) })}</DialogTitle>
+        <DialogDescription>{t("moveHint")}</DialogDescription>
+      </DialogHeader>
+      <TextField id="move-folder" label={t("moveFolder")} value={folder} onChange={setFolder} error={tried && "error" in target ? t(`moveErrors.${target.error}`) : undefined} mono />
+      <DialogCommandFooter feedback={feedback}>
+        <Button type="submit" disabled={busy}>
+          {busy && <Spinner data-icon="inline-start" />}
+          {t("move")}
         </Button>
       </DialogCommandFooter>
     </form>

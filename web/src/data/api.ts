@@ -207,6 +207,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   writeFile(volumeId: string, path: string, content: string, baseline?: WorkspaceBaseline): Promise<WorkspaceWriteResult>;
   createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file", revision?: string): Promise<WorkspaceWriteResult>;
   renameEntry(volumeId: string, path: string, name: string, revision?: string): Promise<WorkspaceWriteResult>;
+  /** Moves an entry into an existing folder of the same volume; owner and mode stay. */
+  moveEntry(volumeId: string, path: string, folder: string, revision?: string): Promise<WorkspaceWriteResult>;
   deleteEntry(volumeId: string, path: string, revision?: string): Promise<WorkspaceWriteResult>;
   uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<WorkspaceWriteResult>;
   downloadFile?(volumeId: string, path: string): Promise<Blob>;

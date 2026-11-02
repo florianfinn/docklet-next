@@ -20,7 +20,7 @@ afterEach(() => { localStorage.clear(); });
 
 it("renders one workspace listing error with a retry action", async () => {
   const refetch = vi.fn();
-  renderWithApp(<FolderView listing={{ isPending: false, isError: true, isPlaceholderData: false, error: new WorkspaceError("helper-incompatible"), refetch }} singleFile={false} onOpen={() => {}} onDownload={() => {}} onRename={() => {}} onDelete={() => {}} />);
+  renderWithApp(<FolderView listing={{ isPending: false, isError: true, isPlaceholderData: false, error: new WorkspaceError("helper-incompatible"), refetch }} singleFile={false} onOpen={() => {}} onDownload={() => {}} onRename={() => {}} onMove={() => {}} onDelete={() => {}} />);
   expect(screen.getAllByRole("alert").length).toBe(1);
   expect(screen.getByRole("alert").textContent).toContain("Hilfsimage ist inkompatibel");
   await userEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));

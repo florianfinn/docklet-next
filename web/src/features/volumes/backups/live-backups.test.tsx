@@ -135,7 +135,8 @@ it("requires key confirmation and discards a late key after close", async () => 
   expect(f.state.requests.some((r) => r.path.endsWith("recovery-key"))).toBe(false);
   await userEvent.click(screen.getByRole("button", { name: "Bestätigen und Schlüssel anzeigen" }));
   await waitFor(() => expect(typeof finish).toBe("function"));
-  await userEvent.click(screen.getByRole("button", { name: "Schließen" }));
+  // The footer action, not the corner control of the dialog primitive.
+  await userEvent.click(screen.getAllByRole("button", { name: "Schließen" }).find((button) => button.dataset.slot !== "dialog-close")!);
   expect(close).toHaveBeenCalled();
   await act(async () => { finish(ok({ recoveryKey: f.state.key })); });
   expect(document.body.textContent).not.toContain(f.state.key); expect(JSON.stringify(client.getQueryCache().getAll().map((q) => q.state.data))).not.toContain(f.state.key); unmount();

@@ -2,7 +2,7 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original Hub backup page for issue #32, using free UI primitives; M16 archive copy target and copy state (#286).
+// Deviations: Original Hub backup page for issue #32, using free UI primitives; M16 archive copy target, copy state and manual policy run (#286).
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Download, HardDrive, RotateCw, Trash2, Upload } from "lucide-react";
@@ -60,7 +60,7 @@ function useBackupErrorText() {
   };
 }
 
-function PolicyEditor({ policy, disabled, onSave }: { policy: HubBackupPolicy; disabled: boolean; onSave: (policy: HubBackupPolicy) => Promise<void> }) {
+function PolicyEditor({ policy, disabled, creating, onSave, onRun }: { policy: HubBackupPolicy; disabled: boolean; creating: boolean; onSave: (policy: HubBackupPolicy) => Promise<void>; onRun: (policyId: string) => void }) {
   const t = useTranslations("hubBackups");
   const initial = parseSimpleBackupSchedule(policy.schedule);
   const [frequency, setFrequency] = useState<BackupFrequency | "custom">(initial ? policy.enabled ? initial.frequency : "off" : "custom");
@@ -120,7 +120,10 @@ function PolicyEditor({ policy, disabled, onSave }: { policy: HubBackupPolicy; d
           <p className="text-xs text-muted-foreground">{t("copyTargetHint")}</p>
         </div>
         {invalid && <p role="alert" className="text-sm text-destructive sm:col-span-2">{t("invalidPolicy")}</p>}
-        <div className="sm:col-span-2"><Button onClick={() => void save()} disabled={disabled || busy}>{t("save")}</Button></div>
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2"><Button onClick={() => void save()} disabled={disabled || busy}>{t("save")}</Button>
+          {/* A manual run of a saved policy uses its saved copy target. */}
+          {policy.id && <Button variant="outline" onClick={() => onRun(policy.id)} disabled={disabled || busy || creating}><Archive data-icon="inline-start" />{t("runNow")}</Button>}
+        </div>
       </CardContent>
     </Card>
   );
@@ -264,9 +267,9 @@ export default function HubBackupsPage() {
   const canManage = access.data?.manage && storage.data?.available && (!restoreStarted || restoreFailed);
   const canRestore = access.data?.restore && storage.data?.available && (!restoreStarted || restoreFailed);
 
-  async function create() {
+  async function create(policyId?: string) {
     setActionError(""); setCreating(true);
-    try { await adapter.createHubBackup(); refresh(); }
+    try { await adapter.createHubBackup(policyId); refresh(); }
     catch (cause) { setActionError(errorText(cause)); }
     finally { setCreating(false); }
   }
@@ -312,7 +315,7 @@ export default function HubBackupsPage() {
           return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><CopyState run={run} /></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
         })}</TableBody></Table></div>}
     </CardContent></Card>
-    {policies.isError ? <QueryError error={policies.error} onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} onSave={savePolicy} />)}
+    {policies.isError ? <QueryError error={policies.error} onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} creating={creating} onSave={savePolicy} onRun={(policyId) => void create(policyId)} />)}
     <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} disabled={!canRestore} onUploaded={refresh} />
     <RestoreDialog key={`restore-${restoreRun?.id ?? "none"}`} run={restoreRun} onClose={() => setRestoreRun(null)} onStarted={(activityId) => { setRestoreActivityId(activityId); setRestoreStarted(true); void maintenance.refetch(); }} />
     <DeleteDialog key={`delete-${deleteRun?.id ?? "none"}`} run={deleteRun} onClose={() => setDeleteRun(null)} onDeleted={refresh} />

@@ -117,4 +117,24 @@ describe("volume file workspace", () => {
     const conf = await screen.findByRole("textbox", { name: "Inhalt von postgresql.conf" });
     expect(conf.closest('[data-slot="code-editor"]')?.getAttribute("data-language")).toBe("ini");
   });
+
+  it("moves an entry into another folder through the entry menu", async () => {
+    const adapter = createDemoAdapter();
+    renderVolume(`/volumes/${HA}?tab=files`, adapter);
+    await userEvent.click(await screen.findByRole("button", { name: "Aktionen für automations.yaml" }));
+    const item = screen.queryByRole("menuitem", { name: "Verschieben" });
+    expect(item !== null).toBe(true);
+    const move = vi.spyOn(adapter, "moveEntry");
+    await userEvent.click(item!);
+    const folder = await screen.findByRole("textbox", { name: "Zielordner" });
+    expect((folder as HTMLInputElement).value).toBe("/");
+    await userEvent.click(screen.getByRole("button", { name: "Verschieben" }));
+    expect(screen.getByText("Der Eintrag liegt bereits in diesem Ordner") !== null).toBe(true);
+    await userEvent.clear(folder);
+    await userEvent.type(folder, "/.storage/");
+    await userEvent.click(screen.getByRole("button", { name: "Verschieben" }));
+    await waitFor(() => expect(move.mock.calls.map((call) => call.slice(0, 3))).toEqual([[HA, "/automations.yaml", "/.storage"]]));
+    await waitFor(async () => expect((await adapter.listFiles(HA, "/.storage")).entries.map((entry) => entry.name).includes("automations.yaml")).toBe(true));
+    expect((await adapter.listFiles(HA, "/")).entries.some((entry) => entry.name === "automations.yaml")).toBe(false);
+  });
 });

@@ -241,6 +241,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
     writeFile: (id, path, content) => fileOp(id, () => db.files.write(id, path, content)),
     createEntry: (id, dir, name, type) => fileOp(id, () => db.files.create(id, dir, name.trim(), type)),
     renameEntry: (id, path, name) => fileOp(id, () => db.files.rename(id, path, name.trim())),
+    moveEntry: (id, path, folder) => fileOp(id, () => db.files.move(id, path, folder)),
     deleteEntry: (id, path) => fileOp(id, () => db.files.remove(id, path)),
     async uploadFile(id, dir, file) {
       const text = file.content ?? (file.blob && file.size <= 256 * 1024 ? await file.blob.text() : undefined);

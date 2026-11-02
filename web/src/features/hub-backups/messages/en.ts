@@ -53,6 +53,7 @@ export const enHubBackups = {
   replaceSchedule: "Replace with a simple schedule",
   keepCount: "Keep completed scheduled archives",
   save: "Save schedule",
+  runNow: "Back up now",
   saved: "Schedule saved",
   invalidPolicy: "Enter a valid time and a keep count of at least one.",
   uploadTitle: "Upload SQLite archive",

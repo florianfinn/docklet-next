@@ -12,5 +12,6 @@ export const deLocale: typeof enLocale = {
     loading: "Lädt",
     newStack: "Neuer Stack",
     toggleSidebar: "Navigation ein- oder ausklappen",
+    close: "Schließen",
   },
 };

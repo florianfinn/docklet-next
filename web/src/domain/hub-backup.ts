@@ -26,7 +26,8 @@ export interface HubBackupApi {
   getHubBackupStorage(): Promise<HubBackupStorage>;
   getHubBackupMaintenance(): Promise<HubBackupMaintenance>;
   getHubBackupActivityStatus(activityId: string): Promise<string>;
-  createHubBackup(): Promise<HubBackupRun>;
+  /** A policy ID copies the manual archive to that policy's target; without one the archive stays local. */
+  createHubBackup(policyId?: string): Promise<HubBackupRun>;
   uploadHubBackup(file: File, onProgress: (percent: number) => void): Promise<HubBackupOperation>;
   restoreHubBackup(id: string): Promise<HubBackupOperation>;
   deleteHubBackup(id: string): Promise<HubBackupOperation>;

@@ -245,7 +245,8 @@ func (s *Service) prepareUpload(ctx context.Context, cli *client.Client, run *Ru
 		_ = writer.CloseWithError(e)
 		encoded <- e
 	}()
-	_, copyErr := cli.CopyToContainer(ctx, p.helper, client.CopyToContainerOptions{DestinationPath: "/scratch/data", Content: reader, AllowOverwriteDirWithFile: false, CopyUIDGID: true})
+	// The normalized headers keep the archive's numeric owners; copyUIDGID would rewrite them to the helper user.
+	_, copyErr := cli.CopyToContainer(ctx, p.helper, client.CopyToContainerOptions{DestinationPath: "/scratch/data", Content: reader, AllowOverwriteDirWithFile: false})
 	_ = reader.CloseWithError(copyErr)
 	encodeErr := <-encoded
 	if encodeErr != nil {

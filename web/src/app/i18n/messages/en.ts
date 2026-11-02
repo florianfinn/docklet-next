@@ -9,5 +9,6 @@ export const enLocale = {
     loading: "Loading",
     newStack: "New stack",
     toggleSidebar: "Expand or collapse navigation",
+    close: "Close",
   },
 };

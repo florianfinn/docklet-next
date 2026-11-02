@@ -117,8 +117,8 @@ export function createHttpHubBackups(baseUrl: string, client: CsrfClient, upload
       if (!body?.activity || typeof body.activity.status !== "string") throw error({ code: "backup.invalid_response" }, 200);
       return body.activity.status;
     },
-    async createHubBackup() {
-      const body = await request("/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    async createHubBackup(policyId) {
+      const body = await request("/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(policyId ? { policyId } : {}) });
       if (!isRecord(body) || typeof body.id !== "string") throw error({ code: "backup.invalid_response" }, 200);
       return body as HubBackupRun;
     },

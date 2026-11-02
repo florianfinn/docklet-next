@@ -10,7 +10,7 @@ import { useTranslations } from "use-intl";
 import { captureCommandFailure } from "@/shared/components/command-failure";
 import { useAdapter } from "@/data/use-adapter";
 import type { WorkspaceUpload, WorkspaceWriteResult, VolumeDirListing } from "@/data/api";
-import { joinPath, parentPath } from "@/domain/files";
+import { baseName, joinPath, parentPath } from "@/domain/files";
 import { workspaceErrorKey } from "./workspace-error";
 
 export function useFileCommands(id: string, revision: string | undefined, rebase: (from: string | undefined, to: string, touched: string[]) => void, writeLockRef: RefObject<boolean>) {
@@ -39,6 +39,7 @@ export function useFileCommands(id: string, revision: string | undefined, rebase
     busy,
     createEntry: (_id: string, dir: string, name: string, type: "dir" | "file") => run(() => adapter.createEntry(id, dir, name, type, revision), [joinPath(dir, name)]),
     rename: (_id: string, path: string, name: string) => run(() => adapter.renameEntry(id, path, name, revision), [path, joinPath(parentPath(path), name)]),
+    move: (_id: string, path: string, folder: string) => run(() => adapter.moveEntry(id, path, folder, revision), [path, joinPath(folder, baseName(path))]),
     removeEntry: (_id: string, path: string) => run(() => adapter.deleteEntry(id, path, revision), [path]),
     upload: (_id: string, dir: string, file: WorkspaceUpload) => {
       const expected = client.getQueryData<VolumeDirListing>(["files", id, dir])?.revision ?? revision;

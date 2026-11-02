@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { useFiles } from "@/data/queries";
-import { baseName, parentPath, pathSegments, type FileEntry } from "@/domain/files";
+import { baseName, joinPath, parentPath, pathSegments, type FileEntry } from "@/domain/files";
 import { storageUsable, volumeLabel, type Volume } from "@/domain/volumes";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { downloadBlob } from "@/shared/lib/tar";
@@ -21,14 +21,14 @@ import { useFileCommands } from "./use-file-commands";
 import { workspaceErrorKey } from "./workspace-error";
 import { FileAside } from "./FileAside";
 import { FileBody, FileStatus } from "./FileBody";
-import { NameDialog } from "./FileDialogs";
+import { MoveDialog, NameDialog } from "./FileDialogs";
 import { FolderView } from "./FolderView";
 import { isUnder, movedPath, useOpenFiles, type OpenFile } from "./use-open-files";
 import { useVolumeTree } from "./use-volume-tree";
 
 const FOLDER_TAB = "@folder";
 
-type Pending = { kind: "create"; type: "dir" | "file" } | { kind: "rename"; entry: FileEntry } | { kind: "delete"; entry: FileEntry } | { kind: "close"; path: string } | null;
+type Pending = { kind: "create"; type: "dir" | "file" } | { kind: "rename"; entry: FileEntry } | { kind: "move"; entry: FileEntry } | { kind: "delete"; entry: FileEntry } | { kind: "close"; path: string } | null;
 
 const ancestors = (path: string) => ["/", ...pathSegments(path).map((s) => s.path)];
 
@@ -279,6 +279,7 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
               onOpen={openEntry}
               onDownload={(e) => void downloadEntry(e)}
               onRename={(entry) => setPending({ kind: "rename", entry })}
+              onMove={(entry) => setPending({ kind: "move", entry })}
               onDelete={(entry) => setPending({ kind: "delete", entry })}
             />
           )}
@@ -323,6 +324,25 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
             setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
             if (fileParam && isUnder(fileParam, from)) setUrl({ file: movedPath(fileParam, from, to) });
             toast.success(t("renamed", { name }));
+          }
+          return !!ok;
+        }}
+      />
+      <MoveDialog
+        open={pending?.kind === "move"}
+        onOpenChange={(o) => !o && setPending(null)}
+        path={pending?.kind === "move" ? pending.entry.path : "/"}
+        onSubmit={async (folder) => {
+          if (pending?.kind !== "move") return false;
+          const from = pending.entry.path;
+          const to = joinPath(folder, pending.entry.name);
+          const owner = currentView.current;
+          const ok = await cmd.move(volume.id, from, folder);
+          if (ok && owner === currentView.current) {
+            open.renamed(from, to);
+            setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
+            if (fileParam && isUnder(fileParam, from)) setUrl({ file: movedPath(fileParam, from, to) });
+            toast.success(t("moved", { path: to }));
           }
           return !!ok;
         }}

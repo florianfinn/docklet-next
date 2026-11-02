@@ -238,6 +238,11 @@ func allowedSettingKeys() map[string]struct{} {
 	}
 
 	allowed["encryptionKey"] = struct{}{}
+	// Internal rows outside Settings: backup target synchronization state (backuptarget.Store; agents compare
+	// owners against hubHostId) and the last repository check (volume backup).
+	for _, key := range []string{"hubHostId", "backupTargetAuthority", "backupTargetSetVersion", "backupTargetContentHash", "volumeBackupRepositoryCheck"} {
+		allowed[key] = struct{}{}
+	}
 
 	return allowed
 }
