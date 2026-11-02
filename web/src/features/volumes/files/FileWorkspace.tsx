@@ -1,5 +1,5 @@
 import { ArrowUp, ChevronRight, Download, FilePlus2, FileText, FolderOpen, FolderPlus, HardDrive, RotateCcw, Save, Upload } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBlocker, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
@@ -22,6 +22,7 @@ import { workspaceErrorKey } from "./workspace-error";
 import { FileAside } from "./FileAside";
 import { FileBody, FileStatus } from "./FileBody";
 import { MoveDialog, NameDialog } from "./FileDialogs";
+import { useLiveSearch } from "./use-live-search";
 import { FolderView } from "./FolderView";
 import { isUnder, movedPath, useOpenFiles, type OpenFile } from "./use-open-files";
 import { useVolumeTree } from "./use-volume-tree";
@@ -44,12 +45,12 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
 
 function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
   const t = useTranslations("volumes.files");
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const path = params.get("path") ?? "/";
   const fileParam = params.get("file");
-  const currentView = useRef(`${path}:${fileParam}`);
-  const currentFile = useRef(fileParam);
-  useLayoutEffect(() => { currentView.current = `${path}:${fileParam}`; currentFile.current = fileParam; }, [path, fileParam]);
+  // Late command completions and view guards use the router's live location; the rendered params may lag behind it.
+  const live = useLiveSearch();
+  const liveView = () => { const p = live.read(); return `${p.get("path") ?? "/"}:${p.get("file")}`; };
   const listing = useFiles(volume.id, path);
 
   const createCapability = useVolumeCapability("createEntry", volume.id);
@@ -90,7 +91,7 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const proceeding = useRef(false);
 
   const setUrl = (next: { path?: string; file?: string | null }) =>
-    setParams((p) => {
+    live.update((p) => {
       const out = new URLSearchParams(p);
       if (next.path !== undefined) out.set("path", next.path);
       if (next.file === null) out.delete("file");
@@ -99,21 +100,18 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
     });
 
   // Completed renames, moves and deletes reconcile tabs, drafts, expanded folders and the URL file even when the
-  // user switched folders or tabs while they ran. The router setter of an older render would restore that render's
-  // folder, so URL changes go through the setter of the latest render.
-  const latestSetUrl = useRef(setUrl);
-  useLayoutEffect(() => { latestSetUrl.current = setUrl; });
+  // user switched folders or tabs while they ran; the URL change only touches the live file parameter.
   const relocated = (from: string, to: string) => {
     open.renamed(from, to);
     setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
-    const file = currentFile.current;
-    if (file && isUnder(file, from)) latestSetUrl.current({ file: movedPath(file, from, to) });
+    const file = live.read().get("file");
+    if (file && isUnder(file, from)) setUrl({ file: movedPath(file, from, to) });
   };
   const discarded = (removed: string) => {
     open.removed(removed);
     setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, removed))));
-    const file = currentFile.current;
-    if (file && isUnder(file, removed)) latestSetUrl.current({ file: null });
+    const file = live.read().get("file");
+    if (file && isUnder(file, removed)) setUrl({ file: null });
   };
 
   const goFolder = (dir: string) => setUrl({ path: dir, file: null });
@@ -177,10 +175,10 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
 
   const onUpload = async (list: FileList | null) => {
     if (!list?.length) return;
-    const owner = currentView.current;
+    const owner = liveView();
     let n = 0;
     for (const f of [...list]) {
-      if (!mounted.current || owner !== currentView.current) break;
+      if (!mounted.current || owner !== liveView()) break;
       if (await cmd.upload(volume.id, path, { name: f.name, size: f.size, blob: f })) n++;
       else break;
     }
@@ -316,9 +314,9 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         siblings={siblings}
         onSubmit={async (name) => {
           if (pending?.kind !== "create") return false;
-          const owner = currentView.current;
+          const owner = liveView();
           const ok = await cmd.createEntry(volume.id, path, name, pending.type);
-          if (ok && owner === currentView.current) {
+          if (ok && owner === liveView()) {
             toast.success(t("created", { name }));
             if (pending.type === "file") openFile(`${path === "/" ? "" : path}/${name}`);
           }
