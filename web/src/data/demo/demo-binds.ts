@@ -11,9 +11,20 @@ import type { DemoDb } from "./demo-db";
 const SYSTEM = ["/proc", "/sys", "/dev", "/etc", "/run", "/var/run", "/boot"];
 const DOCKER = ["/var/lib/docker", "/var/lib/containerd"];
 
-/** Segment-wise overlap: equal, below or above (ancestors are refused too). */
-function overlaps(path: string, root: string): boolean {
-  return path === root || path.startsWith(`${root}/`) || root.startsWith(`${path}/`) || path === "/";
+/** Go `path.Clean` for absolute paths, as the agent canonicalises target paths and compares bind sources. */
+export function cleanPath(value: string): string {
+  const parts: string[] = [];
+  for (const part of value.split("/")) {
+    if (part === "..") parts.pop();
+    else if (part && part !== ".") parts.push(part);
+  }
+  return `/${parts.join("/")}`;
+}
+
+/** Segment-wise overlap of cleaned paths: equal, below or above (ancestors are refused too). */
+function overlaps(a: string, b: string): boolean {
+  const [path, root] = [cleanPath(a), cleanPath(b)];
+  return path === root || path.startsWith(`${root}/`) || root.startsWith(`${path}/`) || path === "/" || root === "/";
 }
 
 /** Like the agent, a key with a policy, backup or restore row stays a stored key after its last consumer is gone (K3). */

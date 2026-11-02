@@ -12,7 +12,7 @@ import { nextBackupRun, volumeId } from "@/domain/volumes";
 import type { BackupTarget } from "@/domain/settings";
 import { validateSchedule } from "@/domain/schedule";
 import { DemoError, wait, type DemoContext } from "./demo-context";
-import { demoBind, demoStored, protectedPaths } from "./demo-binds";
+import { cleanPath, demoBind, demoStored, protectedPaths } from "./demo-binds";
 import { volumeName } from "@/domain/validation";
 
 type Operations =
@@ -101,6 +101,22 @@ export function createDemoBackups(
         db.changed("volumes", "settings");
       },
     });
+  }
+  const stopped = (v: Volume) => v.consumers.filter((c) => c.running).map((c) => ({ id: c.containerId, name: c.containerName }));
+  /** Every restore entry point records and settles its row in the shared store, like the agent lifecycle (K3). */
+  function restoring(v: Volume, row: Omit<RestoreRun, "activityId" | "at" | "phase" | "status" | "pendingRestart">, done: () => void, partial: boolean) {
+    const restore: RestoreRun = { ...row, activityId: "", at: now(), phase: "preparing", status: "running", pendingRestart: false };
+    restores.set(v.id, restore);
+    restore.activityId = start(
+      v.hostId,
+      "volume-restore",
+      () => {
+        done();
+        Object.assign(restore, { status: "succeeded", phase: "done", pendingRestart: false });
+      },
+      () => Object.assign(restore, { phase: "writing", status: "failed", code: "volume.restore.failed-partial", pendingRestart: partial }),
+    );
+    return restore.activityId;
   }
   function usable(host: string) {
     return [
@@ -193,63 +209,48 @@ export function createDemoBackups(
         db.backupRuns.unshift(safety);
         db.files.clone(id, `snapshot-${safety.id}`);
       }
-      const restore: RestoreRun = {
-        restoreId: db.nextId("restore"),
-        activityId: "",
-        at: now(),
-        mode,
-        newVolumeName,
-        kind: "full",
-        phase: "preparing",
-        status: "running",
-        pendingRestart: false,
-        safetyBackupId: safety?.id,
-        stoppedContainers:
-          mode === "new"
-            ? []
-            : v.consumers.filter((c) => c.running).map((c) => ({ id: c.containerId, name: c.containerName })),
-      };
-      restores.set(id, restore);
-      restore.activityId = start(
-        v.hostId,
-        "volume-restore",
+      const restoreId = db.nextId("restore");
+      const activity = restoring(
+        v,
+        {
+          restoreId,
+          mode,
+          newVolumeName,
+          kind: "full",
+          safetyBackupId: safety?.id,
+          stoppedContainers: mode === "new" ? [] : stopped(v),
+        },
         () => {
           const dest = mode === "new" ? volumeId(v.hostId, "volume", newVolumeName!) : id;
           if (mode === "new")
-            db.createdVolumes.set(dest, {
-              name: newVolumeName!,
-              hostId: v.hostId,
-              createdAt: now(),
-              labels: { "docklet.restore-id": restore.restoreId },
-            });
+            db.createdVolumes.set(dest, { name: newVolumeName!, hostId: v.hostId, createdAt: now(), labels: { "docklet.restore-id": restoreId } });
           db.files.clone(source, dest);
-          restore.status = "succeeded";
-          restore.phase = "done";
-          restore.pendingRestart = false;
         },
-        () => {
-          restore.phase = "writing";
-          restore.status = "failed";
-          restore.code = "volume.restore.failed-partial";
-          restore.pendingRestart = mode === "replace";
-        },
+        mode === "replace",
       );
       db.changed("volumes");
-      return restore.activityId;
+      return activity;
     },
     async restoreBackupFiles(id, runId, selection) {
       const v = named(id, true),
         source = snapshot(id, runId),
         paths = selection.paths ?? [];
-      return start(v.hostId, "volume-restore", () => {
-        const src = db.files.ensure(source, () => []),
-          dest = db.files.ensure(id, () => []);
-        for (const selected of paths) {
-          for (const path of dest.keys()) if (path === selected || path.startsWith(`${selected}/`)) dest.delete(path);
-          for (const [path, node] of src)
-            if (path === selected || path.startsWith(`${selected}/`)) dest.set(path, { ...node });
-        }
-      });
+      const activity = restoring(
+        v,
+        { restoreId: db.nextId("restore"), mode: "replace", kind: "files", stoppedContainers: stopped(v) },
+        () => {
+          const src = db.files.ensure(source, () => []),
+            dest = db.files.ensure(id, () => []);
+          for (const selected of paths) {
+            for (const path of dest.keys()) if (path === selected || path.startsWith(`${selected}/`)) dest.delete(path);
+            for (const [path, node] of src)
+              if (path === selected || path.startsWith(`${selected}/`)) dest.set(path, { ...node });
+          }
+        },
+        false,
+      );
+      db.changed("volumes");
+      return activity;
     },
     async browseBackup(id, runId, path = "/", start = 0) {
       const entries = db.files.list(snapshot(id, runId), path).entries;
@@ -295,7 +296,9 @@ export function createDemoBackups(
         stoppedContainers: false,
       };
       db.backupRuns.unshift(run);
-      return api.restoreBackup(v.id, run.id, mode, name);
+      const activity = await api.restoreBackup(v.id, run.id, mode, name);
+      restores.get(v.id)!.kind = "upload";
+      return activity;
     },
     async getBackupOverview(host) {
       const online = isHostAvailable(db.host(host));
@@ -361,6 +364,7 @@ export function createDemoBackups(
     async createBackupTarget(input) {
       const row: BackupTarget = {
         ...input,
+        ...(input.path !== undefined && { path: cleanPath(input.path) }),
         id: db.nextId("target"),
         createdAt: now(),
         configVersion: 1,
@@ -377,10 +381,11 @@ export function createDemoBackups(
       return structuredClone(row);
     },
     async updateBackupTarget(id, input) {
-      const row = target(id);
+      const row = target(id),
+        next = { ...input, ...(input.path !== undefined && { path: cleanPath(input.path) }) };
       if (
         ["kind", "path", "hostId", "server", "share"].some(
-          (key) => row[key as keyof BackupTarget] !== input[key as keyof typeof input],
+          (key) => row[key as keyof BackupTarget] !== next[key as keyof typeof next],
         )
       )
         return fail("backup.target.immutable");

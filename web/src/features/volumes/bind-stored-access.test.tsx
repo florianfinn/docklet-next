@@ -149,7 +149,7 @@ it("keeps a demo bind key retained only by its restore row in overview and detai
   const snapshot = (await api.getVolume(volume.id)).backups[0]!;
   expect(await settle(runner, api.restoreBackup(volume.id, snapshot.id, "replace"))).toBe("succeeded");
   for (const run of (await api.getVolume(volume.id)).backups) await api.deleteBackup(volume.id, run.id);
-  await api.setBackupPolicy(volume.id, undefined);
+  await api.setBackupPolicy(volume.id, null);
   vi.spyOn(db, "containers").mockReturnValue([]);
   const ov = await api.getBackupOverview(volume.hostId);
   const detail = await api.getVolume(volume.id);
@@ -170,3 +170,37 @@ for (const mounted of [true, false])
     await expect(api.runBackup(volume.id)).rejects.toMatchObject({ problem: { code: "volume.bind.path-denied" } });
     vi.useRealTimers();
   });
+
+it("keeps a demo bind key retained only by a selected-file restore, with its running and terminal state", async () => {
+  const { db, runner, api } = timed();
+  const volume = (await api.listVolumes()).find((v) => v.kind === "bind" && v.bind?.eligible && !v.fileBind)!;
+  expect(await settle(runner, api.runBackup(volume.id))).toBe("succeeded");
+  const snapshot = (await api.getVolume(volume.id)).backups[0]!;
+  const path = (await api.browseBackup(volume.id, snapshot.id)).data![0]!.path;
+  const activity = await api.restoreBackupFiles(volume.id, snapshot.id, { paths: [path] });
+  const during = await api.getVolume(volume.id);
+  expect(await settle(runner, Promise.resolve(activity))).toBe("succeeded");
+  for (const run of (await api.getVolume(volume.id)).backups) await api.deleteBackup(volume.id, run.id);
+  await api.setBackupPolicy(volume.id, null);
+  vi.spyOn(db, "containers").mockReturnValue([]);
+  const ov = await api.getBackupOverview(volume.hostId);
+  const detail = await api.getVolume(volume.id);
+  expect([during.running, ov.volumes.some((v) => v.id === volume.id), detail.lastRestore?.kind, detail.lastRestore?.status]).toEqual([{ kind: "restore", activityId: activity }, true, "files", "succeeded"]);
+  vi.useRealTimers();
+});
+
+for (const spelling of ["parent/", "./"])
+  for (const mounted of [true, false])
+    it(`protects a bind path from a target spelled with ${spelling === "./" ? "a dot segment" : "a trailing slash"} (mounted ${mounted})`, async () => {
+      const { db, runner, api } = timed();
+      const volume = (await api.listVolumes()).find((v) => v.kind === "bind" && v.bind?.eligible && !v.fileBind)!;
+      expect(await settle(runner, api.runBackup(volume.id))).toBe("succeeded");
+      const snapshot = (await api.getVolume(volume.id)).backups[0]!;
+      const cut = volume.name.lastIndexOf("/");
+      const path = spelling === "./" ? `${volume.name.slice(0, cut)}/./${volume.name.slice(cut + 1)}` : `${volume.name.slice(0, cut)}/`;
+      await api.createBackupTarget({ name: "Protected source", kind: "local", hostId: volume.hostId, path });
+      if (!mounted) vi.spyOn(db, "containers").mockReturnValue([]);
+      await expect(api.downloadBackup(volume.id, snapshot.id)).resolves.toBeInstanceOf(Blob);
+      await expect(api.runBackup(volume.id)).rejects.toMatchObject({ problem: { code: "volume.bind.path-denied" } });
+      vi.useRealTimers();
+    });
