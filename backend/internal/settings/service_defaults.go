@@ -191,7 +191,11 @@ func (s *SettingsService) PruneUnknownSettings(ctx context.Context) error {
 
 	keys := slices.Collect(maps.Keys(allowedKeys))
 
-	result := s.db.WithContext(ctx).Where("key NOT IN ?", keys).Delete(&SettingVariable{})
+	query := s.db.WithContext(ctx).Where("key NOT IN ?", keys)
+	for _, prefix := range internalSettingPrefixes {
+		query = query.Where("key NOT LIKE ?", prefix+"%")
+	}
+	result := query.Delete(&SettingVariable{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to prune unknown settings: %w", result.Error)
 	}
@@ -238,14 +242,25 @@ func allowedSettingKeys() map[string]struct{} {
 	}
 
 	allowed["encryptionKey"] = struct{}{}
-	// Internal rows outside Settings: backup target synchronization state (backuptarget.Store; agents compare
-	// owners against hubHostId) and the last repository check (volume backup).
-	for _, key := range []string{"hubHostId", "backupTargetAuthority", "backupTargetSetVersion", "backupTargetContentHash", "volumeBackupRepositoryCheck"} {
+	for _, key := range internalSettingKeys {
 		allowed[key] = struct{}{}
 	}
 
 	return allowed
 }
+
+// Rows other packages keep in the settings table outside Settings; startup pruning must not delete them.
+// backuptarget.Store writes the hub authority and set version, the agent's received set (agents compare owners
+// against hubHostId) and one delivery receipt per host; volume backup writes the last repository check.
+// TestPruneKeepsEveryInternalSettingWriter guards the list against new writers.
+var (
+	internalSettingKeys = []string{
+		"backup_target_authority", "backup_target_set_version",
+		"hubHostId", "backupTargetAuthority", "backupTargetSetVersion", "backupTargetContentHash",
+		"volumeBackupRepositoryCheck",
+	}
+	internalSettingPrefixes = []string{"backupTargetDelivery:"}
+)
 
 func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, field reflect.StructField, isEnvOnlyMode bool) error {
 	tag := field.Tag.Get("key")

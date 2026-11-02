@@ -48,7 +48,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const path = params.get("path") ?? "/";
   const fileParam = params.get("file");
   const currentView = useRef(`${path}:${fileParam}`);
-  useLayoutEffect(() => { currentView.current = `${path}:${fileParam}`; }, [path, fileParam]);
+  const currentFile = useRef(fileParam);
+  useLayoutEffect(() => { currentView.current = `${path}:${fileParam}`; currentFile.current = fileParam; }, [path, fileParam]);
   const listing = useFiles(volume.id, path);
 
   const createCapability = useVolumeCapability("createEntry", volume.id);
@@ -96,6 +97,15 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
       else if (next.file !== undefined) out.set("file", next.file);
       return out;
     });
+
+  // A completed rename or move keeps tabs, drafts, expanded folders and the URL file on the entry's new path,
+  // also when the user switched folders or tabs while it ran.
+  const relocated = (from: string, to: string) => {
+    open.renamed(from, to);
+    setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
+    const file = currentFile.current;
+    if (file && isUnder(file, from)) setUrl({ file: movedPath(file, from, to) });
+  };
 
   const goFolder = (dir: string) => setUrl({ path: dir, file: null });
   const openFile = (filePath: string) => {
@@ -317,12 +327,9 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
           if (pending?.kind !== "rename") return false;
           const from = pending.entry.path;
           const to = `${parentPath(from) === "/" ? "" : parentPath(from)}/${name}`;
-          const owner = currentView.current;
           const ok = await cmd.rename(volume.id, from, name);
-          if (ok && owner === currentView.current) {
-            open.renamed(from, to);
-            setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
-            if (fileParam && isUnder(fileParam, from)) setUrl({ file: movedPath(fileParam, from, to) });
+          if (ok) {
+            relocated(from, to);
             toast.success(t("renamed", { name }));
           }
           return !!ok;
@@ -336,12 +343,9 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
           if (pending?.kind !== "move") return false;
           const from = pending.entry.path;
           const to = joinPath(folder, pending.entry.name);
-          const owner = currentView.current;
           const ok = await cmd.move(volume.id, from, folder);
-          if (ok && owner === currentView.current) {
-            open.renamed(from, to);
-            setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
-            if (fileParam && isUnder(fileParam, from)) setUrl({ file: movedPath(fileParam, from, to) });
+          if (ok) {
+            relocated(from, to);
             toast.success(t("moved", { path: to }));
           }
           return !!ok;

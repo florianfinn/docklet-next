@@ -170,7 +170,8 @@ describe("Hub database backup page", () => {
     expect(run !== null).toBe(true);
     await userEvent.click(run!);
     await waitFor(() => expect(create).toHaveBeenLastCalledWith("hub-daily"));
-    await waitFor(async () => expect((await adapter.listHubBackups())[0]?.copyState).toBe("pending"));
+    await waitFor(async () => expect((({ policyId, copyTargetId }) => ({ policyId, copyTargetId }))((await adapter.listHubBackups())[0]!)).toEqual({ policyId: "hub-daily", copyTargetId: "target-smb" }));
+    await waitFor(async () => expect((await adapter.listHubBackups())[0]?.copyState).toBe("succeeded"), { timeout: 3000 });
     await waitFor(() => expect(screen.getByRole("button", { name: deHubBackups.create }).hasAttribute("disabled")).toBe(false));
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.create }));
     await waitFor(() => expect(create).toHaveBeenLastCalledWith(undefined));
