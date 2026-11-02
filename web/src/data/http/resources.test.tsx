@@ -177,6 +177,15 @@ it("renders a bind detail route without fabricated size or non-finite host usage
   expect(view.container.textContent?.includes("Unbekannt")).toBe(true);
 });
 
+it("reads a bind detail opened through an encoded link once, by its full identity", async () => {
+  const f = resourceFixture(); f.state.bind = true;
+  const bind = (await f.adapter.listVolumes()).find((v) => v.kind === "bind")!;
+  f.fetcher.mockClear();
+  renderRoutes([{ path: "/volumes/:volumeId", element: <VolumePage /> }], [`/volumes/${encodeURIComponent(bind.id)}`], f.adapter);
+  await waitFor(() => expect(screen.getByRole("heading", { name: "/srv/example~data" }).textContent).toBe("/srv/example~data"));
+  expect(f.fetcher.mock.calls.map((c) => String(c[0])).filter((u) => u.includes("%25") || /\/volumes\/bind%3A/i.test(u))).toEqual([]);
+});
+
 it("displays Docker built-in and plugin drivers without rejecting a healthy host", async () => {
   const f = resourceFixture();
   const base = f.state.networks[0]!;

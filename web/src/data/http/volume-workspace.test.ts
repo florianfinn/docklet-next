@@ -48,6 +48,15 @@ for (const [host, empty, created] of [["direct", directWs, directWsCreate], ["ed
       expect([...new Uint8Array(await (await adapter.downloadFile!(id, "/hello.txt")).arrayBuffer())]).toEqual([0, 255, 2]);
       expect(calls.every((call) => call.url.pathname.startsWith(`/api/environments/${host}/volumes/data/workspace`))).toBe(true);
     });
+    it("moves an entry to a destination folder under the rename capability", async () => {
+      const { adapter, calls } = fixture(); const id = `${host}~data`;
+      await adapter.moveEntry(id, "/hello.txt", "/config", empty.fileTreeRevision);
+      const manifest = JSON.parse(String((calls.findLast((call) => call.init?.method === "PUT")!.init!.body as FormData).get("manifest")));
+      expect(manifest.fileChanges).toEqual([{ operation: "move", relativePath: "hello.txt", newParentPath: "config" }]);
+      const denied = fixture("renameEntry");
+      await expect(denied.adapter.moveEntry(id, "/hello.txt", "/config", "r")).rejects.toMatchObject({ outcome: { kind: "not-available", operationId: "renameEntry" } });
+      expect(denied.calls.length).toBe(0);
+    });
     it("surfaces stale baseline rather than silently adopting a newer tree", async () => {
       const { adapter } = fixture(); const id = `${host}~data`;
       await adapter.listFiles(id, "/");

@@ -16,7 +16,7 @@ import { renderWithApp } from "@/test/render";
 import { useState } from "react";
 import InstallSheet from "./InstallSheet";
 import { existingHostPlan, TOKEN_PLACEHOLDER } from "./existing-host-plan";
-const host = mapHost({ id: "atlas", name: "Example", color: null, apiUrl: "http://[2001:db8::10]:3553", enabled: true, status: "online", isEdge: false });
+const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "http://[2001:db8::10]:3553", enabled: true, status: "online", isEdge: false });
 const defaults = { projectDir: "/srv/projects", installDir: "/srv/agent", connection: "direct" as const, puid: "", pgid: "", detectSocketGroup: true };
 const general = { hubName: "Example", hubAddress: "https://hub.example.com", domainUrl: "", linkBase: "auto" as const, timeZone: "UTC" };
 afterEach(() => { vi.restoreAllMocks(); setAppLocale("de"); localStorage.clear(); });

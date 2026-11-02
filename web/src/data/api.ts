@@ -192,6 +192,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
   renameVolume(id: string, name: string): Promise<Volume>;
+  /** Measures the apparent size of a bind now; scans longer than the agent deadline fail with `volume.bind.size-timeout`. */
+  measureBind?(id: string): Promise<{ sizeBytes: number; measuredAt: string; partial: boolean }>;
   /** Preview of a prune for the given hosts; computed by the adapter, not the browser. */
   planVolumePrune(input: { hostIds: string[]; all?: boolean }): Promise<VolumePrunePlan>;
   /**
@@ -205,6 +207,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   writeFile(volumeId: string, path: string, content: string, baseline?: WorkspaceBaseline): Promise<WorkspaceWriteResult>;
   createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file", revision?: string): Promise<WorkspaceWriteResult>;
   renameEntry(volumeId: string, path: string, name: string, revision?: string): Promise<WorkspaceWriteResult>;
+  /** Moves an entry into an existing folder of the same volume; owner and mode stay. */
+  moveEntry(volumeId: string, path: string, folder: string, revision?: string): Promise<WorkspaceWriteResult>;
   deleteEntry(volumeId: string, path: string, revision?: string): Promise<WorkspaceWriteResult>;
   uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<WorkspaceWriteResult>;
   downloadFile?(volumeId: string, path: string): Promise<Blob>;
@@ -213,7 +217,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   restoreBackup(volumeId: string, runId: string, mode: "replace" | "new", newVolumeName?: string): Promise<string>;
   restoreBackupFiles(volumeId: string, runId: string, selection: BackupSelection): Promise<string>;
   browseBackup(volumeId: string, runId: string, path?: string, start?: number): Promise<BackupBrowse>;
-  downloadBackup(volumeId: string, runId: string): Promise<Blob>;
+  /** Resolves without a Blob when the browser downloads the archive itself (Direct and hub-local hosts). */
+  downloadBackup(volumeId: string, runId: string): Promise<Blob | undefined>;
   deleteBackup(volumeId: string, runId: string): Promise<void>;
   uploadRestore(volumeId: string, file: File, mode?: "replace" | "new", newVolumeName?: string): Promise<string>;
   getBackupOverview(hostId: string): Promise<BackupOverview>;
@@ -221,10 +226,15 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   getBackupRepository(hostId: string): Promise<BackupRepository>;
   checkBackupRepository(hostId: string): Promise<string>;
   listBackupTargets(): Promise<BackupTarget[]>;
+  /** Initial retention count of new plans (hub setting, 0–3650, 0 keeps all); existing plans keep their own. */
+  getBackupDefaultRetention?(): Promise<number>;
+  setBackupDefaultRetention?(count: number): Promise<void>;
   createBackupTarget(input: BackupTargetInput): Promise<BackupTarget>;
   updateBackupTarget(id: string, input: BackupTargetInput): Promise<BackupTarget>;
   deleteBackupTarget(id: string): Promise<void>;
   testBackupTarget(id: string, hostId: string): Promise<string>;
+  /** Tests an unsaved definition on one host without storing anything; `targetId` reuses a stored secret. */
+  testBackupTargetDraft?(input: { target: BackupTargetInput; probeHostId: string; targetId?: string }): Promise<{ ok: boolean; code?: string }>;
   getBackupTargetReferences(id: string, hostId: string): Promise<BackupTargetReferences>;
   getBackupRecoveryKey(id: string, hostId?: string): Promise<string>;
   attachLocalBackupRecoveryKey(hostId: string, recoveryKey: string): Promise<void>;

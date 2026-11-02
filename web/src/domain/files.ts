@@ -46,6 +46,20 @@ export function pathSegments(path: string): { name: string; path: string }[] {
   return parts.map((name, i) => ({ name, path: `/${parts.slice(0, i + 1).join("/")}` }));
 }
 
+export type MoveTargetError = "required" | "invalid" | "same" | "inside";
+
+/** Normalized absolute destination folder for moving `path`, or why it cannot receive it. */
+export function moveTarget(input: string, path: string): { folder: string } | { error: MoveTargetError } {
+  const v = input.trim();
+  if (!v) return { error: "required" };
+  const parts = v.split("/").filter((part) => part && part !== ".");
+  if (!v.startsWith("/") || parts.includes("..") || /[\\\0]/.test(v)) return { error: "invalid" };
+  const folder = `/${parts.join("/")}`;
+  if (folder === parentPath(path)) return { error: "same" };
+  if (folder === path || folder.startsWith(`${path}/`)) return { error: "inside" };
+  return { folder };
+}
+
 export function validateFileName(name: string, siblings: readonly string[], current?: string): FileNameError | undefined {
   const v = name.trim();
   if (!v) return "required";

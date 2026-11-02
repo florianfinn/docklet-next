@@ -92,6 +92,16 @@ it("rediscovers running restores on reload without a POST and shows pending rest
   expect(f.state.requests.some((r) => r.method === "POST")).toBe(false);
   expect((screen.getByRole("button", { name: "Jetzt sichern" }) as HTMLButtonElement).disabled).toBe(true);
 });
+// An older producer reports a restore's safety capture as a running backup without an activity; the empty ID is
+// never followed, and the operation this tab admitted stays visible.
+it("follows the admitted operation instead of an empty running activity", async () => {
+  const f = setup(); f.state.overview.volumes![0]!.running = { activityId: "", kind: "backup" };
+  const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  renderWithApp(<VolumeBackupsTab volume={{ ...volume, backups: [] }} hostOnline />, f.adapter);
+  await userEvent.click(await screen.findByRole("button", { name: "Jetzt sichern" }));
+  await waitFor(() => expect(f.adapter.observeActionDetail).toHaveBeenCalledWith("first", "accepted", expect.any(Function)));
+  expect((f.adapter.observeActionDetail.mock.calls as unknown[][]).some((call) => call[1] === "")).toBe(false);
+});
 it("locks the manual stop switch on when the stored plan stops containers", async () => {
   const f = setup(); f.state.overview.volumes![0]!.policy = { ...f.state.overview.volumes![0]!.policy!, enabled: false, stopContainers: true };
   const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
@@ -135,7 +145,8 @@ it("requires key confirmation and discards a late key after close", async () => 
   expect(f.state.requests.some((r) => r.path.endsWith("recovery-key"))).toBe(false);
   await userEvent.click(screen.getByRole("button", { name: "Bestätigen und Schlüssel anzeigen" }));
   await waitFor(() => expect(typeof finish).toBe("function"));
-  await userEvent.click(screen.getByRole("button", { name: "Schließen" }));
+  // The footer action, not the corner control of the dialog primitive.
+  await userEvent.click(screen.getAllByRole("button", { name: "Schließen" }).find((button) => button.dataset.slot !== "dialog-close")!);
   expect(close).toHaveBeenCalled();
   await act(async () => { finish(ok({ recoveryKey: f.state.key })); });
   expect(document.body.textContent).not.toContain(f.state.key); expect(JSON.stringify(client.getQueryCache().getAll().map((q) => q.state.data))).not.toContain(f.state.key); unmount();
@@ -157,11 +168,27 @@ it("passes entered credentials and optional existing recovery key only to target
   expect(f.state.requests.find((r) => r.method === "POST")?.body).toMatchObject({ secret: "test-only", recoveryKey: "synthetic-key" });
   expect(JSON.stringify(await f.api.listBackupTargets())).not.toContain("test-only");
 });
-it("shows the named-volume boundary for bind mounts", async () => {
-  const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+it("explains refused and unchecked binds instead of offering backups", async () => {
+  // Without a stored plan or backup; stored history stays readable (bind-access.test.tsx).
+  const f = setup(), volume = { ...(await f.api.getBackupOverview("first")).volumes[0]!, backup: undefined, lastBackup: undefined };
+  const view = renderWithApp(<VolumeBackupsTab volume={{ ...volume, kind: "bind", bind: { kind: "directory", eligible: false, reason: "volume.bind.path-denied" }, backups: [] }} hostOnline />, f.adapter);
+  expect(screen.getByRole("status").textContent).toBe("Für diesen Bind-Mount werden Dateien und Backups nicht angeboten. Dieser Pfad ist vor Datei- und Backup-Aktionen geschützt.");
+  view.unmount();
   renderWithApp(<VolumeBackupsTab volume={{ ...volume, kind: "bind", backups: [] }} hostOnline />, f.adapter);
-  expect(screen.getByRole("status").textContent).toBe("Backups umfassen nur benannte Volumes.");
+  expect(screen.getByRole("status").textContent).toContain("noch nicht geprüft");
 });
+for (const kind of ["directory", "file"] as const) {
+  it(`offers backups for an eligible ${kind} bind with its restore modes`, async () => {
+    const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+    const bind = { ...volume, kind: "bind" as const, fileBind: kind === "file", bind: { kind, eligible: true }, backups: [] };
+    const view = renderWithApp(<VolumeBackupsTab volume={bind} hostOnline />, f.adapter);
+    await screen.findByRole("button", { name: "Jetzt sichern" });
+    expect(screen.queryByText("Archiv zur Wiederherstellung hochladen") !== null).toBe(kind === "directory");
+    view.unmount();
+    renderWithApp(<RestoreDialog volume={bind} runId="run" onClose={() => {}} accepted={() => {}} />, f.adapter);
+    expect(screen.queryByText("Als neues Volume wiederherstellen") === null).toBe(true);
+  });
+}
 it("keeps typed target retirement refusal and host references inside the confirmation", async () => {
   const f = setup(); f.state.fail = "/backup-targets/target"; f.state.code = "backup.target.hosts-unknown";
   renderWithApp(<BackupTargetsSection />, f.adapter);
@@ -193,4 +220,21 @@ it("shows a backup reader the status without requiring policy write permission",
   f.adapter.getCapability = async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: operationId !== "setBackupPolicy", disabledReasonCode: "capability.unavailable" });
   renderWithApp(<BackupBadge volume={volume} />, { ...f.adapter, kind: "http" });
   await waitFor(() => expect(screen.queryByText("Teilweise") !== null).toBe(true));
+});
+it("starts a new plan with the hub default retention and saves the default within its bounds", async () => {
+  const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  const saved: number[] = [];
+  const adapter = { ...f.adapter, getBackupDefaultRetention: async () => 30, setBackupDefaultRetention: async (count: number) => { saved.push(count); } };
+  const view = renderWithApp(<VolumeBackupsTab volume={{ ...volume, id: "first~fresh", name: "fresh", backup: undefined, lastBackup: undefined, backups: [] }} hostOnline />, adapter);
+  await waitFor(() => expect((document.getElementById("bk-retention") as HTMLInputElement | null)?.value).toBe("30"));
+  view.unmount();
+  renderWithApp(<BackupTargetsSection />, adapter);
+  const input = await screen.findByLabelText("Standard-Aufbewahrung für neue Pläne");
+  await waitFor(() => expect((input as HTMLInputElement).value).toBe("30"));
+  const save = screen.getByRole("button", { name: "Standard speichern" }) as HTMLButtonElement;
+  await userEvent.clear(input); await userEvent.type(input, "3651");
+  expect(save.disabled).toBe(true);
+  await userEvent.clear(input); await userEvent.type(input, "0");
+  await userEvent.click(save);
+  await waitFor(() => expect(saved).toEqual([0]));
 });

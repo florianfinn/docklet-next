@@ -5,6 +5,7 @@
 // Deviations: Original workspace implementation and contract coverage for issue #182.
 
 import type { WorkspaceGesture, WorkspaceTree, WorkspaceContent } from "@/data/api";
+import { BackupError, backupCodeKey } from "@/data/backup-error";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "@/data/capability";
 import type { CsrfClient } from "./csrf-client";
 import { splitInventoryId } from "./inventory-mapping";
@@ -71,7 +72,6 @@ export interface WorkspaceOptions {
 export function createWorkspaceTransport({ baseUrl, client, capability, generation = () => 0 }: WorkspaceOptions) {
   function route(kind: "volume" | "stack", id: string) {
     const [host, raw] = splitInventoryId(id);
-    if (kind === "volume" && raw.startsWith("bind:")) throw new WorkspaceError("forbidden");
     return `${baseUrl}/environments/${encodeURIComponent(host)}/${kind === "volume" ? "volumes" : "projects"}/${encodeURIComponent(raw)}/workspace`;
   }
   async function require(operation: string, kind: "volume" | "stack", id: string) {
@@ -89,6 +89,7 @@ export function createWorkspaceTransport({ baseUrl, client, capability, generati
       let code: string | undefined;
       try { code = (await result.json() as { code?: string }).code; } catch { /* HTTP status remains authoritative. */ }
       if (code?.startsWith("agent.")) throw new AdapterOutcomeError({ kind: "error", code, status: result.status });
+      if (code?.startsWith("volume.bind.") && backupCodeKey(code)) throw new BackupError({code: code as ConstructorParameters<typeof BackupError>[0]["code"]}, result.status);
       if (result.status === 409) throw new WorkspaceConflictError();
       if (code === "volume.helper-incompatible") throw new WorkspaceError("helper-incompatible", result.status);
       if (code === "volume.helper-unavailable") throw new WorkspaceError("helper-unavailable", result.status);

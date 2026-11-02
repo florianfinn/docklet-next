@@ -46,7 +46,14 @@ function useCrumbs(): Crumb[] {
   const ts = useTranslations("settings.sections");
   const tl = useTranslations("locale.ui");
   const { pathname } = useLocation();
-  const [first, second] = pathname.split("/").filter(Boolean);
+  // Segments decoded like route params, so crumbs read the same resource identity as the page.
+  const [first, second] = pathname.split("/").filter(Boolean).map((part) => {
+    try {
+      return decodeURIComponent(part);
+    } catch {
+      return part;
+    }
+  });
   const stacks = useStacks();
   const containers = useContainers();
   const volume = useVolume(first === "volumes" && second ? second : undefined);

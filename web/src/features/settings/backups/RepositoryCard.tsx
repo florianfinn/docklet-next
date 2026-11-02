@@ -71,7 +71,7 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
         </Button>
       </div>
       {(value?.running?.activityId || activity) && (
-        <BackupOperation hostId={host.id} activityId={(value?.running?.activityId ?? activity)!} />
+        <BackupOperation hostId={host.id} activityId={(value?.running?.activityId || activity)!} />
       )}
       {error && <p role="alert">{error}</p>}
     </article>

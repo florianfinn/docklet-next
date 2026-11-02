@@ -21,12 +21,12 @@ import { renderWithApp } from "@/test/render";
 import { AutoHealSection } from "@/features/settings/sections/AutoHealSection";
 import { HostCard } from "./HostCard";
 
-const host = mapHost({ id: "atlas", name: "Example", color: null, apiUrl: "http://agent.example.com", enabled: true, status: "standby", isEdge: true });
+const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "http://agent.example.com", enabled: true, status: "standby", isEdge: true });
 afterEach(() => { vi.restoreAllMocks(); setAppLocale("de"); });
 it("H7 preserves neutral standby, available for waking actions; offline and refusals stay unavailable", () => {
   expect(host.status).toBe("standby"); expect(hostTone(host)).toBe("gray"); expect(isHostAvailable(host)).toBe(true);
   for (const status of ["offline", "pending", "token-rejected", "update-required"] as const) expect(isHostAvailable({ ...host, status })).toBe(false);
-  expect(mapHost({ id: "example", color: null, apiUrl: "", enabled: false, status: "standby", isEdge: true }).status).toBe("offline");
+  expect(mapHost({ id: "example", color: null, registrationRevision: 1, apiUrl: "", enabled: false, status: "standby", isEdge: true }).status).toBe("offline");
 });
 it("H7 loads Auto Heal for standby, retains offline unavailability", async () => {
   setAppLocale("en-US"); const adapter = createDemoAdapter();

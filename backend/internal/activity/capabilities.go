@@ -18,6 +18,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/capability"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
 
 var adapterOperationIDs = []string{
@@ -244,7 +245,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		case "listFiles", "readFile", "downloadFile", "writeFile", "createEntry", "uploadFile", "renameEntry", "deleteEntry":
 			ref := descriptors[i].ResourceRef
 			env, raw, scoped := strings.Cut(ref.ID, "~")
-			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && !strings.HasPrefix(raw, "bind:") && permissions.Allows(authz.PermVolumesRead, env)
+			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && volumetypes.ValidateName(raw) == nil && permissions.Allows(authz.PermVolumesRead, env)
 			switch descriptors[i].OperationID {
 			case "writeFile", "createEntry", "uploadFile":
 				valid = valid && permissions.Allows(authz.PermVolumesUpload, env)

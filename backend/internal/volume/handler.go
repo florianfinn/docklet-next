@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; stateless prune HTTP contract; typed API create and rename name conflicts.; M12 preserve typed backup-target refusals and destination-busy responses.
+// Deviations: Local module namespace; stateless prune HTTP contract; typed API create and rename name conflicts.; M12 preserve typed backup-target refusals and destination-busy responses; M16 bind mounts and backup completion.
 
 package volume
 
@@ -178,6 +178,9 @@ func (h *VolumeHandler) GetVolume(ctx context.Context, input *GetVolumeInput) (*
 
 // CreateVolume creates a new Docker volume.
 func (h *VolumeHandler) CreateVolume(ctx context.Context, input *CreateVolumeInput) (*handlerutil.Out[*volume.Volume], error) {
+	if err := volume.RefuseBind(input.Body.Name); err != nil {
+		return nil, err
+	}
 	user, err := handlerutil.RequireUser(ctx)
 	if err != nil {
 		return nil, err
@@ -209,7 +212,7 @@ func (h *VolumeHandler) CreateVolume(ctx context.Context, input *CreateVolumeInp
 	}, func(runtimeCtx context.Context) error {
 		var createErr error
 		response, createErr = h.volumeService.createVolumeForAPI(runtimeCtx, options, *user)
-		return createErr
+		return neutralVolumeOperationError(createErr)
 	})
 	if err != nil {
 		var typed huma.StatusError
@@ -224,7 +227,7 @@ func (h *VolumeHandler) CreateVolume(ctx context.Context, input *CreateVolumeInp
 		if errors.As(err, &conflictErr) {
 			return nil, &volume.ExistsError{Status: http.StatusConflict, Title: "Conflict", Detail: "A volume with this name already exists", Code: "volume.exists"}
 		}
-		return nil, huma.Error500InternalServerError("Failed to create volume: " + err.Error())
+		return nil, neutralVolumeOperationError(err)
 	}
 	response.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
 
@@ -238,6 +241,11 @@ func (h *VolumeHandler) CreateVolume(ctx context.Context, input *CreateVolumeInp
 
 // RenameVolume renames an unused Docker volume.
 func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInput) (*handlerutil.Out[*volume.Volume], error) {
+	for _, name := range []string{input.VolumeName, input.Body.Name} {
+		if err := volume.RefuseBind(name); err != nil {
+			return nil, err
+		}
+	}
 	if input.EnvironmentID != "0" {
 		if h.environmentService == nil {
 			return nil, huma.Error500InternalServerError("environment service not available")
@@ -275,7 +283,7 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 	}, func(runtimeCtx context.Context) error {
 		var renameErr error
 		response, renameErr = h.volumeService.RenameVolume(runtimeCtx, input.VolumeName, input.Body.Name, *user)
-		return renameErr
+		return neutralVolumeOperationError(renameErr)
 	})
 	if err != nil {
 		var typed huma.StatusError
@@ -298,7 +306,7 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 		case errors.Is(err, common.ErrNotFound):
 			return nil, huma.Error404NotFound(err.Error())
 		default:
-			return nil, huma.Error500InternalServerError("Failed to rename volume: " + err.Error())
+			return nil, neutralVolumeOperationError(err)
 		}
 	}
 	response.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
@@ -308,6 +316,9 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 
 // RemoveVolume removes a Docker volume.
 func (h *VolumeHandler) RemoveVolume(ctx context.Context, input *RemoveVolumeInput) (*handlerutil.Out[base.MessageResponse], error) {
+	if err := volume.RefuseBind(input.VolumeName); err != nil {
+		return nil, err
+	}
 	user, err := handlerutil.RequireUser(ctx)
 	if err != nil {
 		return nil, err
@@ -364,6 +375,11 @@ func (h *VolumeHandler) PlanVolumePrune(ctx context.Context, input *PlanVolumePr
 
 // PruneVolumes re-checks and removes only the submitted candidates.
 func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInput) (*handlerutil.Out[volume.PruneResult], error) {
+	for _, candidate := range input.Body.Candidates {
+		if err := volume.RefuseBind(candidate.Name); err != nil {
+			return nil, err
+		}
+	}
 	var report *volume.PruneResult
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{

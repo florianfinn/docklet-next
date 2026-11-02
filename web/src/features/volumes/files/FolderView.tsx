@@ -1,4 +1,4 @@
-import { Download, File, FileText, Folder, MoreHorizontal, Pencil, TextCursorInput, Trash2 } from "lucide-react";
+import { Download, File, FileText, Folder, FolderInput, MoreHorizontal, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { workspaceErrorKey } from "./workspace-error";
@@ -20,11 +20,12 @@ interface FolderViewProps {
   onOpen: (entry: FileEntry) => void;
   onDownload: (entry: FileEntry) => void;
   onRename: (entry: FileEntry) => void;
+  onMove: (entry: FileEntry) => void;
   onDelete: (entry: FileEntry) => void;
 }
 
 /** Folder tab of the volume workspace: entries of the current folder with size, date and actions. */
-export function FolderView({ listing, singleFile, canRename = true, canDelete = true, canDownload = true, onOpen, onDownload, onRename, onDelete }: FolderViewProps) {
+export function FolderView({ listing, singleFile, canRename = true, canDelete = true, canDownload = true, onOpen, onDownload, onRename, onMove, onDelete }: FolderViewProps) {
   const t = useTranslations("volumes.files");
   const entries = listing.data?.entries ?? [];
   if (listing.isPending)
@@ -90,6 +91,11 @@ export function FolderView({ listing, singleFile, canRename = true, canDelete = 
                         {!singleFile && (
                           <DropdownMenuItem disabled={!canRename || listing.isPlaceholderData} onSelect={() => onRename(e)}>
                             <TextCursorInput /> {t("rename")}
+                          </DropdownMenuItem>
+                        )}
+                        {!singleFile && (
+                          <DropdownMenuItem disabled={!canRename || listing.isPlaceholderData} onSelect={() => onMove(e)}>
+                            <FolderInput /> {t("move")}
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuGroup>

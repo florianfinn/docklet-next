@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original retire-fence proofs at the hub policy and manual-backup call sites.
+// Deviations: Original retire-fence proofs at the hub policy and manual-backup call sites; M16 bind mounts and backup completion.
 
 package backup
 
@@ -112,7 +112,7 @@ type remoteFenceHost struct {
 	agentDB      *runtimePlan
 }
 
-func newRemoteFenceHost(t *testing.T, mode string) *remoteFenceHost {
+func newRemoteFenceHost(t *testing.T, mode string, registrations ...func(huma.API, *runtimePlan, *config.Config)) *remoteFenceHost {
 	t.Helper()
 	initFenceEncryption()
 	hub, agent := newRuntimePlan(t), newRuntimePlan(t)
@@ -132,6 +132,9 @@ func newRemoteFenceHost(t *testing.T, mode string) *remoteFenceHost {
 	agentPolicies.BeforeLocalUpdate = agent.service.checkPolicySet
 	policies.RegisterRoutes(api, agentPolicies)
 	backuptarget.RegisterHostRoutes(api, TargetHandler(agent.service, nil, cfg, t.Context()), true)
+	for _, register := range registrations {
+		register(api, agent, cfg)
+	}
 	effects := &atomic.Int32{}
 	agentHTTP := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/app-version" {

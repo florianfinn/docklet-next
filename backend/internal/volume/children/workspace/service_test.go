@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -41,6 +42,10 @@ func newVolumeWorkspaceTestDockerClientInternal(t *testing.T, server *httptest.S
 		client.WithHost(server.URL),
 		client.WithAPIVersion("1.41"),
 		client.WithHTTPClient(server.Client()),
+		// Exec attach hijacks a raw connection, which needs an explicit dialer for the test server.
+		client.WithDialContext(func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp", server.Listener.Addr().String())
+		}),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = dockerClient.Close() })
@@ -385,7 +390,8 @@ func TestVolumeWorkspaceWritesUseRuntimeIdentity(t *testing.T) {
 	require.Empty(t, execRequests[0].user)
 	require.Equal(t, "1000:1000", execRequests[1].user)
 	require.Equal(t, []string{"acfs", "apply", "--root", "/volume", "--staging", "/tmp/arcane-workspace", "--manifest", "manifest-0.json"}, execRequests[1].cmd)
-	require.Equal(t, []string{"true", "true"}, archiveQueries)
+	// Ownership comes from the archive headers; copyUIDGID would apply the tools image user (root) instead.
+	require.Equal(t, []string{"", ""}, archiveQueries)
 	require.Len(t, archiveHeaders, 2)
 	for _, header := range archiveHeaders {
 		require.Equal(t, 1000, header.Uid)

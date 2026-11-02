@@ -1,12 +1,12 @@
 import { ArrowUp, ChevronRight, Download, FilePlus2, FileText, FolderOpen, FolderPlus, HardDrive, RotateCcw, Save, Upload } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useBlocker, useSearchParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useBlocker, useLocation, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { useFiles } from "@/data/queries";
-import { baseName, parentPath, pathSegments, type FileEntry } from "@/domain/files";
-import { volumeLabel, type Volume } from "@/domain/volumes";
+import { baseName, joinPath, parentPath, pathSegments, type FileEntry } from "@/domain/files";
+import { storageUsable, volumeLabel, type Volume } from "@/domain/volumes";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { downloadBlob } from "@/shared/lib/tar";
 import { cn } from "@/shared/lib/utils";
@@ -15,19 +15,21 @@ import { setPreference, usePreference } from "@/shared/preferences/preferences-s
 import { FileTree, type TreeNode } from "@/shared/workspace/file-tree";
 import { AsideToggle, EditorAction, EditorPane, Workspace, WorkspaceFrame } from "@/shared/workspace/workspace";
 
+import { BindNotice } from "../bind-notice";
 import { useVolumeCapability } from "../use-volume-capability";
 import { useFileCommands } from "./use-file-commands";
 import { workspaceErrorKey } from "./workspace-error";
 import { FileAside } from "./FileAside";
 import { FileBody, FileStatus } from "./FileBody";
-import { NameDialog } from "./FileDialogs";
+import { MoveDialog, NameDialog } from "./FileDialogs";
+import { useLiveSearch } from "./use-live-search";
 import { FolderView } from "./FolderView";
 import { isUnder, movedPath, useOpenFiles, type OpenFile } from "./use-open-files";
 import { useVolumeTree } from "./use-volume-tree";
 
 const FOLDER_TAB = "@folder";
 
-type Pending = { kind: "create"; type: "dir" | "file" } | { kind: "rename"; entry: FileEntry } | { kind: "delete"; entry: FileEntry } | { kind: "close"; path: string } | null;
+type Pending = { kind: "create"; type: "dir" | "file" } | { kind: "rename"; entry: FileEntry } | { kind: "move"; entry: FileEntry } | { kind: "delete"; entry: FileEntry } | { kind: "close"; path: string } | null;
 
 const ancestors = (path: string) => ["/", ...pathSegments(path).map((s) => s.path)];
 
@@ -37,18 +39,22 @@ const ancestors = (path: string) => ["/", ...pathSegments(path).map((s) => s.pat
  * (?file=) live in the URL; open tabs and unsaved edits live in memory.
  */
 export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
-  const t = useTranslations("volumes.files");
-  if (volume.kind === "bind") return <div role="status" className="text-sm text-muted-foreground">{t("bindUnavailable")}</div>;
+  if (!storageUsable(volume)) return <BindNotice volume={volume} />;
   return <VolumeFileWorkspace key={volume.id} volume={volume} warning={warning} />;
 }
 
 function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
   const t = useTranslations("volumes.files");
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const path = params.get("path") ?? "/";
   const fileParam = params.get("file");
-  const currentView = useRef(`${path}:${fileParam}`);
-  useLayoutEffect(() => { currentView.current = `${path}:${fileParam}`; }, [path, fileParam]);
+  // Late command completions and view guards use the router's live location; the rendered params may lag behind it.
+  // The live location only belongs to this workspace while its pathname is this volume's own.
+  const { pathname: ownPathname } = useLocation();
+  const live = useLiveSearch();
+  const ownsLive = () => live.pathname() === ownPathname;
+  // A tuple keeps field boundaries: folder and file paths may contain any separator.
+  const liveView = () => { const p = live.read(); return JSON.stringify([live.pathname(), p.get("path") ?? "/", p.get("file")]); };
   const listing = useFiles(volume.id, path);
 
   const createCapability = useVolumeCapability("createEntry", volume.id);
@@ -88,14 +94,30 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const blocker = useBlocker(({ currentLocation, nextLocation }) => open.dirty && (currentLocation.pathname !== nextLocation.pathname || new URLSearchParams(nextLocation.search).get("tab") !== "files"));
   const proceeding = useRef(false);
 
-  const setUrl = (next: { path?: string; file?: string | null }) =>
-    setParams((p) => {
-      const out = new URLSearchParams(p);
-      if (next.path !== undefined) out.set("path", next.path);
-      if (next.file === null) out.delete("file");
-      else if (next.file !== undefined) out.set("file", next.file);
-      return out;
-    });
+  // Writes this workspace's URL: from the live parameters while the live location is its own, otherwise from the
+  // rendered ones, which cancels a pending navigation elsewhere like any in-page gesture.
+  const setUrl = (next: { path?: string; file?: string | null }) => {
+    const out = new URLSearchParams(ownsLive() ? live.read() : params);
+    if (next.path !== undefined) out.set("path", next.path);
+    if (next.file === null) out.delete("file");
+    else if (next.file !== undefined) out.set("file", next.file);
+    live.navigate(ownPathname, out);
+  };
+
+  // Completed renames, moves and deletes reconcile tabs, drafts, expanded folders and the URL file even when the
+  // user switched folders or tabs while they ran; the URL change only touches the live file parameter.
+  const relocated = (from: string, to: string) => {
+    open.renamed(from, to);
+    setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
+    const file = live.read().get("file");
+    if (ownsLive() && file && isUnder(file, from)) setUrl({ file: movedPath(file, from, to) });
+  };
+  const discarded = (removed: string) => {
+    open.removed(removed);
+    setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, removed))));
+    const file = live.read().get("file");
+    if (ownsLive() && file && isUnder(file, removed)) setUrl({ file: null });
+  };
 
   const goFolder = (dir: string) => setUrl({ path: dir, file: null });
   const openFile = (filePath: string) => {
@@ -158,10 +180,10 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
 
   const onUpload = async (list: FileList | null) => {
     if (!list?.length) return;
-    const owner = currentView.current;
+    const owner = liveView();
     let n = 0;
     for (const f of [...list]) {
-      if (!mounted.current || owner !== currentView.current) break;
+      if (!mounted.current || owner !== liveView()) break;
       if (await cmd.upload(volume.id, path, { name: f.name, size: f.size, blob: f })) n++;
       else break;
     }
@@ -279,6 +301,7 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
               onOpen={openEntry}
               onDownload={(e) => void downloadEntry(e)}
               onRename={(entry) => setPending({ kind: "rename", entry })}
+              onMove={(entry) => setPending({ kind: "move", entry })}
               onDelete={(entry) => setPending({ kind: "delete", entry })}
             />
           )}
@@ -296,9 +319,9 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         siblings={siblings}
         onSubmit={async (name) => {
           if (pending?.kind !== "create") return false;
-          const owner = currentView.current;
+          const owner = liveView();
           const ok = await cmd.createEntry(volume.id, path, name, pending.type);
-          if (ok && owner === currentView.current) {
+          if (ok && owner === liveView()) {
             toast.success(t("created", { name }));
             if (pending.type === "file") openFile(`${path === "/" ? "" : path}/${name}`);
           }
@@ -316,13 +339,26 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
           if (pending?.kind !== "rename") return false;
           const from = pending.entry.path;
           const to = `${parentPath(from) === "/" ? "" : parentPath(from)}/${name}`;
-          const owner = currentView.current;
           const ok = await cmd.rename(volume.id, from, name);
-          if (ok && owner === currentView.current) {
-            open.renamed(from, to);
-            setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
-            if (fileParam && isUnder(fileParam, from)) setUrl({ file: movedPath(fileParam, from, to) });
+          if (ok) {
+            relocated(from, to);
             toast.success(t("renamed", { name }));
+          }
+          return !!ok;
+        }}
+      />
+      <MoveDialog
+        open={pending?.kind === "move"}
+        onOpenChange={(o) => !o && setPending(null)}
+        path={pending?.kind === "move" ? pending.entry.path : "/"}
+        onSubmit={async (folder) => {
+          if (pending?.kind !== "move") return false;
+          const from = pending.entry.path;
+          const to = joinPath(folder, pending.entry.name);
+          const ok = await cmd.move(volume.id, from, folder);
+          if (ok) {
+            relocated(from, to);
+            toast.success(t("moved", { path: to }));
           }
           return !!ok;
         }}
@@ -341,11 +377,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         onConfirm={async () => {
           if (pending?.kind !== "delete") return;
           const entry = pending.entry;
-          const owner = currentView.current;
-          if (await cmd.removeEntry(volume.id, entry.path) && owner === currentView.current) {
-            open.removed(entry.path);
-            setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, entry.path))));
-            if (fileParam && isUnder(fileParam, entry.path)) setUrl({ file: null });
+          if (await cmd.removeEntry(volume.id, entry.path)) {
+            discarded(entry.path);
             toast.success(t("deleted", { name: entry.name }));
           }
         }}

@@ -6,16 +6,17 @@
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
-import { useBackupOverview } from "@/data/backup-queries";
+import { useBackupDefaultRetention, useBackupOverview } from "@/data/backup-queries";
 import { BackupError, backupErrorMessage } from "@/data/backup-error";
 import { useAdapter } from "@/data/use-adapter";
-import type { VolumeDetail } from "@/domain/volumes";
+import { backupAccess, directoryStorage, type VolumeDetail } from "@/domain/volumes";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { QueryError } from "@/shared/components/page";
 import { Button } from "@/shared/ui/button";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 import { Switch } from "@/shared/ui/switch";
+import { BindNotice } from "../bind-notice";
 import { useVolumeCapability } from "../use-volume-capability";
 import { BackupHistory } from "./BackupHistory";
 import { BackupPolicyCard } from "./BackupPolicyCard";
@@ -23,15 +24,16 @@ import { BackupOperation } from "./BackupOperation";
 import { RestoreDialog } from "./RestoreDialog";
 
 export function VolumeBackupsTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline: boolean }) {
-  const t = useTranslations("volumes.backups");
-  if (volume.kind === "bind") return <p role="status">{t("namedVolumesOnly")}</p>;
+  const access = backupAccess(volume);
+  if (access === "none") return <BindNotice volume={volume} />;
   return (
     <CapabilityGate operation="getBackupOverview" resourceRef={{ kind: "host", id: volume.hostId }}>
-      <ConnectedTab key={volume.id} volume={volume} hostOnline={hostOnline} />
+      <ConnectedTab key={volume.id} volume={volume} hostOnline={hostOnline} historyOnly={access === "history"} />
     </CapabilityGate>
   );
 }
-function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline: boolean }) {
+function ConnectedTab({ volume, hostOnline, historyOnly }: { volume: VolumeDetail; hostOnline: boolean; historyOnly: boolean }) {
+  const retention = useBackupDefaultRetention();
   const overview = useBackupOverview(volume.hostId),
     t = useTranslations("volumes.backups"),
     all = useTranslations(),
@@ -57,6 +59,14 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
   const safetyId = pending.find((run) => run.safetyBackupId)?.safetyBackupId;
   // A stored plan that stops containers applies to manual backups too (the backend merges both).
   const planStops = !!current.backup?.stopContainers;
+  // A refused path keeps its stored snapshots readable; nothing touches the source.
+  if (historyOnly)
+    return (
+      <>
+        <BindNotice volume={volume} history />
+        <BackupHistory volume={current} targets={overview.data.targets} hostOnline={hostOnline} accepted={setActivity} historyOnly />
+      </>
+    );
   return (
     <>
       {current.volumeExists === false && <p role="status">{t("volumeMissing")}</p>}
@@ -71,7 +81,7 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
         </div>
       )}
       {(running || activity) && (
-        <BackupOperation key={running ?? activity} hostId={volume.hostId} activityId={(running ?? activity)!} />
+        <BackupOperation key={running || activity} hostId={volume.hostId} activityId={(running || activity)!} />
       )}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
         <Field orientation="horizontal" className="w-auto">
@@ -108,7 +118,7 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
         >
           {t("runNow")}
         </Button>
-        <Field className="w-full sm:w-auto">
+        {directoryStorage(volume) && <Field className="w-full sm:w-auto">
           <FieldLabel htmlFor="backup-upload">{t("uploadRestore")}</FieldLabel>
           <Input
             id="backup-upload"
@@ -121,19 +131,27 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
             }}
           />
           <p className="text-xs text-muted-foreground">{t("uploadHint")}</p>
-        </Field>
+        </Field>}
       </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}
-      <BackupPolicyCard
-        key={JSON.stringify(current.backup ?? null)}
-        volume={current}
-        targets={overview.data.targets}
-        hostOnline={hostOnline}
-      />
+      {/* A new plan starts from the configured default retention, so it waits for that setting. */}
+      {current.backup || retention.data !== undefined ? (
+        <BackupPolicyCard
+          key={`${JSON.stringify(current.backup ?? null)}|${retention.data}`}
+          volume={current}
+          defaultRetentionCount={retention.data}
+          targets={overview.data.targets}
+          hostOnline={hostOnline}
+        />
+      ) : retention.isError ? (
+        <QueryError error={retention.error} onRetry={() => void retention.refetch()} />
+      ) : (
+        <p role="status">{t("policyLoading")}</p>
+      )}
       <BackupHistory volume={current} targets={overview.data.targets} hostOnline={hostOnline} accepted={setActivity} />
       {safety && (
         <RestoreDialog volume={current} runId={safety} onClose={() => setSafety(undefined)} accepted={setActivity} />

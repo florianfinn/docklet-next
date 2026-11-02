@@ -2,7 +2,7 @@
 // Revision: 75e73d5c4ffcd78b47ebaa166579079c02f70c8f
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original API-only create refusal; internal Docker create stays idempotent.; M12 destination admission and backup-target refusal before Docker create.
+// Deviations: Original API-only create refusal; internal Docker create stays idempotent.; M12 destination admission and backup-target refusal before Docker create; M16 bind mounts and backup completion.
 
 package volume
 
@@ -19,6 +19,9 @@ import (
 // Only explicit API creates refuse occupied names; Compose and internal callers
 // retain Docker's idempotent create. External creation after inspect can still race.
 func (s *VolumeService) createVolumeForAPI(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	if err := volumetypes.RefuseBind(options.Name); err != nil {
+		return nil, err
+	}
 	unlock, ok := s.workspaceLocks.TryLock(options.Name)
 	if !ok {
 		return nil, &volumeWorkspaceBusyError{name: options.Name}

@@ -1,7 +1,8 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderRoutes } from "@/test/render";
@@ -52,4 +53,23 @@ describe("mobile navigation", () => {
     await waitFor(() => expect(document.querySelector('[data-mobile="true"]') === null).toBe(true));
     expect(screen.getByRole("heading", { name: "Container-Seite" }) !== null).toBe(true);
   });
+});
+
+describe("breadcrumbs", () => {
+  it("read a volume opened through an encoded link by its decoded identity, like the page", async () => {
+    const adapter = createDemoAdapter();
+    const reads = vi.spyOn(adapter, "getVolume");
+    const id = "first~bind:2f7372762f61";
+    renderRoutes([{ element: <AppShell />, children: [{ path: "/volumes/:volumeId", element: <Page name="Volume-Seite" /> }] }], [`/volumes/${encodeURIComponent(id)}`], adapter);
+    await screen.findByRole("heading", { name: "Volume-Seite" });
+    await waitFor(() => expect(reads).toHaveBeenCalled());
+    expect([...new Set(reads.mock.calls.map((c) => c[0]))]).toEqual([id]);
+  });
+});
+
+it("names the sidebar rail and trigger in the active language", async () => {
+  renderRoutes(routes, ["/dashboard"]);
+  await screen.findByRole("heading", { name: "Dashboard-Seite" });
+  expect(document.body.textContent?.includes("Toggle Sidebar")).toBe(false);
+  expect([...document.querySelectorAll("[data-sidebar=rail]")].map((rail) => rail.getAttribute("aria-label"))).toEqual(["Navigation ein- oder ausklappen"]);
 });

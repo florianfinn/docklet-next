@@ -22,8 +22,8 @@ test("notification and Auto Heal codes have English and German catalogue entries
 
 test("v10 manifest contains the actual Auto Heal and notification dispatch producers", () => {
   const spec = JSON.parse(read("api/openapi.json"));
-  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v11.json"));
-  assert.equal(fixture.minimumAgentContractVersion, 11);
+  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v12.json"));
+  assert.equal(fixture.minimumAgentContractVersion, 12);
   assert.deepEqual(fixture.notificationDispatch.autoHeal, spec.components.schemas.NotificationDispatchAutoHeal);
   assert.deepEqual(fixture.notificationDispatch.backupFailed, spec.components.schemas.NotificationDispatchBackupFailed);
   for (const provider of ["Discord", "Email", "Telegram", "Signal", "Slack", "Ntfy", "Pushover", "Gotify", "Matrix", "GoogleChat", "Generic"]) assert.ok(spec.components.schemas[`NotificationConfig${provider}`], provider);

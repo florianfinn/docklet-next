@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
 
 package middleware
 
@@ -36,7 +36,12 @@ func RegisterWithPermission[I, O any](api huma.API, op huma.Operation, perm stri
 	}
 	op.Metadata[authz.MetaRequiredPermission] = perm
 	op.Middlewares = append(op.Middlewares, RequirePermission(api, perm)...)
-	huma.Register(api, op, handler)
+	huma.Register(api, op, func(ctx context.Context, input *I) (*O, error) {
+		if err := validateVolumeEntry(op.Path, input); err != nil {
+			return nil, err
+		}
+		return handler(ctx, input)
+	})
 }
 
 // RequireEchoPermission rejects Echo requests lacking perm for the environment

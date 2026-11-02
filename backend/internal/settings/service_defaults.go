@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion.
 
 package settings
 
@@ -38,6 +38,7 @@ func DefaultSettingsConfig() *Settings {
 		DockerClientRefreshInterval:           SettingVariable{Value: "0 */5 * * * *"},
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
+		BackupDefaultRetentionCount:           SettingVariable{Value: "7"},
 		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		KeepActionOutput:                      SettingVariable{Value: "true"},
@@ -190,7 +191,11 @@ func (s *SettingsService) PruneUnknownSettings(ctx context.Context) error {
 
 	keys := slices.Collect(maps.Keys(allowedKeys))
 
-	result := s.db.WithContext(ctx).Where("key NOT IN ?", keys).Delete(&SettingVariable{})
+	query := s.db.WithContext(ctx).Where("key NOT IN ?", keys)
+	for _, prefix := range internalSettingPrefixes {
+		query = query.Where("key NOT LIKE ?", prefix+"%")
+	}
+	result := query.Delete(&SettingVariable{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to prune unknown settings: %w", result.Error)
 	}
@@ -237,9 +242,26 @@ func allowedSettingKeys() map[string]struct{} {
 	}
 
 	allowed["encryptionKey"] = struct{}{}
+	for _, key := range internalSettingKeys {
+		allowed[key] = struct{}{}
+	}
 
 	return allowed
 }
+
+// Rows other packages keep in the settings table outside Settings; startup pruning must not delete them.
+// backuptarget.Store writes the hub authority and set version, the agent's received set (agents compare owners
+// against hubHostId) and one delivery receipt per host; volume backup writes the last repository check.
+// TestPruneKeepsEveryInternalSettingWriter requires every backend file that touches the settings table to be
+// classified and checks the literal keys of its writes against these lists.
+var (
+	internalSettingKeys = []string{
+		"backup_target_authority", "backup_target_set_version",
+		"hubHostId", "backupTargetAuthority", "backupTargetSetVersion", "backupTargetContentHash",
+		"volumeBackupRepositoryCheck",
+	}
+	internalSettingPrefixes = []string{"backupTargetDelivery:"}
+)
 
 func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, field reflect.StructField, isEnvOnlyMode bool) error {
 	tag := field.Tag.Get("key")

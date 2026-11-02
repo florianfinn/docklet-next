@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence; M16 bind mounts and backup completion.
 
 package system
 
@@ -61,6 +61,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
 
 // SystemService owns Docker system-wide operations and coordinates the prune
@@ -661,6 +662,9 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			}
 			var history []backuptypes.HistoryEntry
 			page, err := pagination.PaginateAndSortDB(params, query, &history)
+			for i := range history {
+				history[i].ResourceName = volumetypes.DisplayName(history[i].ResourceName)
+			}
 			return history, page, err
 		},
 	}

@@ -8,6 +8,8 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Arcane revision and module map](arcane-adoption.md) | Selected revision, local module identities and reproducible Go licence inventory |
 | [SQLite licence assessment](sqlite-license-assessment.md) | Exact compiled header grants, selected Go/web evidence and packaging boundaries |
 | [SQLite hub database](sqlite-database.md) | Driver, files, transactions, fresh schema, Francis, acceptance and the single implementation step |
+| [Bind mounts](bind-mounts.md) | M16 decision: bind keys, shared path rules, file browser and backups for directory and single-file binds, size scans |
+| [Backup completion](backup-completion.md) | M16 decision: hub archive copies to targets, draft target test, per-host delivery state, registration revision, backups overview |
 | [Volume backups and recovery](volume-backups.md) | Owning-host lifecycle, immutable targets, recovery keys, observed availability, archive validation and transport limits |
 | [Identity](identity.md) | Startup sign-in modes, direct-peer proxy trust, session boundaries and recovery |
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries, evaluation gates and the dated decision ledger |

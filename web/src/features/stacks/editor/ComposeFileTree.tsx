@@ -4,7 +4,7 @@ import { useTranslations } from "use-intl";
 
 import { useVolumes } from "@/data/queries";
 import type { ComposeModel } from "@/domain/compose/model";
-import { mountRef } from "@/domain/volumes";
+import { stackStorage } from "@/domain/volumes";
 import { filesHref } from "@/features/volumes/files/files-href";
 import { FileTree, type TreeNode } from "@/shared/workspace/file-tree";
 
@@ -30,16 +30,16 @@ interface ComposeFileTreeProps {
 }
 
 /** Compose adapter for the shared file tree: project files plus mounts linked to their file workspace. */
-export function ComposeFileTree({ projectName, projectDir, hostProjectDir, hostId, stackId, active, composeDirty, envDirty, model, onOpen, extraFiles = [], activeExtra, onOpenExtra }: ComposeFileTreeProps) {
+export function ComposeFileTree({ projectName, projectDir, stackId, active, composeDirty, envDirty, model, onOpen, extraFiles = [], activeExtra, onOpenExtra }: ComposeFileTreeProps) {
   const t = useTranslations("editor.files");
   const volumes = useVolumes();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(PROJECT_OPEN);
-  const known = new Map((volumes.data ?? []).map((v) => [v.id, v]));
-  const specs = [...new Map((model?.services ?? []).flatMap((s) => s.mounts.filter((m) => m.editable && m.source && m.target)).map((m) => [m.source, `${m.source}:${m.target}`])).entries()];
+  // Each use keeps its service, so equal targets in different services resolve to their own consumers.
+  const uses = (model?.services ?? []).flatMap((s) => s.mounts.filter((m) => m.editable && m.source && m.target).map((m) => ({ source: m.source, target: m.target, service: s.key })));
+  const sources = [...new Set(uses.map((u) => u.source))];
 
-  const mounts: TreeNode[] = specs.map(([source, spec]) => {
-    const ref = stackId ? mountRef({ hostId, stackId }, spec, hostProjectDir) : undefined;
-    const volume = ref ? known.get(ref.id) : undefined;
+  const mounts: TreeNode[] = sources.map((source) => {
+    const volume = stackId ? uses.filter((u) => u.source === source).map((u) => stackStorage(volumes.data, stackId, u, u.service)).find(Boolean) : undefined;
     const isBind = /^[./~]/.test(source);
     return {
       id: `mount:${source}`,

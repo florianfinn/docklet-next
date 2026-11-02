@@ -9,7 +9,7 @@ import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { backupCodeKey, backupErrorMessage } from "@/data/backup-error";
 import { formatBytes, formatDateTime } from "@/domain/format";
-import type { BackupRun, UsableBackupTarget, VolumeDetail } from "@/domain/volumes";
+import { directoryStorage, type BackupRun, type UsableBackupTarget, type VolumeDetail } from "@/domain/volumes";
 import { captureCommandFailure } from "@/shared/components/command-failure";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ToneBadge } from "@/shared/components/tone";
@@ -26,19 +26,23 @@ export function BackupHistory({
   targets,
   hostOnline,
   accepted = () => {},
+  historyOnly = false,
 }: {
   volume: VolumeDetail;
   targets: UsableBackupTarget[];
   hostOnline: boolean;
   accepted?: (id: string) => void;
+  /** Refused bind path: download and delete only, no restore onto the source. */
+  historyOnly?: boolean;
 }) {
   const t = useTranslations("volumes.backups"), all = useTranslations(), adapter = useAdapter();
   const restoreCapability = useVolumeCapability("restoreBackup", volume.id),
     filesCapability = useVolumeCapability("restoreBackupFiles", volume.id),
     downloadCapability = useVolumeCapability("downloadBackup", volume.id),
+    browseCapability = useVolumeCapability("browseBackup", volume.id),
     deleteCapability = useVolumeCapability("deleteBackup", volume.id);
   const [restore, setRestore] = useState<BackupRun>(),
-    [files, setFiles] = useState<BackupRun>(),
+    [files, setFiles] = useState<{ run: BackupRun; restore: boolean }>(),
     [remove, setRemove] = useState<BackupRun>(),
     [error, setError] = useState<string>(),
     [busy, setBusy] = useState(false);
@@ -71,7 +75,7 @@ export function BackupHistory({
           {run.archive && <p className="break-all font-mono text-xs text-muted-foreground">{run.archive}</p>}
           <div className="flex flex-wrap gap-2">
             {(run.status === "succeeded" || run.status === "partial") && <>
-              <Button
+              {!historyOnly && <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled || !restoreCapability.available}
@@ -79,16 +83,26 @@ export function BackupHistory({
                 onClick={() => setRestore(run)}
               >
                 {t("restore")}
-              </Button>
-              <Button
+              </Button>}
+              {/* Selected restore needs a directory; a file bind restores its one file by replace only. Browsing is a
+                  recovery read by snapshot ID and stays for file binds and stored keys (K4). */}
+              {!historyOnly && directoryStorage(volume) ? <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled || !filesCapability.available || volume.volumeExists === false}
                 title={filesCapability.reason}
-                onClick={() => setFiles(run)}
+                onClick={() => setFiles({ run, restore: true })}
               >
                 {t("restoreFiles")}
-              </Button>
+              </Button> : <Button
+                variant="outline"
+                size="sm"
+                disabled={disabled || !browseCapability.available}
+                title={browseCapability.reason}
+                onClick={() => setFiles({ run, restore: false })}
+              >
+                {t("browseSnapshot")}
+              </Button>}
               <Button
                 variant="outline"
                 size="sm"
@@ -99,6 +113,7 @@ export function BackupHistory({
                   setError(undefined);
                   try {
                     const blob = await adapter.downloadBackup(volume.id, run.id);
+                    if (!blob) return;
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement("a");
                     link.href = url;
@@ -136,9 +151,10 @@ export function BackupHistory({
       accepted={accepted}
     />}
     {files && <RestoreFilesSheet
-      key={files.id}
+      key={files.run.id}
       volumeId={volume.id}
-      runId={files.id}
+      runId={files.run.id}
+      browseOnly={!files.restore}
       onClose={() => setFiles(undefined)}
       accepted={accepted}
     />}

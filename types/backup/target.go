@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original volume backup lifecycle contract.
+// Deviations: Original volume backup lifecycle contract; M16 bind mounts and backup completion.
 
 package backup
 
@@ -21,16 +21,17 @@ type TargetLocation struct {
 
 type Target struct {
 	TargetLocation
-	ID            string        `json:"id"`
-	Name          string        `json:"name"`
-	Username      string        `json:"username,omitempty"`
-	Options       string        `json:"options,omitempty"`
-	HasSecret     bool          `json:"hasSecret"`
-	ConfigVersion int64         `json:"configVersion"`
-	CreatedAt     time.Time     `json:"createdAt"`
-	UpdatedAt     *time.Time    `json:"updatedAt,omitempty"`
-	RetiredAt     *time.Time    `json:"retiredAt,omitempty"`
-	Checks        []TargetCheck `json:"checks"`
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	Username      string               `json:"username,omitempty"`
+	Options       string               `json:"options,omitempty"`
+	HasSecret     bool                 `json:"hasSecret"`
+	ConfigVersion int64                `json:"configVersion"`
+	CreatedAt     time.Time            `json:"createdAt"`
+	UpdatedAt     *time.Time           `json:"updatedAt,omitempty"`
+	RetiredAt     *time.Time           `json:"retiredAt,omitempty"`
+	Checks        []TargetCheck        `json:"checks"`
+	Delivery      []TargetHostDelivery `json:"delivery"`
 }
 
 type TargetInput struct {
@@ -97,4 +98,25 @@ type TargetTestOperation struct {
 }
 type TargetRecoveryKey struct {
 	RecoveryKey string `json:"recoveryKey"`
+}
+
+type TargetHostDelivery struct {
+	HostID string     `json:"hostId"`
+	State  string     `json:"state" enum:"conflict,current,pending"`
+	Code   string     `json:"code,omitempty"`
+	At     *time.Time `json:"at,omitempty"`
+}
+
+type TargetDraftTest struct {
+	Target      TargetInput `json:"target"`
+	ProbeHostID string      `json:"probeHostId"`
+	TargetID    string      `json:"targetId,omitempty"`
+}
+type TargetProbeRequest struct {
+	Target      TargetInput `json:"target"`
+	ProbeHostID string      `json:"probeHostId"`
+}
+type TargetProbeResult struct {
+	OK   bool   `json:"ok"`
+	Code string `json:"code,omitempty"`
 }

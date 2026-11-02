@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original all-host reference fencing and metadata delivery callbacks.
+// Deviations: Original all-host reference fencing and metadata delivery callbacks; M16 bind mounts and backup completion.
 
 package backup
 
@@ -34,13 +34,9 @@ func (s *Service) configureTargetDelivery(environments *environment.EnvironmentS
 			if !host.Enabled {
 				continue
 			}
-			_, err := backuptarget.SyncHost(ctx, s.deps.DB, host.ID, environments.ProxyJSONRequest)
-			status := ""
-			if err != nil {
-				status = "backup.target.sync-failed"
-			}
-			if err = s.deps.DB.WithContext(ctx).Exec("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "backupTargetDeliveryError:"+host.ID, status).Error; err != nil {
-				return err
+			if _, err := backuptarget.SyncHost(ctx, s.deps.DB, host.ID, environments.ProxyJSONRequest); err != nil {
+				// Delivery failures remain per-host evidence; saving the definition succeeds.
+				continue
 			}
 		}
 		return nil

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Typed helper incompatibility responses; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; Typed helper incompatibility responses; M12 persisted volume lifecycle and legacy restore cut; M16 bind mounts and backup completion.
 
 package workspace
 
@@ -15,6 +15,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	backupdto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/florianfinn/docklet-next/types/workspace"
@@ -59,6 +60,10 @@ func NewHandler(service *Service, activityService *activity.ActivityService, app
 }
 
 func volumeWorkspaceHTTPErrorInternal(err error) error {
+	var problem *backupdto.Problem
+	if errors.As(err, &problem) {
+		return problem
+	}
 	var unavailable *volume.HelperUnavailableError
 	if errors.As(err, &unavailable) {
 		return unavailable
@@ -145,7 +150,7 @@ func (h *Handler) UpdateVolumeWorkspace(ctx context.Context, input *UpdateVolume
 	var result *workspace.Workspace
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
-		EnvironmentID: input.EnvironmentID, Type: activitytypes.TypeResourceAction, ResourceType: "volume", ResourceID: input.VolumeName, ResourceName: input.VolumeName, User: user,
+		EnvironmentID: input.EnvironmentID, Type: activitytypes.TypeResourceAction, ResourceType: "volume", ResourceID: input.VolumeName, ResourceName: volume.DisplayName(input.VolumeName), User: user,
 		Step: "Updating volume workspace", Message: "Updating volume workspace", SuccessMessage: "Volume workspace updated successfully",
 		Metadata: database.JSON{"action": "update_volume_workspace", "fileChangeCount": len(manifest.FileChanges)},
 	}, func(runtimeCtx context.Context) error {

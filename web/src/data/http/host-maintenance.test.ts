@@ -10,7 +10,7 @@ import { HOST_COLORS, defaultHostColor } from "@/domain/hosts";
 import { createHttpAdapter } from "./http-adapter";
 import { mapHost } from "./hosts";
 
-const host: components["schemas"]["EnvironmentEnvironment"] = { id: "example", name: "Example", color: null, apiUrl: "http://[2001:db8::10]:3553", enabled: true, isEdge: false, status: "online" };
+const host: components["schemas"]["EnvironmentEnvironment"] = { id: "example", name: "Example", color: null, registrationRevision: 1, apiUrl: "http://[2001:db8::10]:3553", enabled: true, isEdge: false, status: "online" };
 function fixture(code?: string) {
   const writes: { path: string; method: string; body: unknown }[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

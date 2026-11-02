@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live host schedule and count retention editor.
+// Deviations: Original live host schedule and count retention editor; manual mode is the only disabled-plan control (#291).
 
 import { useState } from "react";
 import { Link } from "react-router";
@@ -20,6 +20,7 @@ import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { useVolumeCapability } from "../use-volume-capability";
+import { customCron, withMode } from "./schedule-mode";
 
 export function BackupPolicyCard({
   volume,
@@ -65,6 +66,7 @@ export function BackupPolicyCard({
     }
   }
   const schedule = draft.schedule;
+  const custom = customCron(schedule);
   const timeZone = volume.timeZone || "UTC";
   return <Card className="gap-3 py-4">
     <CardHeader><CardTitle>{t("policy")}</CardTitle></CardHeader>
@@ -75,10 +77,6 @@ export function BackupPolicyCard({
             .format(new Date(volume.backup.nextRunAt))
           : t("nextManual")} · {timeZone}
       </p>
-      <Field orientation="horizontal">
-        <Switch id="bk-enabled" checked={draft.enabled} onCheckedChange={(enabled) => patch({ enabled })} />
-        <FieldLabel htmlFor="bk-enabled">{t("enabled")}</FieldLabel>
-      </Field>
       <Field>
         <FieldLabel htmlFor="bk-target">{t("target")}</FieldLabel>
         <Select value={draft.targetId} onValueChange={(targetId) => patch({ targetId })}>
@@ -93,8 +91,16 @@ export function BackupPolicyCard({
           <Link to="/settings/backups" className="text-primary-text hover:underline">{t("manageTargets")}</Link>
         </FieldDescription>
       </Field>
-      {schedule.mode === "custom" ? <div className="space-y-2">
-        <p>{t("customSchedule")}: <code>{schedule.cron}</code></p>
+      {schedule.mode === "custom" || custom ? <div className="space-y-2">
+        {/* Manual pauses the custom plan and keeps its cron for a later switch back. */}
+        <SegmentedToggle
+          label={ts("recurrence.label")}
+          value={schedule.mode === "custom" ? "custom" : "manual"}
+          onChange={(mode: "manual" | "custom") => patch(mode === "custom" ? { enabled: true, schedule: { mode, cron: custom! } } : withMode(schedule, mode))}
+          options={[{ value: "manual" as const, label: ts("manual") }, { value: "custom" as const, label: t("customSchedule") }]}
+          wrap
+        />
+        <p>{t("customSchedule")}: <code>{custom}</code></p>
         <Button variant="outline" onClick={() => patch({ schedule: { mode: "daily", time: "03:00" } })}>
           {t("replaceSchedule")}
         </Button>
@@ -102,17 +108,7 @@ export function BackupPolicyCard({
         <SegmentedToggle
           label={ts("recurrence.label")}
           value={schedule.mode}
-          onChange={(mode: "manual" | "daily" | "weekly") => patch({
-            schedule: mode === "manual"
-              ? { mode }
-              : mode === "daily"
-                ? { mode, time: schedule.mode === "manual" ? "03:00" : schedule.time }
-                : {
-                    mode,
-                    day: schedule.mode === "weekly" ? schedule.day : "sun",
-                    time: schedule.mode === "manual" ? "03:00" : schedule.time,
-                  },
-          })}
+          onChange={(mode: "manual" | "daily" | "weekly") => patch(withMode(schedule, mode))}
           options={(["manual", "daily", "weekly"] as const).map((mode) => ({
             value: mode,
             label: mode === "manual" ? ts("manual") : ts(`recurrence.${mode}`),

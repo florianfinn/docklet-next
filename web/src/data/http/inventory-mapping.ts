@@ -45,6 +45,11 @@ function health(value: string): Health {
   return "none";
 }
 
+/** Short mount syntax with the daemon-reported volume name or bind source; other mounts show their target. */
+function mountSpec(mount: NonNullable<ContainerRow["mounts"]>[number]): string {
+  const source = mount.type === "volume" ? mount.name : mount.type === "bind" ? mount.source : undefined;
+  return source ? `${source}:${mount.destination}${mount.rw === false ? ":ro" : ""}` : mount.destination;
+}
 export function mapContainer(row: ContainerRow, hostId: string, projects: ProjectRow[], inventory: InventoryObservation): ContainerInfo {
   if (!row || !row.id || !Array.isArray(row.names) || !row.names[0] || typeof row.state !== "string" || typeof row.status !== "string") throw new Error("inventory.invalid-container");
   const labels = row.labels ?? {};
@@ -62,7 +67,7 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
     ...(service ? { serviceName: service } : {}), origin, originSource, image,
     state: state(row.state), health: health(row.status),
     ports: (row.ports ?? []).filter((port, index, ports) => ports.findIndex((other) => other.publicPort === port.publicPort && other.privatePort === port.privatePort && other.type === port.type) === index).map((port) => ({ container: String(port.privatePort), ...(port.publicPort ? { host: String(port.publicPort) } : {}), ...(port.type === "tcp" || port.type === "udp" ? { protocol: port.type } : {}) })),
-    networks: Object.keys(row.networkSettings?.networks ?? {}), mounts: (row.mounts ?? []).map((mount) => mount.name || mount.destination),
+    networks: Object.keys(row.networkSettings?.networks ?? {}), mounts: (row.mounts ?? []).map(mountSpec), mountPoints: (row.mounts ?? []).map((m) => ({ spec: mountSpec(m), target: m.destination })),
     env: {}, restartPolicy: row.hostConfig?.restartPolicy ?? "", memLimitMb: (row.hostConfig?.memory ?? 0) / 1024 / 1024,
     update: mapUpdateInfo(row.updateInfo, image, row.image, inventory.stale), dockerLabels: labels, inventory,
   };

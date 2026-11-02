@@ -332,3 +332,18 @@ check/reconnect, agent settings and runtime admission errors. The final image AP
 pass preserves both this schema and the typed error body. A policy child refused
 by restart admission persists `host.restarting` in the shared reason vocabulary
 instead of a generic persistence error. Contract version 11 remains the boundary.
+
+## Bind mounts and backup completion (v12)
+
+Agent contract v12, minimum v12, adds bind list and size routes and the agent-only
+target probe. Bind keys reuse volume workspace and backup routes with literal
+host-path admission and per-operation type witnesses. The target probe is published
+in `x-agent-volume-target-probe`; hub client forwarding to it is refused.
+`volume.binds.list`, `volume.binds.size` and `volume.backup.target.probe` are explicit
+Edge commands. Hub and agents upgrade together; `tunnel/v1` is unchanged.
+
+Target delivery exposes identity-scoped per-host receipt/attempt projections.
+Environment DTOs include the non-secret `registrationRevision`. The
+`backupDefaultRetentionCount` setting initializes new plans only (default 7,
+0 keeps all, maximum 3650). Hub archives retain independent local and target-copy
+outcomes. No database migration or helper image change is required.

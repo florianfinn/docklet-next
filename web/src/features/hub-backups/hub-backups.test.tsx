@@ -161,6 +161,22 @@ describe("Hub database backup page", () => {
     await waitFor(async () => expect((await adapter.listHubBackups()).some((run) => run.trigger === "uploaded")).toBe(true));
   });
 
+  it("runs a saved policy manually so its target copy applies, while the header action stays local", async () => {
+    const { adapter } = page();
+    await adapter.saveHubBackupPolicies([{ id: "hub-daily", enabled: true, schedule: "0 0 3 * * *", retentionCount: 7, targetId: "target-smb" }]);
+    const create = vi.spyOn(adapter, "createHubBackup");
+    await screen.findByLabelText(deHubBackups.keepCount);
+    const run = screen.queryByRole("button", { name: deHubBackups.runNow });
+    expect(run !== null).toBe(true);
+    await userEvent.click(run!);
+    await waitFor(() => expect(create).toHaveBeenLastCalledWith("hub-daily"));
+    await waitFor(async () => expect((({ policyId, copyTargetId }) => ({ policyId, copyTargetId }))((await adapter.listHubBackups())[0]!)).toEqual({ policyId: "hub-daily", copyTargetId: "target-smb" }));
+    await waitFor(async () => expect((await adapter.listHubBackups())[0]?.copyState).toBe("succeeded"), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByRole("button", { name: deHubBackups.create }).hasAttribute("disabled")).toBe(false));
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.create }));
+    await waitFor(() => expect(create).toHaveBeenLastCalledWith(undefined));
+  });
+
   it("saves weekly, daily and off through the existing policy payload", async () => {
     const { adapter } = page();
     const save = vi.spyOn(adapter, "saveHubBackupPolicies");

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; preserve scheduled network-prune removal semantics.
+// Deviations: Local module namespace; preserve scheduled network-prune removal semantics; M16 bind mounts and backup completion.
 
 package prune
 
@@ -11,17 +11,16 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
-	imageDTO "github.com/florianfinn/docklet-next/types/image"
-	"log/slog"
-	"regexp"
-	"slices"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
-	"github.com/containerd/errdefs"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
+	"github.com/florianfinn/docklet-next/backend/internal/network"
+	"github.com/florianfinn/docklet-next/backend/internal/volume"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/system"
@@ -30,16 +29,13 @@ import (
 	"github.com/samber/mo"
 	"go.getarcane.app/docker/compat"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
-	"github.com/florianfinn/docklet-next/backend/internal/network"
-	"github.com/florianfinn/docklet-next/backend/internal/volume"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
-	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	"log/slog"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 // Service runs manual and scheduled prunes, serializing them per environment.
@@ -726,68 +722,6 @@ func (s *Service) pruneCutoffInternal(raw string) (time.Time, error) {
 		return time.Unix(int64(seconds), int64((seconds-float64(int64(seconds)))*1e9)), nil
 	}
 	return time.Time{}, fmt.Errorf("unsupported prune cutoff %q", raw)
-}
-
-func (s *Service) executePrunePlanInternal(ctx context.Context, plan prunePlanInternal, previous scheduler.Run, result *system.PruneAllResult, recovery bool) error {
-	dockerClient, err := s.dockerClient(ctx)
-	if err != nil {
-		return err
-	}
-	for _, resource := range plan.Resources {
-		if resource.Kind == "build_cache" {
-			continue
-		}
-		target := scheduler.TargetOutcome{ResourceType: resource.Kind, ID: "prune:" + resource.Kind + ":" + resource.ID, Status: scheduler.Running}
-		if pruneTargetCompletedInternal(previous, target.ID) {
-			continue
-		}
-		if progressErr := jobcontext.Progress(ctx, target); progressErr != nil {
-			return progressErr
-		}
-		eligible, exists, pruneResourceEligibleErr := s.pruneResourceEligibleInternal(ctx, dockerClient, plan, &resource)
-		if pruneResourceEligibleErr != nil {
-			return pruneResourceEligibleErr
-		}
-		switch {
-		case !exists:
-			target.Status = scheduler.Succeeded
-		case !eligible:
-			target.Status = scheduler.Skipped
-		default:
-			pruneResourceEligibleErr = s.removePruneResourceInternal(ctx, dockerClient, resource)
-			problem := imageDTO.Neutral(pruneResourceEligibleErr, "image.remove-failed", 502)
-			if resource.Kind == "image" && pruneResourceEligibleErr != nil && (problem.Status == 409 || problem.Status == 404) {
-				target.Status = scheduler.Skipped
-				target.Message = problem.Problem.Code
-				result.ImageSkipped = append(result.ImageSkipped, imageDTO.PruneItem{ID: resource.ID, Code: problem.Problem.Code})
-			} else if pruneResourceEligibleErr != nil && !errdefs.IsNotFound(pruneResourceEligibleErr) {
-				target.Status = scheduler.Failed
-				target.Message = pruneResourceEligibleErr.Error()
-				result.Success = false
-				result.Errors = append(result.Errors, pruneResourceEligibleErr.Error())
-			} else {
-				target.Status = scheduler.Succeeded
-				if pruneResourceEligibleErr != nil {
-					// Something else removed it first; do not claim its bytes.
-					resource.Size = 0
-				}
-				if resource.Kind == "image" {
-					resource.Size = 0
-					result.ImageSpaceReclaimedKnown = new(false)
-				}
-				recordPrunedResourceInternal(resource, result)
-			}
-		}
-		if targetProgressErr := jobcontext.Progress(ctx, target); targetProgressErr != nil {
-			return targetProgressErr
-		}
-	}
-	if len(result.ImagesDeleted) > 0 {
-		if deleteRecordsForImagesErr := s.imageUpdateService.DeleteRecordsForImages(ctx, result.ImagesDeleted); deleteRecordsForImagesErr != nil {
-			return deleteRecordsForImagesErr
-		}
-	}
-	return s.executePruneCacheInternal(ctx, dockerClient, plan, result, recovery)
 }
 
 func (s *Service) removePruneResourceInternal(ctx context.Context, dockerClient *client.Client, resource pruneResourceInternal) error {

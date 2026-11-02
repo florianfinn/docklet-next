@@ -134,3 +134,34 @@ func TestBackupAdmissionResponseSurvivesBeginningMaintenance(t *testing.T) {
 		})
 	}
 }
+
+// A read admitted before maintenance and cancelled by it answers the maintenance problem, not its own failure.
+func TestMaintenanceCancelledReadAnswersMaintenance(t *testing.T) {
+	for _, failure := range []int{http.StatusInternalServerError, http.StatusBadGateway} {
+		t.Run(http.StatusText(failure), func(t *testing.T) {
+			gate := hubbackup.NewMaintenanceGate()
+			router := newEchoInternal()
+			router.Use(maintenanceMiddlewareInternal(gate))
+			entered := make(chan struct{})
+			router.GET("/api/read", func(c *echo.Context) error {
+				close(entered)
+				<-c.Request().Context().Done()
+				return c.JSON(failure, map[string]string{"detail": "internal error"})
+			})
+			rec := httptest.NewRecorder()
+			done := make(chan struct{})
+			go func() {
+				router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/read", http.NoBody))
+				close(done)
+			}()
+			<-entered
+			require.NoError(t, gate.Begin("activity-1"))
+			<-done
+			require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.Equal(t, "backup.maintenance", body["detail"])
+			require.NoError(t, gate.Wait(t.Context()))
+		})
+	}
+}

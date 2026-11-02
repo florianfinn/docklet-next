@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; M14 container and host operation contracts.
+// Deviations: Local module namespace; functional cut: removed Swarm; M14 container and host operation contracts; M16 bind mounts and backup completion.
 
 package environment
 
@@ -24,7 +24,7 @@ type Environment struct {
 	LastEdgeTransport  *string    `json:"lastEdgeTransport" gorm:"column:last_edge_transport"`
 	AccessToken        *string    `json:"-" gorm:"column:access_token"`
 	ApiKeyID           *string    `json:"-" gorm:"column:api_key_id"`
-	CredentialRevision int64      `json:"-" gorm:"column:credential_revision;not null;default:0"`
+	CredentialRevision int64      `json:"registrationRevision" gorm:"column:credential_revision;not null;default:0"`
 	Color              *string    `json:"color"`
 }
 

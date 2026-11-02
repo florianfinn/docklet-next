@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original persisted asynchronous restore lifecycle and inherited recovery ownership; cancelled runs stay silent.
+// Deviations: Original persisted asynchronous restore lifecycle and inherited recovery ownership; cancelled runs stay silent; M16 bind mounts and backup completion.
 
 package restore
 
@@ -35,6 +35,7 @@ type LifecycleEffects struct {
 	Stop        func(context.Context, volume.StoppedContainer, user.Actor) error
 	Restart     func(context.Context, []volume.StoppedContainer, user.Actor) error
 	Safety      func(context.Context, string, user.Actor) (string, error)
+	PostSafety  func(context.Context, *Run, StartRequest) error
 	Write       func(context.Context, *Run, StartRequest) error
 	CleanupNew  func(context.Context, *Run) error
 	Fence       func(context.Context, string)
@@ -83,7 +84,7 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 		release()
 		return volume.RestoreOperation{}, err
 	}
-	activityID, workCtx := activitylib.StartHandlerActivity(owned, l.Activity, request.EnvironmentID, activitytypes.TypeResourceAction, "volume", request.VolumeName, request.VolumeName, &request.User, "Restoring volume", "Restoring volume data", database.JSON{"action": "restore_volume_backup", "restoreId": id}, false)
+	activityID, workCtx := activitylib.StartHandlerActivity(owned, l.Activity, request.EnvironmentID, activitytypes.TypeResourceAction, "volume", request.VolumeName, volume.DisplayName(request.VolumeName), &request.User, "Restoring volume", "Restoring volume data", database.JSON{"action": "restore_volume_backup", "restoreId": id}, false)
 	if activityID == "" {
 		run.Status = "failed"
 		run.ErrorCode = "volume.restore.interrupted-before-write"
@@ -262,6 +263,11 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 	}
 	if err = ctx.Err(); err != nil {
 		return err
+	}
+	if l.Effects.PostSafety != nil {
+		if err = l.Effects.PostSafety(ctx, run, request); err != nil {
+			return err
+		}
 	}
 	run.Phase = "writing"
 	if err = l.persist(ctx, run); err != nil {

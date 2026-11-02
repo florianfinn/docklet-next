@@ -19,7 +19,7 @@ import type {
 
 import type { HubSettings } from "@/domain/settings";
 import { withoutSystem } from "@/domain/system";
-import type { BackupPolicy, BackupRun } from "@/domain/volumes";
+import type { BackupPolicy, BackupRun, RestoreRun } from "@/domain/volumes";
 
 import type { Topic } from "../adapter";
 import { FileStore } from "./file-store";
@@ -62,6 +62,8 @@ export class DemoDb {
   createdVolumes = new Map<string, { name: string; hostId: string; createdAt: string; labels: Record<string, string>; seeded?: boolean }>();
   backupPolicies = new Map<string, BackupPolicy>(Object.entries(structuredClone(BACKUP_POLICIES)));
   backupRuns: BackupRun[] = structuredClone(BACKUP_RUNS);
+  /** Newest restore per volume key; with policies and runs it is the stored backup state of a key (K3). */
+  restoreRuns = new Map<string, RestoreRun>();
 
   private readonly changeListeners = new Set<(topics: Topic[]) => void>();
   private seq = 100;

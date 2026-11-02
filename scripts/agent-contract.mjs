@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v11.json", import.meta.url);
+const fixtureURL = new URL("../types/contract/testdata/agent-hub-v12.json", import.meta.url);
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -127,8 +127,8 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
-  manifest.version = 11;
-  manifest.minimumAgentContractVersion = 11;
+  manifest.version = 12;
+  manifest.minimumAgentContractVersion = 12;
   const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
     .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
     .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
@@ -189,6 +189,19 @@ export function agentFixture(spec, fixture) {
     restoreStatus:202, policyLimit:1, targetAuthority:"UUID generation, preserved restored version counter", localRecovery:"verify before attach; never re-key",
     retiredWorkspaceOperation:"restore_file", retiredRoutes:["/backups/volumes/config","/backups/volumes/options","/backups/volumes/run"],
   };
+  const bindRoutes = Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["list-volume-binds","measure-volume-bind","test-backup-target-draft"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")})));
+  for (const route of bindRoutes) collectVolume(document.paths[route.path][route.method.toLowerCase()]);
+  for (const name of ["BackupTargetProbeRequest", "BackupTargetProbeResult"]) collectVolume({$ref:`#/components/schemas/${name}`});
+  manifest.bindMounts = {
+    key: "bind:lowercase-hex-UTF8; absolute, clean, non-root, no NUL, <=255 bytes",
+    rules: ["system/docker segment overlap including ancestors", "Docklet and stored local/mount targets", "observed workload source or retained rows", "per-operation source witness"],
+    routes: bindRoutes,
+    edgeRoutes: [...commands.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)].filter((m)=>/^volume\.binds\./.test(m[3])||m[3]==="volume.backup.target.probe").map(([,method,path,command])=>({method:method.toUpperCase(),path,command})),
+    probe: document["x-agent-volume-target-probe"],
+    registrationRevision: schemas.EnvironmentEnvironment.properties.registrationRevision,
+    defaultRetention: schemas.SettingsUpdate.properties.backupDefaultRetentionCount,
+    sizeDeadlineSeconds: 120,
+  };
   manifest.autoHeal = {
     routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["get-auto-heal-settings","update-auto-heal-settings"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
     settings: schemas.AutohealSettings, update: schemas.AutohealUpdate,
@@ -243,6 +256,7 @@ function formatFixture(value, depth = 0) {
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
   if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
+  if (depth >= 3 && JSON.stringify(value).length <= 300) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

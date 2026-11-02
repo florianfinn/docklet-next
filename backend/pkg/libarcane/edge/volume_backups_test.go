@@ -137,3 +137,17 @@ func TestVolumeBackupActualTunnelResponseAssemblyBound(t *testing.T) {
 		})
 	}
 }
+
+// A by-ID backup route carries a producer backup ID that starts like a bind key; the agent handler owns key validation.
+func TestVolumeBackupActualTunnelPassesBindDerivedBackupIDs(t *testing.T) {
+	reached := make(chan string, 1)
+	f := runtimeEdgeActual(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached <- r.URL.Path
+		w.WriteHeader(200)
+	}))
+	path := "/api/environments/0/volumes/backups/bind:2f7372762f61707020-20261102T000000Z-0a1b/files/browse"
+	result, err := NewCommandClient().Execute(t.Context(), f.tunnel, &CommandRequest{ID: uuid.New().String(), Method: "GET", Path: path})
+	require.NoError(t, err)
+	require.Equal(t, 200, result.Status)
+	require.Equal(t, path, <-reached)
+}

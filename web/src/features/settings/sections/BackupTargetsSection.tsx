@@ -3,11 +3,12 @@ import { isHostAvailable } from "@/domain/hosts";
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live targets CRUD and per-host delivery/test results. M14 host maintenance and availability.
+// Deviations: Original live targets CRUD and per-host delivery/test results. M14 host maintenance and availability. M16 delivery states and default retention (#289, #329).
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
-import { useBackupOverviews, useBackupTargets } from "@/data/backup-queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { useBackupDefaultRetention, useBackupOverviews, useBackupTargets } from "@/data/backup-queries";
 import { BackupError, backupCodeKey, backupErrorMessage } from "@/data/backup-error";
 import { useAdapter } from "@/data/use-adapter";
 import type { BackupTarget } from "@/domain/settings";
@@ -16,6 +17,8 @@ import { QueryError } from "@/shared/components/page";
 import { ToneBadge } from "@/shared/components/tone";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { Button } from "@/shared/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/shared/ui/field";
+import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { captureCommandFailure } from "@/shared/components/command-failure";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
@@ -52,17 +55,12 @@ function Targets() {
             {targets.data.map((target) => <TargetCard
               key={target.id}
               target={target}
-              delivered={(host) => {
-                const overview = overviews.data?.find((row) => row.hostId === host);
-                return overview && !overview.unavailable
-                  && overview.setVersion >= target.configVersion
-                  && overview.targets.some((value) => value.id === target.id);
-              }}
               edit={() => setEditing(target)}
               remove={() => setRemove(target)}
               recovery={() => setKey({ id: target.id, name: target.name })}
             />)}
           </div>}
+    {adapter.getBackupDefaultRetention && <DefaultRetention />}
     <h2 className="text-lg font-semibold">{t("repositories")}</h2>
     <div className="grid gap-3 xl:grid-cols-2">
       {hosts.all.map((host) => <RepositoryCard
@@ -110,13 +108,11 @@ function Targets() {
 }
 function TargetCard({
   target,
-  delivered,
   edit,
   remove,
   recovery,
 }: {
   target: BackupTarget;
-  delivered: (host: string) => boolean | undefined;
   edit: () => void;
   remove: () => void;
   recovery: () => void;
@@ -141,8 +137,10 @@ function TargetCard({
     <ul className="space-y-2 text-sm">
       {usable.map((host) => {
         const check = target.checks?.find((value) => value.hostId === host.id);
+        const delivery = target.delivery?.find((value) => value.hostId === host.id);
         return <li key={host.id}>
-          {host.name}: {delivered(host.id) ? t("delivered") : t("deliveryPending")}
+          {host.name}: {delivery?.state === "current" ? t("delivered") : delivery?.state === "conflict" ? t("deliveryConflict") : t("deliveryPending")}
+          {delivery?.code && delivery.state !== "current" && <p className="text-xs">{all(backupCodeKey(delivery.code) ?? "common.commandErrors.failed")}</p>}
           <p className="text-xs text-muted-foreground">
             {check
               ? `${check.ok ? t("testOk") : t("testFailed")} · ${new Date(check.at).toLocaleString()}`
@@ -187,4 +185,42 @@ function TargetCard({
     {activity && <BackupOperation hostId={activity.host} activityId={activity.id} />}
     {error && <p role="alert">{error}</p>}
   </article>;
+}
+
+/** Initial retention count of new plans; existing plans keep their own. */
+function DefaultRetention() {
+  const adapter = useAdapter(), t = useTranslations("settings.backups"), all = useTranslations(), client = useQueryClient();
+  const current = useBackupDefaultRetention();
+  const [value, setValue] = useState<string>(),
+    [busy, setBusy] = useState(false),
+    [message, setMessage] = useState<{ ok: boolean; text: string }>();
+  const text = value ?? (current.data === undefined ? "" : String(current.data));
+  const valid = /^\d+$/.test(text) && Number(text) <= 3650;
+  return <section className="space-y-3 rounded-xl border p-4">
+    <Field>
+      <FieldLabel htmlFor="backup-default-retention">{t("retention")}</FieldLabel>
+      <Input id="backup-default-retention" inputMode="numeric" className="max-w-32" value={text} disabled={current.isPending} aria-invalid={!valid} onChange={(event) => { setValue(event.target.value); setMessage(undefined); }} />
+      <FieldDescription>{t("retentionScope")} {t("retentionHint")}</FieldDescription>
+    </Field>
+    <Button
+      variant="outline"
+      disabled={busy || !valid || value === undefined}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await adapter.setBackupDefaultRetention!(Number(text));
+          await client.invalidateQueries({ queryKey: ["backup-default-retention"] });
+          setValue(undefined);
+          setMessage({ ok: true, text: t("retentionSaved") });
+        } catch (cause) {
+          setMessage({ ok: false, text: backupErrorMessage(cause, all) });
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {t("retentionSave")}
+    </Button>
+    {message && <p role={message.ok ? "status" : "alert"} className="text-sm">{message.text}</p>}
+  </section>;
 }

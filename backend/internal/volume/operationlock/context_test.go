@@ -2,15 +2,17 @@
 // Revision: fdbb8c1fae620d9f97a485983cdaabb3fa53bca2
 // Retrieved: 2026-10-23
 // License: Apache-2.0
-// Deviations: Original lock retention and independent release coverage.
+// Deviations: Original lock retention and independent release coverage; M16 bind mounts and backup completion.
 
 package operationlock
 
 import (
 	"context"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 )
 
 func TestRetainedOperationOwnsOriginalReadAndWriteLock(t *testing.T) {

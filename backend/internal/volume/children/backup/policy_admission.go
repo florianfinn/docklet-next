@@ -2,13 +2,15 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original hub retire fence and exact accepted-set policy admission.
+// Deviations: Original hub retire fence and exact accepted-set policy admission; M16 bind mounts and backup completion.
 
 package backup
 
 import (
 	"cmp"
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
+	"github.com/florianfinn/docklet-next/types/volume"
 	"gorm.io/gorm"
 	"strings"
 
@@ -32,6 +34,25 @@ func (s *Service) validatePolicyTarget(ctx context.Context, id string) error {
 }
 func (s *Service) aroundPolicyUpdate(environments *environment.EnvironmentService, cfg *config.Config) func(context.Context, *policies.UpdateVolumeBackupPolicyInput, func() error) error {
 	return func(ctx context.Context, input *policies.UpdateVolumeBackupPolicyInput, next func() error) error {
+		if err := volume.ValidateName(input.VolumeName); err != nil {
+			return err
+		}
+		local := cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) || input.EnvironmentID == "0"
+		if local && volume.IsBindKey(input.VolumeName) && len(input.Body.Policies) > 0 {
+			var count int64
+			if err := s.deps.DB.WithContext(ctx).Table("volume_backup_policies").Where("volume_name = ?", input.VolumeName).Count(&count).Error; err != nil {
+				return err
+			}
+			if count == 0 || input.Body.Policies[0].Enabled {
+				cli, err := s.deps.Docker.GetClient(ctx)
+				if err != nil {
+					return err
+				}
+				if _, err = bindpath.Check(ctx, cli, s.deps.DB, input.VolumeName); err != nil {
+					return err
+				}
+			}
+		}
 		if len(input.Body.Policies) > 1 {
 			return dto.NewProblem(422, "volume.backup.policy-single", nil)
 		}

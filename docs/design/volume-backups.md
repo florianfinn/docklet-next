@@ -3,13 +3,13 @@ Source: docklet-next/issues/283
 Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 Retrieved: 2026-10-28
 License: Apache-2.0
-Deviations: Original lifecycle, target and portable recovery rationale.
+Deviations: Original lifecycle, target and portable recovery rationale; M16 bind-mount and hub-copy links.
 -->
 
 # Volume backups and recovery
 
-Named Docker volumes use encrypted Rustic snapshots. Bind mounts are outside this
-backup contract. Each host runs its own schedules in its configured time zone,
+Named Docker volumes use encrypted Rustic snapshots. Bind mounts use the same
+lifecycle under the path rules in [bind mounts](bind-mounts.md). Each host runs its own schedules in its configured time zone,
 including while the hub is disconnected. A volume has at most one policy; six-field
 cron is retained for custom schedules. Retention counts scheduled snapshots per
 volume across policy and target changes. Zero keeps all scheduled snapshots;

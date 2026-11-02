@@ -2,13 +2,17 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
 
 package access
 
 // Routes describes the shared exported surface for pre-forwarding decisions.
 // Huma uses the matched operation and its actual parameters.
 var Routes = []Route{
+	{"GET", "/environments/{id}/volumes/binds", "list-volume-binds"},
+	{"POST", "/environments/{id}/volumes/binds/size", "measure-volume-bind"},
+	{"POST", "/backup-targets/test", "test-backup-target-draft"},
+	{"POST", "/environments/{id}/volumes/backups/targets/probe", "probe-volume-backup-target"},
 	{"DELETE", "/api-keys/{id}", "delete-api-key"},
 	{"DELETE", "/auth/me/api-keys/{id}", "delete-my-api-key"},
 	{"DELETE", "/auth/me/avatar", "delete-my-avatar"},

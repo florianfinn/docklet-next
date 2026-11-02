@@ -8,6 +8,11 @@ import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "volume_workspace-busy": "The volume is busy. Finish active operations and retry.",
+  "backup_copy_mount-failed": "The archive was saved locally, but the copy target could not be mounted.",
+  "backup_copy_write-failed": "The archive was saved locally, but its target copy failed.",
+  "backup_copy_insufficient-space": "The archive was saved locally. There is not enough space for the target copy.",
+
   "host_restarting": enRunMessages.codes.host["restarting"],
   "update_permission-denied": enBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": enBackend.errors.update["schedule-owner-unset"],

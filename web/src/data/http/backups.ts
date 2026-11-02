@@ -146,7 +146,7 @@ export function createBackups(options: Options) {
   }
   function context(id: string) {
     const [host, name] = splitInventoryId(id);
-    if (!name || name.startsWith("bind:")) throw unavailable("runBackup", { kind: "volume", id });
+    if (!name) throw unavailable("runBackup", { kind: "volume", id });
     return { host, name, route: `${path(host)}/${encodeURIComponent(name)}` };
   }
   async function admit(host: string, route: string, value: object, volume?: string): Promise<string> {
@@ -167,7 +167,7 @@ export function createBackups(options: Options) {
       ) {
         const observed = await overview(host).catch(() => undefined);
         check();
-        const running = observed?.volumes.find((v) => v.name === volume)?.running;
+        const running = observed?.volumes.find((v) => v.id === inventoryId(host, volume))?.running;
         if (running) {
           options.accepted(host, running.activityId);
           options.changed();
@@ -181,7 +181,7 @@ export function createBackups(options: Options) {
     options.changed();
     return id;
   }
-  const api: Pick<DockletAdapter, Operation> = {
+  const api: Pick<DockletAdapter, Operation | "testBackupTargetDraft"> = {
     async getBackupOverview(host) {
       await require("getBackupOverview", { kind: "host", id: host });
       return overview(host);
@@ -239,7 +239,7 @@ export function createBackups(options: Options) {
           ? [
               {
                 ...(policy.id ? { id: policy.id } : {}),
-                enabled: policy.enabled && policy.schedule.mode !== "manual",
+                enabled: policy.schedule.mode !== "manual",
                 localEnabled: true,
                 retentionCount: policy.retentionCount,
                 stopContainers: policy.stopContainers,
@@ -290,9 +290,21 @@ export function createBackups(options: Options) {
       return body;
     },
     async downloadBackup(id, runId) {
-      const { host } = context(id);
+      const { host, name } = context(id);
       await require("downloadBackup", { kind: "volume", id });
-      const { result, check } = await response(host, `${path(host)}/backups/${encodeURIComponent(runId)}/download`);
+      const route = `${path(host)}/backups/${encodeURIComponent(runId)}/download`;
+      // Direct and hub-local archives stream to disk through a browser download; Edge keeps the
+      // bounded buffered read with its early size refusal and typed messages.
+      if ((await options.hosts()).find((h) => h.id === host)?.connection !== "edge") {
+        const link = document.createElement("a");
+        link.href = `${baseUrl}${route}`;
+        link.download = `${name}-${runId}.tar.gz`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        return undefined;
+      }
+      const { result, check } = await response(host, route);
       const blob = await result.blob();
       check();
       return blob;
@@ -385,6 +397,11 @@ export function createBackups(options: Options) {
         { hostId: host },
       );
     },
+    async testBackupTargetDraft(input) {
+      // Same right as saving a target; the probe writes nothing on the hub.
+      await require("createBackupTarget", { kind: "hub", id: "0" });
+      return request("", "/backup-targets/test", "POST", input);
+    },
     async getBackupTargetReferences(id, host) {
       await require("getBackupTargetReferences", { kind: "host", id: host });
       return request(host, `${path(host)}/backups/targets/${encodeURIComponent(id)}/references`);
@@ -438,21 +455,22 @@ export function createBackups(options: Options) {
         return undefined;
       });
       const byId = new Map(ov?.volumes.map((v) => [v.id, v]));
-      return volumes.map((v) =>
-        v.kind === "bind"
-          ? v
-          : {
+      // Binds keep their recorded outcomes whatever the current verdict; access is decided by the consumer (K3/K4).
+      return volumes.map((v) => ({
               ...v,
               backupUnavailable: !ov,
               ...byId.get(v.id),
+              name: v.name,
+              kind: v.kind,
+              bind: v.bind,
+              fileBind: v.fileBind,
               sizeBytes: v.sizeBytes,
               consumers: v.consumers,
               labels: v.labels,
               source: v.source,
               createdAt: v.createdAt,
               sizeUnavailable: v.sizeUnavailable,
-            },
-      );
+            }));
     },
     inventoryId,
   };

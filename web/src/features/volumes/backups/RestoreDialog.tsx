@@ -64,7 +64,8 @@ export function RestoreDialog({
                   })
                 : t("restoreReplaceHintIdle"),
             },
-            { value: "new", title: t("restoreNew"), description: t("restoreNewHint") },
+            // Bind mounts belong to the host; a new Docker volume is never created from them.
+            ...(volume.kind === "volume" ? [{ value: "new" as const, title: t("restoreNew"), description: t("restoreNewHint") }] : []),
           ]}
         />
         {mode === "new" && (

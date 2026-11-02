@@ -11,12 +11,12 @@ import { AdapterError } from "@/data/api";
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation } from "@/domain/model";
-import type { Volume } from "@/domain/volumes";
+import { bindSize, type BindInfo, type Volume } from "@/domain/volumes";
 import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapVolumes } from "./resource-mapping";
 
-type Read = "get-volume" | "get-volume-sizes";
+type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 type Body<I extends Read> = operations[I]["responses"][200]["content"]["application/json"];
 type Schema = components["schemas"];
 
@@ -54,6 +54,24 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
   function map(row: Schema["VolumeVolume"], hostId: string, ctx: Awaited<ReturnType<typeof context>>, inventory: InventoryObservation): Volume {
     return supplement(mapVolumes([row], hostId, ctx.containers, ctx.projects, inventory)[0]!, row, hostId);
   }
+  /** Bind rows come from container mounts; the agent's bind list adds kind, path-rule verdict and sizes. */
+  async function bindList(hostId: string): Promise<Map<string, BindInfo> | undefined> {
+    const rows = await read("list-volume-binds", hostId, "binds").catch((error) => {
+      if (error instanceof CancelledError) throw error;
+      return undefined;
+    });
+    return rows ? new Map(rows.map((b) => [b.source, {
+      kind: b.kind, eligible: b.eligible, reason: b.reason || undefined,
+      measuredSize: b.measuredSize, measuredAt: b.measuredAt, measuredPartial: b.measuredPartial,
+      lastSnapshotSize: b.lastSnapshotSize, lastSnapshotAt: b.lastSnapshotAt,
+    }])) : undefined;
+  }
+  function withBind(volume: Volume, binds: Map<string, BindInfo> | undefined): Volume {
+    const bind = volume.kind === "bind" ? binds?.get(volume.source) : undefined;
+    if (!bind) return volume;
+    const size = bindSize(bind);
+    return { ...volume, bind, fileBind: bind.kind === "file", sizeBytes: size?.bytes ?? 0, sizeUnavailable: !size };
+  }
   const api: Pick<DockletAdapter, "listVolumes" | "getVolume"> = {
     async listVolumes(onPartial) {
       const check = begin();
@@ -63,11 +81,11 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
       const batches = new Map([...retained].filter(([id]) => scope.some((h) => h.id === id)));
       await Promise.all(scope.map(async (host) => {
         try {
-          const [volumes, ctx] = await Promise.all([transport.list("list-volumes", host.id, "volumes"), context(host.id)]);
+          const [volumes, ctx, binds] = await Promise.all([transport.list("list-volumes", host.id, "volumes"), context(host.id), bindList(host.id)]);
           check();
           const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation);
           const byName = new Map(volumes.rows.map((row) => [row.name, row]));
-          const combined = rows.map((v) => v.kind === "volume" ? supplement(v, byName.get(v.name)!, host.id) : v);
+          const combined = rows.map((v) => v.kind === "volume" ? supplement(v, byName.get(v.name)!, host.id) : withBind(v, binds));
           retained.set(host.id, combined); batches.set(host.id, combined);
           onState(host.id, volumes.observation);
         } catch (error) {

@@ -82,6 +82,7 @@ func TestVolumeWorkspaceDescriptorRightsMasks(t *testing.T) {
 				}
 				permissions := &authz.PermissionSet{PerEnv: map[string]map[string]struct{}{"example": grants}}
 				require.Equal(t, mask&required == required, storageDescriptor(t, permissions, capability.ResourceRef{Kind: "volume", ID: "example~data"}, operation))
+				require.Equal(t, mask&required == required, storageDescriptor(t, permissions, capability.ResourceRef{Kind: "volume", ID: "example~bind:2f7372762f617070"}, operation))
 				for _, ref := range []capability.ResourceRef{
 					{Kind: "volume", ID: "other~data"}, {Kind: "volume", ID: "example~bind:/data"},
 					{Kind: "volume", ID: "example~data~extra"}, {Kind: "volume", ID: "example"},

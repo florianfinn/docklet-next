@@ -8,6 +8,11 @@ import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "volume_workspace-busy": "Das Volume ist beschäftigt. Aktive Vorgänge abschließen und erneut versuchen.",
+  "backup_copy_mount-failed": "Das Archiv wurde lokal gespeichert, aber das Kopierziel konnte nicht eingebunden werden.",
+  "backup_copy_write-failed": "Das Archiv wurde lokal gespeichert, aber die Zielkopie ist fehlgeschlagen.",
+  "backup_copy_insufficient-space": "Das Archiv wurde lokal gespeichert. Für die Zielkopie ist nicht genügend Speicherplatz vorhanden.",
+
   "host_restarting": deRunMessages.codes.host["restarting"],
   "update_permission-denied": deBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": deBackend.errors.update["schedule-owner-unset"],

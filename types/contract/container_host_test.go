@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original M14 container and host operations foundation.
+// Deviations: Original M14 container and host operations foundation; M16 bind mounts and backup completion.
 
 package contract
 
@@ -16,7 +16,7 @@ import (
 )
 
 func TestAgentHubV11ContainerHostFixture(t *testing.T) {
-	data, err := os.ReadFile("testdata/agent-hub-v11.json")
+	data, err := os.ReadFile("testdata/agent-hub-v12.json")
 	require.NoError(t, err)
 	digest := sha256.Sum256(data)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(digest[:]))
@@ -29,8 +29,8 @@ func TestAgentHubV11ContainerHostFixture(t *testing.T) {
 		} `json:"containerHostOperations"`
 	}
 	require.NoError(t, json.Unmarshal(data, &fixture))
-	require.Equal(t, 11, fixture.Version)
-	require.Equal(t, 11, fixture.Minimum)
+	require.Equal(t, 12, fixture.Version)
+	require.Equal(t, 12, fixture.Minimum)
 	for _, name := range []string{"ContainerOriginAssignment", "ContainerRecreateRequest", "ContainerRecreateResult", "ContainerProblem", "ContainerShellQuery", "ContainerShellClose", "ContainerShellResize", "ContainerShellExit", "EnvironmentAgentRestartResponse", "EnvironmentAgentRestartRun", "EnvironmentHostProblem", "SystemHealthResponse", "ActivityRuntimeOptions", "ActivityRuntimeSnapshot"} {
 		require.Contains(t, fixture.Operations.Schemas, name)
 	}
@@ -38,7 +38,7 @@ func TestAgentHubV11ContainerHostFixture(t *testing.T) {
 	for _, operation := range []string{"recreate-container", "redeploy-container", "stop-project"} {
 		require.Contains(t, fixture.Operations.RuntimeOperations, operation)
 	}
-	require.True(t, AgentCompatible(11, AgentHubFingerprint))
-	require.False(t, AgentCompatible(10, AgentHubFingerprint))
-	require.False(t, AgentCompatible(11, "different"))
+	require.True(t, AgentCompatible(12, AgentHubFingerprint))
+	require.False(t, AgentCompatible(11, AgentHubFingerprint))
+	require.False(t, AgentCompatible(12, "different"))
 }

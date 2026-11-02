@@ -16,7 +16,7 @@ import { renderWithApp } from "@/test/render";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 import { HostCard } from "./HostCard";
 
-const host = mapHost({ id: "atlas", name: "Example", color: "#112233", apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
+const host = mapHost({ id: "atlas", name: "Example", color: "#112233", registrationRevision: 1, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false });
 afterEach(() => { setAppLocale("de"); vi.restoreAllMocks(); });
 it.each(["host.name-invalid", "host.name-taken"])("H1 localizes a %s save refusal", async code => {
   setAppLocale("en-US"); const adapter = createDemoAdapter();

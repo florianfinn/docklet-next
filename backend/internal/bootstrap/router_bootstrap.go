@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/florianfinn/docklet-next/types"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
@@ -434,7 +435,8 @@ func maintenanceMiddlewareInternal(gate *hubbackup.MaintenanceGate) echo.Middlew
 				return next(c)
 			}
 			ctx, cancel := context.WithCancel(req.Context())
-			release, err := gate.AdmitCancel(cancel)
+			var cancelled atomic.Bool
+			release, err := gate.AdmitCancel(func() { cancelled.Store(true); cancel() })
 			if err != nil {
 				cancel()
 				return maintenanceReadOrErrorInternal(c, gate.Status())
@@ -442,6 +444,7 @@ func maintenanceMiddlewareInternal(gate *hubbackup.MaintenanceGate) echo.Middlew
 			defer release()
 			defer cancel()
 			c.SetRequest(req.WithContext(ctx))
+			c.SetResponse(&maintenanceResponseInternal{ResponseWriter: c.Response(), cancelled: &cancelled})
 			return next(c)
 		}
 	}

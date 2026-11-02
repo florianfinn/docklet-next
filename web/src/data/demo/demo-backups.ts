@@ -11,7 +11,8 @@ import type { BackupPolicy, BackupRun, RestoreRun, Volume } from "@/domain/volum
 import { nextBackupRun, volumeId } from "@/domain/volumes";
 import type { BackupTarget } from "@/domain/settings";
 import { validateSchedule } from "@/domain/schedule";
-import type { DemoContext } from "./demo-context";
+import { DemoError, wait, type DemoContext } from "./demo-context";
+import { cleanPath, demoBind, demoStored, protectedPaths } from "./demo-binds";
 import { volumeName } from "@/domain/validation";
 
 type Operations =
@@ -34,24 +35,39 @@ type Operations =
   | "testBackupTarget"
   | "getBackupTargetReferences"
   | "getBackupRecoveryKey"
-  | "attachLocalBackupRecoveryKey";
+  | "attachLocalBackupRecoveryKey"
+  | "testBackupTargetDraft"
+  | "getBackupDefaultRetention"
+  | "setBackupDefaultRetention";
 export function createDemoBackups(
   ctx: DemoContext,
   all: () => Volume[],
   find: (id: string) => Volume,
 ): Pick<VolumesApi, Operations> {
   const { db, runner } = ctx;
-  const restores = new Map<string, RestoreRun>(),
-    keys = new Map<string, string>();
+  const restores = db.restoreRuns,
+    keys = new Map<string, string>(),
+    // Simulated stored credentials; like the agent, an edit probe without a new secret reuses them.
+    secrets = new Map<string, string>();
   const now = () => new Date().toISOString();
   const fail = (code: ConstructorParameters<typeof BackupError>[0]["code"]): never => {
     throw new BackupError({ code });
   };
-  function named(id: string) {
+  /**
+   * Source-touching operations, as the agent admits them: the current path rules apply to every bind, mounted or
+   * stored (K3/K4); an unmounted key needs stored state; directory-only operations refuse file binds.
+   */
+  function named(id: string, directory = false) {
     const v = find(id);
-    if (v.kind !== "volume") return fail("volume.not-found");
+    if (v.kind === "volume") return v;
+    const verdict = v.bind ?? (demoStored(db, v.id) ? demoBind(v.name, !!v.fileBind, protectedPaths(db.settings.backups.targets, v.hostId)) : undefined);
+    if (!verdict) return fail("volume.bind.not-mounted");
+    if (!verdict.eligible) return fail(verdict.reason === "volume.bind.unsupported-type" ? "volume.bind.unsupported-type" : "volume.bind.path-denied");
+    if (directory && v.fileBind) return fail("volume.bind.file-operation-unsupported");
     return v;
   }
+  /** Stored target location as `backuptarget.Validate` cleans it: absolute for local/mount, a relative subpath otherwise. */
+  const targetPath = (kind: BackupTarget["kind"], path: string) => (kind === "local" || kind === "mount" ? cleanPath(path) : cleanPath(`/${path}`).slice(1));
   function target(id: string) {
     const t = db.settings.backups.targets.find((t) => t.id === id);
     if (!t) return fail("backup.target.unknown");
@@ -87,6 +103,22 @@ export function createDemoBackups(
         db.changed("volumes", "settings");
       },
     });
+  }
+  const stopped = (v: Volume) => v.consumers.filter((c) => c.running).map((c) => ({ id: c.containerId, name: c.containerName }));
+  /** Every restore entry point records and settles its row in the shared store, like the agent lifecycle (K3). */
+  function restoring(v: Volume, row: Omit<RestoreRun, "activityId" | "at" | "phase" | "status" | "pendingRestart">, done: () => void, partial: boolean) {
+    const restore: RestoreRun = { ...row, activityId: "", at: now(), phase: "preparing", status: "running", pendingRestart: false };
+    restores.set(v.id, restore);
+    restore.activityId = start(
+      v.hostId,
+      "volume-restore",
+      () => {
+        done();
+        Object.assign(restore, { status: "succeeded", phase: "done", pendingRestart: false });
+      },
+      () => Object.assign(restore, { phase: "writing", status: "failed", code: "volume.restore.failed-partial", pendingRestart: partial }),
+    );
+    return restore.activityId;
   }
   function usable(host: string) {
     return [
@@ -151,6 +183,7 @@ export function createDemoBackups(
     async restoreBackup(id, runId, mode, newVolumeName) {
       const v = named(id),
         source = snapshot(id, runId);
+      if (v.kind === "bind" && mode === "new") return fail("volume.bind.unsupported");
       if (
         mode === "new" &&
         (!newVolumeName ||
@@ -178,63 +211,48 @@ export function createDemoBackups(
         db.backupRuns.unshift(safety);
         db.files.clone(id, `snapshot-${safety.id}`);
       }
-      const restore: RestoreRun = {
-        restoreId: db.nextId("restore"),
-        activityId: "",
-        at: now(),
-        mode,
-        newVolumeName,
-        kind: "full",
-        phase: "preparing",
-        status: "running",
-        pendingRestart: false,
-        safetyBackupId: safety?.id,
-        stoppedContainers:
-          mode === "new"
-            ? []
-            : v.consumers.filter((c) => c.running).map((c) => ({ id: c.containerId, name: c.containerName })),
-      };
-      restores.set(id, restore);
-      restore.activityId = start(
-        v.hostId,
-        "volume-restore",
+      const restoreId = db.nextId("restore");
+      const activity = restoring(
+        v,
+        {
+          restoreId,
+          mode,
+          newVolumeName,
+          kind: "full",
+          safetyBackupId: safety?.id,
+          stoppedContainers: mode === "new" ? [] : stopped(v),
+        },
         () => {
           const dest = mode === "new" ? volumeId(v.hostId, "volume", newVolumeName!) : id;
           if (mode === "new")
-            db.createdVolumes.set(dest, {
-              name: newVolumeName!,
-              hostId: v.hostId,
-              createdAt: now(),
-              labels: { "docklet.restore-id": restore.restoreId },
-            });
+            db.createdVolumes.set(dest, { name: newVolumeName!, hostId: v.hostId, createdAt: now(), labels: { "docklet.restore-id": restoreId } });
           db.files.clone(source, dest);
-          restore.status = "succeeded";
-          restore.phase = "done";
-          restore.pendingRestart = false;
         },
-        () => {
-          restore.phase = "writing";
-          restore.status = "failed";
-          restore.code = "volume.restore.failed-partial";
-          restore.pendingRestart = mode === "replace";
-        },
+        mode === "replace",
       );
       db.changed("volumes");
-      return restore.activityId;
+      return activity;
     },
     async restoreBackupFiles(id, runId, selection) {
-      const v = named(id),
+      const v = named(id, true),
         source = snapshot(id, runId),
         paths = selection.paths ?? [];
-      return start(v.hostId, "volume-restore", () => {
-        const src = db.files.ensure(source, () => []),
-          dest = db.files.ensure(id, () => []);
-        for (const selected of paths) {
-          for (const path of dest.keys()) if (path === selected || path.startsWith(`${selected}/`)) dest.delete(path);
-          for (const [path, node] of src)
-            if (path === selected || path.startsWith(`${selected}/`)) dest.set(path, { ...node });
-        }
-      });
+      const activity = restoring(
+        v,
+        { restoreId: db.nextId("restore"), mode: "replace", kind: "files", stoppedContainers: stopped(v) },
+        () => {
+          const src = db.files.ensure(source, () => []),
+            dest = db.files.ensure(id, () => []);
+          for (const selected of paths) {
+            for (const path of dest.keys()) if (path === selected || path.startsWith(`${selected}/`)) dest.delete(path);
+            for (const [path, node] of src)
+              if (path === selected || path.startsWith(`${selected}/`)) dest.set(path, { ...node });
+          }
+        },
+        false,
+      );
+      db.changed("volumes");
+      return activity;
     },
     async browseBackup(id, runId, path = "/", start = 0) {
       const entries = db.files.list(snapshot(id, runId), path).entries;
@@ -257,7 +275,7 @@ export function createDemoBackups(
       return new Blob(["Development snapshot export"], { type: "application/gzip" });
     },
     async deleteBackup(id, runId) {
-      named(id);
+      find(id);
       if (restores.get(id)?.pendingRestart && restores.get(id)?.safetyBackupId === runId)
         return fail("volume.backup.safety-pinned");
       db.backupRuns = db.backupRuns.filter((run) => run.id !== runId || run.volumeId !== id);
@@ -267,7 +285,8 @@ export function createDemoBackups(
     async uploadRestore(id, file, mode = "replace", name) {
       if (file.size > 4 * 1024 ** 3) return fail("volume.backup.upload-too-large");
       if (!/\.(tar\.gz|tgz)$/.test(file.name)) return fail("volume.backup.upload-invalid");
-      const v = named(id);
+      const v = named(id, true);
+      if (v.kind === "bind" && mode === "new") return fail("volume.bind.unsupported");
       const run: BackupRun = {
         id: db.nextId("upload"),
         volumeId: id,
@@ -279,7 +298,9 @@ export function createDemoBackups(
         stoppedContainers: false,
       };
       db.backupRuns.unshift(run);
-      return api.restoreBackup(v.id, run.id, mode, name);
+      const activity = await api.restoreBackup(v.id, run.id, mode, name);
+      restores.get(v.id)!.kind = "upload";
+      return activity;
     },
     async getBackupOverview(host) {
       const online = isHostAvailable(db.host(host));
@@ -292,7 +313,7 @@ export function createDemoBackups(
         repository: { available: online, mode: "volume" },
         targets: usable(host),
         volumes: all()
-          .filter((v) => v.kind === "volume" && v.hostId === host)
+          .filter((v) => v.hostId === host && (v.kind === "volume" || v.bind?.eligible || demoStored(db, v.id)))
           .map((v) => ({
             ...v,
             timeZone: db.settings.general.timeZone,
@@ -306,14 +327,7 @@ export function createDemoBackups(
                     : undefined,
                 }
               : undefined,
-            lastRestore: restores.get(v.id),
-            pendingRestores: restores.get(v.id)?.pendingRestart ? [restores.get(v.id)!] : [],
-            running:
-              restores.get(v.id)?.status === "running"
-                ? { kind: "restore", activityId: restores.get(v.id)!.activityId }
-                : v.lastBackup?.status === "running"
-                  ? { kind: "backup", activityId: v.lastBackup.actionId! }
-                  : undefined,
+            pendingRestores: v.pendingRestores ?? [],
           })),
       };
     },
@@ -331,12 +345,32 @@ export function createDemoBackups(
     async listBackupTargets() {
       return structuredClone(db.settings.backups.targets);
     },
+    async testBackupTargetDraft({ target, probeHostId, targetId }) {
+      await wait(700);
+      const secret = target.secret || (targetId ? secrets.get(targetId) : undefined);
+      if ((target.kind === "local" || target.kind === "mount") && target.hostId !== probeHostId) return { ok: false, code: "backup.target.probe-host-mismatch" };
+      if (!isHostAvailable(db.host(probeHostId))) return { ok: false, code: "backup.target.unreachable" };
+      // Simulation: an SMB password "wrong" or a path containing "missing" fails like a real probe.
+      if (secret === "wrong") return { ok: false, code: "backup.target.permission-denied" };
+      if (target.path.includes("missing")) return { ok: false, code: "backup.target.path-missing" };
+      return { ok: true };
+    },
+    async getBackupDefaultRetention() {
+      return db.settings.backups.defaultRetentionCount;
+    },
+    async setBackupDefaultRetention(count) {
+      await wait(300);
+      if (!Number.isInteger(count) || count < 0 || count > 3650) throw new DemoError("invalid-plan");
+      db.settings.backups.defaultRetentionCount = count;
+    },
     async createBackupTarget(input) {
       const row: BackupTarget = {
         ...input,
+        ...(input.path !== undefined && { path: targetPath(input.kind, input.path) }),
         id: db.nextId("target"),
         createdAt: now(),
         configVersion: 1,
+        delivery: [{ hostId: input.hostId ?? "0", state: "current" }],
         checks: [],
         hasSecret: !!input.secret,
       };
@@ -344,14 +378,16 @@ export function createDemoBackups(
       delete (row as Record<string, unknown>).recoveryKey;
       db.settings.backups.targets.push(row);
       keys.set(row.id, input.recoveryKey ?? "AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA");
+      if (input.secret) secrets.set(row.id, input.secret);
       db.changed("settings");
       return structuredClone(row);
     },
     async updateBackupTarget(id, input) {
-      const row = target(id);
+      const row = target(id),
+        next = { ...input, ...(input.path !== undefined && { path: targetPath(input.kind, input.path) }) };
       if (
         ["kind", "path", "hostId", "server", "share"].some(
-          (key) => row[key as keyof BackupTarget] !== input[key as keyof typeof input],
+          (key) => row[key as keyof BackupTarget] !== next[key as keyof typeof next],
         )
       )
         return fail("backup.target.immutable");
@@ -362,6 +398,7 @@ export function createDemoBackups(
         hasSecret: row.hasSecret || !!input.secret,
         configVersion: row.configVersion + 1,
       });
+      if (input.secret) secrets.set(id, input.secret);
       db.changed("settings");
       return structuredClone(row);
     },

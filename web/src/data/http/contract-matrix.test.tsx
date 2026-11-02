@@ -30,7 +30,7 @@ import type { CapabilityDescriptor } from "../capability";
 import { createHttpAdapter } from "./http-adapter";
 import { inventoryId } from "./inventory-mapping";
 import { mapActivityDetail, mapEvent } from "./map-dto";
-import type { HubBackupRun } from "@/domain/hub-backup";
+import { hubBackupErrorCode, type HubBackupRun } from "@/domain/hub-backup";
 
 type Activity = components["schemas"]["ActivityActivitySummary"];
 type Detail = components["schemas"]["ActivityDetail"];
@@ -477,6 +477,8 @@ function backupBackend(scenario: BackupScenario) {
     if (scenario === "no-access") return json({ detail: "permission.denied" }, 403);
     if (url.pathname === "/api/backups" && method === "GET") return page(state.runs);
     if (url.pathname === "/api/backups" && method === "POST") {
+      const policyId = (JSON.parse(String(init?.body ?? "{}")) as { policyId?: string }).policyId;
+      if (policyId && !state.policy.some((entry: { id: string }) => entry.id === policyId)) return json({ detail: "backup.not_found" }, 404);
       const created: HubBackupRun = { ...run, id: "system-new-2", activityId: "activity-new-2", status: "running", size: 0 };
       state.runs.unshift(created);
       return json(created, 202);
@@ -520,6 +522,13 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     if (scenario === "creating") expect(await adapter.getHubBackupActivityStatus("activity-demo-1")).toBe("running");
   });
 
+  it("refuses a manual run of an unknown policy", async () => {
+    const setup = backupBackend("list");
+    const adapter = kind === "demo" ? createDemoAdapter() : setup.adapter;
+    const outcome = await adapter.createHubBackup("missing-policy").then(() => "created", (error: unknown) => hubBackupErrorCode(error));
+    expect(outcome).toBe("backup.not_found");
+  });
+
   it("creates an archive, saves policy and starts a confirmed restore", async () => {
     const setup = backupBackend("list");
     const adapter = kind === "demo" ? createDemoAdapter() : setup.adapter;
@@ -535,6 +544,15 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
       expect(setup.state.requests.some((item) => item.path.endsWith("/restore") && item.body?.includes('"confirmBackupId":"system-demo-1"'))).toBe(true);
       expect(setup.state.requests.some((item) => item.path === "/api/backups/policies" && item.method === "PUT")).toBe(true);
     }
+  });
+
+  it("sends the policy of a manual run so its target copy applies", async () => {
+    if (kind !== "http") return;
+    const setup = backupBackend("list");
+    await setup.adapter.createHubBackup("hub-daily");
+    await setup.adapter.createHubBackup();
+    const bodies = setup.state.requests.filter((entry) => entry.path === "/api/backups" && entry.method === "POST").map((entry) => JSON.parse(entry.body!));
+    expect(bodies).toEqual([{ policyId: "hub-daily" }, {}]);
   });
 
   it("omits an unassigned policy ID on first save", async () => {

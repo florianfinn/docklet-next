@@ -11,5 +11,7 @@ export const deLocale: typeof enLocale = {
     documentTitle: (import.meta.env.DEV ? "Docklet · React-Prototyp" : "Docklet Next"),
     loading: "Lädt",
     newStack: "Neuer Stack",
+    toggleSidebar: "Navigation ein- oder ausklappen",
+    close: "Schließen",
   },
 };

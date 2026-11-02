@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
 
 package settings
 
@@ -294,6 +294,9 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 	if input.EnvironmentID == "0" && h.cfg != nil && h.cfg.UIConfigurationDisabled {
 		return nil, &environmentDTO.HostProblem{Code: "settings.ui-configuration-disabled", Status: 403}
 	}
+	if input.Body.BackupDefaultRetentionCount != nil && (input.EnvironmentID != "0" || h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent)) {
+		return nil, huma.Error400BadRequest("backupDefaultRetentionCount is a hub-only setting")
+	}
 	if input.Body.StackStopMode != nil && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
 		return nil, huma.Error400BadRequest("stackStopMode is a hub-only setting")
 	}
@@ -434,7 +437,7 @@ func (h *SettingsHandler) GetCategories(ctx context.Context, input *struct{}) (*
 func withoutStackStopMode(values []settings.PublicSetting) []settings.PublicSetting {
 	out := make([]settings.PublicSetting, 0, len(values))
 	for _, setting := range values {
-		if setting.Key != "stackStopMode" {
+		if setting.Key != "stackStopMode" && setting.Key != "backupDefaultRetentionCount" {
 			out = append(out, setting)
 		}
 	}

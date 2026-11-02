@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original hub target CRUD, encrypted keys and retire/admission fence.
+// Deviations: Original hub target CRUD, encrypted keys and retire/admission fence; M16 bind mounts and backup completion.
 
 package backuptarget
 
@@ -197,6 +197,15 @@ func (s *Service) Retire(ctx context.Context, id string) error {
 	if row.RetiredAt != nil {
 		return nil
 	}
+	if s.deps.Store.DB.Migrator().HasTable("system_backup_policies") {
+		var count int64
+		if err := s.deps.Store.DB.WithContext(ctx).Table("system_backup_policies").Where("target_id = ?", id).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return dto.NewProblem(409, "backup.target.in-use", nil)
+		}
+	}
 	if s.deps.References == nil {
 		return dto.NewProblem(409, "backup.target.hosts-unknown", nil)
 	}
@@ -241,7 +250,13 @@ func (s *Service) List(ctx context.Context) ([]dto.Target, error) {
 		if err := s.deps.Store.DB.WithContext(ctx).Where("target_id = ?", row.ID).Order("host_id").Find(&checks).Error; err != nil {
 			return nil, err
 		}
-		result = append(result, project(row, checks))
+		projected := project(row, checks)
+		delivery, err := s.deliveries(ctx, row)
+		if err != nil {
+			return nil, err
+		}
+		projected.Delivery = delivery
+		result = append(result, projected)
 	}
 	return result, nil
 }

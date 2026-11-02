@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original paginated snapshot selection; reads are owned by the open folder.
+// Deviations: Original paginated snapshot selection; reads are owned by the open folder. M16: read-only browsing mode.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -18,11 +18,14 @@ export function RestoreFilesSheet({
   runId,
   onClose,
   accepted,
+  browseOnly = false,
 }: {
   volumeId: string;
   runId: string;
   onClose: () => void;
   accepted: (id: string) => void;
+  /** Lists the snapshot without selection or restore. */
+  browseOnly?: boolean;
 }) {
   const adapter = useAdapter(),
     t = useTranslations("volumes.backups"),
@@ -48,8 +51,8 @@ export function RestoreFilesSheet({
     <Sheet open onOpenChange={(open) => !open && !busy && onClose()}>
       <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>{t("restoreFiles")}</SheetTitle>
-          <SheetDescription>{t("restoreFilesHint")}</SheetDescription>
+          <SheetTitle>{t(browseOnly ? "browseSnapshot" : "restoreFiles")}</SheetTitle>
+          <SheetDescription>{t(browseOnly ? "browseSnapshotHint" : "restoreFilesHint")}</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 px-4 pb-4">
           <div className="flex items-center gap-2">
@@ -71,14 +74,14 @@ export function RestoreFilesSheet({
               <ul className="space-y-2">
                 {(listing.data.data ?? []).map((entry) => (
                   <li key={entry.path} className="flex items-center gap-3">
-                    <Checkbox
+                    {!browseOnly && <Checkbox
                       id={`entry-${entry.path}`}
                       checked={paths.includes(entry.path)}
                       onCheckedChange={(checked) => {
                         setPaths((old) => (checked ? [...old, entry.path] : old.filter((p) => p !== entry.path)));
                         setConfirm(false);
                       }}
-                    />
+                    />}
                     <label htmlFor={`entry-${entry.path}`} className="min-w-0 flex-1 break-all text-sm">
                       {entry.name}
                     </label>
@@ -104,6 +107,7 @@ export function RestoreFilesSheet({
               </div>
             </>
           )}
+          {!browseOnly && <>
           <p className="text-sm">{t("selectedPaths", { count: paths.length })}</p>
           {confirm && <p>{t("restoreFilesConfirm")}</p>}
           {error && <p role="alert">{error}</p>}
@@ -128,6 +132,7 @@ export function RestoreFilesSheet({
           >
             {confirm ? t("restoreConfirm") : t("restoreFiles")}
           </Button>
+          </>}
         </div>
       </SheetContent>
     </Sheet>

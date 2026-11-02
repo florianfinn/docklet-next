@@ -69,6 +69,7 @@ func TestBackupCapabilitiesRequireRouteRights(t *testing.T) {
 			}
 			if onVolume {
 				require.False(t, storageDescriptor(t, full, capability.ResourceRef{Kind: "volume", ID: "example~bind:/data"}, operation))
+				require.True(t, storageDescriptor(t, full, capability.ResourceRef{Kind: "volume", ID: "example~bind:2f7372762f617070"}, operation))
 				require.False(t, storageDescriptor(t, full, capability.ResourceRef{Kind: "volume", ID: "example~a~b"}, operation))
 			}
 			for _, missing := range grants {

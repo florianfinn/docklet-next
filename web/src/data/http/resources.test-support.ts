@@ -18,7 +18,7 @@ const volume: components["schemas"]["VolumeVolume"] = { id: "data", name: "data"
 const network: components["schemas"]["NetworkInspect"] = { id: "net", name: "front", driver: "bridge", scope: "local", created: at, ipam: { driver: "default", options: {}, config: [{ subnet: "192.0.2.0/24", gateway: "192.0.2.1" }] }, configFrom: { Network: "" }, containers: {}, options: {}, labels: { "com.docker.compose.project": "app" }, containersList: [], enableIPv4: true, enableIPv6: true, internal: true, attachable: false, ingress: false, configOnly: false };
 
 export function resourceFixture() {
-  const state = { isEdge: false, filesDown: false, reason: "", observedAt: at, status: "online", malformed: false, noSnapshot: false, bind: false, networks: [network], defaultNetworks: [] as string[], dynamicObservation: false, failureHost: "second", failure: "", hostIds: ["first", "second"] };
+  const state = { isEdge: false, filesDown: false, reason: "", observedAt: at, status: "online", malformed: false, noSnapshot: false, bind: false, networks: [network], defaultNetworks: [] as string[], dynamicObservation: false, failureHost: "second", failure: "", hostIds: ["first", "second"], binds: undefined as components["schemas"]["VolumeBind"][] | undefined, registrationRevision: 1 };
   const sockets = new Map<string, MetricsSocket>();
   const webSocket = vi.fn((url: string): MetricsSocket => {
     const socket: MetricsSocket = { onmessage: null, onclose: null, onerror: null, close: vi.fn() };
@@ -29,7 +29,7 @@ export function resourceFixture() {
   const fetcher = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(String(input), "https://hub.example.com");
     if (url.pathname === "/api/capabilities") return json(["listHosts", "listStacks", "getStack", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
-    if (url.pathname === "/api/environments") return json(state.hostIds.map((id) => ({ id, name: id, apiUrl: "http://agent.example.com", enabled: true, status: state.status, isEdge: state.isEdge })), true);
+    if (url.pathname === "/api/environments") return json(state.hostIds.map((id) => ({ id, name: id, apiUrl: "http://agent.example.com", enabled: true, status: state.status, isEdge: state.isEdge, registrationRevision: state.registrationRevision })), true);
     if (url.pathname.endsWith("/settings")) return json({ effectiveTimeZone: "UTC", settings: [] });
     if (state.noSnapshot && url.pathname.includes("/environments/")) return json(state.reason || "agent.unavailable", false, false, 502);
     if (url.pathname.startsWith(`/api/environments/${state.failureHost}/`)) {
@@ -44,6 +44,7 @@ export function resourceFixture() {
     if (url.pathname.endsWith("/containers")) return json([{ ...container, mounts: state.bind ? [{ type: "bind", name: "", source: "/srv/example~data", destination: "/data", rw: true }] : container.mounts }, { ...container, id: "db", names: ["/db"], state: "exited", labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "db" }, ports: [], mounts: [] }], true, true);
     if (url.pathname.endsWith("/images")) return json(state.malformed ? [{ id: "bad" }] : [image, { ...image, id: "unused", repoTags: ["unused:1"], usedBy: [], inUse: false }, { ...image, id: "dangling", repoTags: [], usedBy: [], inUse: false }], true, true);
     if (url.pathname.endsWith("/volumes/data/usage")) return json({ inUse: true, containers: ["web"] });
+    if (url.pathname.endsWith("/volumes/binds") && state.binds) return json(state.binds);
     if (url.pathname.endsWith("/volumes/sizes")) return json([{ name: "data", size: 512, refCount: 1 }]);
     if (url.pathname.endsWith("/volumes/data")) return json(volume, false, true);
     if (url.pathname.endsWith("/volumes")) return json([volume], true, true);

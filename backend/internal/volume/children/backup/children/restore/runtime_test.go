@@ -42,6 +42,7 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 			var creates []container.HostConfig
 			var labels []map[string]string
 			var copied []string
+			var owners []int
 			removed := []string{}
 			targetEffects := 0
 			targetCreated := false
@@ -93,6 +94,12 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 						}
 						require.NoError(t, err)
 						copied = append(copied, h.Name)
+						// Docker's copyUIDGID applies the helper image user (root), discarding the archive's owners.
+						owner := h.Uid
+						if r.URL.Query().Get("copyUIDGID") == "true" {
+							owner = 0
+						}
+						owners = append(owners, owner)
 						_, err = io.Copy(io.Discard, tr)
 						require.NoError(t, err)
 					}
@@ -156,6 +163,7 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 			}
 			err = l.Execute(t.Context(), run, StartRequest{VolumeName: "app-data", Kind: "upload", InputPath: input})
 			require.Equal(t, []string{"file\nname"}, copied)
+			require.Equal(t, []int{123}, owners, "staged upload keeps the archive's numeric owner")
 			require.NotEmpty(t, removed)
 			require.NotEmpty(t, creates)
 			require.Empty(t, creates[0].Binds)

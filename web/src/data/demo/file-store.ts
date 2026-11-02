@@ -110,6 +110,18 @@ export class FileStore {
     }
   }
 
+  move(volumeId: string, path: string, folder: string): void {
+    const tree = this.tree(volumeId);
+    if (!tree.has(path) || path === "/" || tree.get(folder)?.type !== "dir") throw new FileStoreError("not-found");
+    if (folder === path || folder.startsWith(`${path}/`)) throw new FileStoreError("invalid-name");
+    const next = joinPath(folder, baseName(path));
+    if (next === path) return;
+    if (tree.has(next)) throw new FileStoreError("exists");
+    for (const [p, node] of [...tree]) {
+      if (p === path || p.startsWith(`${path}/`)) { tree.delete(p); tree.set(next + p.slice(path.length), node); }
+    }
+  }
+
   remove(volumeId: string, path: string): void {
     const tree = this.tree(volumeId);
     if (!tree.has(path) || path === "/") throw new FileStoreError("not-found");
