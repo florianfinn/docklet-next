@@ -158,7 +158,8 @@ it("passes entered credentials and optional existing recovery key only to target
   expect(JSON.stringify(await f.api.listBackupTargets())).not.toContain("test-only");
 });
 it("explains refused and unchecked binds instead of offering backups", async () => {
-  const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  // Without a stored plan or backup; stored history stays readable (bind-access.test.tsx).
+  const f = setup(), volume = { ...(await f.api.getBackupOverview("first")).volumes[0]!, backup: undefined, lastBackup: undefined };
   const view = renderWithApp(<VolumeBackupsTab volume={{ ...volume, kind: "bind", bind: { kind: "directory", eligible: false, reason: "volume.bind.path-denied" }, backups: [] }} hostOnline />, f.adapter);
   expect(screen.getByRole("status").textContent).toBe("Für diesen Bind-Mount werden Dateien und Backups nicht angeboten. Dieser Pfad ist vor Datei- und Backup-Aktionen geschützt.");
   view.unmount();

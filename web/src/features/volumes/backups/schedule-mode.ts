@@ -17,3 +17,9 @@ export function withMode(schedule: BackupSchedule, mode: "manual" | "daily" | "w
     schedule: mode === "daily" ? { mode, time } : { mode, time, day: previous.mode === "weekly" ? previous.day : "sun" },
   };
 }
+
+/** The custom cron of an active or paused custom plan; presets have none. */
+export function customCron(schedule: BackupSchedule): string | undefined {
+  if (schedule.mode === "custom") return schedule.cron;
+  return schedule.mode === "manual" && schedule.cron && backupSchedule(schedule.cron).mode === "custom" ? schedule.cron : undefined;
+}

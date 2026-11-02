@@ -309,6 +309,8 @@ export interface ContainerInfo {
   ports: PortMapping[];
   networks: string[];
   mounts: string[];
+  /** Daemon-reported mounts with their structured target, aligned with `mounts`; display strings are never re-parsed for identity. */
+  mountPoints?: { spec: string; target: string }[];
   env: Record<string, string>;
   restartPolicy: string;
   memLimitMb: number;

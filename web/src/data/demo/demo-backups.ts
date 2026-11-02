@@ -50,11 +50,16 @@ export function createDemoBackups(
   const fail = (code: ConstructorParameters<typeof BackupError>[0]["code"]): never => {
     throw new BackupError({ code });
   };
-  function named(id: string) {
+  /** Source-touching operations: binds need the eligible verdict, directory-only kinds a directory (as the agent). */
+  function named(id: string, directory = false) {
     const v = find(id);
-    if (v.kind !== "volume") return fail("volume.not-found");
+    if (v.kind === "volume") return v;
+    if (!v.bind?.eligible) return fail(v.bind?.reason === "volume.bind.unsupported-type" ? "volume.bind.unsupported-type" : "volume.bind.path-denied");
+    if (directory && v.bind.kind === "file") return fail("volume.bind.file-operation-unsupported");
     return v;
   }
+  /** Stored history is read by key whatever the current verdict (K3/K4). */
+  const stored = (v: Volume) => db.backupPolicies.has(v.id) || db.backupRuns.some((run) => run.volumeId === v.id);
   function target(id: string) {
     const t = db.settings.backups.targets.find((t) => t.id === id);
     if (!t) return fail("backup.target.unknown");
@@ -154,6 +159,7 @@ export function createDemoBackups(
     async restoreBackup(id, runId, mode, newVolumeName) {
       const v = named(id),
         source = snapshot(id, runId);
+      if (v.kind === "bind" && mode === "new") return fail("volume.bind.unsupported");
       if (
         mode === "new" &&
         (!newVolumeName ||
@@ -226,7 +232,7 @@ export function createDemoBackups(
       return restore.activityId;
     },
     async restoreBackupFiles(id, runId, selection) {
-      const v = named(id),
+      const v = named(id, true),
         source = snapshot(id, runId),
         paths = selection.paths ?? [];
       return start(v.hostId, "volume-restore", () => {
@@ -260,7 +266,7 @@ export function createDemoBackups(
       return new Blob(["Development snapshot export"], { type: "application/gzip" });
     },
     async deleteBackup(id, runId) {
-      named(id);
+      find(id);
       if (restores.get(id)?.pendingRestart && restores.get(id)?.safetyBackupId === runId)
         return fail("volume.backup.safety-pinned");
       db.backupRuns = db.backupRuns.filter((run) => run.id !== runId || run.volumeId !== id);
@@ -270,7 +276,8 @@ export function createDemoBackups(
     async uploadRestore(id, file, mode = "replace", name) {
       if (file.size > 4 * 1024 ** 3) return fail("volume.backup.upload-too-large");
       if (!/\.(tar\.gz|tgz)$/.test(file.name)) return fail("volume.backup.upload-invalid");
-      const v = named(id);
+      const v = named(id, true);
+      if (v.kind === "bind" && mode === "new") return fail("volume.bind.unsupported");
       const run: BackupRun = {
         id: db.nextId("upload"),
         volumeId: id,
@@ -295,7 +302,7 @@ export function createDemoBackups(
         repository: { available: online, mode: "volume" },
         targets: usable(host),
         volumes: all()
-          .filter((v) => v.kind === "volume" && v.hostId === host)
+          .filter((v) => v.hostId === host && (v.kind === "volume" || v.bind?.eligible || stored(v)))
           .map((v) => ({
             ...v,
             timeZone: db.settings.general.timeZone,

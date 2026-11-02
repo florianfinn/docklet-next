@@ -41,9 +41,8 @@ export function ContainerFacts({ c, env = true }: { c: ContainerInfo; host: Host
       <Row label={t("mounts")}>
         {c.mounts.length ? (
           <ul className="flex flex-col gap-1 font-mono text-xs">
-            {c.mounts.map((mnt) => {
-              const parsed = parseMount(mnt);
-              const ref = parsed && storageOf(volumes.data, c.id, parsed.target);
+            {(c.mountPoints ?? c.mounts.map((spec) => ({ spec, target: parseMount(spec)?.target }))).map(({ spec: mnt, target }) => {
+              const ref = target ? storageOf(volumes.data, c.id, target) : undefined;
               return (
                 <li key={mnt} className="flex items-start gap-1.5 break-all">
                   {ref ? (

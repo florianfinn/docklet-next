@@ -34,11 +34,12 @@ export function ComposeFileTree({ projectName, projectDir, stackId, active, comp
   const t = useTranslations("editor.files");
   const volumes = useVolumes();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(PROJECT_OPEN);
-  const specs = [...new Map((model?.services ?? []).flatMap((s) => s.mounts.filter((m) => m.editable && m.source && m.target)).map((m) => [m.source, `${m.source}:${m.target}`])).entries()];
+  // Each use keeps its service, so equal targets in different services resolve to their own consumers.
+  const uses = (model?.services ?? []).flatMap((s) => s.mounts.filter((m) => m.editable && m.source && m.target).map((m) => ({ source: m.source, target: m.target, service: s.key })));
+  const sources = [...new Set(uses.map((u) => u.source))];
 
-  const mounts: TreeNode[] = specs.map(([source, spec]) => {
-    const [, target = ""] = spec.split(":");
-    const volume = stackId ? stackStorage(volumes.data, stackId, { source, target }) : undefined;
+  const mounts: TreeNode[] = sources.map((source) => {
+    const volume = stackId ? uses.filter((u) => u.source === source).map((u) => stackStorage(volumes.data, stackId, u, u.service)).find(Boolean) : undefined;
     const isBind = /^[./~]/.test(source);
     return {
       id: `mount:${source}`,

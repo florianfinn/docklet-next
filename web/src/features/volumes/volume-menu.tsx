@@ -6,7 +6,7 @@ import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import type { Host } from "@/domain/model";
-import { storageUsable, type Volume } from "@/domain/volumes";
+import { backupAccess, storageUsable, type Volume } from "@/domain/volumes";
 import type { MenuGroups } from "@/shared/components/action-menu";
 
 import { filesHref } from "./files/files-href";
@@ -31,11 +31,11 @@ export function useVolumeMenu(v: Volume, host: Host | undefined, on: { remove: (
     [
       { id: "open", label: t("open"), icon: <Eye />, onSelect: () => navigate(`/volumes/${v.id}`) },
       { id: "files", label: t("files"), icon: <FolderOpen />, disabled: !files.available || !online || !storageUsable(v), title: files.reason, onSelect: () => navigate(filesHref(v)) },
-      { id: "backups", label: t("backups"), icon: <Archive />, disabled: !backup.available || !storageUsable(v), title: backup.reason, onSelect: () => navigate(`/volumes/${encodeURIComponent(v.id)}?tab=backups`) },
+      { id: "backups", label: t("backups"), icon: <Archive />, disabled: !backup.available || backupAccess(v) === "none", title: backup.reason, onSelect: () => navigate(`/volumes/${encodeURIComponent(v.id)}?tab=backups`) },
     ],
     [
       ...(v.stackId ? [{ id: "stack", label: t("stack"), icon: <Layers />, onSelect: () => navigate(`/stacks/${v.stackId}`) }] : []),
-      { id: "backup", label: t("backupNow"), icon: <Play />, disabled: !backup.available || !!v.inventory?.stale || !online || !v.backup || !storageUsable(v), title: backup.reason, onSelect: () => on.backup(v) },
+      { id: "backup", label: t("backupNow"), icon: <Play />, disabled: !backup.available || !!v.inventory?.stale || !online || !v.backup || backupAccess(v) !== "full", title: backup.reason, onSelect: () => on.backup(v) },
     ],
     v.kind === "volume" ? [{ id: "delete", label: t("delete"), icon: <Trash2 />, disabled: !remove.available || !!v.inventory?.stale || !!deleteBlock(v, host), title: remove.reason, onSelect: () => on.remove(v) }] : [],
   ];

@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { formatRelative } from "@/domain/format";
-import { storageUsable, type Volume } from "@/domain/volumes";
+import { backupAccess, type Volume } from "@/domain/volumes";
 import { ToneBadge } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
 
@@ -29,7 +29,8 @@ export function KindBadge({ volume, className }: { volume: Pick<Volume, "kind" |
 export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup" | "backupUnavailable" | "kind" | "bind" | "hostId"> }) {
   const t = useTranslations("volumes.backupState");
   const backup = useCapability("getBackupOverview", { kind: "host", id: volume.hostId });
-  if (!storageUsable(volume)) return <span className="text-xs text-muted-foreground">{t("bindUnavailable")}</span>;
+  // Recorded outcomes always show; only a bind without stored backups and without access reads as unavailable.
+  if (backupAccess(volume) === "none") return <span className="text-xs text-muted-foreground">{t("bindUnavailable")}</span>;
   if (volume.backupUnavailable || !backup.available) return <span className="text-xs text-muted-foreground" title={backup.reason}>{t("unavailable")}</span>;
   if (volume.lastBackup?.status === "partial") return <ToneBadge tone="warn">{t("partial")}</ToneBadge>;
   if (volume.lastBackup?.status === "unavailable") return <ToneBadge tone="gray">{t("unavailable")}</ToneBadge>;

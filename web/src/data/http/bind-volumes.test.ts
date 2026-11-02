@@ -54,7 +54,7 @@ it("links container and stack mounts through the daemon-reported consumers", () 
   const volumes = [bind] as never[];
   expect([storageOf(volumes, "first~web", "/config")?.id, storageOf(volumes, "first~web", "/data")?.id]).toEqual([bind.id, undefined]);
   // A relative Compose source resolves through the deployed consumer, never through a guessed host path.
-  expect([stackStorage(volumes, "first~app", { source: "./config", target: "/config" }, "web")?.id, stackStorage(volumes, "first~app", { source: "config", target: "/config" })?.id]).toEqual([bind.id, undefined]);
+  expect([stackStorage(volumes, "first~app", { source: "./config", target: "/config" }, "web")?.id, stackStorage(volumes, "first~app", { source: "config", target: "/config" }, "web")?.id]).toEqual([bind.id, undefined]);
 });
 
 function measure(status: number, body: object) {

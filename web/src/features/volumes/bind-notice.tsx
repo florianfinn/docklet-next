@@ -7,17 +7,17 @@
 import { useTranslations } from "use-intl";
 
 import { backupCodeKey } from "@/data/backup-error";
-import type { Volume } from "@/domain/volumes";
+import { storageUsable, type Volume } from "@/domain/volumes";
 
-/** Why files and backups are not offered for a bind; renders nothing for usable entries. */
-export function BindNotice({ volume }: { volume: Pick<Volume, "kind" | "bind"> }) {
+/** Why files or backups are restricted for a bind; renders nothing for fully usable entries. */
+export function BindNotice({ volume, history = false }: { volume: Pick<Volume, "kind" | "bind">; history?: boolean }) {
   const t = useTranslations("volumes.detail");
   const all = useTranslations();
-  if (volume.kind !== "bind" || volume.bind?.eligible) return null;
+  if (!history && storageUsable(volume)) return null;
   const reason = backupCodeKey(volume.bind?.reason);
   return (
     <p role="status" className="text-sm text-muted-foreground">
-      {volume.bind ? t("bindDenied") : t("bindUnchecked")}
+      {history ? t("bindHistoryOnly") : volume.bind?.eligible ? t("bindKindUnknown") : volume.bind ? t("bindDenied") : t("bindUnchecked")}
       {reason && ` ${all(reason)}`}
     </p>
   );

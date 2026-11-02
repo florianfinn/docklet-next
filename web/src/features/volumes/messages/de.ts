@@ -117,6 +117,8 @@ export const deVolumes: typeof enVolumes = {
     fileBindNote: "Einzelne Datei als Bind-Mount. Dateien zeigt nur diese Datei; eine Wiederherstellung ersetzt sie an Ort und Stelle.",
     bindDenied: "Für diesen Bind-Mount werden Dateien und Backups nicht angeboten.",
     bindUnchecked: "Der Agent hat diesen Bind-Mount noch nicht geprüft. Dateien und Backups gibt es erst danach.",
+    bindKindUnknown: "Der Agent konnte nicht feststellen, ob dieser Bind-Mount ein Verzeichnis oder eine Datei ist. Dateien gibt es erst danach.",
+    bindHistoryOnly: "Dieser Pfad ist nicht mehr erlaubt. Gespeicherte Backups bleiben zum Herunterladen verfügbar.",
     sizeMeasured: "Gemessen {time}",
     sizeSnapshot: "Snapshot-Größe vom {time}",
     sizePartial: "Einige Einträge waren nicht lesbar; die Größe ist eine Untergrenze.",

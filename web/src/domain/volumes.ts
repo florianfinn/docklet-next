@@ -88,9 +88,24 @@ export function bindSize(info: BindInfo | undefined): { bytes: number; at: strin
   return Date.parse(measured.at) >= Date.parse(snapshot.at) ? measured : snapshot;
 }
 
-/** Whether files and backups are offered: binds need an eligible agent verdict. */
+/** Whether the file workspace is offered: binds need an eligible agent verdict of a known kind. */
 export function storageUsable(v: Pick<Volume, "kind" | "bind">): boolean {
-  return v.kind === "volume" || !!v.bind?.eligible;
+  return v.kind === "volume" || (!!v.bind?.eligible && v.bind.kind !== "unknown");
+}
+
+/** Directory-only operations (upload restore, selected restore) need a volume or a confirmed directory bind. */
+export function directoryStorage(v: Pick<Volume, "kind" | "bind">): boolean {
+  return v.kind === "volume" || v.bind?.kind === "directory";
+}
+
+/**
+ * Backup access: volumes and eligible binds get every operation. Other binds with a stored plan or backup keep
+ * them (K3/K4): unchecked or unmounted keys fully, as the agent decides admission; refused paths read-only.
+ */
+export function backupAccess(v: Pick<Volume, "kind" | "bind" | "backup" | "lastBackup">): "full" | "history" | "none" {
+  if (v.kind === "volume" || v.bind?.eligible) return "full";
+  if (!v.backup && !v.lastBackup) return "none";
+  return v.bind ? "history" : "full";
 }
 
 export interface Volume {
@@ -199,10 +214,10 @@ export function storageOf(volumes: readonly Volume[] | undefined, containerId: s
   return volumes?.find((v) => v.consumers.some((c) => c.containerId === containerId && c.target === target));
 }
 
-/** Inventory entry of a Compose mount of a deployed stack, matched by the stack's consumers and the mount target. */
-export function stackStorage(volumes: readonly Volume[] | undefined, stackId: string, mount: { source: string; target: string }, service?: string): Volume | undefined {
+/** Inventory entry of a Compose mount of a deployed stack, matched by the stack, service and target of a consumer. */
+export function stackStorage(volumes: readonly Volume[] | undefined, stackId: string, mount: { source: string; target: string }, service: string): Volume | undefined {
   const bind = /^[./~]/.test(mount.source);
-  return volumes?.find((v) => (v.kind === "bind") === bind && v.consumers.some((c) => c.stackId === stackId && c.target === mount.target && (service === undefined || c.service === service)));
+  return volumes?.find((v) => (v.kind === "bind") === bind && v.consumers.some((c) => c.stackId === stackId && c.service === service && c.target === mount.target));
 }
 
 export interface MountUsage {

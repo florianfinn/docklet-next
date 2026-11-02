@@ -116,6 +116,8 @@ export const enVolumes = {
     fileBindNote: "Single file as bind mount. Files shows only this file; a restore replaces it in place.",
     bindDenied: "Files and backups are not offered for this bind mount.",
     bindUnchecked: "The agent has not checked this bind mount yet. Files and backups are offered once it has.",
+    bindKindUnknown: "The agent could not tell whether this bind mount is a directory or a file. Files are offered once it can.",
+    bindHistoryOnly: "This path is no longer allowed. Stored backups stay available for download.",
     sizeMeasured: "Measured {time}",
     sizeSnapshot: "Snapshot size from {time}",
     sizePartial: "Some entries could not be read; the size is a lower bound.",

@@ -9,7 +9,7 @@ import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { backupCodeKey, backupErrorMessage } from "@/data/backup-error";
 import { formatBytes, formatDateTime } from "@/domain/format";
-import type { BackupRun, UsableBackupTarget, VolumeDetail } from "@/domain/volumes";
+import { directoryStorage, type BackupRun, type UsableBackupTarget, type VolumeDetail } from "@/domain/volumes";
 import { captureCommandFailure } from "@/shared/components/command-failure";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ToneBadge } from "@/shared/components/tone";
@@ -26,11 +26,14 @@ export function BackupHistory({
   targets,
   hostOnline,
   accepted = () => {},
+  historyOnly = false,
 }: {
   volume: VolumeDetail;
   targets: UsableBackupTarget[];
   hostOnline: boolean;
   accepted?: (id: string) => void;
+  /** Refused bind path: download and delete only, no restore onto the source. */
+  historyOnly?: boolean;
 }) {
   const t = useTranslations("volumes.backups"), all = useTranslations(), adapter = useAdapter();
   const restoreCapability = useVolumeCapability("restoreBackup", volume.id),
@@ -71,7 +74,7 @@ export function BackupHistory({
           {run.archive && <p className="break-all font-mono text-xs text-muted-foreground">{run.archive}</p>}
           <div className="flex flex-wrap gap-2">
             {(run.status === "succeeded" || run.status === "partial") && <>
-              <Button
+              {!historyOnly && <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled || !restoreCapability.available}
@@ -79,9 +82,9 @@ export function BackupHistory({
                 onClick={() => setRestore(run)}
               >
                 {t("restore")}
-              </Button>
-              {/* A file bind restores its one file by replace only. */}
-              {!volume.fileBind && <Button
+              </Button>}
+              {/* Selected restore needs a directory; a file bind restores its one file by replace only. */}
+              {!historyOnly && directoryStorage(volume) && <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled || !filesCapability.available || volume.volumeExists === false}

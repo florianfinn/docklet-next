@@ -167,7 +167,7 @@ export function createBackups(options: Options) {
       ) {
         const observed = await overview(host).catch(() => undefined);
         check();
-        const running = observed?.volumes.find((v) => v.name === volume)?.running;
+        const running = observed?.volumes.find((v) => v.id === inventoryId(host, volume))?.running;
         if (running) {
           options.accepted(host, running.activityId);
           options.changed();
@@ -455,23 +455,22 @@ export function createBackups(options: Options) {
         return undefined;
       });
       const byId = new Map(ov?.volumes.map((v) => [v.id, v]));
-      return volumes.map((v) =>
-        v.kind === "bind" && !v.bind?.eligible
-          ? v
-          : {
+      // Binds keep their recorded outcomes whatever the current verdict; access is decided by the consumer (K3/K4).
+      return volumes.map((v) => ({
               ...v,
               backupUnavailable: !ov,
               ...byId.get(v.id),
               name: v.name,
               kind: v.kind,
+              bind: v.bind,
+              fileBind: v.fileBind,
               sizeBytes: v.sizeBytes,
               consumers: v.consumers,
               labels: v.labels,
               source: v.source,
               createdAt: v.createdAt,
               sizeUnavailable: v.sizeUnavailable,
-            },
-      );
+            }));
     },
     inventoryId,
   };

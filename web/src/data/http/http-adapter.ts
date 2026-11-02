@@ -19,6 +19,7 @@ import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type Capabil
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
+import { backupAccess } from "@/domain/volumes";
 import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
 import type { CurrentUser } from "../api";
@@ -721,13 +722,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           || error instanceof Error && error.message === "not-found";
         if (!missing) throw error;
         const host = id.split("~")[0]!;
-        const observed = (await backups.api.getBackupOverview(host)).volumes.find((v) => v.id === id && v.volumeExists === false);
+        // A stored bind key stays reachable without a current mount (K3); a volume only once it is gone.
+        const observed = (await backups.api.getBackupOverview(host)).volumes.find((v) => v.id === id && (v.kind === "bind" || v.volumeExists === false));
         if (!observed) throw error;
         volume = { ...observed, backups: [] };
       }
-      if (volume.kind === "bind" && !volume.bind?.eligible) return volume;
-      const [decorated, history] = await Promise.all([backups.decorate(volume.hostId, [volume]), backups.history(id).catch(() => null)]);
-      return { ...volume, ...decorated[0], backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
+      const known = volume.kind === "volume" || !!volume.bind?.eligible;
+      const [decorated, early] = await Promise.all([backups.decorate(volume.hostId, [volume]), known ? backups.history(id).catch(() => null) : undefined]);
+      const entry = { ...volume, ...decorated[0] };
+      // Other binds read history only when the overview shows a stored plan or backup (K3/K4).
+      if (!known && backupAccess(entry) === "none") return entry;
+      const history = known ? early : await backups.history(id).catch(() => null);
+      return { ...entry, backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
     },
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),

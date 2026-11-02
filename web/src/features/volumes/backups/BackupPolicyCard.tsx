@@ -20,7 +20,7 @@ import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { useVolumeCapability } from "../use-volume-capability";
-import { withMode } from "./schedule-mode";
+import { customCron, withMode } from "./schedule-mode";
 
 export function BackupPolicyCard({
   volume,
@@ -66,6 +66,7 @@ export function BackupPolicyCard({
     }
   }
   const schedule = draft.schedule;
+  const custom = customCron(schedule);
   const timeZone = volume.timeZone || "UTC";
   return <Card className="gap-3 py-4">
     <CardHeader><CardTitle>{t("policy")}</CardTitle></CardHeader>
@@ -90,8 +91,16 @@ export function BackupPolicyCard({
           <Link to="/settings/backups" className="text-primary-text hover:underline">{t("manageTargets")}</Link>
         </FieldDescription>
       </Field>
-      {schedule.mode === "custom" ? <div className="space-y-2">
-        <p>{t("customSchedule")}: <code>{schedule.cron}</code></p>
+      {schedule.mode === "custom" || custom ? <div className="space-y-2">
+        {/* Manual pauses the custom plan and keeps its cron for a later switch back. */}
+        <SegmentedToggle
+          label={ts("recurrence.label")}
+          value={schedule.mode === "custom" ? "custom" : "manual"}
+          onChange={(mode: "manual" | "custom") => patch(mode === "custom" ? { enabled: true, schedule: { mode, cron: custom! } } : withMode(schedule, mode))}
+          options={[{ value: "manual" as const, label: ts("manual") }, { value: "custom" as const, label: t("customSchedule") }]}
+          wrap
+        />
+        <p>{t("customSchedule")}: <code>{custom}</code></p>
         <Button variant="outline" onClick={() => patch({ schedule: { mode: "daily", time: "03:00" } })}>
           {t("replaceSchedule")}
         </Button>
