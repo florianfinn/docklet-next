@@ -143,6 +143,8 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		}
 		return rows[i].CreatedAt.After(*rows[j].CreatedAt)
 	})
+	// A restore's safety capture yields to the running restore; without one it stays the volume's running backup.
+	safety := map[string]bool{}
 	for _, r := range rows {
 		switch r.Kind {
 		case "target":
@@ -163,8 +165,9 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {
 				item.LastSuccessAt = r.CreatedAt
 			}
-			// A restore's safety capture has no activity of its own; the running restore reports it.
-			if r.Status == "running" && item.Running == nil && r.Trigger != dto.VolumeBackupTriggerSafety {
+			if r.Status == "running" && r.Trigger == dto.VolumeBackupTriggerSafety {
+				safety[r.VolumeName] = true
+			} else if r.Status == "running" && item.Running == nil {
 				item.Running = &volume.BackupRunning{Kind: "backup", ActivityID: r.ActivityID}
 			}
 		case "download":
@@ -193,6 +196,11 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			if r.Status == "running" && item.Running == nil {
 				item.Running = &volume.BackupRunning{Kind: "restore", ActivityID: r.ActivityID, RestoreID: r.ID}
 			}
+		}
+	}
+	for name := range safety {
+		if item := get(name); item.Running == nil {
+			item.Running = &volume.BackupRunning{Kind: "backup"}
 		}
 	}
 	cli, err := s.deps.Docker.GetClient(ctx)
