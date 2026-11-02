@@ -209,3 +209,20 @@ it("shows a backup reader the status without requiring policy write permission",
   renderWithApp(<BackupBadge volume={volume} />, { ...f.adapter, kind: "http" });
   await waitFor(() => expect(screen.queryByText("Teilweise") !== null).toBe(true));
 });
+it("starts a new plan with the hub default retention and saves the default within its bounds", async () => {
+  const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  const saved: number[] = [];
+  const adapter = { ...f.adapter, getBackupDefaultRetention: async () => 30, setBackupDefaultRetention: async (count: number) => { saved.push(count); } };
+  const view = renderWithApp(<VolumeBackupsTab volume={{ ...volume, id: "first~fresh", name: "fresh", backup: undefined, lastBackup: undefined, backups: [] }} hostOnline />, adapter);
+  await waitFor(() => expect((document.getElementById("bk-retention") as HTMLInputElement | null)?.value).toBe("30"));
+  view.unmount();
+  renderWithApp(<BackupTargetsSection />, adapter);
+  const input = await screen.findByLabelText("Standard-Aufbewahrung für neue Pläne");
+  await waitFor(() => expect((input as HTMLInputElement).value).toBe("30"));
+  const save = screen.getByRole("button", { name: "Standard speichern" }) as HTMLButtonElement;
+  await userEvent.clear(input); await userEvent.type(input, "3651");
+  expect(save.disabled).toBe(true);
+  await userEvent.clear(input); await userEvent.type(input, "0");
+  await userEvent.click(save);
+  await waitFor(() => expect(saved).toEqual([0]));
+});

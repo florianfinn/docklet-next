@@ -2,7 +2,7 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original Hub backup page for issue #32, using free UI primitives.
+// Deviations: Original Hub backup page for issue #32, using free UI primitives; M16 archive copy target and copy state (#286).
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Download, HardDrive, RotateCw, Trash2, Upload } from "lucide-react";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { useLocale, useTranslations } from "use-intl";
 
 import { useAdapter } from "@/data/use-adapter";
+import { useBackupTargets } from "@/data/backup-queries";
+import { backupCodeKey } from "@/data/backup-error";
 import { AdapterOutcomeError } from "@/data/capability";
 import { hubBackupErrorCode, MAX_HUB_BACKUP_BYTES, type HubBackupPolicy, type HubBackupRun } from "@/domain/hub-backup";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -65,6 +67,10 @@ function PolicyEditor({ policy, disabled, onSave }: { policy: HubBackupPolicy; d
   const [time, setTime] = useState(initial?.time ?? "03:00");
   const [weekday, setWeekday] = useState<BackupWeekday>(initial?.frequency === "weekly" ? initial.weekday : "1");
   const [retentionCount, setRetentionCount] = useState(String(policy.retentionCount));
+  const [copyTarget, setCopyTarget] = useState(policy.targetId ?? "none");
+  // The hub reaches SMB and NFS shares and targets on its own host (0); other hosts' directories are out of reach.
+  const targets = useBackupTargets(!disabled);
+  const reachable = (targets.data ?? []).filter((target) => !target.retiredAt && (target.kind === "smb" || target.kind === "nfs" || target.hostId === "0"));
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
   async function save() {
@@ -72,7 +78,7 @@ function PolicyEditor({ policy, disabled, onSave }: { policy: HubBackupPolicy; d
     if (!Number.isSafeInteger(count) || count < 1 || (frequency !== "off" && frequency !== "custom" && !validBackupTime(time))) { setInvalid(true); return; }
     const schedule = frequency === "off" || frequency === "custom" ? policy.schedule : formatSimpleBackupSchedule(frequency === "weekly" ? { frequency, time, weekday } : { frequency, time });
     setInvalid(false); setBusy(true);
-    try { await onSave({ ...policy, enabled: frequency === "custom" ? policy.enabled : frequency !== "off", schedule, retentionCount: count }); }
+    try { await onSave({ ...policy, enabled: frequency === "custom" ? policy.enabled : frequency !== "off", schedule, retentionCount: count, targetId: copyTarget === "none" ? undefined : copyTarget }); }
     finally { setBusy(false); }
   }
   return (
@@ -102,6 +108,17 @@ function PolicyEditor({ policy, disabled, onSave }: { policy: HubBackupPolicy; d
           </>}
         </>}
         <div className="grid gap-1.5"><Label htmlFor={`keep-${policy.id}`}>{t("keepCount")}</Label><Input id={`keep-${policy.id}`} type="number" min={1} step={1} value={retentionCount} onChange={(event) => setRetentionCount(event.target.value)} disabled={disabled || busy} /></div>
+        <div className="grid gap-1.5"><Label htmlFor={`copy-${policy.id}`}>{t("copyTarget")}</Label>
+          <Select value={copyTarget} onValueChange={setCopyTarget} disabled={disabled || busy}>
+            <SelectTrigger id={`copy-${policy.id}`} className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t("copyNone")}</SelectItem>
+              {reachable.map((target) => <SelectItem key={target.id} value={target.id}>{target.name}</SelectItem>)}
+              {copyTarget !== "none" && !reachable.some((target) => target.id === copyTarget) && <SelectItem value={copyTarget}>{copyTarget}</SelectItem>}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("copyTargetHint")}</p>
+        </div>
         {invalid && <p role="alert" className="text-sm text-destructive sm:col-span-2">{t("invalidPolicy")}</p>}
         <div className="sm:col-span-2"><Button onClick={() => void save()} disabled={disabled || busy}>{t("save")}</Button></div>
       </CardContent>
@@ -289,10 +306,10 @@ export default function HubBackupsPage() {
     <Card className="mb-5"><CardHeader><CardTitle className="flex items-center gap-2"><HardDrive className="size-4" />{t("storage")}</CardTitle><CardDescription>{storage.data ? t("storageUsage", { used: formatBytes(storage.data.usedBytes, locale), free: formatBytes(storage.data.freeBytes, locale) }) : "–"}</CardDescription></CardHeader></Card>
     <Card className="mb-5"><CardHeader className="flex flex-row items-center justify-between"><CardTitle>{t("archives")}</CardTitle><Button size="sm" variant="ghost" onClick={refresh} aria-label={t("retry")}><RotateCw /></Button></CardHeader><CardContent>
       {runs.isError ? <QueryError error={runs.error} onRetry={() => void runs.refetch()} /> : runs.isPending ? <Skeleton className="h-48 w-full" /> : !runs.data?.length ? <EmptyState icon={<Archive />} title={t("emptyTitle")} description={t("emptyHint")} /> :
-        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("created")}</TableHead><TableHead>{t("size")}</TableHead><TableHead>{t("trigger")}</TableHead><TableHead>{t("status")}</TableHead><TableHead>{t("actions")}</TableHead></TableRow></TableHeader><TableBody>{runs.data.map((run) => {
+        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("created")}</TableHead><TableHead>{t("size")}</TableHead><TableHead>{t("trigger")}</TableHead><TableHead>{t("status")}</TableHead><TableHead>{t("copy")}</TableHead><TableHead>{t("actions")}</TableHead></TableRow></TableHeader><TableBody>{runs.data.map((run) => {
           const state = run.activityId ? activity.data?.[run.activityId] : "";
           const status = state === "queued" ? "queued" : state === "cancelled" || state === "canceled" ? "cancelled" : run.status;
-          return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
+          return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><CopyState run={run} /></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
         })}</TableBody></Table></div>}
     </CardContent></Card>
     {policies.isError ? <QueryError error={policies.error} onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} onSave={savePolicy} />)}
@@ -300,4 +317,16 @@ export default function HubBackupsPage() {
     <RestoreDialog key={`restore-${restoreRun?.id ?? "none"}`} run={restoreRun} onClose={() => setRestoreRun(null)} onStarted={(activityId) => { setRestoreActivityId(activityId); setRestoreStarted(true); void maintenance.refetch(); }} />
     <DeleteDialog key={`delete-${deleteRun?.id ?? "none"}`} run={deleteRun} onClose={() => setDeleteRun(null)} onDeleted={refresh} />
   </>;
+}
+
+/** Copy of an archive to its policy target; a failed copy leaves the local archive usable. */
+function CopyState({ run }: { run: HubBackupRun }) {
+  const t = useTranslations("hubBackups"), all = useTranslations();
+  const state = run.copyState ?? "none";
+  if (state === "none") return <span className="text-xs text-muted-foreground">{t("copyStates.none")}</span>;
+  const code = run.copyErrorCode && backupCodeKey(run.copyErrorCode);
+  return <span className="flex flex-col gap-0.5">
+    <ToneBadge tone={state === "succeeded" ? "ok" : state === "failed" ? "err" : "gray"}>{t(`copyStates.${state}`)}</ToneBadge>
+    {state === "failed" && code && <span className="text-xs text-muted-foreground">{all(code)}</span>}
+  </span>;
 }

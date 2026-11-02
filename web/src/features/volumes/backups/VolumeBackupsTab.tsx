@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
-import { useBackupOverview } from "@/data/backup-queries";
+import { useBackupDefaultRetention, useBackupOverview } from "@/data/backup-queries";
 import { BackupError, backupErrorMessage } from "@/data/backup-error";
 import { useAdapter } from "@/data/use-adapter";
 import { storageUsable, type VolumeDetail } from "@/domain/volumes";
@@ -32,6 +32,7 @@ export function VolumeBackupsTab({ volume, hostOnline }: { volume: VolumeDetail;
   );
 }
 function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline: boolean }) {
+  const retention = useBackupDefaultRetention();
   const overview = useBackupOverview(volume.hostId),
     t = useTranslations("volumes.backups"),
     all = useTranslations(),
@@ -129,8 +130,9 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
         </p>
       )}
       <BackupPolicyCard
-        key={JSON.stringify(current.backup ?? null)}
+        key={`${JSON.stringify(current.backup ?? null)}|${retention.data}`}
         volume={current}
+        defaultRetentionCount={retention.data}
         targets={overview.data.targets}
         hostOnline={hostOnline}
       />

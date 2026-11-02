@@ -263,7 +263,7 @@ export const deVolumes: typeof enVolumes = {
     failedRestore: "Die letzte Wiederherstellung brach nach Schreibbeginn ab. Daten können unvollständig sein. Ein Backup wiederherstellen, zum Beispiel Sicherheitskopie {safety}. Eine erfolgreiche Wiederherstellung startet diese Container neu: {names}.",
     uploadHint: "gzip-tar (.tar.gz oder .tgz), bis 4 GiB komprimiert und 16 GiB entpackte reguläre Dateien.",
     title: "Backups",
-    description: "Backups benannter Volumes je Host: Zeitpläne, Snapshots und Wiederherstellungen.",
+    description: "Backups von Volumes und Bind-Mounts je Host: Pläne, Snapshots, Wiederherstellungen und Ziele.",
     policy: "Backup-Plan",
     target: "Ziel",
     targetHint: "Ziele werden in den Hub-Einstellungen verwaltet: lokale Verzeichnisse, vorhandene Host-Mounts, SMB und NFS.",

@@ -34,6 +34,10 @@ export function useBackupTargets(enabled = true) {
   const adapter = useAdapter();
   return useQuery({ queryKey: ["backup-targets"], queryFn: () => adapter.listBackupTargets(), enabled });
 }
+export function useBackupDefaultRetention() {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: ["backup-default-retention"], queryFn: () => adapter.getBackupDefaultRetention?.() ?? 7 });
+}
 export function useBackupRepository(host: string) {
   const adapter = useAdapter();
   return useQuery({

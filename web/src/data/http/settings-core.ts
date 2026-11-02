@@ -7,6 +7,7 @@
 import { settingsProblem, SettingsProblemError } from "../settings-error";
 import { discardResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
+import type { DockletAdapter } from "@/data/adapter";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
 import type { HubSettings, SettingsSection } from "@/domain/settings";
 import { unavailable } from "../capability";
@@ -26,7 +27,7 @@ function boolean(values: CoreSettings, key: string): boolean {
   return value === "true";
 }
 
-export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> {
+export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> & Pick<DockletAdapter, "getBackupDefaultRetention" | "setBackupDefaultRetention"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
@@ -71,6 +72,16 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       });
     },
     getStackStopMode: () => readStackStopMode(baseUrl, client),
+    async getBackupDefaultRetention() {
+      // Older hubs without the setting use the established default.
+      const raw = (await read()).backupDefaultRetentionCount ?? "7";
+      const count = Number(raw);
+      if (!/^\d+$/.test(raw) || count > 3650) throw new Error("settings.invalid.backupDefaultRetentionCount");
+      return count;
+    },
+    async setBackupDefaultRetention(count) {
+      await write({ backupDefaultRetentionCount: String(count) });
+    },
     getConnectedSettings: (async (section?: "hostDefaults" | "installation") => {
       const values = await read();
       const connection = field(values, "defaultHostConnection");

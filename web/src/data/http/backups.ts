@@ -181,7 +181,7 @@ export function createBackups(options: Options) {
     options.changed();
     return id;
   }
-  const api: Pick<DockletAdapter, Operation> = {
+  const api: Pick<DockletAdapter, Operation | "testBackupTargetDraft"> = {
     async getBackupOverview(host) {
       await require("getBackupOverview", { kind: "host", id: host });
       return overview(host);
@@ -396,6 +396,11 @@ export function createBackups(options: Options) {
         id === "local" ? `${path(host)}/backups/targets/local/test` : `/backup-targets/${encodeURIComponent(id)}/test`,
         { hostId: host },
       );
+    },
+    async testBackupTargetDraft(input) {
+      // Same right as saving a target; the probe writes nothing on the hub.
+      await require("createBackupTarget", { kind: "hub", id: "0" });
+      return request("", "/backup-targets/test", "POST", input);
     },
     async getBackupTargetReferences(id, host) {
       await require("getBackupTargetReferences", { kind: "host", id: host });

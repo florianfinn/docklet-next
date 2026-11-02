@@ -11,7 +11,7 @@ import type { BackupPolicy, BackupRun, RestoreRun, Volume } from "@/domain/volum
 import { nextBackupRun, volumeId } from "@/domain/volumes";
 import type { BackupTarget } from "@/domain/settings";
 import { validateSchedule } from "@/domain/schedule";
-import type { DemoContext } from "./demo-context";
+import { DemoError, wait, type DemoContext } from "./demo-context";
 import { volumeName } from "@/domain/validation";
 
 type Operations =
@@ -34,7 +34,10 @@ type Operations =
   | "testBackupTarget"
   | "getBackupTargetReferences"
   | "getBackupRecoveryKey"
-  | "attachLocalBackupRecoveryKey";
+  | "attachLocalBackupRecoveryKey"
+  | "testBackupTargetDraft"
+  | "getBackupDefaultRetention"
+  | "setBackupDefaultRetention";
 export function createDemoBackups(
   ctx: DemoContext,
   all: () => Volume[],
@@ -330,6 +333,23 @@ export function createDemoBackups(
     },
     async listBackupTargets() {
       return structuredClone(db.settings.backups.targets);
+    },
+    async testBackupTargetDraft({ target, probeHostId }) {
+      await wait(700);
+      if ((target.kind === "local" || target.kind === "mount") && target.hostId !== probeHostId) return { ok: false, code: "backup.target.probe-host-mismatch" };
+      if (!isHostAvailable(db.host(probeHostId))) return { ok: false, code: "backup.target.unreachable" };
+      // Simulation: an SMB password "wrong" or a path containing "missing" fails like a real probe.
+      if (target.secret === "wrong") return { ok: false, code: "backup.target.permission-denied" };
+      if (target.path.includes("missing")) return { ok: false, code: "backup.target.path-missing" };
+      return { ok: true };
+    },
+    async getBackupDefaultRetention() {
+      return db.settings.backups.defaultRetentionCount;
+    },
+    async setBackupDefaultRetention(count) {
+      await wait(300);
+      if (!Number.isInteger(count) || count < 0 || count > 3650) throw new DemoError("invalid-plan");
+      db.settings.backups.defaultRetentionCount = count;
     },
     async createBackupTarget(input) {
       const row: BackupTarget = {

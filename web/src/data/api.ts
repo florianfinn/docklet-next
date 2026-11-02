@@ -224,10 +224,15 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   getBackupRepository(hostId: string): Promise<BackupRepository>;
   checkBackupRepository(hostId: string): Promise<string>;
   listBackupTargets(): Promise<BackupTarget[]>;
+  /** Initial retention count of new plans (hub setting, 0–3650, 0 keeps all); existing plans keep their own. */
+  getBackupDefaultRetention?(): Promise<number>;
+  setBackupDefaultRetention?(count: number): Promise<void>;
   createBackupTarget(input: BackupTargetInput): Promise<BackupTarget>;
   updateBackupTarget(id: string, input: BackupTargetInput): Promise<BackupTarget>;
   deleteBackupTarget(id: string): Promise<void>;
   testBackupTarget(id: string, hostId: string): Promise<string>;
+  /** Tests an unsaved definition on one host without storing anything; `targetId` reuses a stored secret. */
+  testBackupTargetDraft?(input: { target: BackupTargetInput; probeHostId: string; targetId?: string }): Promise<{ ok: boolean; code?: string }>;
   getBackupTargetReferences(id: string, hostId: string): Promise<BackupTargetReferences>;
   getBackupRecoveryKey(id: string, hostId?: string): Promise<string>;
   attachLocalBackupRecoveryKey(hostId: string, recoveryKey: string): Promise<void>;

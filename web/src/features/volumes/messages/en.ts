@@ -262,7 +262,7 @@ export const enVolumes = {
     failedRestore: "The last restore stopped after writing began. Data may be incomplete. Restore a backup, for example safety snapshot {safety}. A successful restore restarts these containers: {names}.",
     uploadHint: "gzip tar (.tar.gz or .tgz), up to 4 GiB compressed and 16 GiB expanded regular files.",
     title: "Backups",
-    description: "Named volume backups by host: schedules, snapshots and restore operations.",
+    description: "Volume and bind mount backups by host: plans, snapshots, restores and targets.",
     policy: "Backup plan",
     target: "Target",
     targetHint: "Targets are managed in the hub settings: local directories, existing host mounts, SMB and NFS.",

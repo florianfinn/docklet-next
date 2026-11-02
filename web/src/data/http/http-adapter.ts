@@ -305,6 +305,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       row.enabled,
       row.apiUrl,
       row.isEdge,
+      // Credential rotation and Edge re-pairing keep every other field; the revision still discards held reads.
+      row.registrationRevision,
       row.agentReport?.version.currentVersion,
       row.agentReport?.version.agentContractVersion,
       row.agentReport?.version.agentContractFingerprint,
