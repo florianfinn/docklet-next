@@ -90,8 +90,9 @@ export function createHttpHubBackups(baseUrl: string, client: CsrfClient, upload
       if (!isRecord(body) || !Array.isArray(body.policies)) throw error({ code: "backup.invalid_response" }, 200);
       return body.policies as HubBackupPolicy[];
     },
+    // Every save carries the copy target; an omitted target clears it (backend contract).
     async saveHubBackupPolicies(policies) {
-      const body = await request("/backups/policies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policies: policies.map(({ id, enabled, retentionCount, schedule }) => ({ ...(id ? { id } : {}), enabled, retentionCount, schedule })) }) });
+      const body = await request("/backups/policies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policies: policies.map(({ id, enabled, retentionCount, schedule, targetId }) => ({ ...(id ? { id } : {}), enabled, retentionCount, schedule, ...(targetId ? { targetId } : {}) })) }) });
       if (!isRecord(body) || !Array.isArray(body.policies)) throw error({ code: "backup.invalid_response" }, 200);
       return body.policies as HubBackupPolicy[];
     },

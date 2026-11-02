@@ -26,24 +26,24 @@ export function KindBadge({ volume, className }: { volume: Pick<Volume, "kind" |
   );
 }
 
-export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup" | "backupUnavailable" | "kind" | "bind" | "hostId"> }) {
+export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup" | "running" | "lastRestore" | "pendingRestores" | "backupUnavailable" | "kind" | "bind" | "hostId"> }) {
   const t = useTranslations("volumes.backupState");
   const backup = useCapability("getBackupOverview", { kind: "host", id: volume.hostId });
   // Recorded outcomes always show; only a bind without stored backups and without access reads as unavailable.
   if (backupAccess(volume) === "none") return <span className="text-xs text-muted-foreground">{t("bindUnavailable")}</span>;
   if (volume.backupUnavailable || !backup.available) return <span className="text-xs text-muted-foreground" title={backup.reason}>{t("unavailable")}</span>;
-  if (volume.lastBackup?.status === "partial") return <ToneBadge tone="warn">{t("partial")}</ToneBadge>;
-  if (volume.lastBackup?.status === "unavailable") return <ToneBadge tone="gray">{t("unavailable")}</ToneBadge>;
-  if (!volume.backup && !volume.lastBackup) return <span className="text-xs text-muted-foreground">{t("none")}</span>;
-  if (volume.backup && !volume.backup.enabled) return <ToneBadge tone="gray">{t("disabled")}</ToneBadge>;
-  const last = volume.lastBackup;
-  if (last?.status === "running")
+  if (volume.running?.kind === "backup")
     return (
       <ToneBadge tone="accent">
         <Loader2 className="animate-spin" aria-hidden />
         {t("running")}
       </ToneBadge>
     );
+  if (volume.lastBackup?.status === "partial") return <ToneBadge tone="warn">{t("partial")}</ToneBadge>;
+  if (volume.lastBackup?.status === "unavailable") return <ToneBadge tone="gray">{t("unavailable")}</ToneBadge>;
+  if (!volume.backup && !volume.lastBackup) return <span className="text-xs text-muted-foreground">{t("none")}</span>;
+  if (volume.backup && !volume.backup.enabled) return <ToneBadge tone="gray">{t("disabled")}</ToneBadge>;
+  const last = volume.lastBackup;
   if (last?.status === "failed")
     return (
       <ToneBadge tone="err">

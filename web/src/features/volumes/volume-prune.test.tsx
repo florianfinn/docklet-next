@@ -6,11 +6,13 @@ import { errorCode } from "@/data/api";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import { planVolumePrune } from "@/domain/volume-prune";
-import type { Volume } from "@/domain/volumes";
+import { volumeId, type Volume } from "@/domain/volumes";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderRoutes } from "@/test/render";
 
 import VolumesPage from "./VolumesPage";
+
+const MEDIA_BIND = volumeId("atlas", "bind", "/mnt/user/media");
 
 beforeEach(() => {
   simulationStore.set((s) => ({ ...s, latency: "instant", live: false, actionSpeed: 3 }));
@@ -51,13 +53,13 @@ describe("demo prune contract", () => {
     expect(plan.kept.some((k) => k.reason === "bind") && plan.kept.some((k) => k.reason === "in-use")).toBe(true);
     expect(plan.candidates.every((v) => v.sizeBytes > 0)).toBe(true);
 
-    const result = await adapter.pruneVolumes({ hostIds: ["atlas"], volumeIds: [OLD_PLEX, "vol-boreal-nextcloud_previews_old", "vol-cedar-wiki_uploads_old", "vol-atlas-media_media_config", "bind-atlas-mnt-user-media"] });
+    const result = await adapter.pruneVolumes({ hostIds: ["atlas"], volumeIds: [OLD_PLEX, "vol-boreal-nextcloud_previews_old", "vol-cedar-wiki_uploads_old", "vol-atlas-media_media_config", MEDIA_BIND] });
     expect(result.removed.map((r) => r.id)).toEqual([OLD_PLEX]);
     expect(result.skipped).toEqual([
       { id: "vol-boreal-nextcloud_previews_old", reason: "not-found" },
       { id: "vol-cedar-wiki_uploads_old", reason: "not-found" },
       { id: "vol-atlas-media_media_config", reason: "in-use" },
-      { id: "bind-atlas-mnt-user-media", reason: "bind" },
+      { id: MEDIA_BIND, reason: "bind" },
     ]);
     const after = await adapter.listVolumes();
     expect([after.some((v) => v.id === OLD_PLEX), after.some((v) => v.id === "vol-cedar-wiki_uploads_old")]).toEqual([false, true]);

@@ -243,6 +243,7 @@ export const deVolumes: typeof enVolumes = {
     retentionHint: "Die neuesten 1–3650 geplanten Snapshots behalten. 0 behält alle. Manuelle Snapshots bleiben bis zum Löschen; die neuesten zwei Sicherheitskopien bleiben erhalten.",
     operation: "Vorgang",
     following: "Aktivität wird geladen…",
+    policyLoading: "Standardwerte für den Backup-Plan werden geladen…",
     openActivity: "Aktivität öffnen",
     uploadRestore: "Archiv zur Wiederherstellung hochladen",
     newVolumeName: "Name des neuen Volumes",

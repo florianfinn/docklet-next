@@ -45,21 +45,27 @@ export function createDemoBackups(
 ): Pick<VolumesApi, Operations> {
   const { db, runner } = ctx;
   const restores = new Map<string, RestoreRun>(),
-    keys = new Map<string, string>();
+    keys = new Map<string, string>(),
+    // Simulated stored credentials; like the agent, an edit probe without a new secret reuses them.
+    secrets = new Map<string, string>();
   const now = () => new Date().toISOString();
   const fail = (code: ConstructorParameters<typeof BackupError>[0]["code"]): never => {
     throw new BackupError({ code });
   };
-  /** Source-touching operations: binds need the eligible verdict, directory-only kinds a directory (as the agent). */
+  /** Stored history is read by key whatever the current verdict (K3/K4). */
+  const stored = (v: Volume) => db.backupPolicies.has(v.id) || db.backupRuns.some((run) => run.volumeId === v.id);
+  /**
+   * Source-touching operations, as the agent admits them: binds need an eligible verdict, or stored state once
+   * unmounted (K3); directory-only operations refuse file binds.
+   */
   function named(id: string, directory = false) {
     const v = find(id);
     if (v.kind === "volume") return v;
-    if (!v.bind?.eligible) return fail(v.bind?.reason === "volume.bind.unsupported-type" ? "volume.bind.unsupported-type" : "volume.bind.path-denied");
-    if (directory && v.bind.kind === "file") return fail("volume.bind.file-operation-unsupported");
+    if (!v.bind && !stored(v)) return fail("volume.bind.not-mounted");
+    if (v.bind && !v.bind.eligible) return fail(v.bind.reason === "volume.bind.unsupported-type" ? "volume.bind.unsupported-type" : "volume.bind.path-denied");
+    if (directory && v.fileBind) return fail("volume.bind.file-operation-unsupported");
     return v;
   }
-  /** Stored history is read by key whatever the current verdict (K3/K4). */
-  const stored = (v: Volume) => db.backupPolicies.has(v.id) || db.backupRuns.some((run) => run.volumeId === v.id);
   function target(id: string) {
     const t = db.settings.backups.targets.find((t) => t.id === id);
     if (!t) return fail("backup.target.unknown");
@@ -321,9 +327,7 @@ export function createDemoBackups(
             running:
               restores.get(v.id)?.status === "running"
                 ? { kind: "restore", activityId: restores.get(v.id)!.activityId }
-                : v.lastBackup?.status === "running"
-                  ? { kind: "backup", activityId: v.lastBackup.actionId! }
-                  : undefined,
+                : v.running,
           })),
       };
     },
@@ -341,12 +345,13 @@ export function createDemoBackups(
     async listBackupTargets() {
       return structuredClone(db.settings.backups.targets);
     },
-    async testBackupTargetDraft({ target, probeHostId }) {
+    async testBackupTargetDraft({ target, probeHostId, targetId }) {
       await wait(700);
+      const secret = target.secret || (targetId ? secrets.get(targetId) : undefined);
       if ((target.kind === "local" || target.kind === "mount") && target.hostId !== probeHostId) return { ok: false, code: "backup.target.probe-host-mismatch" };
       if (!isHostAvailable(db.host(probeHostId))) return { ok: false, code: "backup.target.unreachable" };
       // Simulation: an SMB password "wrong" or a path containing "missing" fails like a real probe.
-      if (target.secret === "wrong") return { ok: false, code: "backup.target.permission-denied" };
+      if (secret === "wrong") return { ok: false, code: "backup.target.permission-denied" };
       if (target.path.includes("missing")) return { ok: false, code: "backup.target.path-missing" };
       return { ok: true };
     },
@@ -372,6 +377,7 @@ export function createDemoBackups(
       delete (row as Record<string, unknown>).recoveryKey;
       db.settings.backups.targets.push(row);
       keys.set(row.id, input.recoveryKey ?? "AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA-AAAAAA");
+      if (input.secret) secrets.set(row.id, input.secret);
       db.changed("settings");
       return structuredClone(row);
     },
@@ -390,6 +396,7 @@ export function createDemoBackups(
         hasSecret: row.hasSecret || !!input.secret,
         configVersion: row.configVersion + 1,
       });
+      if (input.secret) secrets.set(id, input.secret);
       db.changed("settings");
       return structuredClone(row);
     },

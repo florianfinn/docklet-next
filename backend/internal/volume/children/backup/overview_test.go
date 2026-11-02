@@ -67,7 +67,8 @@ func TestOverviewRediscoveryMissingVolumesAndHostMetadata(t *testing.T) {
 	require.Empty(t, removed.PendingRestores)
 	require.False(t, removed.VolumeExists)
 	require.Equal(t, 2, removed.Count)
-	require.Equal(t, "running", removed.LastBackup.ID)
+	// The newest finished backup stays the outcome while a newer capture runs.
+	require.Equal(t, "captured", removed.LastBackup.ID)
 	require.Equal(t, &volume.BackupRunning{Kind: "backup", ActivityID: "capturing"}, removed.Running)
 	require.True(t, removed.LastSuccessAt.Equal(now.Add(-time.Hour)))
 	require.Empty(t, started)

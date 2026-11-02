@@ -91,7 +91,8 @@ export function mapBackupOverview(dto: Schema["VolumeBackupOverview"], host: str
       sizeUnavailable: true,
       consumers: [],
       labels: {},
-      volumeExists: v.volumeExists,
+      // The agent reports Docker volume existence; a bind source is observed by the bind list instead.
+      volumeExists: bindPath(v.name) === undefined ? v.volumeExists : undefined,
       backup: v.policy ? mapBackupPolicy(v.policy) : undefined,
       lastBackup: v.lastBackup ? mapBackup(v.lastBackup, host) : undefined,
       running: v.running,

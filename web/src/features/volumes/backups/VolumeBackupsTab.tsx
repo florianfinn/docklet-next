@@ -138,13 +138,20 @@ function ConnectedTab({ volume, hostOnline, historyOnly }: { volume: VolumeDetai
           {error}
         </p>
       )}
-      <BackupPolicyCard
-        key={`${JSON.stringify(current.backup ?? null)}|${retention.data}`}
-        volume={current}
-        defaultRetentionCount={retention.data}
-        targets={overview.data.targets}
-        hostOnline={hostOnline}
-      />
+      {/* A new plan starts from the configured default retention, so it waits for that setting. */}
+      {current.backup || retention.data !== undefined ? (
+        <BackupPolicyCard
+          key={`${JSON.stringify(current.backup ?? null)}|${retention.data}`}
+          volume={current}
+          defaultRetentionCount={retention.data}
+          targets={overview.data.targets}
+          hostOnline={hostOnline}
+        />
+      ) : retention.isError ? (
+        <QueryError error={retention.error} onRetry={() => void retention.refetch()} />
+      ) : (
+        <p role="status">{t("policyLoading")}</p>
+      )}
       <BackupHistory volume={current} targets={overview.data.targets} hostOnline={hostOnline} accepted={setActivity} />
       {safety && (
         <RestoreDialog volume={current} runId={safety} onClose={() => setSafety(undefined)} accepted={setActivity} />

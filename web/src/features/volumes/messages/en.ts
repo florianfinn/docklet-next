@@ -242,6 +242,7 @@ export const enVolumes = {
     retentionHint: "Keep the newest 1–3650 scheduled snapshots. 0 keeps all. Manual snapshots stay until deleted; the newest two safety snapshots are kept.",
     operation: "Operation",
     following: "Loading activity…",
+    policyLoading: "Loading backup plan defaults…",
     openActivity: "Open activity",
     uploadRestore: "Upload archive to restore",
     newVolumeName: "New volume name",

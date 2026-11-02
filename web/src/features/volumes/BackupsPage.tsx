@@ -11,7 +11,7 @@ import { useLocale, useTranslations } from "use-intl";
 import { useBackupOverviews, useBackupTargets } from "@/data/backup-queries";
 import { useVolumes } from "@/data/queries";
 import { isHostAvailable } from "@/domain/hosts";
-import { volumeLabel } from "@/domain/volumes";
+import { backupAccess, storedBackupState, volumeLabel } from "@/domain/volumes";
 import { StatStrip } from "@/shared/component-set/stat-strip";
 import { ToneBadge } from "@/shared/components/tone";
 import { CapabilityGate } from "@/shared/components/capability-gate";
@@ -38,7 +38,9 @@ function BackupOverview() {
   const [sort, setSort] = useState<BackupSort>(DEFAULT_BACKUP_SORT);
   const visible = overviews.data?.filter((row) => hosts.visible.some((host) => host.id === row.hostId)) ?? [];
   const figures = backupFigures(visible, inventory.data ?? []);
-  const volumes = visible.flatMap((row) => row.volumes).filter((v) => v.backup || v.lastBackup || v.volumeExists === false);
+  const volumes = visible.flatMap((row) => row.volumes).filter((v) => storedBackupState(v) || v.volumeExists === false);
+  // Bind rows take the live verdict from the inventory; a refused path keeps only its history.
+  const verdict = new Map((inventory.data ?? []).map((v) => [v.id, v.bind]));
   const rows = sortBackups(volumes, hosts.byId, visible.flatMap((row) => row.targets), sort);
   const key = (k: BackupSortKey) => ({ key: k, label: t(`columns.${k === "name" ? "volume" : k}`) });
   return <>
@@ -99,7 +101,7 @@ function BackupOverview() {
                       view={view}
                       columns={columns}
                       pad="py-3"
-                      actions={plan && <Button size="sm" variant="outline" disabled={!online || !!volume.running || volume.volumeExists === false} onClick={() => void cmd.backup(volume.id)}>
+                      actions={plan && <Button size="sm" variant="outline" disabled={!online || !!volume.running || volume.volumeExists === false || backupAccess({ ...volume, bind: verdict.get(volume.id) }) !== "full"} onClick={() => void cmd.backup(volume.id)}>
                         <Play data-icon="inline-start" />
                         {t("runNow")}
                       </Button>}

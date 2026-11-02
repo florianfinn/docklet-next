@@ -15,7 +15,7 @@ const SCHEDULE_RANK = { custom: 0, daily: 1, weekly: 2, manual: 3 } as const;
 /** Failed runs first, then running, never run and successful ones. */
 function lastRank(v: Volume): number {
   const s = v.lastBackup?.status;
-  return s === "failed" ? 0 : s === "running" ? 1 : !s ? 2 : 3;
+  return s === "failed" ? 0 : v.running?.kind === "backup" ? 1 : !s ? 2 : 3;
 }
 
 /**

@@ -156,7 +156,8 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		case "backup":
 			item := get(r.VolumeName)
 			item.Count++
-			if item.LastBackup == nil {
+			// The last backup is the newest finished one; a capture in progress is reported by Running.
+			if item.LastBackup == nil && r.Status != "running" {
 				item.LastBackup = new(entryInternal(r.backupInternal()))
 			}
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {

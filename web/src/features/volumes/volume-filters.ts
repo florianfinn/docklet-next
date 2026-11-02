@@ -17,7 +17,7 @@ function backupRank(v: Volume): number {
   if (!v.backup) return 3;
   if (!v.backup.enabled) return 2;
   if (v.lastBackup?.status === "failed") return 0;
-  if (v.lastBackup?.status === "running") return 1;
+  if (v.running?.kind === "backup") return 1;
   return 4;
 }
 

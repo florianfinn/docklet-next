@@ -98,20 +98,25 @@ export function directoryStorage(v: Pick<Volume, "kind" | "bind">): boolean {
   return v.kind === "volume" || v.bind?.kind === "directory";
 }
 
+/** Whether the agent holds a policy, backup, restore or running operation for the key (K3 retained keys). */
+export function storedBackupState(v: Pick<Volume, "backup" | "lastBackup" | "running" | "lastRestore" | "pendingRestores">): boolean {
+  return !!(v.backup || v.lastBackup || v.running || v.lastRestore || v.pendingRestores?.length);
+}
+
 /**
- * Backup access: volumes and eligible binds get every operation. Other binds with a stored plan or backup keep
- * them (K3/K4): unchecked or unmounted keys fully, as the agent decides admission; refused paths read-only.
+ * Backup access: volumes and eligible binds get every operation. Other binds with stored state keep them
+ * (K3/K4): unchecked or unmounted keys fully, as the agent decides admission; refused paths read-only.
  */
-export function backupAccess(v: Pick<Volume, "kind" | "bind" | "backup" | "lastBackup">): "full" | "history" | "none" {
+export function backupAccess(v: Pick<Volume, "kind" | "bind" | "backup" | "lastBackup" | "running" | "lastRestore" | "pendingRestores">): "full" | "history" | "none" {
   if (v.kind === "volume" || v.bind?.eligible) return "full";
-  if (!v.backup && !v.lastBackup) return "none";
+  if (!storedBackupState(v)) return "none";
   return v.bind ? "history" : "full";
 }
 
 export interface Volume {
   inventory?: InventoryObservation;
   sizeUnavailable?: boolean;
-  /** Stable id used in routes: vol-<host>-<docker name> or bind-<host>-<path slug>. */
+  /** Stable id used in routes: vol-<host>-<docker name> or bind-<host>-<hex of the source path> (collision-free). */
   id: string;
   /** Docker volume name or the absolute host path of a bind mount. */
   name: string;
@@ -177,12 +182,8 @@ export function dockerVolumeName(name: string, stackId?: string): string {
   return stackId ? `${stackId}_${name}` : name;
 }
 
-function pathSlug(path: string): string {
-  return path.replace(/^\/+/, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+$/, "").toLowerCase() || "root";
-}
-
 export function volumeId(hostId: string, kind: StorageKind, key: string): string {
-  return kind === "volume" ? `vol-${hostId}-${key}` : `bind-${hostId}-${pathSlug(key)}`;
+  return kind === "volume" ? `vol-${hostId}-${key}` : `bind-${hostId}-${bindKey(key).slice("bind:".length)}`;
 }
 
 export function isFileBind(path: string): boolean {

@@ -32,7 +32,7 @@ export const enHubBackups = {
   statusValues: { running: "Running", queued: "Queued", succeeded: "Complete", failed: "Failed", cancelled: "Cancelled" },
   copyTarget: "Copy archives to",
   copyNone: "Keep on the hub only",
-  copyTargetHint: "SMB and NFS targets and targets on the hub's own host. The local archive always stays on the hub.",
+  copyTargetHint: "SMB and NFS targets and targets on the hub''s own host. The local archive always stays on the hub.",
   copy: "Copy",
   copyStates: { none: "–", pending: "Copying …", succeeded: "Copied", failed: "Copy failed" },
   storage: "Local storage",

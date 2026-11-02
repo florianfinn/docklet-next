@@ -46,10 +46,11 @@ type BackupRunning struct {
 }
 
 type BackupVolumeOverview struct {
-	DisplayName   string         `json:"displayName,omitempty"`
-	Name          string         `json:"name"`
-	VolumeExists  bool           `json:"volumeExists"`
-	Policy        *BackupPolicy  `json:"policy,omitempty"`
+	DisplayName  string        `json:"displayName,omitempty"`
+	Name         string        `json:"name"`
+	VolumeExists bool          `json:"volumeExists"`
+	Policy       *BackupPolicy `json:"policy,omitempty"`
+	// LastBackup is the newest finished backup; a capture in progress appears in Running.
 	LastBackup    *BackupEntry   `json:"lastBackup,omitempty"`
 	LastSuccessAt *time.Time     `json:"lastSuccessAt,omitempty"`
 	Count         int            `json:"count"`

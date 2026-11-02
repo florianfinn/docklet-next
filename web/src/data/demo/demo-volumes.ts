@@ -52,12 +52,22 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       consumers: u.consumers,
       labels: u.stackId && u.composeName ? { "com.docker.compose.project": u.stackId, "com.docker.compose.volume": u.composeName } : {},
       backup: db.backupPolicies.get(u.id),
-      lastBackup: latest(runs),
+      ...outcome(runs),
     };
+  }
+
+  // Like the agent, a bind key with a stored plan or backup stays reachable after its last consumer is gone (K3).
+  const seenBinds = new Map<string, Volume>();
+  function retained(): Volume[] {
+    const mounted = new Set(usageOf().map((u) => u.id));
+    return [...seenBinds.values()]
+      .filter((v) => !mounted.has(v.id) && (db.backupPolicies.has(v.id) || db.backupRuns.some((r) => r.volumeId === v.id)))
+      .map((v) => ({ ...v, consumers: [], bind: undefined, backup: db.backupPolicies.get(v.id), ...outcome(db.backupRuns.filter((r) => r.volumeId === v.id)) }));
   }
 
   function all(): Volume[] {
     const derived = usageOf().map(toVolume);
+    for (const v of derived) if (v.kind === "bind") seenBinds.set(v.id, v);
     const mounted = new Map(derived.map((v) => [v.id, v]));
     const created = [...db.createdVolumes].map(([id, v]): Volume => {
       db.files.ensure(id, () => []);
@@ -77,7 +87,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
         consumers: used?.consumers ?? [],
         labels: { ...used?.labels, ...v.labels },
         backup: db.backupPolicies.get(id),
-        lastBackup: latest(db.backupRuns.filter((r) => r.volumeId === id)),
+        ...outcome(db.backupRuns.filter((r) => r.volumeId === id)),
         demoCreated: v.seeded ? undefined : true,
       };
     });
@@ -85,7 +95,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
   }
 
   function find(id: string): Volume {
-    const v = all().find((x) => x.id === id);
+    const v = all().find((x) => x.id === id) ?? retained().find((x) => x.id === id);
     if (!v) throw new DemoError("not-found");
     return v;
   }
@@ -232,8 +242,14 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       return new Blob([file.content], { type: "text/plain" });
     },
 
-    ...createDemoBackups(ctx, all, find),
+    ...createDemoBackups(ctx, () => [...all(), ...retained()], find),
   };
+}
+
+/** Like the agent: the newest finished backup, and a capture in progress as the running operation. */
+function outcome(runs: BackupRun[]): Pick<Volume, "lastBackup" | "running"> {
+  const active = runs.find((r) => r.status === "running" && r.actionId);
+  return { lastBackup: latest(runs.filter((r) => r.status !== "running")), running: active && { kind: "backup", activityId: active.actionId! } };
 }
 
 function latest(runs: BackupRun[]): BackupRun | undefined {
