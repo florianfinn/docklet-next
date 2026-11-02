@@ -66,6 +66,8 @@ export function createDemoBackups(
     if (directory && v.fileBind) return fail("volume.bind.file-operation-unsupported");
     return v;
   }
+  /** Stored target location as `backuptarget.Validate` cleans it: absolute for local/mount, a relative subpath otherwise. */
+  const targetPath = (kind: BackupTarget["kind"], path: string) => (kind === "local" || kind === "mount" ? cleanPath(path) : cleanPath(`/${path}`).slice(1));
   function target(id: string) {
     const t = db.settings.backups.targets.find((t) => t.id === id);
     if (!t) return fail("backup.target.unknown");
@@ -364,7 +366,7 @@ export function createDemoBackups(
     async createBackupTarget(input) {
       const row: BackupTarget = {
         ...input,
-        ...(input.path !== undefined && { path: cleanPath(input.path) }),
+        ...(input.path !== undefined && { path: targetPath(input.kind, input.path) }),
         id: db.nextId("target"),
         createdAt: now(),
         configVersion: 1,
@@ -382,7 +384,7 @@ export function createDemoBackups(
     },
     async updateBackupTarget(id, input) {
       const row = target(id),
-        next = { ...input, ...(input.path !== undefined && { path: cleanPath(input.path) }) };
+        next = { ...input, ...(input.path !== undefined && { path: targetPath(input.kind, input.path) }) };
       if (
         ["kind", "path", "hostId", "server", "share"].some(
           (key) => row[key as keyof BackupTarget] !== next[key as keyof typeof next],

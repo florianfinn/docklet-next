@@ -204,3 +204,18 @@ for (const spelling of ["parent/", "./"])
       await expect(api.runBackup(volume.id)).rejects.toMatchObject({ problem: { code: "volume.bind.path-denied" } });
       vi.useRealTimers();
     });
+
+for (const kind of ["smb", "nfs"] as const) {
+  it(`keeps the relative location of a seeded ${kind} target editable`, async () => {
+    const { api } = demo();
+    const t = (await api.listBackupTargets()).find((row) => row.kind === kind)!;
+    const input = { name: "Renamed", kind: t.kind, path: t.path, hostId: t.hostId, server: t.server, share: t.share, username: t.username, options: t.options };
+    await expect(api.updateBackupTarget(t.id, input)).resolves.toMatchObject({ name: "Renamed", path: t.path });
+  });
+  it(`stores a new ${kind} target with a relative subpath, cleaned like the agent`, async () => {
+    const { api } = demo();
+    const share = kind === "smb" ? "backups" : "/export";
+    const created = await Promise.all(["", "docklet", "./docklet/"].map((path) => api.createBackupTarget({ name: "Remote", kind, server: "archive.example.com", share, path })));
+    expect(created.map((t) => t.path)).toEqual(["", "docklet", "docklet"]);
+  });
+}
