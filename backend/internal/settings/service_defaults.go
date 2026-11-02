@@ -252,7 +252,8 @@ func allowedSettingKeys() map[string]struct{} {
 // Rows other packages keep in the settings table outside Settings; startup pruning must not delete them.
 // backuptarget.Store writes the hub authority and set version, the agent's received set (agents compare owners
 // against hubHostId) and one delivery receipt per host; volume backup writes the last repository check.
-// TestPruneKeepsEveryInternalSettingWriter guards the list against new writers.
+// TestPruneKeepsEveryInternalSettingWriter requires every backend file that touches the settings table to be
+// classified and checks the literal keys of its writes against these lists.
 var (
 	internalSettingKeys = []string{
 		"backup_target_authority", "backup_target_set_version",

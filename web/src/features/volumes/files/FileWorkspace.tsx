@@ -98,13 +98,22 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
       return out;
     });
 
-  // A completed rename or move keeps tabs, drafts, expanded folders and the URL file on the entry's new path,
-  // also when the user switched folders or tabs while it ran.
+  // Completed renames, moves and deletes reconcile tabs, drafts, expanded folders and the URL file even when the
+  // user switched folders or tabs while they ran. The router setter of an older render would restore that render's
+  // folder, so URL changes go through the setter of the latest render.
+  const latestSetUrl = useRef(setUrl);
+  useLayoutEffect(() => { latestSetUrl.current = setUrl; });
   const relocated = (from: string, to: string) => {
     open.renamed(from, to);
     setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
     const file = currentFile.current;
-    if (file && isUnder(file, from)) setUrl({ file: movedPath(file, from, to) });
+    if (file && isUnder(file, from)) latestSetUrl.current({ file: movedPath(file, from, to) });
+  };
+  const discarded = (removed: string) => {
+    open.removed(removed);
+    setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, removed))));
+    const file = currentFile.current;
+    if (file && isUnder(file, removed)) latestSetUrl.current({ file: null });
   };
 
   const goFolder = (dir: string) => setUrl({ path: dir, file: null });
@@ -365,11 +374,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         onConfirm={async () => {
           if (pending?.kind !== "delete") return;
           const entry = pending.entry;
-          const owner = currentView.current;
-          if (await cmd.removeEntry(volume.id, entry.path) && owner === currentView.current) {
-            open.removed(entry.path);
-            setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, entry.path))));
-            if (fileParam && isUnder(fileParam, entry.path)) setUrl({ file: null });
+          if (await cmd.removeEntry(volume.id, entry.path)) {
+            discarded(entry.path);
             toast.success(t("deleted", { name: entry.name }));
           }
         }}

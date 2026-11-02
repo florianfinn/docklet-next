@@ -82,7 +82,25 @@ func TestSettingsService_PruneUnknownSettings_KeepsHubTargetState(t *testing.T) 
 	require.EqualValues(t, 1, receipts)
 }
 
-// Every settings row written outside the Settings struct uses one of these forms; each written key must survive pruning.
+// Every backend file outside this package that touches the settings table, with its reviewed role. A new file fails
+// until it is classified here; writers must keep their keys in internalSettingKeys or internalSettingPrefixes.
+var reviewedSettingFilesInternal = map[string]string{
+	"internal/activity/runtime_restore.go":                "reads instanceId",
+	"internal/backuptarget/delivery_state.go":             "writes backupTargetDelivery:<host>",
+	"internal/backuptarget/service.go":                    "writes backup_target_set_version",
+	"internal/backuptarget/store.go":                      "writes hub authority/version and agent sync rows",
+	"internal/environment/agent_pairing_read.go":          "reads agentToken",
+	"internal/schema/models.go":                           "registers the SettingVariable model",
+	"internal/session/sign_in.go":                         "writes authLastMode (Settings field)",
+	"internal/volume/bindpath/rules.go":                   "reads hubHostId",
+	"internal/volume/children/backup/metadata_routes.go":  "reads volumeBackupRepositoryCheck",
+	"internal/volume/children/backup/repository.go":       "reads hubHostId",
+	"internal/volume/children/backup/repository_check.go": "reads hubHostId, backupTargetSetVersion; writes volumeBackupRepositoryCheck",
+}
+
+var settingSinkInternal = regexp.MustCompile(`Table\("settings"\)|(INTO|FROM|UPDATE)\s+settings\b|settings\.SettingVariable|writeSetting\(|return "settings"`)
+
+// Literal key forms of the reviewed writers; each key found must survive pruning.
 var settingWriteFormsInternal = []*regexp.Regexp{
 	regexp.MustCompile(`writeSetting\(tx, "([^"]+)"`),
 	regexp.MustCompile(`range map\[string\]string\{([^}]*)\}`),
@@ -93,23 +111,29 @@ var settingWriteFormsInternal = []*regexp.Regexp{
 var mapKeyInternal = regexp.MustCompile(`"([^"]+)":`)
 
 func TestPruneKeepsEveryInternalSettingWriter(t *testing.T) {
+	root := filepath.Join("..", "..")
 	var found []string
-	require.NoError(t, filepath.WalkDir("..", func(path string, entry fs.DirEntry, err error) error {
+	seen := map[string]bool{}
+	require.NoError(t, filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
 		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
 		source, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		text := string(source)
-		if strings.Contains(text, `Table("settings")`) {
-			for _, line := range strings.Split(text, "\n") {
-				if strings.Contains(line, `Table("settings")`) {
-					require.NotRegexp(t, `\.(Create|Save|Update|Updates|Delete|Exec)\(`, line, "%s writes the settings table in a form this guard does not read", path)
-				}
-			}
+		if strings.HasPrefix(rel, "internal/settings/") || !settingSinkInternal.MatchString(text) {
+			return nil
 		}
+		_, reviewed := reviewedSettingFilesInternal[rel]
+		require.True(t, reviewed, "%s touches the settings table but is not classified for startup pruning", rel)
+		seen[rel] = true
 		for i, form := range settingWriteFormsInternal {
 			for _, match := range form.FindAllStringSubmatch(text, -1) {
 				if i == 1 {
@@ -126,6 +150,9 @@ func TestPruneKeepsEveryInternalSettingWriter(t *testing.T) {
 		}
 		return nil
 	}))
+	for rel := range reviewedSettingFilesInternal {
+		require.True(t, seen[rel], "%s no longer touches the settings table; remove its classification", rel)
+	}
 	require.GreaterOrEqual(t, len(found), 9, "the guard must see the known writers")
 	for _, key := range found {
 		require.True(t, preservedSettingKeyInternal(key), "startup pruning deletes %q", key)
