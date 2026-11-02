@@ -25,7 +25,14 @@ export function releaseResponse(response: Response): void {
   releases.delete(response);
 }
 
-/** Status-only callers discard unread data and release request ownership immediately. */
+/** Status-only callers of a successful response release ownership and read its body to the end in the background, so
+ * the browser records a finished request rather than an aborted one. */
+export function drainResponse(response: Response): void {
+  releaseResponse(response);
+  void response.body?.pipeTo(new WritableStream()).catch(() => undefined);
+}
+
+/** Status-only failures discard unread data and release request ownership immediately. */
 export function discardResponse(response: Response): void {
   releaseResponse(response);
   void response.body?.cancel().catch(() => undefined);
