@@ -9,6 +9,7 @@ package restore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
@@ -28,7 +29,7 @@ import (
 )
 
 func TestBindScratchRootThroughLifecycle(t *testing.T) {
-	for _, kind := range []string{"valid", "extra", "directory", "symlink", "missing"} {
+	for _, kind := range []string{"valid", "write-fails", "extra", "directory", "symlink", "missing"} {
 		t.Run(kind, func(t *testing.T) {
 			l, run := lifecycleFixture(t)
 			run.VolumeName = volume.BindKey("/srv/app.conf")
@@ -102,6 +103,9 @@ func TestBindScratchRootThroughLifecycle(t *testing.T) {
 					require.Equal(t, "writing", stored.Phase)
 					writes++
 					require.Equal(t, []string{"/scratch/app.conf", "/volume/app.conf"}, args[4:])
+					if kind == "write-fails" {
+						return "", "copy failed", errors.New("exit status 1")
+					}
 					out, e := exec.CommandContext(ctx, "/bin/sh", "-c", args[2], "sh", filepath.Join(scratch, "app.conf"), live).CombinedOutput()
 					return string(out), "", e
 				default:
@@ -127,6 +131,12 @@ func TestBindScratchRootThroughLifecycle(t *testing.T) {
 				require.NoError(t, statErr)
 				require.True(t, os.SameFile(before, after), "the mounted file keeps its inode")
 				require.Len(t, creates, 4, "scratch restore, scratch check, bind witness and writer")
+			} else if kind == "write-fails" {
+				// The writer's own failure settles the run as failed after writing began.
+				require.Error(t, err)
+				require.Equal(t, 1, writes)
+				require.Equal(t, "original", string(content))
+				require.Len(t, creates, 4)
 			} else {
 				var p *dto.Problem
 				require.ErrorAs(t, err, &p)
