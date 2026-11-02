@@ -8,19 +8,21 @@ import { useContext } from "react";
 import { UNSAFE_DataRouterContext } from "react-router";
 
 /**
- * Search parameters of the router's current or pending location. After a navigation the router runs ahead of the last
- * React commit, so late command completions read and update the URL here instead of through a rendered snapshot.
+ * Pathname and search parameters of the router's current or pending location. After a navigation the router runs ahead
+ * of the last React commit, so late command completions read and update the URL here instead of through a rendered
+ * snapshot. The location may already belong to another page; callers compare its pathname with their own.
  */
 export function useLiveSearch() {
   const context = useContext(UNSAFE_DataRouterContext);
   if (!context) throw new Error("useLiveSearch requires a data router");
   const { router } = context;
   const location = () => router.state.navigation.location ?? router.state.location;
+  const pathname = () => location().pathname;
   const read = () => new URLSearchParams(location().search);
-  const update = (change: (params: URLSearchParams) => URLSearchParams) => {
-    const { pathname, hash } = location();
-    const search = change(read()).toString();
-    void router.navigate({ pathname, search: search ? `?${search}` : "", hash });
+  /** Navigates to `target` with `params`; the live hash is kept when the live location is already `target`. */
+  const navigate = (target: string, params: URLSearchParams) => {
+    const search = params.toString();
+    void router.navigate({ pathname: target, search: search ? `?${search}` : "", hash: pathname() === target ? location().hash : "" });
   };
-  return { read, update };
+  return { pathname, read, navigate };
 }

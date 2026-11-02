@@ -1,6 +1,6 @@
 import { ArrowUp, ChevronRight, Download, FilePlus2, FileText, FolderOpen, FolderPlus, HardDrive, RotateCcw, Save, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useBlocker, useSearchParams } from "react-router";
+import { useBlocker, useLocation, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
@@ -49,8 +49,11 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const path = params.get("path") ?? "/";
   const fileParam = params.get("file");
   // Late command completions and view guards use the router's live location; the rendered params may lag behind it.
+  // The live location only belongs to this workspace while its pathname is this volume's own.
+  const { pathname: ownPathname } = useLocation();
   const live = useLiveSearch();
-  const liveView = () => { const p = live.read(); return `${p.get("path") ?? "/"}:${p.get("file")}`; };
+  const ownsLive = () => live.pathname() === ownPathname;
+  const liveView = () => { const p = live.read(); return `${live.pathname()}?${p.get("path") ?? "/"}:${p.get("file")}`; };
   const listing = useFiles(volume.id, path);
 
   const createCapability = useVolumeCapability("createEntry", volume.id);
@@ -90,14 +93,15 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const blocker = useBlocker(({ currentLocation, nextLocation }) => open.dirty && (currentLocation.pathname !== nextLocation.pathname || new URLSearchParams(nextLocation.search).get("tab") !== "files"));
   const proceeding = useRef(false);
 
-  const setUrl = (next: { path?: string; file?: string | null }) =>
-    live.update((p) => {
-      const out = new URLSearchParams(p);
-      if (next.path !== undefined) out.set("path", next.path);
-      if (next.file === null) out.delete("file");
-      else if (next.file !== undefined) out.set("file", next.file);
-      return out;
-    });
+  // Writes this workspace's URL: from the live parameters while the live location is its own, otherwise from the
+  // rendered ones, which cancels a pending navigation elsewhere like any in-page gesture.
+  const setUrl = (next: { path?: string; file?: string | null }) => {
+    const out = new URLSearchParams(ownsLive() ? live.read() : params);
+    if (next.path !== undefined) out.set("path", next.path);
+    if (next.file === null) out.delete("file");
+    else if (next.file !== undefined) out.set("file", next.file);
+    live.navigate(ownPathname, out);
+  };
 
   // Completed renames, moves and deletes reconcile tabs, drafts, expanded folders and the URL file even when the
   // user switched folders or tabs while they ran; the URL change only touches the live file parameter.
@@ -105,13 +109,13 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
     open.renamed(from, to);
     setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
     const file = live.read().get("file");
-    if (file && isUnder(file, from)) setUrl({ file: movedPath(file, from, to) });
+    if (ownsLive() && file && isUnder(file, from)) setUrl({ file: movedPath(file, from, to) });
   };
   const discarded = (removed: string) => {
     open.removed(removed);
     setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, removed))));
     const file = live.read().get("file");
-    if (file && isUnder(file, removed)) setUrl({ file: null });
+    if (ownsLive() && file && isUnder(file, removed)) setUrl({ file: null });
   };
 
   const goFolder = (dir: string) => setUrl({ path: dir, file: null });
