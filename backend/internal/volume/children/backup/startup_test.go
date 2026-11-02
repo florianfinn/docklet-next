@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -208,5 +209,46 @@ func TestStartupSweepsLegacyBackupHelpersAndScratchWithoutTouchingWorkspace(t *t
 		require.NotContains(t, path, "unrelated-data")
 		require.NotContains(t, path, "workspace")
 		require.NotContains(t, path, "foreign")
+	}
+}
+
+// A routine retry after settled startup leaves unrelated volumes admissible;
+// a restored discovery closes every volume until it settles.
+func TestStartupDiscoveryBarrierOnlyForInitialOrRestoredSweeps(t *testing.T) {
+	for _, restored := range []bool{false, true} {
+		var calls atomic.Int32
+		entered, release := make(chan struct{}), make(chan struct{})
+		restarted := []string{}
+		s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if strings.HasSuffix(r.URL.Path, "/containers/json") {
+				if calls.Add(1) == 2 {
+					close(entered)
+					<-release
+				}
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/volumes") {
+				_, _ = w.Write([]byte(`{"Volumes":[]}`))
+				return
+			}
+			t.Errorf("unexpected Docker request %s", r.URL.Path)
+			w.WriteHeader(500)
+		}), &restarted)
+		require.NoError(t, s.ReconcileStartup(t.Context(), false))
+		require.False(t, s.WriterFenced("fresh-bind"))
+		done := make(chan error, 1)
+		go func() { done <- s.ReconcileStartup(t.Context(), restored) }()
+		<-entered
+		err := s.checkWriterFence(t.Context(), "fresh-bind")
+		close(release)
+		require.NoError(t, <-done)
+		if restored {
+			require.ErrorContains(t, err, "volume.backup.writer-unconfirmed", "restored discovery must close admission")
+		} else {
+			require.NoError(t, err, "a routine retry must not close an unrelated volume")
+		}
+		require.False(t, s.WriterFenced("fresh-bind"))
 	}
 }
