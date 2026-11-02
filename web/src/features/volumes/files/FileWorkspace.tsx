@@ -53,7 +53,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const { pathname: ownPathname } = useLocation();
   const live = useLiveSearch();
   const ownsLive = () => live.pathname() === ownPathname;
-  const liveView = () => { const p = live.read(); return `${live.pathname()}?${p.get("path") ?? "/"}:${p.get("file")}`; };
+  // A tuple keeps field boundaries: folder and file paths may contain any separator.
+  const liveView = () => { const p = live.read(); return JSON.stringify([live.pathname(), p.get("path") ?? "/", p.get("file")]); };
   const listing = useFiles(volume.id, path);
 
   const createCapability = useVolumeCapability("createEntry", volume.id);
