@@ -433,15 +433,15 @@ while :; do
   esac
   cur="$cur/$segment"
   if mode=$(stat -c '%A' -- "$cur" 2>/dev/null); then
-    case "$mode" in l*) echo ARCANE_SYMLINK >&2; exit 42 ;; esac
+    case "$mode" in l*) printf 'ARCANE_SYMLINK\n' >&2; exit 42 ;; esac
   else
     case "$allow_missing" in 1) exit 0 ;; esac
-    echo ARCANE_NOT_FOUND >&2
+    printf 'ARCANE_NOT_FOUND\n' >&2
     exit 44
   fi
   case "$remaining" in
     '') ;;
-    *) case "$mode" in d*) ;; *) echo ARCANE_NOT_DIRECTORY >&2; exit 47 ;; esac ;;
+    *) case "$mode" in d*) ;; *) printf 'ARCANE_NOT_DIRECTORY\n' >&2; exit 47 ;; esac ;;
   esac
 done`
 
@@ -460,14 +460,14 @@ while :; do
   case "$current" in '') current=$segment ;; *) current="$current/$segment" ;; esac
   cur="$cur/$segment"
   if mode=$(stat -c '%A' -- "$cur" 2>/dev/null); then
-    case "$mode" in l*) echo ARCANE_SYMLINK >&2; exit 42 ;; esac
+    case "$mode" in l*) printf 'ARCANE_SYMLINK\n' >&2; exit 42 ;; esac
   else
     printf 'absent\0%s\0' "$current"
     exit 0
   fi
   case "$remaining" in
     '') ;;
-    *) case "$mode" in d*) ;; *) echo ARCANE_NOT_DIRECTORY >&2; exit 47 ;; esac ;;
+    *) case "$mode" in d*) ;; *) printf 'ARCANE_NOT_DIRECTORY\n' >&2; exit 47 ;; esac ;;
   esac
 done
 case "$rel" in

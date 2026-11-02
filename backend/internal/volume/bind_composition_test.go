@@ -259,8 +259,13 @@ func (d *helperDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			require.NoError(d.t, err)
+			// Like Docker, copyUIDGID replaces archive ownership with the container user, which the image sets.
+			uid := header.Uid
+			if r.URL.Query().Get("copyUIDGID") == "true" {
+				uid = toolsImageUID(d.t)
+			}
 			d.mu.Lock()
-			d.stagedUIDs = append(d.stagedUIDs, header.Uid)
+			d.stagedUIDs = append(d.stagedUIDs, uid)
 			d.mu.Unlock()
 			data, err := io.ReadAll(archive)
 			require.NoError(d.t, err)
@@ -271,6 +276,22 @@ func (d *helperDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.t.Errorf("unexpected Docker request %s %s", r.Method, p)
 		w.WriteHeader(500)
 	}
+}
+
+// toolsImageUID is the USER of the pinned tools image (deploy/tools/inputs.env RUNTIME_USER).
+func toolsImageUID(t *testing.T) int {
+	t.Helper()
+	data, err := os.ReadFile("../../../deploy/tools/inputs.env")
+	require.NoError(t, err)
+	for _, line := range strings.Split(string(data), "\n") {
+		if user, ok := strings.CutPrefix(line, "RUNTIME_USER="); ok {
+			uid, err := strconv.Atoi(strings.Split(user, ":")[0])
+			require.NoError(t, err)
+			return uid
+		}
+	}
+	t.Fatal("RUNTIME_USER missing")
+	return 0
 }
 
 func appletPath(t *testing.T) string {

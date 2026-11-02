@@ -5,6 +5,7 @@
 // Deviations: Original regressions for stored bind access, identity and backup completion findings of the web review (#287, #329).
 
 import { act, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { ActionRunner } from "@/data/demo/action-runner";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
@@ -22,6 +23,7 @@ import { backupAccess, bindKey, collectMountUsage } from "@/domain/volumes";
 import { renderWithApp } from "@/test/render";
 import { backupFigures } from "./backup-figures";
 import BackupsPage from "./BackupsPage";
+import { BackupHistory } from "./backups/BackupHistory";
 import { VolumeBackupsTab } from "./backups/VolumeBackupsTab";
 
 afterEach(() => {
@@ -219,3 +221,30 @@ for (const kind of ["smb", "nfs"] as const) {
     expect(created.map((t) => t.path)).toEqual(["", "docklet", "docklet"]);
   });
 }
+
+for (const unavailable of [false, true])
+  it(`offers "back up now" on /backups only while the host's overview is readable (unavailable ${unavailable})`, async () => {
+    const ov = mapBackupOverview({ ...overview, volumes: [{ name: "data", volumeExists: true, count: 1, policy: { ...policy, volumeName: "data" }, lastBackup: { ...entry, volumeName: "data" } }] }, "first");
+    const row = { ...ov, unavailable, volumes: ov.volumes.map((v) => ({ ...v, backupUnavailable: unavailable })) };
+    renderWithApp(<BackupsPage />, { ...base(), listBackupOverviews: async () => [row], listVolumes: async () => [], listBackupTargets: async () => [] });
+    const button = (await screen.findByRole("button", { name: "Jetzt sichern" })) as HTMLButtonElement;
+    expect(button.disabled).toBe(unavailable);
+  });
+
+const snapshotRun = { id: "r", volumeId: `first~${key}`, hostId: "first", startedAt: "2026-11-02T00:00:00Z", status: "succeeded" as const, trigger: "manual" as const, targetId: "local", archive: "r", stoppedContainers: false };
+for (const [label, bind, historyOnly] of [
+  ["a file bind", { kind: "file" as const, eligible: true }, false],
+  ["an unmounted stored key", undefined, false],
+  ["a refused stored key", { kind: "directory" as const, eligible: false, reason: "volume.bind.path-denied" }, true],
+] as const)
+  it(`browses a snapshot of ${label} read-only`, async () => {
+    const browse = vi.fn(async () => ({ success: true, data: [{ name: "config.yml", path: "/config.yml", isDirectory: false }], pagination: { totalItems: 1, currentPage: 1, itemsPerPage: 100, totalPages: 1 } }));
+    const volume = { ...mapBackupOverview(overview, "first").volumes[0]!, id: `first~${key}`, name: "/srv/data", kind: "bind" as const, bind, backups: [snapshotRun] };
+    renderWithApp(<BackupHistory volume={volume} targets={[]} hostOnline historyOnly={historyOnly} />, { ...base(), browseBackup: browse });
+    await screen.findByRole("button", { name: "Herunterladen" });
+    const open = screen.queryByRole("button", { name: "Snapshot durchsuchen" });
+    expect(open !== null).toBe(true);
+    await userEvent.click(open!);
+    await screen.findByText("config.yml");
+    expect([browse.mock.calls[0]?.slice(0, 2), screen.queryByRole("checkbox"), screen.queryByRole("button", { name: "Dateien wiederherstellen" })]).toEqual([[`first~${key}`, "r"], null, null]);
+  });

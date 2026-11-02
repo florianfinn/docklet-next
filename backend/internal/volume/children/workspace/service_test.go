@@ -390,7 +390,8 @@ func TestVolumeWorkspaceWritesUseRuntimeIdentity(t *testing.T) {
 	require.Empty(t, execRequests[0].user)
 	require.Equal(t, "1000:1000", execRequests[1].user)
 	require.Equal(t, []string{"acfs", "apply", "--root", "/volume", "--staging", "/tmp/arcane-workspace", "--manifest", "manifest-0.json"}, execRequests[1].cmd)
-	require.Equal(t, []string{"true", "true"}, archiveQueries)
+	// Ownership comes from the archive headers; copyUIDGID would apply the tools image user (root) instead.
+	require.Equal(t, []string{"", ""}, archiveQueries)
 	require.Len(t, archiveHeaders, 2)
 	for _, header := range archiveHeaders {
 		require.Equal(t, 1000, header.Uid)

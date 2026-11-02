@@ -95,7 +95,8 @@ function BackupOverview() {
                   {(view, columns) => rows.map((volume) => {
                     const overview = visible.find((row) => row.hostId === volume.hostId)!;
                     const plan = volume.backup;
-                    const online = isHostAvailable(hosts.byId.get(volume.hostId));
+                    // A failed overview read keeps its cached rows for display but offers no capture.
+                    const online = isHostAvailable(hosts.byId.get(volume.hostId)) && !overview.unavailable && !volume.backupUnavailable;
                     return <OverviewRowView
                       key={volume.id}
                       view={view}

@@ -247,6 +247,8 @@ export const enVolumes = {
     uploadRestore: "Upload archive to restore",
     newVolumeName: "New volume name",
     cancel: "Cancel",
+    browseSnapshot: "Browse snapshot",
+    browseSnapshotHint: "Read-only view of the files in this snapshot. Download the snapshot to keep a copy.",
     restoreFiles: "Restore files",
     restoreFilesHint: "Choose files or folders from the snapshot. A safety snapshot is taken before replacing the selected contents.",
     parentFolder: "Parent folder",

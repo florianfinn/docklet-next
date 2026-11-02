@@ -364,7 +364,8 @@ func (
 		_ = pipeWriter.CloseWithError(err)
 		archiveDone <- err
 	}()
-	_, copyErr := dockerClient.CopyToContainer(ctx, containerID, client.CopyToContainerOptions{DestinationPath: "/tmp/arcane-workspace", Content: pipeReader, CopyUIDGID: identity.execUser != ""})
+	// Archive headers carry the write identity; copyUIDGID would replace them with the tools image user (root).
+	_, copyErr := dockerClient.CopyToContainer(ctx, containerID, client.CopyToContainerOptions{DestinationPath: "/tmp/arcane-workspace", Content: pipeReader})
 	_ = pipeReader.Close()
 	archiveErr := <-archiveDone
 	for _, stagedContent := range contents {

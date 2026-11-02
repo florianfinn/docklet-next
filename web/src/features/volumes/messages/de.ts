@@ -248,6 +248,8 @@ export const deVolumes: typeof enVolumes = {
     uploadRestore: "Archiv zur Wiederherstellung hochladen",
     newVolumeName: "Name des neuen Volumes",
     cancel: "Abbrechen",
+    browseSnapshot: "Snapshot durchsuchen",
+    browseSnapshotHint: "Nur-Lese-Ansicht der Dateien in diesem Snapshot. Den Snapshot herunterladen, um eine Kopie zu behalten.",
     restoreFiles: "Dateien wiederherstellen",
     restoreFilesHint: "Dateien oder Ordner aus dem Snapshot wählen. Vor dem Ersetzen wird eine Sicherheitskopie erstellt.",
     parentFolder: "Übergeordneter Ordner",

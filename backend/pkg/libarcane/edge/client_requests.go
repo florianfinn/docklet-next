@@ -9,10 +9,8 @@ package edge
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/florianfinn/docklet-next/types/volume"
 	"io"
 	"log/slog"
 	"net/http"
@@ -204,20 +202,6 @@ func (c *TunnelClient) handleCommandRequest(ctx context.Context, conn TunnelConn
 	}
 
 	recorder := newCommandResponseRecorderInternal(msg.ID, msg.Command, conn)
-	if strings.Contains(msg.Path, "/volumes/") {
-		for _, part := range strings.Split(msg.Path, "/") {
-			if volume.IsBindKey(part) {
-				if err := volume.ValidateName(part); err != nil {
-					recorder.Header().Set("Content-Type", "application/problem+json")
-					recorder.WriteHeader(400)
-					_ = json.NewEncoder(recorder).Encode(err)
-					_ = recorder.Close()
-					return
-				}
-			}
-		}
-
-	}
 	c.handler.ServeHTTP(recorder, req)
 	if closeErr := recorder.Close(); closeErr != nil {
 		slog.WarnContext(reqCtx, "Failed to finalize command response", "id", msg.ID, "command", msg.Command, "error", closeErr)

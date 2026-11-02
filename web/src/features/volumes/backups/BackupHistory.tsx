@@ -39,9 +39,10 @@ export function BackupHistory({
   const restoreCapability = useVolumeCapability("restoreBackup", volume.id),
     filesCapability = useVolumeCapability("restoreBackupFiles", volume.id),
     downloadCapability = useVolumeCapability("downloadBackup", volume.id),
+    browseCapability = useVolumeCapability("browseBackup", volume.id),
     deleteCapability = useVolumeCapability("deleteBackup", volume.id);
   const [restore, setRestore] = useState<BackupRun>(),
-    [files, setFiles] = useState<BackupRun>(),
+    [files, setFiles] = useState<{ run: BackupRun; restore: boolean }>(),
     [remove, setRemove] = useState<BackupRun>(),
     [error, setError] = useState<string>(),
     [busy, setBusy] = useState(false);
@@ -83,15 +84,24 @@ export function BackupHistory({
               >
                 {t("restore")}
               </Button>}
-              {/* Selected restore needs a directory; a file bind restores its one file by replace only. */}
-              {!historyOnly && directoryStorage(volume) && <Button
+              {/* Selected restore needs a directory; a file bind restores its one file by replace only. Browsing is a
+                  recovery read by snapshot ID and stays for file binds and stored keys (K4). */}
+              {!historyOnly && directoryStorage(volume) ? <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled || !filesCapability.available || volume.volumeExists === false}
                 title={filesCapability.reason}
-                onClick={() => setFiles(run)}
+                onClick={() => setFiles({ run, restore: true })}
               >
                 {t("restoreFiles")}
+              </Button> : <Button
+                variant="outline"
+                size="sm"
+                disabled={disabled || !browseCapability.available}
+                title={browseCapability.reason}
+                onClick={() => setFiles({ run, restore: false })}
+              >
+                {t("browseSnapshot")}
               </Button>}
               <Button
                 variant="outline"
@@ -141,9 +151,10 @@ export function BackupHistory({
       accepted={accepted}
     />}
     {files && <RestoreFilesSheet
-      key={files.id}
+      key={files.run.id}
       volumeId={volume.id}
-      runId={files.id}
+      runId={files.run.id}
+      browseOnly={!files.restore}
       onClose={() => setFiles(undefined)}
       accepted={accepted}
     />}

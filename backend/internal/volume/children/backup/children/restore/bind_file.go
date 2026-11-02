@@ -82,16 +82,18 @@ func (s *Service) PrepareBindFile(ctx context.Context, run *Run, r StartRequest)
 	return nil
 }
 
+// The tools shell has no arithmetic; a second entry fails on the already-set marker.
 const bindScratchCheck = `set -e
-count=0
+seen=
 for entry in /scratch/* /scratch/.[!.]* /scratch/..?*; do
  if ! test -e "$entry" && ! test -L "$entry"; then continue; fi
- count=$((count + 1))
+ test -z "$seen"
+ seen=1
  test "$entry" = "/scratch/$1"
  test -f "$entry"
  test ! -L "$entry"
 done
-test "$count" = 1`
+test -n "$seen"`
 
 func (s *Service) writeBindFile(ctx context.Context, cli *client.Client, run *Run, target mount.Mount) error {
 	p := run.Prepared

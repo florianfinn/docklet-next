@@ -8,5 +8,6 @@ export const enLocale = {
     documentTitle: (import.meta.env.DEV ? "Docklet · React prototype" : "Docklet Next"),
     loading: "Loading",
     newStack: "New stack",
+    toggleSidebar: "Expand or collapse navigation",
   },
 };
