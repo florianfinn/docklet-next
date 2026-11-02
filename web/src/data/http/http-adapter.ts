@@ -705,7 +705,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...backups.api,
     async listVolumes(onPartial) {
       const rows = await volumeReads.listVolumes(onPartial);
-      const hosts = [...new Set(rows.filter((v) => v.kind === "volume").map((v) => v.hostId))];
+      const hosts = [...new Set(rows.map((v) => v.hostId))];
       const mapped = await Promise.all(hosts.map((host) => backups.decorate(host, rows.filter((v) => v.hostId === host))));
       const covered = new Set(hosts);
       return [...mapped.flat(), ...rows.filter((v) => !covered.has(v.hostId))];
@@ -723,7 +723,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         if (!observed) throw error;
         volume = { ...observed, backups: [] };
       }
-      if (volume.kind === "bind") return volume;
+      if (volume.kind === "bind" && !volume.bind?.eligible) return volume;
       const [decorated, history] = await Promise.all([backups.decorate(volume.hostId, [volume]), backups.history(id).catch(() => null)]);
       return { ...volume, ...decorated[0], backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
     },

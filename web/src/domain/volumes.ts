@@ -51,6 +51,48 @@ export interface BackupRun {
   stoppedContainers: boolean;
 }
 
+/** Agent view of a bind source: kind, path-rule verdict and the latest known sizes. */
+export interface BindInfo {
+  kind: "directory" | "file" | "unknown";
+  eligible: boolean;
+  /** Refusal code of the first failing path rule, e.g. `volume.bind.path-denied`. */
+  reason?: string;
+  measuredSize?: number;
+  measuredAt?: string;
+  measuredPartial?: boolean;
+  lastSnapshotSize?: number;
+  lastSnapshotAt?: string;
+}
+
+/** Backend bind identity: `bind:` plus the lowercase hex UTF-8 bytes of the source path. */
+export function bindKey(path: string): string {
+  return `bind:${Array.from(new TextEncoder().encode(path), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Source path of a bind key, or undefined for volume names and malformed keys. */
+export function bindPath(key: string): string | undefined {
+  const hex = key.startsWith("bind:") ? key.slice(5) : "";
+  if (!hex || hex.length % 2 || !/^[0-9a-f]+$/.test(hex)) return undefined;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(hex.match(/../g)!, (pair) => parseInt(pair, 16)));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Newest known size of a bind: an on-demand scan or the latest snapshot, whichever is newer. */
+export function bindSize(info: BindInfo | undefined): { bytes: number; at: string; source: "measured" | "snapshot"; partial: boolean } | undefined {
+  const measured = info?.measuredSize != null && info.measuredAt ? { bytes: info.measuredSize, at: info.measuredAt, source: "measured" as const, partial: !!info.measuredPartial } : undefined;
+  const snapshot = info?.lastSnapshotSize != null && info.lastSnapshotAt ? { bytes: info.lastSnapshotSize, at: info.lastSnapshotAt, source: "snapshot" as const, partial: false } : undefined;
+  if (!measured || !snapshot) return measured ?? snapshot;
+  return Date.parse(measured.at) >= Date.parse(snapshot.at) ? measured : snapshot;
+}
+
+/** Whether files and backups are offered: binds need an eligible agent verdict. */
+export function storageUsable(v: Pick<Volume, "kind" | "bind">): boolean {
+  return v.kind === "volume" || !!v.bind?.eligible;
+}
+
 export interface Volume {
   inventory?: InventoryObservation;
   sizeUnavailable?: boolean;
@@ -69,6 +111,8 @@ export interface Volume {
   stackName?: string;
   /** Bind mount of a single file instead of a directory. */
   fileBind?: boolean;
+  /** Bind list verdict; absent for volumes and when the agent did not answer the bind list. */
+  bind?: BindInfo;
   sizeBytes: number;
   createdAt: string;
   consumers: VolumeConsumer[];
@@ -148,6 +192,17 @@ export function mountRef(container: { hostId: string; stackId?: string }, spec: 
   const stackDir = projectDir && container.stackId ? `${projectDir.replace(/\/+$/, "")}/${container.stackId}` : undefined;
   const path = resolveBindSource(m.source, stackDir);
   return { ...m, id: volumeId(container.hostId, "bind", path), name: path };
+}
+
+/** Inventory entry of a container mount, matched by the consumer the daemon reports, never by a guessed path. */
+export function storageOf(volumes: readonly Volume[] | undefined, containerId: string, target: string): Volume | undefined {
+  return volumes?.find((v) => v.consumers.some((c) => c.containerId === containerId && c.target === target));
+}
+
+/** Inventory entry of a Compose mount of a deployed stack, matched by the stack's consumers and the mount target. */
+export function stackStorage(volumes: readonly Volume[] | undefined, stackId: string, mount: { source: string; target: string }, service?: string): Volume | undefined {
+  const bind = /^[./~]/.test(mount.source);
+  return volumes?.find((v) => (v.kind === "bind") === bind && v.consumers.some((c) => c.stackId === stackId && c.target === mount.target && (service === undefined || c.service === service)));
 }
 
 export interface MountUsage {

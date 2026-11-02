@@ -157,11 +157,26 @@ it("passes entered credentials and optional existing recovery key only to target
   expect(f.state.requests.find((r) => r.method === "POST")?.body).toMatchObject({ secret: "test-only", recoveryKey: "synthetic-key" });
   expect(JSON.stringify(await f.api.listBackupTargets())).not.toContain("test-only");
 });
-it("shows the named-volume boundary for bind mounts", async () => {
+it("explains refused and unchecked binds instead of offering backups", async () => {
   const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  const view = renderWithApp(<VolumeBackupsTab volume={{ ...volume, kind: "bind", bind: { kind: "directory", eligible: false, reason: "volume.bind.path-denied" }, backups: [] }} hostOnline />, f.adapter);
+  expect(screen.getByRole("status").textContent).toBe("Für diesen Bind-Mount werden Dateien und Backups nicht angeboten. Dieser Pfad ist vor Datei- und Backup-Aktionen geschützt.");
+  view.unmount();
   renderWithApp(<VolumeBackupsTab volume={{ ...volume, kind: "bind", backups: [] }} hostOnline />, f.adapter);
-  expect(screen.getByRole("status").textContent).toBe("Backups umfassen nur benannte Volumes.");
+  expect(screen.getByRole("status").textContent).toContain("noch nicht geprüft");
 });
+for (const kind of ["directory", "file"] as const) {
+  it(`offers backups for an eligible ${kind} bind with its restore modes`, async () => {
+    const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+    const bind = { ...volume, kind: "bind" as const, fileBind: kind === "file", bind: { kind, eligible: true }, backups: [] };
+    const view = renderWithApp(<VolumeBackupsTab volume={bind} hostOnline />, f.adapter);
+    await screen.findByRole("button", { name: "Jetzt sichern" });
+    expect(screen.queryByText("Archiv zur Wiederherstellung hochladen") !== null).toBe(kind === "directory");
+    view.unmount();
+    renderWithApp(<RestoreDialog volume={bind} runId="run" onClose={() => {}} accepted={() => {}} />, f.adapter);
+    expect(screen.queryByText("Als neues Volume wiederherstellen") === null).toBe(true);
+  });
+}
 it("keeps typed target retirement refusal and host references inside the confirmation", async () => {
   const f = setup(); f.state.fail = "/backup-targets/target"; f.state.code = "backup.target.hosts-unknown";
   renderWithApp(<BackupTargetsSection />, f.adapter);

@@ -1,4 +1,5 @@
 import { isHostAvailable } from "@/domain/hosts";
+import { demoBind } from "./demo-binds";
 import { createDemoBackups } from "./demo-backups";
 import { collectMountUsage, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
 import { planVolumePrune, pruneBlock } from "@/domain/volume-prune";
@@ -29,9 +30,12 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
     db.files.ensure(id, () => u.files);
   }
 
+  const measured = new Map<string, { size: number; at: string }>();
   function toVolume(u: MountUsage): Volume {
     db.files.ensure(u.id, () => seedFiles(u));
     const runs = db.backupRuns.filter((r) => r.volumeId === u.id);
+    const snapshot = latest(runs.filter((r) => r.status === "succeeded" && r.sizeBytes != null));
+    const bind = u.kind === "bind" ? demoBind(u.name, u.fileBind, measured.get(u.id), snapshot && { size: snapshot.sizeBytes!, at: snapshot.finishedAt ?? snapshot.startedAt }) : undefined;
     return {
       id: u.id,
       name: u.name,
@@ -42,6 +46,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       composeName: u.composeName,
       stackId: u.stackId,
       fileBind: u.fileBind,
+      bind,
       sizeBytes: db.files.size(u.id),
       createdAt: new Date(Date.now() - (20 + (hash(u.id) % 300)) * DAY).toISOString(),
       consumers: u.consumers,
@@ -142,6 +147,16 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       db.files.drop(id);
       db.changed("volumes");
       return structuredClone(find(nextId));
+    },
+
+    async measureBind(id) {
+      await wait(600);
+      const v = online(find(id));
+      if (v.kind !== "bind") throw new DemoError("invalid-name");
+      if (!v.bind?.eligible) throw new DemoError("not-editable");
+      const at = new Date().toISOString();
+      measured.set(id, { size: db.files.size(id), at });
+      return { sizeBytes: db.files.size(id), measuredAt: at, partial: false };
     },
 
     async deleteVolume(id) {

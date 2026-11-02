@@ -192,6 +192,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
   renameVolume(id: string, name: string): Promise<Volume>;
+  /** Measures the apparent size of a bind now; scans longer than the agent deadline fail with `volume.bind.size-timeout`. */
+  measureBind?(id: string): Promise<{ sizeBytes: number; measuredAt: string; partial: boolean }>;
   /** Preview of a prune for the given hosts; computed by the adapter, not the browser. */
   planVolumePrune(input: { hostIds: string[]; all?: boolean }): Promise<VolumePrunePlan>;
   /**

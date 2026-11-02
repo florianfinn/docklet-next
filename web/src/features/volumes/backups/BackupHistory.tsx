@@ -80,7 +80,8 @@ export function BackupHistory({
               >
                 {t("restore")}
               </Button>
-              <Button
+              {/* A file bind restores its one file by replace only. */}
+              {!volume.fileBind && <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled || !filesCapability.available || volume.volumeExists === false}
@@ -88,7 +89,7 @@ export function BackupHistory({
                 onClick={() => setFiles(run)}
               >
                 {t("restoreFiles")}
-              </Button>
+              </Button>}
               <Button
                 variant="outline"
                 size="sm"

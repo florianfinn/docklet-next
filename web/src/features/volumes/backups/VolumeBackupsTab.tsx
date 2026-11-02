@@ -9,13 +9,14 @@ import { useTranslations } from "use-intl";
 import { useBackupOverview } from "@/data/backup-queries";
 import { BackupError, backupErrorMessage } from "@/data/backup-error";
 import { useAdapter } from "@/data/use-adapter";
-import type { VolumeDetail } from "@/domain/volumes";
+import { storageUsable, type VolumeDetail } from "@/domain/volumes";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { QueryError } from "@/shared/components/page";
 import { Button } from "@/shared/ui/button";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 import { Switch } from "@/shared/ui/switch";
+import { BindNotice } from "../bind-notice";
 import { useVolumeCapability } from "../use-volume-capability";
 import { BackupHistory } from "./BackupHistory";
 import { BackupPolicyCard } from "./BackupPolicyCard";
@@ -23,8 +24,7 @@ import { BackupOperation } from "./BackupOperation";
 import { RestoreDialog } from "./RestoreDialog";
 
 export function VolumeBackupsTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline: boolean }) {
-  const t = useTranslations("volumes.backups");
-  if (volume.kind === "bind") return <p role="status">{t("namedVolumesOnly")}</p>;
+  if (!storageUsable(volume)) return <BindNotice volume={volume} />;
   return (
     <CapabilityGate operation="getBackupOverview" resourceRef={{ kind: "host", id: volume.hostId }}>
       <ConnectedTab key={volume.id} volume={volume} hostOnline={hostOnline} />
@@ -108,7 +108,7 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
         >
           {t("runNow")}
         </Button>
-        <Field className="w-full sm:w-auto">
+        {!volume.fileBind && <Field className="w-full sm:w-auto">
           <FieldLabel htmlFor="backup-upload">{t("uploadRestore")}</FieldLabel>
           <Input
             id="backup-upload"
@@ -121,7 +121,7 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
             }}
           />
           <p className="text-xs text-muted-foreground">{t("uploadHint")}</p>
-        </Field>
+        </Field>}
       </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">

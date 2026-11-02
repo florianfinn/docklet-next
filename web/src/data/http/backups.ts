@@ -146,7 +146,7 @@ export function createBackups(options: Options) {
   }
   function context(id: string) {
     const [host, name] = splitInventoryId(id);
-    if (!name || name.startsWith("bind:")) throw unavailable("runBackup", { kind: "volume", id });
+    if (!name) throw unavailable("runBackup", { kind: "volume", id });
     return { host, name, route: `${path(host)}/${encodeURIComponent(name)}` };
   }
   async function admit(host: string, route: string, value: object, volume?: string): Promise<string> {
@@ -451,12 +451,14 @@ export function createBackups(options: Options) {
       });
       const byId = new Map(ov?.volumes.map((v) => [v.id, v]));
       return volumes.map((v) =>
-        v.kind === "bind"
+        v.kind === "bind" && !v.bind?.eligible
           ? v
           : {
               ...v,
               backupUnavailable: !ov,
               ...byId.get(v.id),
+              name: v.name,
+              kind: v.kind,
               sizeBytes: v.sizeBytes,
               consumers: v.consumers,
               labels: v.labels,

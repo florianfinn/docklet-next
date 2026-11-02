@@ -4,7 +4,8 @@ import { useTranslations } from "use-intl";
 import { formatPorts, formatRelative } from "@/domain/format";
 import type { ContainerInfo, Host } from "@/domain/model";
 import { versionLabel } from "@/domain/updates";
-import { isFileBind, mountRef } from "@/domain/volumes";
+import { useVolumes } from "@/data/queries";
+import { parseMount, storageOf } from "@/domain/volumes";
 import { filesHref } from "@/features/volumes/files/files-href";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -17,9 +18,10 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 /** Image, ports, networks, restart policy, mounts (linked to their file workspace) and environment; shared by inspector and container page. */
-export function ContainerFacts({ c, host, env = true }: { c: ContainerInfo; host: Host | undefined; env?: boolean }) {
+export function ContainerFacts({ c, env = true }: { c: ContainerInfo; host: Host | undefined; env?: boolean }) {
   const t = useTranslations("containers.inspector");
   const tk = useTranslations("volumes.kind");
+  const volumes = useVolumes();
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm" data-slot="container-facts">
       <Row label={t("image")}>
@@ -40,11 +42,12 @@ export function ContainerFacts({ c, host, env = true }: { c: ContainerInfo; host
         {c.mounts.length ? (
           <ul className="flex flex-col gap-1 font-mono text-xs">
             {c.mounts.map((mnt) => {
-              const ref = mountRef(c, mnt, host?.projectDir);
+              const parsed = parseMount(mnt);
+              const ref = parsed && storageOf(volumes.data, c.id, parsed.target);
               return (
                 <li key={mnt} className="flex items-start gap-1.5 break-all">
                   {ref ? (
-                    <Link to={filesHref({ id: ref.id, source: ref.name, fileBind: ref.kind === "bind" && isFileBind(ref.name) })} className="hover:text-primary-text hover:underline" aria-label={t("mountOpen", { mount: mnt })}>
+                    <Link to={filesHref(ref)} className="hover:text-primary-text hover:underline" aria-label={t("mountOpen", { mount: mnt })}>
                       {mnt}
                     </Link>
                   ) : (

@@ -6,7 +6,7 @@ import { useTranslations } from "use-intl";
 
 import { useFiles } from "@/data/queries";
 import { baseName, parentPath, pathSegments, type FileEntry } from "@/domain/files";
-import { volumeLabel, type Volume } from "@/domain/volumes";
+import { storageUsable, volumeLabel, type Volume } from "@/domain/volumes";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { downloadBlob } from "@/shared/lib/tar";
 import { cn } from "@/shared/lib/utils";
@@ -15,6 +15,7 @@ import { setPreference, usePreference } from "@/shared/preferences/preferences-s
 import { FileTree, type TreeNode } from "@/shared/workspace/file-tree";
 import { AsideToggle, EditorAction, EditorPane, Workspace, WorkspaceFrame } from "@/shared/workspace/workspace";
 
+import { BindNotice } from "../bind-notice";
 import { useVolumeCapability } from "../use-volume-capability";
 import { useFileCommands } from "./use-file-commands";
 import { workspaceErrorKey } from "./workspace-error";
@@ -37,8 +38,7 @@ const ancestors = (path: string) => ["/", ...pathSegments(path).map((s) => s.pat
  * (?file=) live in the URL; open tabs and unsaved edits live in memory.
  */
 export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
-  const t = useTranslations("volumes.files");
-  if (volume.kind === "bind") return <div role="status" className="text-sm text-muted-foreground">{t("bindUnavailable")}</div>;
+  if (!storageUsable(volume)) return <BindNotice volume={volume} />;
   return <VolumeFileWorkspace key={volume.id} volume={volume} warning={warning} />;
 }
 

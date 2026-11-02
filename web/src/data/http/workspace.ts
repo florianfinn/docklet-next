@@ -72,7 +72,6 @@ export interface WorkspaceOptions {
 export function createWorkspaceTransport({ baseUrl, client, capability, generation = () => 0 }: WorkspaceOptions) {
   function route(kind: "volume" | "stack", id: string) {
     const [host, raw] = splitInventoryId(id);
-    if (kind === "volume" && raw.startsWith("bind:")) throw new WorkspaceError("forbidden");
     return `${baseUrl}/environments/${encodeURIComponent(host)}/${kind === "volume" ? "volumes" : "projects"}/${encodeURIComponent(raw)}/workspace`;
   }
   async function require(operation: string, kind: "volume" | "stack", id: string) {

@@ -27,12 +27,12 @@ it("renders one workspace listing error with a retry action", async () => {
   expect(refetch).toHaveBeenCalledOnce();
 });
 
-it("presents bind mounts neutrally without trying workspace reads", async () => {
+it("explains a refused bind without trying workspace reads", async () => {
   const adapter = createDemoAdapter();
   adapter.listFiles = vi.fn(async () => { throw new WorkspaceError("forbidden"); });
-  const volume = { id: "example~bind:/data", kind: "bind" } as Volume;
+  const volume = { id: "example~bind:2f657463", kind: "bind", bind: { kind: "directory", eligible: false, reason: "volume.bind.unsupported-type" } } as Volume;
   renderWithApp(<FileWorkspace volume={volume} />, adapter);
-  expect(screen.getByRole("status").textContent).toBe("Dateizugriff ist für Bind-Mounts nicht verfügbar.");
+  expect(screen.getByRole("status").textContent).toBe("Für diesen Bind-Mount werden Dateien und Backups nicht angeboten. Nur Verzeichnisse und reguläre Dateien werden unterstützt.");
   expect(screen.queryByRole("alert") === null).toBe(true);
   expect(adapter.listFiles).not.toHaveBeenCalled();
 });

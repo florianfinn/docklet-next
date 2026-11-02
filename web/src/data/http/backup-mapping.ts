@@ -5,7 +5,7 @@
 // Deviations: Original volume backup DTO projection.
 
 import type { components } from "@/api/generated/schema";
-import type { BackupOverview, BackupPolicy, BackupRun, BackupSchedule } from "@/domain/volumes";
+import { bindPath, type BackupOverview, type BackupPolicy, type BackupRun, type BackupSchedule } from "@/domain/volumes";
 import {
   parseSimpleBackupSchedule,
   formatSimpleBackupSchedule,
@@ -81,10 +81,11 @@ export function mapBackupOverview(dto: Schema["VolumeBackupOverview"], host: str
     targets: dto.targets ?? [],
     volumes: (dto.volumes ?? []).map((v) => ({
       id: inventoryId(host, v.name),
-      name: v.name,
+      // Bind keys are identities only; display text is the source path.
+      name: bindPath(v.name) ?? v.name,
       hostId: host,
-      kind: "volume",
-      source: "",
+      kind: bindPath(v.name) === undefined ? "volume" as const : "bind" as const,
+      source: bindPath(v.name) ?? "",
       createdAt: "",
       sizeBytes: 0,
       sizeUnavailable: true,
