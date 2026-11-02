@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 	"github.com/stretchr/testify/require"
 	"net/http"
@@ -67,4 +68,12 @@ func TestBindHelperAndLockNamespace(t *testing.T) {
 	require.NotEqual(t, bound, changed)
 	require.Contains(t, removed, bound)
 	require.Equal(t, "file", svc.helperByVolume[key].kind)
+}
+
+func TestRenameRefusesPaddedBindKeys(t *testing.T) {
+	key := volumetypes.BindKey("/srv/app")
+	for _, names := range [][2]string{{" " + key + " ", "renamed"}, {"data", key + "\n"}} {
+		_, err := (&VolumeService{}).RenameVolume(t.Context(), names[0], names[1], usertypes.Actor{})
+		require.EqualError(t, err, "volume.bind.unsupported")
+	}
 }

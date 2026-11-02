@@ -9,10 +9,14 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	dto "github.com/florianfinn/docklet-next/types/backup"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/florianfinn/docklet-next/types/workspace"
+	"log/slog"
 	"path"
 	"strconv"
 )
@@ -53,3 +57,13 @@ func (s *Service) updateBindFile(ctx context.Context, id, key string, manifest v
 }
 
 const bindFileWriteScript = bindpath.FileWriteScript
+
+func (s *Service) logWorkspaceUpdate(ctx context.Context, volumeName string, count int, user usertypes.Actor) {
+	if s.deps.Events == nil {
+		return
+	}
+	metadata := database.JSON{"action": "workspace_update", "fileChangeCount": count}
+	if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeWorkspaceUpdate, volumeName, volume.DisplayName(volumeName), user.ID, user.Username, "0", metadata); logErr != nil {
+		slog.WarnContext(ctx, "could not log volume workspace update event", "volume", volumeName, "error", logErr.Error())
+	}
+}

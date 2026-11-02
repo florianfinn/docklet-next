@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -41,6 +42,10 @@ func newVolumeWorkspaceTestDockerClientInternal(t *testing.T, server *httptest.S
 		client.WithHost(server.URL),
 		client.WithAPIVersion("1.41"),
 		client.WithHTTPClient(server.Client()),
+		// Exec attach hijacks a raw connection, which needs an explicit dialer for the test server.
+		client.WithDialContext(func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp", server.Listener.Addr().String())
+		}),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = dockerClient.Close() })

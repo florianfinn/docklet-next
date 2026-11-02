@@ -35,6 +35,12 @@ func (s *Service) bindSourceMount(ctx context.Context, cli *client.Client, key s
 	return bindpath.SourceMount(source, kind, false), kind, nil
 }
 
+// BindEffects wires the single-file phases: the scratch root check runs in preparing, before any
+// live write, and the in-place copy runs in writing.
+func (s *Service) BindEffects(e *LifecycleEffects) {
+	e.PostSafety, e.Write = s.PrepareBindFile, s.WriteRestore
+}
+
 // PrepareBindFile is a preparing-phase effect after safety capture and before live writes.
 func (s *Service) PrepareBindFile(ctx context.Context, run *Run, r StartRequest) error {
 	p := run.Prepared

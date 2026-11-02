@@ -103,3 +103,10 @@ func TestBindStartupRestartsOnlyRecordedSameIDConsumers(t *testing.T) {
 	require.NoError(t, s.deps.DB.Table("volume_backups").First(&live, "id = ?", "live").Error)
 	require.Equal(t, "running", live.Status)
 }
+
+// The restore package's scratch-check test drives BindEffects; this pins that production uses it.
+func TestRestoreLifecycleWiresBindFilePhases(t *testing.T) {
+	s := NewService(Dependencies{})
+	require.NotNil(t, s.lifecycle.Effects.PostSafety, "single-file binds need the preparing-phase scratch check")
+	require.NotNil(t, s.lifecycle.Effects.Write)
+}

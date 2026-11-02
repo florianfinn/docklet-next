@@ -381,14 +381,14 @@ func (e *volumeWorkspaceBusyError) MarshalJSON() ([]byte, error) {
 
 // RenameVolume copies an unused volume to a new name and removes the source.
 func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName string, user usertypes.Actor) (*volumetypes.Volume, error) {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
 	if err := volumetypes.RefuseBind(oldName); err != nil {
 		return nil, err
 	}
 	if err := volumetypes.RefuseBind(newName); err != nil {
 		return nil, err
 	}
-	oldName = strings.TrimSpace(oldName)
-	newName = strings.TrimSpace(newName)
 	if oldName == "" || newName == "" || oldName == newName {
 		return nil, common.ErrVolumeRenameInvalid
 	}

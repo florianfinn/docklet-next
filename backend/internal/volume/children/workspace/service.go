@@ -561,7 +561,11 @@ func (
 	}
 
 	if s.deps.BindKind != nil && s.deps.BindKind(volumeName) == "file" {
-		return s.updateBindFile(ctx, containerID, volumeName, manifest, uploads)
+		tree, err := s.updateBindFile(ctx, containerID, volumeName, manifest, uploads)
+		if err == nil {
+			s.logWorkspaceUpdate(ctx, volumeName, len(manifest.FileChanges), user)
+		}
+		return tree, err
 	}
 	stagingStartedAt := time.Now()
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
@@ -628,12 +632,7 @@ func (
 		),
 	)
 
-	if s.deps.Events != nil {
-		metadata := database.JSON{"action": "workspace_update", "fileChangeCount": len(manifest.FileChanges)}
-		if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeWorkspaceUpdate, volumeName, volume.DisplayName(volumeName), user.ID, user.Username, "0", metadata); logErr != nil {
-			slog.WarnContext(ctx, "could not log volume workspace update event", "volume", volumeName, "error", logErr.Error())
-		}
-	}
+	s.logWorkspaceUpdate(ctx, volumeName, len(manifest.FileChanges), user)
 	return tree, nil
 }
 

@@ -51,6 +51,7 @@ func (s *Service) configureRestoreLifecycle() {
 			return s.deps.StopContainer(ctx, c.ID, u)
 		},
 		Restart: s.restartConsumers, Safety: s.safetyBackupInternal,
-		PostSafety: s.restore.PrepareBindFile, Write: s.restore.WriteRestore, CleanupNew: s.restore.CleanupNew, Fence: s.retainWriterFence, PruneSafety: s.pruneSafety,
+		CleanupNew: s.restore.CleanupNew, Fence: s.retainWriterFence, PruneSafety: s.pruneSafety,
 	}
+	s.restore.BindEffects(&s.lifecycle.Effects)
 }

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
@@ -56,8 +57,10 @@ func TestBindScratchRootThroughLifecycle(t *testing.T) {
 				switch {
 				case strings.Contains(r.URL.Path, "/images/"):
 					_, _ = w.Write([]byte(`{"Id":"image"}`))
+				case strings.HasSuffix(r.URL.Path, "/info"):
+					_, _ = w.Write([]byte(`{"DockerRootDir":"/var/lib/docker"}`))
 				case strings.HasSuffix(r.URL.Path, "/containers/json"):
-					_, _ = w.Write([]byte(`[]`))
+					_, _ = w.Write([]byte(`[{"Id":"app","Mounts":[{"Type":"bind","Source":"/srv/app.conf","Destination":"/app.conf"}]}]`))
 				case strings.HasSuffix(r.URL.Path, "/volumes/create"):
 					_, _ = w.Write([]byte(`{"Name":"scratch"}`))
 				case strings.HasSuffix(r.URL.Path, "/containers/create"):
@@ -87,36 +90,54 @@ func TestBindScratchRootThroughLifecycle(t *testing.T) {
 			require.NoError(t, err)
 			defer cli.Close()
 			engine := backup.NewEngine(t.Context(), nil, nil)
+			writes := 0
 			s := NewService(Dependencies{Docker: docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(cli), Engine: engine, HelperImage: func(context.Context, *client.Client) (string, error) { return "tools", nil }, Exec: func(ctx context.Context, _, _ string, args []string) (string, string, error) {
 				var stored Run
 				require.NoError(t, l.DB.First(&stored, "id = ?", run.ID).Error)
-				require.Equal(t, "preparing", stored.Phase)
 				require.Equal(t, "safety", stored.SafetyBackupID)
+				switch args[2] {
+				case bindScratchCheck:
+					require.Equal(t, "preparing", stored.Phase)
+				case bindpath.RestoreFileScript:
+					require.Equal(t, "writing", stored.Phase)
+					writes++
+					require.Equal(t, []string{"/scratch/app.conf", "/volume/app.conf"}, args[4:])
+					out, e := exec.CommandContext(ctx, "/bin/sh", "-c", args[2], "sh", filepath.Join(scratch, "app.conf"), live).CombinedOutput()
+					return string(out), "", e
+				default:
+					require.Contains(t, args[2], "/source", "only the bind witness runs besides the scratch check and the write")
+					return "file", "", nil
+				}
 				script := strings.ReplaceAll(args[2], "/scratch", scratch)
 				out, e := exec.CommandContext(ctx, "/bin/sh", "-c", script, "sh", "app.conf").CombinedOutput()
 				return string(out), "", e
 			}})
 			run.Prepared = &preparedRestore{bindKind: "file", repository: backup.Repository{ID: "repository"}, snapshot: strings.Repeat("a", 64)}
-			l.Effects.PostSafety = s.PrepareBindFile
-			writes := 0
-			l.Effects.Write = func(context.Context, *Run, StartRequest) error { writes++; return nil }
+			s.BindEffects(&l.Effects)
+			before, err := os.Stat(live)
+			require.NoError(t, err)
 			err = l.Execute(t.Context(), run, StartRequest{VolumeName: run.VolumeName, Kind: "full"})
+			content, readErr := os.ReadFile(live)
+			require.NoError(t, readErr)
 			if kind == "valid" {
 				require.NoError(t, err)
 				require.Equal(t, 1, writes)
+				require.Equal(t, "restored", string(content))
+				after, statErr := os.Stat(live)
+				require.NoError(t, statErr)
+				require.True(t, os.SameFile(before, after), "the mounted file keeps its inode")
+				require.Len(t, creates, 4, "scratch restore, scratch check, bind witness and writer")
 			} else {
 				var p *dto.Problem
 				require.ErrorAs(t, err, &p)
 				require.Equal(t, 422, p.Status)
 				require.Zero(t, writes)
 				require.False(t, run.PendingRestart)
+				require.Equal(t, "original", string(content))
+				require.Len(t, creates, 2)
 			}
-			require.Len(t, creates, 2)
 			require.Contains(t, creates[0].HostConfig.Mounts, mount.Mount{Type: mount.TypeVolume, Source: "docklet-restore-" + run.ID, Target: "/scratch"})
 			require.Equal(t, "/scratch", creates[0].Cmd[len(creates[0].Cmd)-1])
-			content, err := os.ReadFile(live)
-			require.NoError(t, err)
-			require.Equal(t, "original", string(content))
 		})
 	}
 }
