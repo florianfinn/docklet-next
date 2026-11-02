@@ -163,7 +163,8 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {
 				item.LastSuccessAt = r.CreatedAt
 			}
-			if r.Status == "running" && item.Running == nil {
+			// A restore's safety capture has no activity of its own; the running restore reports it.
+			if r.Status == "running" && item.Running == nil && r.ActivityID != "" {
 				item.Running = &volume.BackupRunning{Kind: "backup", ActivityID: r.ActivityID}
 			}
 		case "download":

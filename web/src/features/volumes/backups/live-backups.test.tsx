@@ -92,6 +92,16 @@ it("rediscovers running restores on reload without a POST and shows pending rest
   expect(f.state.requests.some((r) => r.method === "POST")).toBe(false);
   expect((screen.getByRole("button", { name: "Jetzt sichern" }) as HTMLButtonElement).disabled).toBe(true);
 });
+// An older producer reports a restore's safety capture as a running backup without an activity; the empty ID is
+// never followed, and the operation this tab admitted stays visible.
+it("follows the admitted operation instead of an empty running activity", async () => {
+  const f = setup(); f.state.overview.volumes![0]!.running = { activityId: "", kind: "backup" };
+  const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  renderWithApp(<VolumeBackupsTab volume={{ ...volume, backups: [] }} hostOnline />, f.adapter);
+  await userEvent.click(await screen.findByRole("button", { name: "Jetzt sichern" }));
+  await waitFor(() => expect(f.adapter.observeActionDetail).toHaveBeenCalledWith("first", "accepted", expect.any(Function)));
+  expect((f.adapter.observeActionDetail.mock.calls as unknown[][]).some((call) => call[1] === "")).toBe(false);
+});
 it("locks the manual stop switch on when the stored plan stops containers", async () => {
   const f = setup(); f.state.overview.volumes![0]!.policy = { ...f.state.overview.volumes![0]!.policy!, enabled: false, stopContainers: true };
   const volume = (await f.api.getBackupOverview("first")).volumes[0]!;

@@ -125,3 +125,21 @@ func TestOverviewLatestBackupHidesStoredDiagnostic(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, strings.Contains(string(body), "private-sentinel"), "overview must not serialize stored diagnostics")
 }
+
+// A restore's safety capture runs without an activity of its own; the running
+// restore, not an empty backup activity, is the volume's running operation.
+func TestOverviewRunningRestoreOwnsItsSafetyCapture(t *testing.T) {
+	started := []string{}
+	s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"Volumes": []mobyvolume.Volume{{Name: "live"}}}))
+	}), &started)
+	require.NoError(t, s.deps.DB.AutoMigrate(&checkSetting{}, &backuptarget.Target{}, &policies.VolumeBackupPolicy{}))
+	require.NoError(t, s.deps.DB.AutoMigrate(activity.Models()...))
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, s.deps.DB.Create(&restore.Run{ID: "restore", VolumeName: "live", Kind: "files", Mode: "replace", Status: "running", Phase: "preparing", StartedAt: now, ActivityID: "restoring"}).Error)
+	require.NoError(t, s.deps.DB.Table("volume_backups").Create(&volume.Backup{ID: "safety", VolumeName: "live", CreatedAt: now.Add(time.Second), Status: "running", Trigger: "safety", Destination: "local", Format: "rustic"}).Error)
+	result, err := s.Overview(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Volumes, 1)
+	require.Equal(t, &volume.BackupRunning{Kind: "restore", ActivityID: "restoring", RestoreID: "restore"}, result.Volumes[0].Running)
+}

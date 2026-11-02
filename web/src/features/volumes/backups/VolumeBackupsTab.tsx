@@ -81,7 +81,7 @@ function ConnectedTab({ volume, hostOnline, historyOnly }: { volume: VolumeDetai
         </div>
       )}
       {(running || activity) && (
-        <BackupOperation key={running ?? activity} hostId={volume.hostId} activityId={(running ?? activity)!} />
+        <BackupOperation key={running || activity} hostId={volume.hostId} activityId={(running || activity)!} />
       )}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
         <Field orientation="horizontal" className="w-auto">
