@@ -54,7 +54,7 @@ func (s *Service) listConsumers(ctx context.Context, name string, refuseSelf boo
 		if !uses {
 			continue
 		}
-		self := strings.EqualFold(candidate.Labels["com.getarcaneapp.arcane"], "true") || strings.EqualFold(candidate.Labels["com.getarcaneapp.arcane.agent"], "true")
+		self := bindpath.Self(candidate)
 		if refuseSelf && self {
 			return nil, dto.NewProblem(409, "volume.restore.self-mounted", nil)
 		}

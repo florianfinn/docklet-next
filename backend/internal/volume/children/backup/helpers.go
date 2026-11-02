@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	"log/slog"
 	"path"
 	"strings"
@@ -195,7 +196,7 @@ func (
 	eligible := make([]container.Summary, 0, len(containers.Items))
 	arcaneOwned := make([]container.Summary, 0, 2)
 	for _, candidate := range containers.Items {
-		if strings.EqualFold(candidate.Labels["com.getarcaneapp.arcane"], "true") || strings.EqualFold(candidate.Labels["com.getarcaneapp.arcane.agent"], "true") {
+		if bindpath.Self(candidate) {
 			arcaneOwned = append(arcaneOwned, candidate)
 			continue
 		}

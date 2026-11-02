@@ -9,6 +9,7 @@ package bindpath
 import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/volume"
@@ -23,7 +24,13 @@ func Overlap(a, b string) bool {
 	a, b = path.Clean(a), path.Clean(b)
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/") || a == "/" || b == "/"
 }
+
+// Self reports Docklet's own hub or agent container: the images and the agent template label it io.docklet.system;
+// the Arcane labels cover containers installed from Arcane templates.
 func Self(c container.Summary) bool {
+	if system := c.Labels[inventory.SystemLabel]; system == "hub" || system == "agent" {
+		return true
+	}
 	return strings.EqualFold(c.Labels["com.getarcaneapp.arcane"], "true") || strings.EqualFold(c.Labels["com.getarcaneapp.arcane.agent"], "true")
 }
 

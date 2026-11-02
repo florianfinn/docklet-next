@@ -26,6 +26,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/var/cache/g
     go run scripts/core-license-files.go bundle /out/licenses
 
 FROM ${RUNTIME_IMAGE} AS agent
+LABEL io.docklet.system=agent
 WORKDIR /app
 COPY --from=build /out/docklet-agent /usr/local/bin/docklet-agent
 COPY --from=build /out/licenses /usr/share/licenses/docklet-next
@@ -36,6 +37,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["/us
 ENTRYPOINT ["/usr/local/bin/docklet-agent"]
 
 FROM ${RUNTIME_IMAGE} AS hub
+LABEL io.docklet.system=hub
 WORKDIR /app
 COPY --from=build /out/docklet-hub /usr/local/bin/docklet-hub
 COPY --from=build /out/licenses /usr/share/licenses/docklet-next

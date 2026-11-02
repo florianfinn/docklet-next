@@ -38,9 +38,11 @@ func TestBindConsumersOverlapAndSelfRefusal(t *testing.T) {
 		ids = append(ids, c.ID)
 	}
 	require.Equal(t, []string{"equal", "parent", "child"}, ids)
-	rows = append(rows, row("hub", "/srv/app/secrets", map[string]string{"com.getarcaneapp.arcane": "true"}))
-	_, err = svc.listConsumers(t.Context(), volume.BindKey("/srv/app"), true)
-	require.EqualError(t, err, "volume.restore.self-mounted")
+	for _, labels := range []map[string]string{{"com.getarcaneapp.arcane": "true"}, {"io.docklet.system": "agent", "com.getarcaneapp.arcane.hidden": "true"}, {"io.docklet.system": "hub"}} {
+		rows = append(rows[:5:5], row("self", "/srv/app/secrets", labels))
+		_, err = svc.listConsumers(t.Context(), volume.BindKey("/srv/app"), true)
+		require.EqualError(t, err, "volume.restore.self-mounted", "%v", labels)
+	}
 }
 func TestProtectedBindBackupsRemainDownloadable(t *testing.T) {
 	f := newRuntimePlan(t)
