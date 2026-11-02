@@ -127,3 +127,46 @@ it("offers a new plan only once the configured default retention has loaded", as
   await screen.findByRole("button", { name: "Plan speichern" });
   expect((document.getElementById("bk-retention") as HTMLInputElement).value).toBe("30");
 });
+
+/** Runs a demo operation through the real ActionRunner and returns its terminal status. */
+async function settle(runner: ActionRunner, activity: Promise<string>) {
+  const id = await activity;
+  await vi.advanceTimersByTimeAsync(5000);
+  return runner.list().find((r) => r.id === id)?.status;
+}
+function timed() {
+  vi.useFakeTimers();
+  simulationStore.set((s) => ({ ...s, latency: "instant", live: false, actionSpeed: 3 }));
+  const db = new DemoDb(),
+    runner = new ActionRunner([]);
+  return { db, runner, api: createVolumesApi({ db, runner, forcedFailure: () => false, demoFailure: () => undefined }) };
+}
+
+it("keeps a demo bind key retained only by its restore row in overview and detail", async () => {
+  const { db, runner, api } = timed();
+  const volume = (await api.listVolumes()).find((v) => v.kind === "bind" && v.bind?.eligible)!;
+  expect(await settle(runner, api.runBackup(volume.id))).toBe("succeeded");
+  const snapshot = (await api.getVolume(volume.id)).backups[0]!;
+  expect(await settle(runner, api.restoreBackup(volume.id, snapshot.id, "replace"))).toBe("succeeded");
+  for (const run of (await api.getVolume(volume.id)).backups) await api.deleteBackup(volume.id, run.id);
+  await api.setBackupPolicy(volume.id, undefined);
+  vi.spyOn(db, "containers").mockReturnValue([]);
+  const ov = await api.getBackupOverview(volume.hostId);
+  const detail = await api.getVolume(volume.id);
+  expect([ov.volumes.some((v) => v.id === volume.id), detail.lastRestore?.status, backupAccess(detail)]).toEqual([true, "succeeded", "full"]);
+  vi.useRealTimers();
+});
+
+for (const mounted of [true, false])
+  it(`refuses demo source work once a bind path becomes a backup target (mounted ${mounted})`, async () => {
+    const { db, runner, api } = timed();
+    const volume = (await api.listVolumes()).find((v) => v.kind === "bind" && v.bind?.eligible && !v.fileBind)!;
+    expect(await settle(runner, api.runBackup(volume.id))).toBe("succeeded");
+    const snapshot = (await api.getVolume(volume.id)).backups[0]!;
+    await api.createBackupTarget({ name: "Protected source", kind: "local", hostId: volume.hostId, path: volume.name });
+    if (!mounted) vi.spyOn(db, "containers").mockReturnValue([]);
+    if (mounted) expect((await api.listVolumes()).find((v) => v.id === volume.id)?.bind?.reason).toBe("volume.bind.path-denied");
+    await expect(api.downloadBackup(volume.id, snapshot.id)).resolves.toBeInstanceOf(Blob);
+    await expect(api.runBackup(volume.id)).rejects.toMatchObject({ problem: { code: "volume.bind.path-denied" } });
+    vi.useRealTimers();
+  });

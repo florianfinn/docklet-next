@@ -12,6 +12,7 @@ import { nextBackupRun, volumeId } from "@/domain/volumes";
 import type { BackupTarget } from "@/domain/settings";
 import { validateSchedule } from "@/domain/schedule";
 import { DemoError, wait, type DemoContext } from "./demo-context";
+import { demoBind, demoStored, protectedPaths } from "./demo-binds";
 import { volumeName } from "@/domain/validation";
 
 type Operations =
@@ -44,7 +45,7 @@ export function createDemoBackups(
   find: (id: string) => Volume,
 ): Pick<VolumesApi, Operations> {
   const { db, runner } = ctx;
-  const restores = new Map<string, RestoreRun>(),
+  const restores = db.restoreRuns,
     keys = new Map<string, string>(),
     // Simulated stored credentials; like the agent, an edit probe without a new secret reuses them.
     secrets = new Map<string, string>();
@@ -52,17 +53,16 @@ export function createDemoBackups(
   const fail = (code: ConstructorParameters<typeof BackupError>[0]["code"]): never => {
     throw new BackupError({ code });
   };
-  /** Stored history is read by key whatever the current verdict (K3/K4). */
-  const stored = (v: Volume) => db.backupPolicies.has(v.id) || db.backupRuns.some((run) => run.volumeId === v.id);
   /**
-   * Source-touching operations, as the agent admits them: binds need an eligible verdict, or stored state once
-   * unmounted (K3); directory-only operations refuse file binds.
+   * Source-touching operations, as the agent admits them: the current path rules apply to every bind, mounted or
+   * stored (K3/K4); an unmounted key needs stored state; directory-only operations refuse file binds.
    */
   function named(id: string, directory = false) {
     const v = find(id);
     if (v.kind === "volume") return v;
-    if (!v.bind && !stored(v)) return fail("volume.bind.not-mounted");
-    if (v.bind && !v.bind.eligible) return fail(v.bind.reason === "volume.bind.unsupported-type" ? "volume.bind.unsupported-type" : "volume.bind.path-denied");
+    const verdict = v.bind ?? (demoStored(db, v.id) ? demoBind(v.name, !!v.fileBind, protectedPaths(db.settings.backups.targets, v.hostId)) : undefined);
+    if (!verdict) return fail("volume.bind.not-mounted");
+    if (!verdict.eligible) return fail(verdict.reason === "volume.bind.unsupported-type" ? "volume.bind.unsupported-type" : "volume.bind.path-denied");
     if (directory && v.fileBind) return fail("volume.bind.file-operation-unsupported");
     return v;
   }
@@ -308,7 +308,7 @@ export function createDemoBackups(
         repository: { available: online, mode: "volume" },
         targets: usable(host),
         volumes: all()
-          .filter((v) => v.hostId === host && (v.kind === "volume" || v.bind?.eligible || stored(v)))
+          .filter((v) => v.hostId === host && (v.kind === "volume" || v.bind?.eligible || demoStored(db, v.id)))
           .map((v) => ({
             ...v,
             timeZone: db.settings.general.timeZone,
@@ -322,12 +322,7 @@ export function createDemoBackups(
                     : undefined,
                 }
               : undefined,
-            lastRestore: restores.get(v.id),
-            pendingRestores: restores.get(v.id)?.pendingRestart ? [restores.get(v.id)!] : [],
-            running:
-              restores.get(v.id)?.status === "running"
-                ? { kind: "restore", activityId: restores.get(v.id)!.activityId }
-                : v.running,
+            pendingRestores: v.pendingRestores ?? [],
           })),
       };
     },

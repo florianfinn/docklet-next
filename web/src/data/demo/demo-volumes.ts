@@ -1,5 +1,5 @@
 import { isHostAvailable } from "@/domain/hosts";
-import { demoBind } from "./demo-binds";
+import { demoBind, demoStored, protectedPaths } from "./demo-binds";
 import { createDemoBackups } from "./demo-backups";
 import { collectMountUsage, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
 import { planVolumePrune, pruneBlock } from "@/domain/volume-prune";
@@ -35,7 +35,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
     db.files.ensure(u.id, () => seedFiles(u));
     const runs = db.backupRuns.filter((r) => r.volumeId === u.id);
     const snapshot = latest(runs.filter((r) => r.status === "succeeded" && r.sizeBytes != null));
-    const bind = u.kind === "bind" ? demoBind(u.name, u.fileBind, measured.get(u.id), snapshot && { size: snapshot.sizeBytes!, at: snapshot.finishedAt ?? snapshot.startedAt }) : undefined;
+    const bind = u.kind === "bind" ? demoBind(u.name, u.fileBind, protectedPaths(db.settings.backups.targets, u.hostId), measured.get(u.id), snapshot && { size: snapshot.sizeBytes!, at: snapshot.finishedAt ?? snapshot.startedAt }) : undefined;
     return {
       id: u.id,
       name: u.name,
@@ -51,18 +51,29 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       createdAt: new Date(Date.now() - (20 + (hash(u.id) % 300)) * DAY).toISOString(),
       consumers: u.consumers,
       labels: u.stackId && u.composeName ? { "com.docker.compose.project": u.stackId, "com.docker.compose.volume": u.composeName } : {},
-      backup: db.backupPolicies.get(u.id),
-      ...outcome(runs),
+      ...stored(u.id),
     };
   }
 
-  // Like the agent, a bind key with a stored plan or backup stays reachable after its last consumer is gone (K3).
+  /** Stored backup state of a key: plan, newest finished backup, running operation and restore rows. */
+  function stored(id: string): Pick<Volume, "backup" | "lastBackup" | "running" | "lastRestore" | "pendingRestores"> {
+    const restore = db.restoreRuns.get(id),
+      runs = outcome(db.backupRuns.filter((r) => r.volumeId === id));
+    return {
+      backup: db.backupPolicies.get(id),
+      ...runs,
+      ...(restore && { lastRestore: restore, pendingRestores: restore.pendingRestart ? [restore] : [] }),
+      running: restore?.status === "running" ? { kind: "restore", activityId: restore.activityId } : runs.running,
+    };
+  }
+
+  // A stored bind key stays reachable after its last consumer is gone (K3); without a mount it has no live verdict.
   const seenBinds = new Map<string, Volume>();
   function retained(): Volume[] {
     const mounted = new Set(usageOf().map((u) => u.id));
     return [...seenBinds.values()]
-      .filter((v) => !mounted.has(v.id) && (db.backupPolicies.has(v.id) || db.backupRuns.some((r) => r.volumeId === v.id)))
-      .map((v) => ({ ...v, consumers: [], bind: undefined, backup: db.backupPolicies.get(v.id), ...outcome(db.backupRuns.filter((r) => r.volumeId === v.id)) }));
+      .filter((v) => !mounted.has(v.id) && demoStored(db, v.id))
+      .map((v) => ({ ...v, consumers: [], bind: undefined, ...stored(v.id) }));
   }
 
   function all(): Volume[] {
@@ -86,8 +97,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
         createdAt: v.createdAt,
         consumers: used?.consumers ?? [],
         labels: { ...used?.labels, ...v.labels },
-        backup: db.backupPolicies.get(id),
-        ...outcome(db.backupRuns.filter((r) => r.volumeId === id)),
+        ...stored(id),
         demoCreated: v.seeded ? undefined : true,
       };
     });
