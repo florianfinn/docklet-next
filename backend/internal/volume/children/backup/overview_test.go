@@ -7,6 +7,7 @@
 package backup
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -142,4 +143,31 @@ func TestOverviewRunningRestoreOwnsItsSafetyCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Volumes, 1)
 	require.Equal(t, &volume.BackupRunning{Kind: "restore", ActivityID: "restoring", RestoreID: "restore"}, result.Volumes[0].Running)
+}
+
+func TestOverviewScheduledCaptureStaysRunningWithoutActivity(t *testing.T) {
+	f := newRuntimePlan(t)
+	s := f.service
+	require.NoError(t, s.deps.DB.AutoMigrate(&backuptarget.Target{}, &policies.VolumeBackupPolicy{}))
+	require.NoError(t, s.deps.DB.AutoMigrate(activity.Models()...))
+	s.deps.Store.Create = func(ctx context.Context, row *volume.Backup) error {
+		return s.deps.DB.WithContext(ctx).Table("volume_backups").Create(row).Error
+	}
+	require.NoError(t, s.deps.DB.Create(&policies.VolumeBackupPolicy{ID: "scheduled-policy", VolumeName: "data", Enabled: true, LocalEnabled: true, TargetID: "local", Schedule: "0 0 2 * * *"}).Error)
+	// Scheduled captures run without an activity of their own and stay visible as running.
+	entry, owner, _, err := s.prepareCapture(t.Context(), "data", "scheduled", volume.CreateBackupRequest{PolicyID: "scheduled-policy"})
+	require.NoError(t, err)
+	defer owner.Release(t.Context())
+	require.Nil(t, entry.ActivityID)
+	require.Equal(t, "running", entry.Status)
+	_, _, err = s.acquireOperation(t.Context(), "data", "")
+	require.ErrorContains(t, err, "volume.backup.busy")
+	held, err := s.HeldForAutoHeal(t.Context(), []string{"data"})
+	require.NoError(t, err)
+	require.True(t, held)
+	result, err := s.Overview(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Volumes, 1)
+	require.NotNil(t, result.Volumes[0].Running, "an admitted scheduled capture must remain visible as running")
+	require.Equal(t, "backup", result.Volumes[0].Running.Kind)
 }
