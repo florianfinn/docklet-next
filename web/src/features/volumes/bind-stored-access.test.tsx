@@ -246,5 +246,5 @@ for (const [label, bind, historyOnly] of [
     expect(open !== null).toBe(true);
     await userEvent.click(open!);
     await screen.findByText("config.yml");
-    expect([browse.mock.calls[0]?.slice(0, 2), screen.queryByRole("checkbox"), screen.queryByRole("button", { name: "Dateien wiederherstellen" })]).toEqual([[`first~${key}`, "r"], null, null]);
+    expect([browse.mock.calls[0]?.slice(0, 2), screen.queryByRole("checkbox") === null, screen.queryByRole("button", { name: "Dateien wiederherstellen" }) === null]).toEqual([[`first~${key}`, "r"], true, true]);
   });
