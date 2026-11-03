@@ -62,6 +62,8 @@ type Sample struct {
 	Host       HostSample        `json:"host"`
 	Containers []ContainerSample `json:"containers"`
 	Projects   []ProjectSample   `json:"projects"`
+	// Listed containers whose inspect hit its deadline: no minute, but no proof of absence either.
+	Uninspected []string `json:"uninspected,omitempty" maxItems:"2000"`
 }
 type Problem struct {
 	Code   string `json:"code" enum:"history.sample-too-large,history.sample-invalid,history.unavailable,history.invalid-range"`

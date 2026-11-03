@@ -16,6 +16,8 @@ import (
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	dto "github.com/florianfinn/docklet-next/types/history"
 	"gorm.io/gorm"
+	"slices"
+	"strings"
 	"time"
 	"uuid"
 )
@@ -25,6 +27,16 @@ func containerConditions(items []dto.Condition) map[string]dto.Condition {
 	for _, c := range items {
 		if c.Kind == "container" {
 			out[c.ContainerID] = c
+		}
+	}
+	return out
+}
+
+func stackConditions(items []dto.Condition) map[string]dto.Condition {
+	out := map[string]dto.Condition{}
+	for _, c := range items {
+		if c.Kind == "stack" {
+			out[c.ProjectID] = c
 		}
 	}
 	return out
@@ -70,8 +82,9 @@ func (s *Service) projectTransitions(tx *gorm.DB, host string, now time.Time, cu
 	return nil
 }
 
-// projectLoad evaluates one minute; container episodes end only when a successful sample no longer reports them.
-func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now time.Time, observations []observation, sampled bool, next *hostState) error {
+// projectLoad evaluates one minute; container episodes end only when a successful sample no longer lists
+// them. An uninspected container keeps its episode: the missing minute resets the run, not the alert.
+func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now time.Time, observations []observation, sampled bool, uninspected []string, next *hostState) error {
 	enabled, cpuThreshold, memoryThreshold, minutes := true, 90., 90., 10
 	if s.settings != nil {
 		cfg := s.settings.GetSettingsConfig()
@@ -125,6 +138,9 @@ func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now tim
 		return nil
 	}
 	for key := range next.episodes {
+		if parts := strings.Split(key, ":"); len(parts) == 4 && parts[0] == "container" && slices.Contains(uninspected, parts[2]) {
+			continue
+		}
 		if !alive[key] {
 			delete(next.episodes, key)
 		}

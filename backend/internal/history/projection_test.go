@@ -79,9 +79,13 @@ func TestConditionTransitionsSurviveFailedMinute(t *testing.T) {
 	down.Containers[0].State, down.Containers[0].ExitCode, down.Containers[0].Stats = "exited", 1, nil
 	minute := func(i int) time.Time { return now.Add(time.Duration(i) * time.Minute) }
 	require.NoError(t, s.commit(t.Context(), host, minute(0), down, nil))
+	since := s.snapshots.read(host.ID).Items[0].Since
 	require.NoError(t, s.commit(t.Context(), host, minute(1), dto.Sample{}, errors.New("agent unreachable")))
 	require.NoError(t, s.commit(t.Context(), host, minute(2), down, nil))
 	require.EqualValues(t, 1, countEvents(t, s, dto.EventDown))
+	for _, c := range s.snapshots.read(host.ID).Items {
+		require.Equal(t, since, c.Since, c.Kind)
+	}
 	require.NoError(t, s.commit(t.Context(), host, minute(3), dto.Sample{}, errors.New("agent unreachable")))
 	require.NoError(t, s.commit(t.Context(), host, minute(4), fixtureSample(), nil))
 	require.EqualValues(t, 1, countEvents(t, s, dto.EventRunningAgain))
@@ -109,6 +113,50 @@ func TestLoadEpisodeSurvivesFailedMinute(t *testing.T) {
 	high(8)
 	require.NoError(t, s.commit(t.Context(), host, now.Add(time.Duration(minute)*time.Minute), dto.Sample{}, errors.New("agent unreachable")))
 	minute++
+	high(8)
+	var alerts int64
+	require.NoError(t, s.db.Model(&activity.Activity{}).Where("type='load_sustained' AND resource_type='container' AND metadata LIKE '%\"cpu\"%'").Count(&alerts).Error)
+	require.EqualValues(t, 1, alerts)
+}
+
+// A container listed but not inspected for one minute is no transition and keeps its alerted episode.
+func TestUninspectedContainerKeepsConditionAndEpisode(t *testing.T) {
+	s, host, now := samplerFixture(t)
+	setting, err := settings.NewSettingsService(t.Context(), s.db)
+	require.NoError(t, err)
+	defer setting.Stop(context.Background())
+	s.settings = setting
+	require.NoError(t, setting.SetStringSetting(t.Context(), "loadAlertMinutes", "5"))
+	minute := 0
+	commit := func(sample dto.Sample) {
+		require.NoError(t, s.commit(t.Context(), host, now.Add(time.Duration(minute)*time.Minute), sample, nil))
+		minute++
+	}
+	skipped := func(sample dto.Sample) dto.Sample {
+		gap := cloneSample(sample)
+		gap.Uninspected, gap.Containers = []string{sample.Containers[0].ID}, nil
+		return *gap
+	}
+	down := fixtureSample()
+	down.Containers[0].State, down.Containers[0].ExitCode, down.Containers[0].Stats = "exited", 1, nil
+	commit(down)
+	since := s.snapshots.read(host.ID).Items
+	commit(skipped(down))
+	require.Equal(t, since[0].Since, s.snapshots.read(host.ID).Items[0].Since)
+	commit(down)
+	require.EqualValues(t, 1, countEvents(t, s, dto.EventDown))
+	require.Equal(t, since[0].Since, s.snapshots.read(host.ID).Items[0].Since)
+
+	sample := fixtureSample()
+	high := func(n int) {
+		for i := 0; i < n; i++ {
+			sample.Containers[0].Stats.CPUTotal += 95
+			sample.Containers[0].Stats.CPUSystem += 100
+			commit(sample)
+		}
+	}
+	high(8)
+	commit(skipped(sample))
 	high(8)
 	var alerts int64
 	require.NoError(t, s.db.Model(&activity.Activity{}).Where("type='load_sustained' AND resource_type='container' AND metadata LIKE '%\"cpu\"%'").Count(&alerts).Error)

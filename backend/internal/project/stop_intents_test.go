@@ -30,7 +30,7 @@ func TestHB5ProjectStopAndDownPersistActiveMembersOnly(t *testing.T) {
 				daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					if strings.HasSuffix(r.URL.Path, "/containers/json") {
-						_ = json.NewEncoder(w).Encode([]any{map[string]any{"Id": "running", "Names": []string{"/example-app"}, "State": "running"}, map[string]any{"Id": "looping", "Names": []string{"/example-loop"}, "State": "restarting"}, map[string]any{"Id": "stopped", "Names": []string{"/example-old"}, "State": "exited"}})
+						_ = json.NewEncoder(w).Encode([]any{map[string]any{"Id": "running", "Names": []string{"/example-app"}, "State": "running"}, map[string]any{"Id": "looping", "Names": []string{"/example-loop"}, "State": "restarting"}, map[string]any{"Id": "held", "Names": []string{"/example-held"}, "State": "paused"}, map[string]any{"Id": "stopped", "Names": []string{"/example-old"}, "State": "exited"}})
 						return
 					}
 					w.WriteHeader(200)
@@ -61,9 +61,9 @@ func TestHB5ProjectStopAndDownPersistActiveMembersOnly(t *testing.T) {
 					require.Empty(t, rows)
 				} else {
 					require.NoError(t, err)
-					require.Len(t, rows, 2)
-					ids := []string{rows[0].ContainerID, rows[1].ContainerID}
-					require.ElementsMatch(t, []string{"running", "looping"}, ids)
+					require.Len(t, rows, 3)
+					ids := []string{rows[0].ContainerID, rows[1].ContainerID, rows[2].ContainerID}
+					require.ElementsMatch(t, []string{"running", "looping", "held"}, ids)
 					require.Equal(t, row.ID, rows[0].ProjectID)
 					require.False(t, rows[0].RecordedAt.IsZero())
 				}

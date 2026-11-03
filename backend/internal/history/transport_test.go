@@ -290,3 +290,67 @@ func TestSampleSkipsContainerGoneBeforeInspect(t *testing.T) {
 	require.Len(t, sample.Containers, 1)
 	require.Equal(t, "kept", sample.Containers[0].ID)
 }
+
+// An inspect that misses its deadline marks the container uninspected and keeps its stop intent; a container
+// gone since the list loses it; any other inspect failure fails the host sample.
+func TestSampleInspectFailureKinds(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		slow      int
+		wantError bool
+	}{{"deadline", http.StatusOK, false}, {"daemon error", http.StatusInternalServerError, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := historyDB(t)
+			daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/_ping"):
+					w.WriteHeader(200)
+				case strings.HasSuffix(r.URL.Path, "/containers/json"):
+					_ = json.NewEncoder(w).Encode([]any{map[string]any{"Id": "gone", "Names": []string{"/old"}, "State": "running"}, map[string]any{"Id": "slow", "Names": []string{"/db"}, "State": "exited"}, map[string]any{"Id": "kept", "Names": []string{"/app"}, "State": "exited"}})
+				case strings.HasSuffix(r.URL.Path, "/gone/json"):
+					http.Error(w, `{"message":"No such container: gone"}`, http.StatusNotFound)
+				case strings.HasSuffix(r.URL.Path, "/slow/json"):
+					if tc.slow != http.StatusOK {
+						http.Error(w, `{"message":"daemon unavailable"}`, tc.slow)
+						return
+					}
+					select {
+					case <-r.Context().Done():
+					case <-time.After(5 * time.Second):
+					}
+				case strings.HasSuffix(r.URL.Path, "/kept/json"):
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "kept", "Name": "/app", "Config": map[string]any{"Labels": map[string]string{}}, "State": map[string]any{"Status": "exited", "ExitCode": 0, "StartedAt": "2026-11-03T10:00:00Z", "FinishedAt": "2026-11-03T11:00:00Z"}})
+				default:
+					http.Error(w, "unexpected Docker route", 404)
+				}
+			}))
+			t.Cleanup(daemon.Close)
+			cli, err := client.New(client.WithHost(daemon.URL), client.WithAPIVersion("1.41"), client.WithHTTPClient(daemon.Client()))
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, cli.Close()) })
+			setting, err := settings.NewSettingsService(t.Context(), db)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, setting.Stop(context.WithoutCancel(t.Context()))) })
+			recorded := time.Date(2026, 11, 3, 10, 30, 0, 0, time.UTC)
+			for _, id := range []string{"gone", "slow"} {
+				require.NoError(t, db.Create(&runtimeintent.Row{ContainerID: id, ContainerName: id, RecordedAt: recorded}).Error)
+			}
+			producer := NewProducer(db, docker.NewDockerClientService(t.Context(), db, &config.Config{Environment: "test"}, setting).WithClient(cli), setting)
+			producer.inspectTimeout = 200 * time.Millisecond
+			producer.hostSample = func(context.Context) (dto.HostSample, error) { return fixtureSample().Host, nil }
+			sample, err := producer.Sample(t.Context())
+			if tc.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, []string{"kept"}, []string{sample.Containers[0].ID})
+			require.Len(t, sample.Containers, 1)
+			require.Equal(t, []string{"slow"}, sample.Uninspected)
+			var kept []string
+			require.NoError(t, db.Model(&runtimeintent.Row{}).Order("container_id").Pluck("container_id", &kept).Error)
+			require.Equal(t, []string{"slow"}, kept)
+		})
+	}
+}

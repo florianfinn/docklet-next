@@ -58,9 +58,11 @@ func (s *Service) observations(host string, now time.Time, sample dto.Sample, ol
 	}
 	out := []observation{hostObservation}
 	conditions := []dto.Condition{}
-	previousConditions := s.snapshots.read(host)
 	priorByID := map[string]dto.Condition{}
-	for _, c := range previousConditions.Items {
+	for _, c := range old.conditions {
+		priorByID[c.Kind+":"+c.ContainerID+":"+c.ProjectID] = c
+	}
+	for _, c := range old.stacks {
 		priorByID[c.Kind+":"+c.ContainerID+":"+c.ProjectID] = c
 	}
 	stackConditions := map[string][]dto.Condition{}
@@ -115,6 +117,18 @@ func (s *Service) observations(host string, now time.Time, sample dto.Sample, ol
 			sum.read += o.read
 			sum.write += o.write
 			stackMetrics[c.ProjectID] = sum
+		}
+	}
+	// An uninspected container gets no minute but keeps its last condition and restart window.
+	for _, id := range sample.Uninspected {
+		if points, ok := old.restarts[id]; ok {
+			next.restarts[id] = points
+		}
+		if c, ok := old.conditions[id]; ok {
+			conditions = append(conditions, c)
+			if c.ProjectID != "" {
+				stackConditions[c.ProjectID] = append(stackConditions[c.ProjectID], c)
+			}
 		}
 	}
 	for _, p := range sample.Projects {

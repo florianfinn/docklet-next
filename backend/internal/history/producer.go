@@ -10,10 +10,12 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
@@ -36,10 +38,11 @@ type Producer struct {
 	getClient        func(context.Context) (*client.Client, error)
 	hostSample       func(context.Context) (dto.HostSample, error)
 	dockerHostMemory func(context.Context) (uint64, uint64, bool)
+	inspectTimeout   time.Duration
 }
 
 func NewProducer(db *database.DB, dockerService *docker.DockerClientService, settingsService *settings.SettingsService) *Producer {
-	p := &Producer{db: db, getClient: dockerService.GetClient}
+	p := &Producer{db: db, getClient: dockerService.GetClient, inspectTimeout: 3 * time.Second}
 	p.hostSample = func(ctx context.Context) (dto.HostSample, error) {
 		h, err := sampleHost(ctx, settingsService.GetSettingsConfig().DiskUsagePath.Value)
 		if err == nil && p.dockerHostMemory != nil && cgroup.IsDockerContainer() {
@@ -135,17 +138,28 @@ func (p *Producer) Sample(ctx context.Context) (dto.Sample, error) {
 		out.Projects = append(out.Projects, dto.ProjectSample{ID: v.ID, Name: v.Name, Status: string(v.Status)})
 	}
 	out.Containers = make([]dto.ContainerSample, len(list.Items))
+	uninspected := make([]bool, len(list.Items))
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(16)
 	for i, c := range list.Items {
 		group.Go(func() error {
-			callCtx, cancel := context.WithTimeout(groupCtx, 3*time.Second)
+			callCtx, cancel := context.WithTimeout(groupCtx, p.inspectTimeout)
 			defer cancel()
 			inspected, err := cli.ContainerInspect(callCtx, c.ID, client.ContainerInspectOptions{})
 			if err != nil {
-				// A container removed since the list, or one slow inspect, skips only that
-				// container for this minute; the host sample still counts.
-				return groupCtx.Err()
+				// A container removed since the list, or one slow inspect, skips only that container
+				// for this minute; any other failure fails the host sample.
+				if groupCtx.Err() != nil {
+					return groupCtx.Err()
+				}
+				if errdefs.IsNotFound(err) {
+					return nil
+				}
+				if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+					uninspected[i] = true
+					return nil
+				}
+				return err
 			}
 			v := inspected.Container
 			item := dto.ContainerSample{ID: c.ID, Name: strings.TrimPrefix(v.Name, "/")}
@@ -186,6 +200,11 @@ func (p *Producer) Sample(ctx context.Context) (dto.Sample, error) {
 		return out, err
 	}
 	out.Containers = slices.DeleteFunc(out.Containers, func(c dto.ContainerSample) bool { return c.ID == "" })
+	for i, skipped := range uninspected {
+		if skipped {
+			out.Uninspected = append(out.Uninspected, list.Items[i].ID)
+		}
+	}
 	if err = ctx.Err(); err != nil {
 		return out, err
 	}
@@ -217,11 +236,18 @@ func (p *Producer) applyIntents(ctx context.Context, sample *dto.Sample) error {
 		return err
 	}
 	current := map[string]*dto.ContainerSample{}
+	unknown := map[string]bool{}
+	for _, id := range sample.Uninspected {
+		unknown[id] = true
+	}
 	for i := range sample.Containers {
 		c := &sample.Containers[i]
 		current[c.ID] = c
 	}
 	for _, r := range rows {
+		if unknown[r.ContainerID] {
+			continue
+		}
 		c, exists := current[r.ContainerID]
 		if exists {
 			started, err := time.Parse(time.RFC3339Nano, c.StartedAt)
