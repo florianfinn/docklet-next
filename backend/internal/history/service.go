@@ -29,8 +29,10 @@ type hostState struct {
 	previous *dto.Sample
 	restarts map[string][]restartPoint
 	episodes map[string]episode
-	// Last committed container conditions; failed minutes keep it, so a host blip is no transition.
+	// Last committed container and stack conditions; failed minutes and uninspected containers keep
+	// them, so a gap is no transition and does not restart Since.
 	conditions map[string]dto.Condition
+	stacks     map[string]dto.Condition
 }
 type Service struct {
 	db            *database.DB
@@ -150,9 +152,9 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 	if fetchErr == nil {
 		observations, conditions.Items = s.observations(host.ID, now, sample, old, &next)
 		next.previous = cloneSample(sample)
-		next.conditions = containerConditions(conditions.Items)
+		next.conditions, next.stacks = containerConditions(conditions.Items), stackConditions(conditions.Items)
 	} else {
-		next.restarts, next.conditions = old.restarts, old.conditions
+		next.restarts, next.conditions, next.stacks = old.restarts, old.conditions, old.stacks
 	}
 	committed := false
 	invalidated := false
@@ -186,7 +188,7 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 				return err
 			}
 		}
-		if err := s.projectLoad(tx, host, now, observations, fetchErr == nil, &next); err != nil {
+		if err := s.projectLoad(tx, host, now, observations, fetchErr == nil, sample.Uninspected, &next); err != nil {
 			return err
 		}
 		committed = true

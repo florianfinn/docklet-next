@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 8aa79676a28af5c0ff8e8f19556aaf810b0db49400fc48886f127da6a0578847
+// Revision: 568f5daae47635bfa264035fd580bbb5503a6a666327cdbabca59464366f5707
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10112,6 +10112,7 @@ export interface components {
             containers: components["schemas"]["HistoryContainerSample"][] | null;
             host: components["schemas"]["HistoryHostSample"];
             projects: components["schemas"]["HistoryProjectSample"][] | null;
+            uninspected?: string[] | null;
         };
         ImageAttestation: {
             artifactType?: string;

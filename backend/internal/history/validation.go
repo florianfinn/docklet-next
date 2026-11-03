@@ -40,6 +40,15 @@ func Validate(s dto.Sample) error {
 			return invalid()
 		}
 	}
+	if len(s.Uninspected) > 2000 {
+		return invalid()
+	}
+	for _, id := range s.Uninspected {
+		if id == "" || !nameOK(id) || ids[id] {
+			return invalid()
+		}
+		ids[id] = true
+	}
 	for _, p := range s.Projects {
 		if p.ID == "" || p.Name == "" || !nameOK(p.ID) || !nameOK(p.Name) || projects[p.ID] {
 			return invalid()

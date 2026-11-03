@@ -165,6 +165,8 @@ administrator selects it. Episodes are kept in memory, so a hub restart starts t
   again.
 - A failed host minute is no transition: condition events and load episodes continue
   from the last successful minute. A container that disappears between listing and
-  inspection, or whose inspection times out, is left out of that minute.
+  inspection is left out of that minute and loses its stop intent. One whose inspection
+  times out is listed as uninspected: it gets no minute but keeps its stop intent, its last
+  condition and its alerted load episode. Any other inspection error fails the host minute.
 - Commits of all hosts share one lock, and the runtime conditions route waits for a
-  running commit; at homelab scale this costs milliseconds.
+  running commit; this was not measured and is checked in practical acceptance.

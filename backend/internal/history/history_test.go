@@ -192,7 +192,7 @@ func TestHB7TiersSlotsAndRetentionEdges(t *testing.T) {
 	require.Len(t, rows, 3)
 }
 func TestHB8SampleValidation(t *testing.T) {
-	for _, mutate := range []func(*dto.Sample){func(s *dto.Sample) { s.Containers = append(s.Containers, s.Containers[0]) }, func(s *dto.Sample) { s.Host.CPUBusy = math.NaN() }, func(s *dto.Sample) { s.Containers[0].State = "invented" }, func(s *dto.Sample) { s.Host.DiskUsed = -1 }, func(s *dto.Sample) { s.Projects = append(s.Projects, s.Projects[0]) }} {
+	for _, mutate := range []func(*dto.Sample){func(s *dto.Sample) { s.Containers = append(s.Containers, s.Containers[0]) }, func(s *dto.Sample) { s.Host.CPUBusy = math.NaN() }, func(s *dto.Sample) { s.Containers[0].State = "invented" }, func(s *dto.Sample) { s.Host.DiskUsed = -1 }, func(s *dto.Sample) { s.Projects = append(s.Projects, s.Projects[0]) }, func(s *dto.Sample) { s.Uninspected = []string{s.Containers[0].ID} }, func(s *dto.Sample) { s.Uninspected = []string{""} }, func(s *dto.Sample) { s.Uninspected = []string{"x", "x"} }, func(s *dto.Sample) { s.Uninspected = make([]string, 2001) }} {
 		s := fixtureSample()
 		mutate(&s)
 		require.EqualError(t, Validate(s), "history.sample-invalid")
