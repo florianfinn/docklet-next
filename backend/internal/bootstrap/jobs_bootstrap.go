@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences.
 
 package bootstrap
 
@@ -27,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/history"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -267,6 +268,7 @@ type registerJobsParams struct {
 	Scheduler schedulertypes.JobScheduler
 
 	DB            *database.DB
+	History       *history.Service
 	Notification  *notification.NotificationService
 	Vulnerability *vulnerability.VulnerabilityService
 	Activity      *activity.ActivityService
@@ -319,6 +321,11 @@ func registerJobs(params registerJobsParams) error {
 		}
 	}
 	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		for _, job := range []schedulertypes.Job{&scheduler.HistoryJob{Service: params.History}, &scheduler.HistoryJob{Service: params.History, Retention: true}} {
+			if err := params.Scheduler.RegisterJob(job); err != nil {
+				return err
+			}
+		}
 		if err := params.Notification.ResetAvailability(params.AppCtx, time.Now().UTC()); err != nil {
 			return err
 		}

@@ -33,6 +33,7 @@ const KINDS: Record<string, ActionKind> = {
   container_restart: "restart", container_redeploy: "redeploy", container_edit: "recreate",
   vulnerability_scan: "scan", system_prune: "prune", auto_update: "update",
   container_auto_heal: "auto-heal",
+  load_sustained: "load-alert",
 };
 
 function required(value: unknown, field: string): asserts value {
@@ -61,14 +62,27 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
-  // Auto Heal and notification delivery codes live under runMessages.codes, keyed by their wire path.
-  if (code && /^(autoheal|notification)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
+  // Auto Heal, notification delivery, load and condition codes live under runMessages.codes, keyed by their wire path.
+  if (code && /^(autoheal|notification|load|container\.condition)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
   return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+}
+
+const CONDITION_CODES = ["down", "unhealthy", "restart-loop", "running-again"] as const;
+const count = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0);
+
+/** A runtime condition event names its container, the exit code and the restarts of the sampled window. */
+function conditionTitle(event: Event, meta: Record<string, unknown> | undefined): MessageCode | undefined {
+  const kind = event.messageCode?.startsWith("container.condition.") ? event.messageCode.slice("container.condition.".length) : undefined;
+  if (!kind || !(CONDITION_CODES as readonly string[]).includes(kind)) return undefined;
+  const name = typeof meta?.containerName === "string" && meta.containerName ? meta.containerName : event.resourceName ?? "";
+  return { code: `runMessages.codes.container.condition.${kind}`, params: { name, exitCode: count(meta?.exitCode), restarts: count(meta?.restarts) }, sourceText: event.title };
 }
 
 /** A delivery failure names its channel and typed reason; sender diagnostics never reach the title. */
 function eventTitle(event: Event): MessageCode {
   const meta = event.metadata as Record<string, unknown> | undefined;
+  const condition = conditionTitle(event, meta);
+  if (condition) return condition;
   const provider = meta?.provider;
   if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return message(event.messageCode, event.title);
   const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
@@ -221,6 +235,7 @@ export function mapEvent(event: Event): CodedEvent {
     id: event.id, at: event.timestamp, kind: eventKind(event), level: eventLevel(event.severity),
     title: eventTitle(event),
     hostId: event.environmentId,
+    ...(event.messageCode?.startsWith("container.condition.") ? { condition: true } : {}),
     ...(event.resourceType === "project" && event.resourceId && event.environmentId ? { stackId: inventoryId(event.environmentId, event.resourceId) } : {}),
   };
 }

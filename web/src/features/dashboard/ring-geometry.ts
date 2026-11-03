@@ -18,12 +18,23 @@ export interface RingGroup<G, T> {
 /** Gap between host groups and between neighbouring segments, in degrees. */
 const GROUP_GAP = 8;
 const SEGMENT_GAP = 0.9;
+/** Smallest segment span; shrinks when many units would not fit otherwise. */
+export const MIN_SEGMENT = 4;
 
-export function layoutRing<G, T>(groups: { group: G; items: T[] }[]): RingGroup<G, T>[] {
+/**
+ * Segment spans follow `weight` (container count, at least 1) on top of a shared
+ * minimum span per segment, so a one-container stack stays visible next to a
+ * large one and the ring never overlaps, from one unit to several hundred.
+ */
+export function layoutRing<G, T>(groups: { group: G; items: T[] }[], weight: (item: T) => number = () => 1): RingGroup<G, T>[] {
   const filled = groups.filter((g) => g.items.length);
-  const total = filled.reduce((n, g) => n + g.items.length, 0);
+  const items = filled.flatMap((g) => g.items);
   const gap = filled.length > 1 ? GROUP_GAP : 0;
-  const per = total ? (360 - gap * filled.length) / total : 0;
+  const available = 360 - gap * filled.length;
+  const weights = new Map(items.map((item) => [item, Math.max(1, weight(item) || 1)]));
+  const total = items.reduce((n, item) => n + weights.get(item)!, 0);
+  const min = items.length ? Math.min(MIN_SEGMENT, available / items.length) : 0;
+  const spare = available - min * items.length;
   const out: RingGroup<G, T>[] = [];
   let cursor = gap / 2;
   let index = 0;
@@ -31,6 +42,7 @@ export function layoutRing<G, T>(groups: { group: G; items: T[] }[]): RingGroup<
     const start = cursor;
     const segments: RingSegment<T>[] = [];
     for (const item of g.items) {
+      const per = min + (total ? (spare * weights.get(item)!) / total : 0);
       const s = cursor + SEGMENT_GAP;
       segments.push({ item, start: s, end: Math.max(s + 0.5, cursor + per - SEGMENT_GAP), index: index++ });
       cursor += per;

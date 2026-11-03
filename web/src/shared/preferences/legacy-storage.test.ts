@@ -26,8 +26,10 @@ describe("stored lab preferences", () => {
       ["hidden", hiddenStore], ["dashboard", layoutStore], ["fleet-view", fleetViewStore],
     ] as const) {
       const stored = records[`docklet-react-opus.${suffix}`].data;
-      // Older records acquire the new personal toggle without rewriting the fixture.
-      expect(store.get()).toEqual(suffix === "preferences" ? { ...stored, showUnraidRing: false } : stored);
+      // Older records acquire the new personal toggle and drop the former per-browser widget
+      // connections (now on the hub) without rewriting the fixture.
+      const { services: _services, ...dashboard } = stored as Record<string, unknown>;
+      expect(store.get()).toEqual(suffix === "preferences" ? { ...stored, showUnraidRing: false } : suffix === "dashboard" ? dashboard : stored);
     }
   });
 

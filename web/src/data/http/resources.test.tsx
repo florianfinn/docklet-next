@@ -113,9 +113,9 @@ it("maps measured host units, retains two hosts, then recovers from disconnect",
   stop(); expect([...f.sockets.values()].every((s) => vi.mocked(s.close).mock.calls.length > 0)).toBe(true);
   stopChanges();
 });
-it("rejects malformed metrics and keeps unknown disk/growth explicitly unavailable", () => {
+it("rejects malformed metrics and keeps unknown disk explicitly unavailable", () => {
   expect(() => mapHostMetrics({ cpuUsage: "bad" }, "first")).toThrow();
-  expect(mapHostMetrics({ cpuUsage: 20, memoryUsage: 100, memoryTotal: 200, cpuCount: 2 }, "first")).toMatchObject({ diskUnavailable: true, growthUnavailable: true });
+  expect(mapHostMetrics({ cpuUsage: 20, memoryUsage: 100, memoryTotal: 200, cpuCount: 2 }, "first")).toMatchObject({ diskUnavailable: true });
 });
 it("renders two dashboard host cards with distinct real measurements", async () => {
   const f = resourceFixture();

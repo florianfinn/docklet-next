@@ -26,6 +26,7 @@ GET /environments/{id}/containers/{containerId}/edit-config
 GET /environments/{id}/containers/{containerId}/logs/download
 GET /environments/{id}/containers/{containerId}/processes
 GET /environments/{id}/diagnostics/actors
+GET /environments/{id}/history/sample
 GET /environments/{id}/image-updates/by-refs
 GET /environments/{id}/image-updates/check
 GET /environments/{id}/image-updates/check/{imageId}

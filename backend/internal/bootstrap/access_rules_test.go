@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
 
 package bootstrap
 
@@ -85,6 +85,31 @@ func TestM15RuleCompleteness(t *testing.T) {
 	}
 	for key := range access.Rules {
 		assert.True(t, want[key], "stale rule: %s", key)
+	}
+}
+
+func TestM17RuleCompleteness(t *testing.T) {
+	want := map[string]access.Rule{
+		"get-history-sample":     {Kind: access.Admin},
+		"get-container-history":  {Kind: access.App, Ref: access.ContainerPath, Level: access.Restricted},
+		"get-project-history":    {Kind: access.App, Ref: access.ProjectPath, Level: access.Restricted},
+		"get-runtime-conditions": {Kind: access.AppList},
+		"get-host-history":       {Kind: access.Admin},
+		"get-history-capacity":   {Kind: access.Admin},
+		"get-my-ui-preferences":  {Kind: access.Self},
+		"put-my-ui-preferences":  {Kind: access.Self},
+	}
+	registered := map[string]bool{}
+	for _, path := range api.SetupAPIForSpec().OpenAPI().Paths {
+		for _, op := range []*huma.Operation{path.Get, path.Put} {
+			if op != nil {
+				registered[op.OperationID] = true
+			}
+		}
+	}
+	for operation, rule := range want {
+		require.True(t, registered[operation], operation)
+		require.Equal(t, rule, access.Rules[operation], operation)
 	}
 }
 

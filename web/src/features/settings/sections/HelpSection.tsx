@@ -31,7 +31,7 @@ export function HelpSection() {
         helpStore.set(d);
         section.commit(d);
       }}
-      note={t("form.browserLocal")}
+      note={t("form.accountStored")}
     >
       <Field>
         <HelpLabel id="help-mode-label" topic="settingsHelp.mode">

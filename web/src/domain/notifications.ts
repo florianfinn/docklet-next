@@ -28,8 +28,8 @@ export type NotificationTestResult = Schema["NotificationTestResponse"];
 
 export const NOTIFICATION_PROVIDERS: readonly NotificationProvider[] = ["email", "discord", "telegram", "signal", "slack", "ntfy", "pushover", "gotify", "matrix", "googlechat", "generic"];
 
-export type NotificationEvent = "deployFailed" | "hostOffline" | "backupFailed" | "autoHeal" | "updates" | "security" | "cleanup";
-export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = ["deployFailed", "hostOffline", "backupFailed", "autoHeal", "updates", "security", "cleanup"];
+export type NotificationEvent = "deployFailed" | "hostOffline" | "backupFailed" | "autoHeal" | "updates" | "security" | "cleanup" | "sustainedLoad";
+export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = ["deployFailed", "hostOffline", "backupFailed", "autoHeal", "updates", "security", "cleanup", "sustainedLoad"];
 /** New targets start with the failure and recovery events. */
 export const DEFAULT_EVENTS: readonly NotificationEvent[] = ["deployFailed", "hostOffline", "backupFailed", "autoHeal"];
 
@@ -42,7 +42,10 @@ export const EVENT_KEYS: Record<NotificationEvent, readonly WireEvent[]> = {
   updates: ["image_update", "container_update"],
   security: ["vulnerability_found"],
   cleanup: ["prune_report"],
+  sustainedLoad: ["sustained_load"],
 };
+/** Wire keys a target only receives after an explicit opt-in; the hub treats them as off when missing. */
+const OPT_IN_KEYS: readonly WireEvent[] = ["sustained_load"];
 const WIRE_EVENTS = Object.values(EVENT_KEYS).flat();
 
 type ValueKind = "string" | "number" | "boolean" | "list" | "map" | "events";
@@ -94,9 +97,9 @@ export function isProvider(value: unknown): value is NotificationProvider {
   return typeof value === "string" && (NOTIFICATION_PROVIDERS as readonly string[]).includes(value);
 }
 
-/** A missing wire key means enabled; a UI event is on when any of its keys is. */
+/** A missing wire key means enabled, except opt-in keys; a UI event is on when any of its keys is. */
 export function eventsFromMap(map: Partial<Record<WireEvent, boolean>> | undefined): NotificationEvent[] {
-  return NOTIFICATION_EVENTS.filter((event) => EVENT_KEYS[event].some((key) => map?.[key] !== false));
+  return NOTIFICATION_EVENTS.filter((event) => EVENT_KEYS[event].some((key) => map?.[key] ?? !OPT_IN_KEYS.includes(key)));
 }
 
 /**
@@ -108,7 +111,7 @@ export function eventMap(events: readonly NotificationEvent[], stored?: Partial<
   return Object.fromEntries(NOTIFICATION_EVENTS.flatMap((event) => {
     const on = events.includes(event);
     const keep = before !== undefined && before.includes(event) === on;
-    return EVENT_KEYS[event].map((key) => [key, keep ? stored?.[key] !== false : on]);
+    return EVENT_KEYS[event].map((key) => [key, keep ? stored?.[key] ?? !OPT_IN_KEYS.includes(key) : on]);
   })) as Record<WireEvent, boolean>;
 }
 

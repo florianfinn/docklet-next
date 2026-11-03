@@ -1,5 +1,8 @@
 export const enBackend = {
   errors: {
+    "history": {"sample-too-large": "The history sample exceeds the size limit.", "sample-invalid": "The host returned an invalid history sample.", "unavailable": "History is unavailable.", "invalid-range": "Choose a history range of 24h, 7d or 30d."},
+    "preferences": {"no-user": "This identity has no personal preferences.", "unknown-section": "Unknown preference section.", "invalid": "Preferences must contain an object.", "too-large": "Preferences exceed the size limit."},
+
     "feature-disabled": "This feature is disabled.",
     "vulnerability": {
       "agent-job-retired": "This agent-local vulnerability job is retired.",

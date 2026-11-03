@@ -19,6 +19,7 @@ import { enSecurity } from "@/features/security/messages/en";
 import { enEditor } from "@/features/stacks/editor/messages/en";
 import { enStacks } from "@/features/stacks/messages/en";
 import { enHelp } from "@/shared/help/messages/en";
+import { enHistory } from "@/shared/history/messages/en";
 import { enCommon } from "@/shared/messages/en";
 import { enTheme } from "@/shared/theme/messages/en";
 import { enWorkspace } from "@/shared/workspace/messages/en";
@@ -44,6 +45,7 @@ export const enMessages = {
   stacks: enStacks,
   editor: enEditor,
   containers: enContainers,
+  history: enHistory,
   security: enSecurity,
   networks: {
     ...enNetworks,

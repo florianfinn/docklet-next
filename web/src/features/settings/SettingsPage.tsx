@@ -1,4 +1,4 @@
-import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
+import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, LayoutGrid, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
 import { NavLink, Navigate, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -16,6 +16,7 @@ import { HelpSection } from "./sections/HelpSection";
 import { AutoHealSection } from "./sections/AutoHealSection";
 import { NotificationsSection } from "./sections/NotificationsSection";
 import { SecurityLiveSection } from "./sections/SecurityLiveSection";
+import { ServiceWidgetsSection } from "./sections/ServiceWidgetsSection";
 import { SecuritySection } from "./sections/SecuritySection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { ActivitySection, HostDefaultsSection, ConnectedHostDefaultsSection } from "./sections/SimpleSections";
@@ -24,7 +25,7 @@ import { UpdatesSection } from "./sections/UpdatesSection";
 
 const GROUPS = [
   { key: "hub", items: [{ id: "general", icon: Settings2 }, { id: "appearance", icon: Palette }, { id: "help", icon: Info }, { id: "auth", icon: KeyRound }] },
-  { key: "operations", items: [{ id: "hosts", icon: HardDrive }, { id: "updates", icon: RefreshCw }, { id: "backups", icon: Archive }, { id: "notifications", icon: BellRing }, { id: "autoHeal", icon: HeartPulse }] },
+  { key: "operations", items: [{ id: "hosts", icon: HardDrive }, { id: "updates", icon: RefreshCw }, { id: "backups", icon: Archive }, { id: "notifications", icon: BellRing }, { id: "autoHeal", icon: HeartPulse }, { id: "serviceWidgets", icon: LayoutGrid }] },
   { key: "system", items: [{ id: "security", icon: ShieldAlert }, { id: "activity", icon: History }] },
 ] as const;
 
@@ -43,7 +44,7 @@ export default function SettingsPage() {
   const liveScans = adapter.kind === "http" && id === "security";
   const liveBackups = id === "backups";
   // Notification targets and Auto Heal have no hub-settings draft; both adapters serve them directly.
-  const own = id === "notifications" || id === "autoHeal";
+  const own = id === "notifications" || id === "autoHeal" || id === "serviceWidgets";
   const liveUpdates = adapter.kind === "http" && id === "updates";
   const settings = useSettings(!liveHosts && !liveScans && !liveUpdates && !liveBackups && !own && !connected && id !== "appearance" && id !== "help");
   const hub = useConnectedSettings(connected && id !== "auth");
@@ -85,7 +86,7 @@ export default function SettingsPage() {
             </div>
           ) : id === "help" ? (
             <HelpSection />
-          ) : id === "notifications" ? <NotificationsSection /> : id === "autoHeal" ? <AutoHealSection /> : liveHosts ? <ConnectedHostDefaultsSection /> : liveBackups ? <BackupTargetsSection /> : liveScans ? <SecurityLiveSection /> : liveUpdates ? <LiveUpdatesSection /> : connected ? (
+          ) : id === "serviceWidgets" ? <ServiceWidgetsSection /> : id === "notifications" ? <NotificationsSection /> : id === "autoHeal" ? <AutoHealSection /> : liveHosts ? <ConnectedHostDefaultsSection /> : liveBackups ? <BackupTargetsSection /> : liveScans ? <SecurityLiveSection /> : liveUpdates ? <LiveUpdatesSection /> : connected ? (
             id === "auth" ? <ConnectedAuthSection /> : hub.isError ? <QueryError error={hub.error} onRetry={() => void hub.refetch()} /> : !hub.data ? (
               <div className="flex flex-col gap-3" aria-busy="true"><Skeleton className="h-16 rounded-2xl" /><Skeleton className="h-80 rounded-2xl" /></div>
             ) : id === "general" ? <GeneralSection settings={hub.data} /> : <ActivitySection settings={hub.data} />

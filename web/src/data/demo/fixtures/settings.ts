@@ -1,5 +1,5 @@
 import { HISTORY_LIMITS } from "@/domain/activity-history";
-import type { HubSettings } from "@/domain/settings";
+import { LOAD_ALERT_DEFAULTS, type HubSettings } from "@/domain/settings";
 
 import { daysAgo } from "./time";
 
@@ -101,5 +101,5 @@ export const SETTINGS: HubSettings = {
     ],
   },
   security: { scanEnabled: true, schedule: { mode: "daily", time: "03:00" } },
-  activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: true, actionPresentation: "dialog" },
+  activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: true, actionPresentation: "dialog", loadAlerts: { ...LOAD_ALERT_DEFAULTS } },
 };

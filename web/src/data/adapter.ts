@@ -26,6 +26,9 @@ import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-cod
 import type { CapabilityDescriptor, ResourceRef } from "./capability";
 import type { RegistriesApi } from "@/domain/registries";
 import type { HubBackupApi } from "@/domain/hub-backup";
+import type { HistoryApi } from "@/domain/history";
+import type { UiPreferencesApi } from "@/domain/ui-preferences";
+import type { ServiceWidgetsApi } from "@/domain/service-widgets";
 
 export type StackCommand = "start" | "stop" | "restart" | "redeploy" | "down" | "stop-containers";
 export type ContainerCommand = "start" | "stop" | "restart";
@@ -101,7 +104,7 @@ export interface RuntimeReleaseInput {
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi {
+export interface DockletAdapter extends UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, UiPreferencesApi, ServiceWidgetsApi {
   readonly kind: "demo" | "http" | "disconnected";
   readonly mappedOperations?: ReadonlySet<string>;
 

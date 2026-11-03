@@ -6,7 +6,9 @@ import { useTranslations } from "use-intl";
 import { useScanAction } from "@/features/security/use-scan-action";
 import { useCapability } from "@/data/use-capability";
 import { useMetrics } from "@/data/live";
+import { useCapacity } from "@/data/queries";
 import { formatCountdown, formatGb, formatRelative } from "@/domain/format";
+import type { HostCapacity } from "@/domain/history";
 import { jobHref } from "@/domain/job-links";
 import { formatNumber } from "@/domain/locale";
 import type { EventLevel, Host, JobKind, OpsEvent, ScheduledJob, SecurityOverview, Severity, Stack } from "@/domain/model";
@@ -22,6 +24,7 @@ export function CapacityWidget({ hosts }: { hosts: Host[] }) {
   const t = useTranslations("dashboard.capacity");
   const td = useTranslations("dashboard");
   const metrics = useMetrics((s) => s?.hosts);
+  const capacity = useCapacity();
   return (
     <ScrollArea className="h-full">
     <ul className="flex flex-col gap-3.5 pr-2">
@@ -30,23 +33,38 @@ export function CapacityWidget({ hosts }: { hosts: Host[] }) {
         const total = m?.diskTotalGb ?? h.diskTotalGb;
         if (!m || m.diskUnavailable) return <li key={h.id}>{h.name}: {td("metricsUnavailable")}</li>;
         const used = m.disk / 100 * total;
-        const free = total - used;
-        const days = m && m.diskGrowthGbPerDay > 0 ? Math.round(free / m.diskGrowthGbPerDay) : Infinity;
+        const trend = capacity.data?.find((c) => c.hostId === h.id);
+        const growth = trend?.growthPerDay;
+        const days = trend?.daysUntilFull === undefined ? Infinity : Math.round(trend.daysUntilFull);
         const tone = days < 30 ? "err" : days < 90 ? "warn" : "ok";
         return (
-          <li key={h.id} className="flex flex-col gap-1.5">
+          <li key={h.id} className="flex flex-col gap-1.5" data-capacity-host={h.id}>
             <Meter label={h.name} value={m?.disk ?? 0} color={h.color} sub={t("used", { used: formatGb(used), total: formatGb(total) })} />
+            {trend && <CapacityLine series={trend.series} total={trend.diskTotal} color={h.color} label={t("line")} />}
             <div className="flex items-center justify-between text-[11px]">
               <span data-tone={h.status !== "online" ? "gray" : tone} className="font-medium text-(--tone)">
-                {h.status === "standby" ? status("standby") : m.inventory?.stale || h.status !== "online" ? t("offline") : m.growthUnavailable ? "" : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
+                {h.status === "standby" ? status("standby") : m.inventory?.stale || h.status !== "online" ? t("offline") : growth === undefined ? "" : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
               </span>
-              <span className="text-muted-foreground tabular">{m.growthUnavailable ? td("growthUnavailable") : t("growth", { gb: formatNumber(m.diskGrowthGbPerDay) })}</span>
+              <span className="text-muted-foreground tabular" data-growth={growth === undefined ? "unavailable" : "known"}>{growth === undefined ? td("growthUnavailable") : t("growth", { gb: formatNumber(growth / GIB, { maximumFractionDigits: 1 }) })}</span>
             </div>
           </li>
         );
       })}
     </ul>
     </ScrollArea>
+  );
+}
+
+const GIB = 1024 ** 3;
+
+/** Disk usage of the last 30 days as share of the current disk size. */
+function CapacityLine({ series, total, color, label }: { series: HostCapacity["series"]; total: number; color: string; label: string }) {
+  if (series.length < 2 || total <= 0) return null;
+  const points = series.map((p, i) => `${(i / (series.length - 1)) * 100},${(1 - Math.min(1, p.used / total)) * 24}`).join(" ");
+  return (
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="h-6 w-full overflow-visible" role="img" aria-label={label} data-capacity-line={series.length}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
   );
 }
 

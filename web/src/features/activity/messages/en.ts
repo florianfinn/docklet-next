@@ -71,6 +71,7 @@ export const enActivity = {
     prune: "Cleanup",
     "agent-restart": "Agent restart",
     "auto-heal": "Auto Heal restart",
+    "load-alert": "Sustained load",
   },
   dismiss: "Close notice",
   notices: {

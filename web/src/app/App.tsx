@@ -7,6 +7,7 @@ import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { createAdapter } from "@/runtime";
 import { useApplyDesignTokens, usePrefersReducedMotion, useTokens } from "@/shared/theme/use-design-tokens";
 import { usePointerGlow } from "@/shared/lib/pointer-glow";
+import { PreferenceBridge } from "@/shared/preferences/sync/PreferenceBridge";
 import { useApplyUiStyle, useUiStyle } from "@/shared/preferences/ui-style-store";
 import { useApplyVisualStyle, useVisualStyle } from "@/shared/preferences/visual-style-store";
 import { TooltipProvider } from "@/shared/ui/tooltip";
@@ -38,6 +39,7 @@ export function App() {
   usePointerGlow(useUiStyle("pointerGlow"), useUiStyle("pointerGlowIntensity"), (reduced && !tokens.ignoreReducedMotion) || tokens.motion === "off", useVisualStyle("glowInside"), useVisualStyle("glowOutside"));
   return (
     <AdapterProvider adapter={adapter}>
+      <PreferenceBridge />
       <AppContent locale={locale} />
     </AdapterProvider>
   );

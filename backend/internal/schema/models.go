@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models.
 
 package schema
 
@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/history"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/patch"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
@@ -26,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
+	"github.com/florianfinn/docklet-next/backend/internal/runtimeintent"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
@@ -39,12 +41,14 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/query"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
+	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	vulnerabilityDTO "github.com/florianfinn/docklet-next/types/vulnerability"
 )
 
 // Models is the persistent schema owned by the retained core modules.
 func Models() []any {
-	return append(activity.Models(),
+	return append(append(append(activity.Models(), history.Models()...), widget.Models()...),
+		&runtimeintent.Row{},
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
 		&environment.Environment{}, &environment.AgentRestartRequest{}, &container.RecreateJournal{}, &container.OriginOverride{}, &event.Event{},
 		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},

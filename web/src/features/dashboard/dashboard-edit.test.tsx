@@ -54,7 +54,7 @@ describe("dashboard layout model", () => {
   it("never restores secrets from storage and appends widgets added later", () => {
     const merged = mergeLayout({ order: ["timeline", "attention"], hidden: [], services: { plex: { address: "http://192.0.2.21:32400", status: "connected", token: "x-secret" } } }, DEFAULT_LAYOUT);
     expect(JSON.stringify(merged).includes("x-secret")).toBe(false);
-    expect(merged.services.plex).toEqual({ address: "http://192.0.2.21:32400", status: "connected", simulateError: false });
+    expect("services" in merged).toBe(false);
     expect(merged.order.slice(0, 2)).toEqual(["timeline", "attention"]);
     expect(merged.hidden.includes("minecraft") && merged.order.includes("overseerr")).toBe(true);
   });
@@ -94,36 +94,21 @@ describe("dashboard edit mode", () => {
     expect(screen.getByText(/an Position 2 von/) !== null).toBe(true);
   });
 
-  it("adds a service widget from the catalog and connects it in a simulation without storing secrets", async () => {
+  it("adds service widgets from the catalog; their data comes from the hub adapter", async () => {
     layoutStore.set((l) => ({ ...l, hidden: [...new Set([...l.hidden, "plex", "minecraft"] as const)] }));
     renderWithApp(<DashboardPage />);
     await widget("attention");
     await userEvent.click(screen.getByRole("button", { name: "Anpassen" }));
     await userEvent.click(screen.getByRole("button", { name: "Widget hinzufügen" }));
     const catalog = await screen.findByRole("dialog", { name: "Widget-Katalog" });
+    expect(within(catalog).getAllByText("Aktiv").length).toBe(3);
     await userEvent.click(within(catalog).getByRole("button", { name: "Plex einblenden" }));
     await userEvent.click(within(catalog).getByRole("button", { name: "Minecraft einblenden" }));
     await userEvent.keyboard("{Escape}");
-
-    // Without an address the widget says the configuration is missing.
     const plex = await widget("plex");
-    expect(within(plex).getByText("Konfiguration fehlt") !== null).toBe(true);
-    await userEvent.click(within(plex).getByRole("button", { name: "Plex einrichten" }));
-    const dialog = await screen.findByRole("dialog", { name: "Plex einrichten" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "Beispiel" }));
-    await userEvent.type(within(dialog).getByLabelText("Plex-Token"), "geheimer-token");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Verbinden (simuliert)" }));
-    await waitFor(() => expect(within(plex).getByRole("list", { name: "Aktive Streams" }) !== null).toBe(true), { timeout: 3000 });
-    expect(within(plex).getAllByRole("progressbar").length).toBe(3);
-    expect(localStorage.getItem("docklet-react-opus.dashboard")?.includes("geheimer-token")).toBe(false);
-
-    // The error simulation ends in the error state of the widget.
+    await waitFor(() => expect(within(plex).getAllByRole("progressbar").length).toBe(3));
     const minecraft = await widget("minecraft");
-    await userEvent.click(within(minecraft).getByRole("button", { name: "Minecraft einrichten" }));
-    const mc = await screen.findByRole("dialog", { name: "Minecraft einrichten" });
-    await userEvent.type(within(mc).getByLabelText("Adresse"), "192.0.2.22:25565");
-    await userEvent.click(within(mc).getByLabelText("Fehler beim Verbinden simulieren"));
-    await userEvent.click(within(mc).getByRole("button", { name: "Verbinden (simuliert)" }));
-    await waitFor(() => expect(within(minecraft).getByText("Verbindung fehlgeschlagen") !== null).toBe(true), { timeout: 3000 });
+    expect(await within(minecraft).findByRole("list", { name: "Spieler" }) !== null).toBe(true);
+    expect(localStorage.getItem("docklet-react-opus.dashboard")?.includes("192.0.2")).toBe(false);
   });
 });

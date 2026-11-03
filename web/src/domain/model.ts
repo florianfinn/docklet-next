@@ -133,7 +133,22 @@ export interface PortMapping {
   protocol?: "tcp" | "udp";
 }
 
+/**
+ * Hub-side runtime condition of one container incarnation (see runtime history design).
+ * `containerId` is the inventory id; a condition for another id never applies.
+ */
+export interface RuntimeCondition {
+  containerId: string;
+  condition: "running" | "unhealthy" | "down" | "stopped";
+  reason: string;
+  exitCode?: number;
+  restarts10m?: number;
+  sampledAt: string;
+}
+
 export interface Service {
+  /** Hub condition of this service's container, merged from runtime conditions. */
+  condition?: RuntimeCondition;
   containersRemoved?: boolean;
   containerId?: string;
   name: string;
@@ -208,7 +223,8 @@ export type ActionKind =
   | "pull"
   | "prune"
   | "agent-restart"
-  | "auto-heal";
+  | "auto-heal"
+  | "load-alert";
 
 export type ActionStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -290,6 +306,8 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  /** Hub condition of this container, merged from runtime conditions. */
+  condition?: RuntimeCondition;
   imageId?: string;
   inventory?: InventoryObservation;
   restrictions?: { recreate: boolean; reason: string };
@@ -347,6 +365,8 @@ export interface OpsEvent {
   hostId?: string;
   stackId?: string;
   actionId?: string;
+  /** A container runtime condition change from the hub's history (fleet ring feed). */
+  condition?: boolean;
 }
 
 export type JobKind = "backup" | "scan" | "update-check" | "auto-update";
@@ -368,7 +388,6 @@ export interface ScheduledJob {
 
 export interface HostMetrics {
   diskUnavailable?: boolean;
-  growthUnavailable?: boolean;
   inventory?: InventoryObservation;
   cpuCores?: number;
   memTotalGb?: number;
@@ -377,7 +396,6 @@ export interface HostMetrics {
   cpu: number;
   mem: number;
   disk: number;
-  diskGrowthGbPerDay: number;
   cpuHistory: number[];
   memHistory: number[];
 }

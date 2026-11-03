@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences.
 
 package notification
 
@@ -341,20 +341,6 @@ func (s *NotificationService) dispatchForTargetInternal(ctx context.Context, tar
 	default:
 		return notification.DispatchResponse{}, fmt.Errorf("%s: %w", payload.Kind, ErrUnsupportedDispatchKind)
 	}
-}
-
-func (s *NotificationService) isEventEnabled(localConfig database.JSON, eventType notifications.NotificationEventType) bool {
-	events, ok := localConfig["events"].(map[string]any)
-	if !ok {
-		return true // If no events config, default to enabled
-	}
-
-	enabled, ok := events[string(eventType)].(bool)
-	if !ok {
-		return true // If event type not specified, default to enabled
-	}
-
-	return enabled
 }
 
 // logNotificationInternal records a delivery attempt in the event log so sends and

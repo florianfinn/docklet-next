@@ -39,7 +39,7 @@ function seedHost(h: Host): HostMetrics {
     cpuHistory.push(Math.round(cpu));
     memHistory.push(Math.round(mem));
   }
-  return { hostId: h.id, cpu: Math.round(cpu), mem: Math.round(mem), disk: b.disk, diskGrowthGbPerDay: b.growth, cpuHistory, memHistory };
+  return { hostId: h.id, cpu: Math.round(cpu), mem: Math.round(mem), disk: b.disk, cpuHistory, memHistory };
 }
 
 interface Source {

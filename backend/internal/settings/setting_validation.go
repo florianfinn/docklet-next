@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
 
 package settings
 
@@ -18,6 +18,19 @@ import (
 )
 
 func validateSettingValueInternal(key, value string) error {
+	if key == "loadAlertsEnabled" && value != "true" && value != "false" {
+		return common.Classify(common.ErrValidation, errors.New("loadAlertsEnabled must be true or false"))
+	}
+	if key == "loadAlertCpuPercent" || key == "loadAlertMemoryPercent" || key == "loadAlertMinutes" {
+		minimum, maximum := 50, 100
+		if key == "loadAlertMinutes" {
+			minimum, maximum = 5, 60
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < minimum || n > maximum {
+			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be a whole number between %d and %d", key, minimum, maximum))
+		}
+	}
 	if key == "stackStopMode" && value != "down" && value != "stop" {
 		return common.Classify(common.ErrValidation, errors.New("stackStopMode must be down or stop"))
 	}

@@ -2,7 +2,7 @@
 // Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: Stable wire-code catalogue for runs and events.
+// Deviations: Stable wire-code catalogue for runs and events; M17 runtime history and personal preferences.
 
 package activity
 
@@ -10,6 +10,11 @@ package activity
 type Code string
 
 const (
+	CodeLoadSustained              Code = "load.sustained"
+	CodeConditionDown              Code = "container.condition.down"
+	CodeConditionUnhealthy         Code = "container.condition.unhealthy"
+	CodeConditionRestartLoop       Code = "container.condition.restart-loop"
+	CodeConditionRunningAgain      Code = "container.condition.running-again"
 	CodeContainerRecreateRecovered Code = "container.recreate-recovered"
 	CodeContainerRecreateAmbiguous Code = "container.recreate-ambiguous"
 	CodeContainerOriginLocked      Code = "container.origin-locked"
@@ -241,6 +246,7 @@ func Values() []Code {
 		CodeAutoHealLimitReached,
 		CodeAutoHealInterrupted,
 		CodeNotificationDeliveryFailed,
+		CodeLoadSustained, CodeConditionDown, CodeConditionUnhealthy, CodeConditionRestartLoop, CodeConditionRunningAgain,
 	}
 }
 

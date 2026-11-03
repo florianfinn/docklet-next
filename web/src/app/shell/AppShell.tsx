@@ -30,6 +30,7 @@ import { Button } from "@/shared/ui/button";
 import { Separator } from "@/shared/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/shared/ui/sidebar";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { useSidebarOpen } from "@/shared/preferences/sidebar-store";
 
 import { PAGE_MAX_WIDTH, pageWidth } from "./page-width";
 import { NAV, PREVIEW_ICONS, type NavGroup } from "./nav-items";
@@ -98,9 +99,10 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
   const running = useActionRuns().filter((r) => r.status === "queued" || r.status === "running").length;
   const width = pageWidth(location.pathname);
   const sidebarWidth = sidebarWidthCss(useSidebarWidth());
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
 
   return (
-    <SidebarProvider style={{ "--sidebar-width": sidebarWidth } as React.CSSProperties}>
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen} style={{ "--sidebar-width": sidebarWidth } as React.CSSProperties}>
       <a href="#main-content" className="sr-only z-50 rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
         {t("skip")}
       </a>
@@ -110,18 +112,19 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
         <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border/50 px-4">
           <SidebarTrigger className="-ml-1" aria-label={t("toggleSidebar")} />
           <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-          <Breadcrumb aria-label={t("breadcrumb")}>
-            <BreadcrumbList>
+          <Breadcrumb aria-label={t("breadcrumb")} className="min-w-0">
+            <BreadcrumbList className="flex-nowrap">
               {crumbs.map((c, i) => (
                 <Fragment key={c.label}>
                   {i > 0 && <BreadcrumbSeparator />}
-                  <BreadcrumbItem>
+                  {/* Long identifiers (shown until the name loads) truncate instead of widening the page. */}
+                  <BreadcrumbItem className="min-w-0">
                     {c.to && i < crumbs.length - 1 ? (
                       <BreadcrumbLink asChild>
-                        <Link to={c.to}>{c.label}</Link>
+                        <Link to={c.to} className="truncate">{c.label}</Link>
                       </BreadcrumbLink>
                     ) : (
-                      <BreadcrumbPage>{c.label}</BreadcrumbPage>
+                      <BreadcrumbPage className="truncate">{c.label}</BreadcrumbPage>
                     )}
                   </BreadcrumbItem>
                 </Fragment>

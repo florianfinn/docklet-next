@@ -7,10 +7,10 @@ import { useCapability } from "@/data/use-capability";
 import { useTranslations } from "use-intl";
 
 import { ActionPresentationField } from "@/features/activity/ActionPresentationSetting";
-import type { HostDefaults, HubSettings } from "@/domain/settings";
+import { LOAD_ALERT_LIMITS, loadAlertValueValid, type HostDefaults, type HubSettings, type LoadAlertSettings } from "@/domain/settings";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { HelpLabel, HelpLegend } from "@/shared/help/help-tooltip";
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldSet } from "@/shared/ui/field";
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/shared/ui/field";
 import { Switch } from "@/shared/ui/switch";
 
 import { useHostDefaultErrors } from "../field-rules";
@@ -94,11 +94,13 @@ export function ActivitySection({ settings }: { settings: Pick<HubSettings, "act
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.activity);
   if (!draft) return null;
+  const load = draft.loadAlerts;
+  const loadValid = loadAlertValueValid("percent", load.cpuPercent) && loadAlertValueValid("percent", load.memoryPercent) && loadAlertValueValid("minutes", load.minutes);
   return (
     <SettingsForm
       title={t("sections.activity")}
       dirty={dirty}
-      valid
+      valid={loadValid}
       onDiscard={reset}
       onSave={async () => {
         await save("activity", draft);
@@ -117,8 +119,31 @@ export function ActivitySection({ settings }: { settings: Pick<HubSettings, "act
           </FieldContent>
         </Field>
         <ActionPresentationField value={draft.actionPresentation} onChange={(actionPresentation) => patch({ actionPresentation })} />
+        <LoadAlertFields value={load} onChange={(next) => patch({ loadAlerts: { ...load, ...next } })} />
       </FieldGroup>
     </SettingsForm>
+  );
+}
+
+function LoadAlertFields({ value, onChange }: { value: LoadAlertSettings; onChange: (p: Partial<LoadAlertSettings>) => void }) {
+  const ta = useTranslations("settings.activity");
+  const error = (kind: keyof typeof LOAD_ALERT_LIMITS, n: number) => (loadAlertValueValid(kind, n) ? undefined : Number.isInteger(n) ? ta("errors.range", LOAD_ALERT_LIMITS[kind]) : ta("errors.integer"));
+  const number = (text: string) => (text.trim() === "" ? Number.NaN : Number(text));
+  return (
+    <FieldSet data-load-alerts>
+      <Field orientation="horizontal">
+        <Switch id="act-load" checked={value.enabled} onCheckedChange={(enabled) => onChange({ enabled })} />
+        <FieldContent>
+          <FieldLabel htmlFor="act-load">{ta("load")}</FieldLabel>
+          <FieldDescription>{ta("loadHint")}</FieldDescription>
+        </FieldContent>
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <TextField id="act-load-cpu" type="number" label={ta("loadCpu")} value={Number.isNaN(value.cpuPercent) ? "" : String(value.cpuPercent)} onChange={(v) => onChange({ cpuPercent: number(v) })} error={error("percent", value.cpuPercent)} disabled={!value.enabled} />
+        <TextField id="act-load-memory" type="number" label={ta("loadMemory")} value={Number.isNaN(value.memoryPercent) ? "" : String(value.memoryPercent)} onChange={(v) => onChange({ memoryPercent: number(v) })} error={error("percent", value.memoryPercent)} disabled={!value.enabled} />
+        <TextField id="act-load-minutes" type="number" label={ta("loadMinutes")} value={Number.isNaN(value.minutes) ? "" : String(value.minutes)} onChange={(v) => onChange({ minutes: number(v) })} error={error("minutes", value.minutes)} disabled={!value.enabled} />
+      </div>
+    </FieldSet>
   );
 }
 

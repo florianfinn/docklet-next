@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys; Complete helper image setting key; Auto Heal stack-exclusion setting inventory for #296; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys; Complete helper image setting key; Auto Heal stack-exclusion setting inventory for #296; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 sustained-load setting environment inventory.
 
 package schema
 
@@ -90,6 +90,18 @@ func TestGenerate_SettingEnvOverridesMatchModelMetadata(t *testing.T) {
 	assert.NotContains(t, entries, "effectiveTimeZone")
 	_, hasRuntimeDerived := entries["uiConfigDisabled"]
 	assert.False(t, hasRuntimeDerived)
+	for key, expected := range map[string]struct{ env, value, kind string }{
+		"loadAlertsEnabled":      {"LOAD_ALERTS_ENABLED", "true", "boolean"},
+		"loadAlertCpuPercent":    {"LOAD_ALERT_CPU_PERCENT", "90", "number"},
+		"loadAlertMemoryPercent": {"LOAD_ALERT_MEMORY_PERCENT", "90", "number"},
+		"loadAlertMinutes":       {"LOAD_ALERT_MINUTES", "10", "number"},
+	} {
+		entry, ok := entries[key]
+		require.True(t, ok, key)
+		assert.Equal(t, expected.env, entry.Env)
+		assert.Equal(t, expected.value, entry.DefaultValue)
+		assert.Equal(t, expected.kind, entry.Type)
+	}
 }
 
 func TestGenerate_DocumentIncludesEnvOnlyModeNote(t *testing.T) {
@@ -323,6 +335,10 @@ var expectedSettingOverrideKeys = []string{
 	"keepActionOutput",
 	"lifecycleMaxTimeoutSec",
 	"linkBase",
+	"loadAlertCpuPercent",
+	"loadAlertMemoryPercent",
+	"loadAlertMinutes",
+	"loadAlertsEnabled",
 	"maxConcurrentActivities",
 	"maxImageUploadSize",
 	"pollingEnabled",

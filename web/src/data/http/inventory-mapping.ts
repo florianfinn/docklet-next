@@ -73,6 +73,18 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   };
 }
 
+/** First http(s) address from the Compose `x-arcane: urls` list; other schemes and malformed entries are skipped. */
+export function stackAddress(urls: readonly string[] | null | undefined): string | undefined {
+  for (const value of urls ?? []) {
+    if (typeof value !== "string") continue;
+    try {
+      const url = new URL(value.trim());
+      if ((url.protocol === "http:" || url.protocol === "https:") && url.hostname) return url.href;
+    } catch { /* not a URL */ }
+  }
+  return undefined;
+}
+
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
   if (!row?.id || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
   if (row.updateInfo) checkResult(row.updateInfo);
@@ -91,6 +103,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
       update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, definitionHint: row.definitionHint, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  const url = stackAddress(row.urls);
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };
 }

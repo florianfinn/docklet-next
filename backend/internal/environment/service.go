@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status; M15 simple-user rights and identity contracts; M17 runtime history and personal preferences.
 
 package environment
 
@@ -42,6 +42,7 @@ type EnvironmentService struct {
 	AssignmentUserChanged func(context.Context, string)
 	restarts              *restartController
 	runtimeRemoval        RuntimeRemoval
+	historyInvalidator    func(string)
 	snapshots             hoststate.Store
 	agentRuntime          agentRuntime
 	db                    *database.DB
@@ -376,6 +377,9 @@ func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, u
 		return nil, err
 	}
 	s.remoteEnvs.put(*updated)
+	if hostRevisionChangedForHistory(*current, *updated) {
+		s.invalidateHistory(id)
+	}
 	if _, endpointChanged := updates["api_url"]; endpointChanged {
 		s.revokeAgentSessions(id)
 	}
@@ -435,6 +439,9 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 
 	var affected []string
 	remove := func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM history_buckets WHERE host_id=?", id).Error; err != nil {
+			return err
+		}
 		if err := tx.Table("user_app_assignments").Where("environment_id = ?", id).Distinct().Pluck("user_id", &affected).Error; err != nil {
 			return err
 		}
@@ -464,6 +471,7 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 		}
 	}
 	s.revokeAgentSessions(id)
+	s.invalidateHistory(id)
 	s.edgeTokens.invalidate(id)
 	s.ForgetSyncState(id)
 	s.remoteEnvs.remove(id)

@@ -64,7 +64,8 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
       new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
       const options = { ...init, credentials: "same-origin" as const, headers };
       const write = !SAFE_METHODS.includes(method);
-      const attempt = () => send(request ? request.clone() : input, options);
+      // Every attempt, including the retry after a token renewal, honours an abort that happened meanwhile.
+      const attempt = () => { options.signal?.throwIfAborted(); return send(request ? request.clone() : input, options); };
       let response: Response;
       if (write) {
         headers.set(CSRF_HEADER, await requireToken());

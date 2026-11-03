@@ -31,7 +31,7 @@ export interface StackFilterInput {
   labels: string[];
 }
 
-const STATUS_RANK: Record<StackStatus, number> = { problem: 0, unreachable: 1, busy: 2, partial: 3, running: 4, stopped: 5 };
+const STATUS_RANK: Record<StackStatus, number> = { down: 0, unreachable: 1, unhealthy: 2, busy: 3, running: 4, stopped: 5 };
 
 export function filterStacks(stacks: Stack[], hosts: Map<string, Host>, f: StackFilterInput): Stack[] {
   const q = f.query.trim().toLowerCase();
@@ -46,7 +46,7 @@ export function filterStacks(stacks: Stack[], hosts: Map<string, Host>, f: Stack
       case "running":
         return st === "running";
       case "problem":
-        return st === "problem" || st === "unreachable";
+        return st === "down" || st === "unhealthy" || st === "unreachable";
       case "updates":
         return summarizeUpdates(s.services).pending > 0;
       case "stopped":

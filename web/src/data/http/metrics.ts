@@ -27,7 +27,7 @@ export function mapHostMetrics(value: unknown, hostId: string, previous?: HostMe
   const diskTotal = r?.diskTotal == null ? 0 : number("diskTotal");
   const diskUsed = r?.diskUsage == null ? 0 : number("diskUsage");
   if (diskUsed > diskTotal) throw new Error("metrics.invalid-sample");
-  return { hostId, cpu, mem, disk: diskTotal ? diskUsed / diskTotal * 100 : 0, diskUnavailable: !diskTotal, growthUnavailable: true, diskGrowthGbPerDay: 0,
+  return { hostId, cpu, mem, disk: diskTotal ? diskUsed / diskTotal * 100 : 0, diskUnavailable: !diskTotal,
     cpuCores: cores, memTotalGb: total / 1024 ** 3, diskTotalGb: diskTotal / 1024 ** 3,
     cpuHistory: [...previous?.cpuHistory ?? [], cpu].slice(-60), memHistory: [...previous?.memHistory ?? [], mem].slice(-60), inventory: { stale: false, observedAt: new Date().toISOString() } };
 }

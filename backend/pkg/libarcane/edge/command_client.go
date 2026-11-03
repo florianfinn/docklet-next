@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences.
 
 package edge
 
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
+	historyDTO "github.com/florianfinn/docklet-next/types/history"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"net/http"
@@ -98,7 +99,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	defer tunnel.Pending.Delete(requestID)
 	completed := false
 	defer func() {
-		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path) || volumeBackupCancelableRequest(req.Method, req.Path)) {
+		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path) || historyDTO.IsSampleRoute(req.Method, req.Path) || volumeBackupCancelableRequest(req.Method, req.Path)) {
 			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
 		}
 	}()
@@ -134,6 +135,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	}
 
 	limit := 0
+	if historyDTO.IsSampleRoute(req.Method, req.Path) {
+		limit = historyDTO.SampleLimit
+	}
 	if pointListRequest(req.Method, req.Path) {
 		limit = dto.MaxRestorePointResponseBytes
 	}
@@ -150,6 +154,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	if err != nil {
 		if errors.Is(err, ErrCommandResponseTooLarge) && backuptypes.VolumeRouteResponseLimit(req.Method, req.Path) > 0 {
 			return nil, backuptypes.NewProblem(413, "volume.backup.listing-too-large", err)
+		}
+		if errors.Is(err, ErrCommandResponseTooLarge) && historyDTO.IsSampleRoute(req.Method, req.Path) {
+			return nil, historyDTO.Fail("history.sample-too-large", 502)
 		}
 		return nil, err
 	}

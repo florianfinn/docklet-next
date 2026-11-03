@@ -13,7 +13,7 @@ export const DEFAULT_CONTAINER_SORT: ContainerSort = { key: "host", dir: "asc" }
 
 export const containerSortDefaultDir = (key: ContainerSortKey): SortDir => (key === "update" || key === "uptime" || key === "load" ? "desc" : "asc");
 
-const RANK: Record<RuntimeStatus, number> = { unhealthy: 0, restarting: 1, unknown: 2, starting: 3, running: 4, stopped: 5 };
+const RANK: Record<RuntimeStatus, number> = { down: 0, unhealthy: 1, restarting: 2, unknown: 3, starting: 4, running: 5, stopped: 6 };
 const ORIGIN_RANK: Record<ContainerOrigin, number> = { compose: 0, standalone: 1, unraid: 2, unknown: 3 };
 
 const ORIGINS: readonly ContainerOrigin[] = ["compose", "standalone", "unraid", "unknown"];

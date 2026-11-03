@@ -221,7 +221,9 @@ export const deRunMessages = {
 },
   // Activity and event codes of Auto Heal and notification delivery, keyed by the wire code path.
   codes: {
+    load: { sustained: "Anhaltend hohe Ressourcenauslastung" },
     container: {
+      condition: {"down": "{name} wurde unerwartet beendet{exitCode, plural, =0 {} other { (Exit #)}}", "unhealthy": "{name} ist ungesund", "restart-loop": "{name} befindet sich in einer Neustartschleife ({restarts, plural, one {# Neustart} other {# Neustarts}} in 10 Min.)", "running-again": "{name} läuft wieder"},
       "origin-locked": "Die Container-Herkunft verhindert diese Aktion",
       "recreate-recovered": "Neuerstellung unterbrochen; Original wiederhergestellt",
       "recreate-ambiguous": "Neuerstellung erfordert manuelle Bereinigung",

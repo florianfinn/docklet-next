@@ -94,8 +94,7 @@ export const enCommon = {
   },
   status: {
     running: "Running",
-    partial: "Partial",
-    problem: "Problem",
+    down: "Failed",
     stopped: "Stopped",
     busy: "In progress",
     unreachable: "Host disconnected",

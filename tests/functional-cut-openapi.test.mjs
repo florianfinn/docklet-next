@@ -5,6 +5,21 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["GET /auth/me/ui-preferences", "get-my-ui-preferences"],
+  ["PUT /auth/me/ui-preferences/{section}", "put-my-ui-preferences"],
+  ["GET /environments/{id}/history/sample", "get-history-sample"],
+  ["GET /environments/{id}/containers/{containerId}/history", "get-container-history"],
+  ["GET /environments/{id}/projects/{projectId}/history", "get-project-history"],
+  ["GET /environments/{id}/history/host", "get-host-history"],
+  ["GET /environments/{id}/runtime-conditions", "get-runtime-conditions"],
+  ["GET /history/capacity", "get-history-capacity"],
+  ["GET /service-widgets", "list-service-widgets"],
+  ["GET /service-widgets/{kind}", "get-service-widget"],
+  ["GET /service-widgets/{kind}/config", "get-service-widget-config"],
+  ["PUT /service-widgets/{kind}/config", "put-service-widget-config"],
+  ["POST /service-widgets/{kind}/test", "test-service-widget"],
+  ["POST /service-widgets/overseerr/requests/{requestId}/approve", "approve-service-widget-request"],
+  ["POST /service-widgets/overseerr/requests/{requestId}/decline", "decline-service-widget-request"],
   ["POST /backup-targets/test", "test-backup-target-draft"],
   ["GET /environments/{id}/volumes/binds", "list-volume-binds"],
   ["POST /environments/{id}/volumes/binds/size", "measure-volume-bind"],

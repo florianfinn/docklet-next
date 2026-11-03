@@ -221,7 +221,9 @@ export const enRunMessages = {
 },
   // Activity and event codes of Auto Heal and notification delivery, keyed by the wire code path.
   codes: {
+    load: { sustained: "Sustained resource load" },
     container: {
+      condition: {"down": "{name} exited unexpectedly{exitCode, plural, =0 {} other { (exit #)}}", "unhealthy": "{name} is unhealthy", "restart-loop": "{name} is in a restart loop ({restarts, plural, one {# restart} other {# restarts}} in 10 min)", "running-again": "{name} is running again"},
       "origin-locked": "Container origin prevents this operation",
       "recreate-recovered": "Recreate interrupted; original restored",
       "recreate-ambiguous": "Recreate needs manual cleanup",

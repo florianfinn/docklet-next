@@ -23,7 +23,7 @@ import { LogoutDialog } from "./LogoutDialog";
 beforeEach(() => { setAppLocale("en-US"); simulationStore.set((s) => ({ ...s, latency: "instant", live: false })); });
 afterEach(() => { setAppLocale("de"); simulationStore.reset(); });
 
-it("W3 renders only Stacks and profile; denied routes never mount their data consumers", async () => {
+it("W3 renders only Dashboard, Stacks and profile; denied routes never mount their data consumers", async () => {
   const demo = createDemoAdapter();
   const adapter = { ...demo, kind: "http" as const, getCurrentUser: vi.fn(async () => ({ id: "member", username: "member", isAdmin: false, assignments: [], requiresPasswordChange: false })) };
   const forbidden = vi.fn();
@@ -32,7 +32,7 @@ it("W3 renders only Stacks and profile; denied routes never mount their data con
   await screen.findByRole("heading", { name: "Not available" });
   expect(forbidden).not.toHaveBeenCalled();
   const links = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href"));
-  expect(links.every((href) => href === "/stacks")).toBe(true);
+  expect(links.every((href) => href === "/stacks" || href === "/dashboard")).toBe(true);
   await userEvent.click(screen.getByRole("button", { name: "Profile and hub settings" }));
   expect(screen.queryByRole("menuitem", { name: "Hub settings" }) === null).toBe(true);
   expect(screen.queryByRole("menuitem", { name: "Profile" }) !== null).toBe(true);

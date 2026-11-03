@@ -2,7 +2,6 @@ import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { sampleRun } from "@/features/activity/sample-run";
-import { MINECRAFT, PLEX_STREAMS } from "@/features/dashboard/services/service-data";
 
 import { createDemoAdapter } from "../demo-adapter";
 import { renderEvent, renderRun } from "../../message-code";
@@ -65,7 +64,6 @@ describe("demo texts in American English", () => {
       ...STACKS.flatMap((s) => [s.description, ...s.services.map((x) => (x.update.state === "error" ? x.update.message : undefined))]),
       ...STANDALONE.map((c) => c.originNote),
       ...HOSTS.flatMap((h) => [h.address, agentContainer(h).originNote]),
-      ...PLEX_STREAMS.flatMap((s) => [s.subtitle, s.device]),
       ...runTexts(sampleRun(new Date(0).toISOString())),
       SIMULATED_NOTE,
       ...["example/notes-app", "example/other"].flatMap((ref) => {
@@ -80,7 +78,7 @@ describe("demo texts in American English", () => {
     expect(texts.length).toBeGreaterThan(100);
     expect(germanIn(texts)).toEqual([]);
     // Content names (media titles, the server's message of the day) are data, not interface text.
-    expect(en(MINECRAFT.motd)).toBe(MINECRAFT.motd);
+    expect(en("Werkstatt-Welt (Demo)")).toBe("Werkstatt-Welt (Demo)");
   });
 
   it("keep one localized object per run so live selectors stay stable", () => {

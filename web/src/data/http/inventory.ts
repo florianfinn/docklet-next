@@ -9,21 +9,22 @@ import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation } from "@/domain/model";
 import { withoutSystem } from "@/domain/system";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
+import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
-export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
+export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
   function fail(code: string): never { throw new AdapterOutcomeError({ kind: "error", code }); }
   async function hostInventory(host: Host) {
     try {
-      const [projects, containers] = await Promise.all([list("list-projects", host.id, "projects"), list("list-containers", host.id, "containers")]);
+      const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects"), list("list-containers", host.id, "containers"), readConditions(host.id)]);
       const observation: InventoryObservation = { ...projects.observation, ...(containers.observation.stale ? containers.observation : {}), stale: projects.observation.stale || containers.observation.stale };
       onState(host.id, observation);
       const projectRows = projects.rows as ProjectRow[];
       const containerRows = containers.rows as ContainerRow[];
       const allContainers = containerRows.map((row) => mapContainer(row, host.id, projectRows, observation));
       const stacks = withoutSystem(projectRows.map((row) => mapStack(row, host.id, allContainers, observation)));
-      return { stacks, containers: withoutSystem(allContainers) };
+      return withConditions({ stacks, containers: withoutSystem(allContainers) }, conditions);
     } catch (error) {
       onState(host.id, inventoryFailure(host.id, error));
       return { stacks: [], containers: [] };

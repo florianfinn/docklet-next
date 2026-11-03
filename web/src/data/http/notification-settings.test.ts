@@ -10,7 +10,7 @@ import { AdapterOutcomeError } from "../capability";
 import { SettingsProblemError } from "../settings-error";
 import { createDemoAdapter } from "../demo/demo-adapter";
 import { simulationStore } from "../demo/simulation";
-import { EVENT_KEYS, eventMap, parseNotificationTarget } from "@/domain/notifications";
+import { DEFAULT_EVENTS, EVENT_KEYS, eventMap, eventsFromMap, parseNotificationTarget } from "@/domain/notifications";
 import type { CsrfClient } from "./csrf-client";
 import { createNotificationSettings } from "./notification-settings";
 import fixture from "./testdata/notification-targets.json";
@@ -95,6 +95,15 @@ describe("notification target transport", () => {
     const stored = { image_update: false };
     expect([eventMap([], stored).image_update, eventMap([], stored).container_update]).toEqual([false, false]);
     expect([eventMap(["updates"], { image_update: false, container_update: false }).image_update, eventMap(["updates"], { image_update: false, container_update: false }).container_update]).toEqual([true, true]);
+  });
+
+  it("keeps sustained load opt-in: a missing key is off and an untouched target saves it off", () => {
+    expect(eventsFromMap({}).includes("sustainedLoad")).toBe(false);
+    expect(eventsFromMap({ sustained_load: true }).includes("sustainedLoad")).toBe(true);
+    expect(eventMap(DEFAULT_EVENTS).sustained_load).toBe(false);
+    const stored = { deploy_failed: true };
+    expect(eventMap(eventsFromMap(stored), stored).sustained_load).toBe(false);
+    expect(eventMap([...eventsFromMap(stored), "sustainedLoad"], stored).sustained_load).toBe(true);
   });
 
   it("refuses a list row without an identity", async () => {

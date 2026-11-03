@@ -2,12 +2,20 @@
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230.
+// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys.
 
 import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "history_invalid-range": deBackend.errors.history["invalid-range"],
+  "history_sample-invalid": deBackend.errors.history["sample-invalid"],
+  "history_sample-too-large": deBackend.errors.history["sample-too-large"],
+  "history_unavailable": deBackend.errors.history["unavailable"],
+  "preferences_invalid": deBackend.errors.preferences["invalid"],
+  "preferences_no-user": deBackend.errors.preferences["no-user"],
+  "preferences_too-large": deBackend.errors.preferences["too-large"],
+  "preferences_unknown-section": deBackend.errors.preferences["unknown-section"],
   "volume_workspace-busy": "Das Volume ist beschäftigt. Aktive Vorgänge abschließen und erneut versuchen.",
   "backup_copy_mount-failed": "Das Archiv wurde lokal gespeichert, aber das Kopierziel konnte nicht eingebunden werden.",
   "backup_copy_write-failed": "Das Archiv wurde lokal gespeichert, aber die Zielkopie ist fehlgeschlagen.",

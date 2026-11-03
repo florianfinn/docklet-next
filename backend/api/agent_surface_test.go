@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 agent route contract test.
+// Deviations: Original issue #8 agent route contract test; M17 runtime history and personal preferences.
 
 package api
 
@@ -26,7 +26,7 @@ const routeSnapshotHeader = "# Source: docklet-next/docs/design/core-adoption.md
 
 func TestAgentAndEdgeAgentRouteAllowlist(t *testing.T) {
 	wantModules := []string{
-		"activity", "autoheal", "container", "diagnostics", "health", "image", "image-update",
+		"activity", "autoheal", "container", "diagnostics", "health", "history", "image", "image-update",
 		"job", "network", "port", "project", "registry", "runtime", "settings", "system", "updater", "upload",
 		"version", "volume", "vulnerability",
 	}

@@ -83,15 +83,11 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 		}
 		target = t
 	}
-	text := fmt.Sprintf("%s on %s", row.Event, target.EnvironmentName)
-	for _, f := range []string{"stack", "container", "volume", "operation", "outcome", "reason"} {
-		if v, ok := row.Payload[f].(string); ok && v != "" {
-			text += fmt.Sprintf("\n%s: %s", f, v)
-		}
+	appURL := ""
+	if s.config != nil {
+		appURL = s.config.GetAppURL()
 	}
-	if s.config != nil && s.config.GetAppURL() != "" {
-		text += "\n" + s.config.GetAppURL()
-	}
+	text := outboxText(row.Event, target.EnvironmentName, row.Payload, appURL)
 	content := notifications.Content{Title: row.Event, DefaultTitle: row.Event, Text: map[notifications.MessageFormat]string{}, Vars: notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventType(row.Event))}
 	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatHTML, notifications.MessageFormatSlack} {
 		content.Text[f] = text
@@ -100,4 +96,30 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 	return s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventType(row.Event), row.Event, database.JSON{"eventType": row.Event, "notificationId": row.ID}, func(ctx context.Context, p notifications.NotificationProvider, c database.JSON) (bool, error) {
 		return notifications.Deliver(ctx, p, c, content)
 	})
+}
+
+// outboxText is the plain message of one outbox event; load alerts name metric, value and threshold.
+func outboxText(eventType, host string, payload database.JSON, appURL string) string {
+	text := fmt.Sprintf("%s on %s", eventType, host)
+	for _, f := range []string{"stack", "container", "volume", "operation", "outcome", "reason"} {
+		if v, ok := payload[f].(string); ok && v != "" {
+			text += fmt.Sprintf("\n%s: %s", f, v)
+		}
+	}
+	if metric, ok := payload["metric"].(string); ok && metric != "" {
+		number := func(key string) float64 {
+			switch v := payload[key].(type) {
+			case float64:
+				return v
+			case int:
+				return float64(v)
+			}
+			return 0
+		}
+		text += fmt.Sprintf("\nload: %s %.0f%% above %.0f%% for %.0f min", metric, number("percent"), number("threshold"), number("minutes"))
+	}
+	if appURL != "" {
+		text += "\n" + appURL
+	}
+	return text
 }

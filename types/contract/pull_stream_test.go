@@ -2,7 +2,7 @@
 // Revision: 7df52f8f3b912be751e2283ec8d990933f5dc4b8
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original image/registry UI foundation follow-up for issue #229; M16 bind mounts and backup completion.
+// Deviations: Original image/registry UI foundation follow-up for issue #229; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
 
 package contract
 
@@ -17,7 +17,7 @@ import (
 )
 
 func TestV7PullFrameFixtureTracksPublicProducerTypes(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v12.json")
+	body, err := os.ReadFile("testdata/agent-hub-v13.json")
 	require.NoError(t, err)
 	var fixture struct {
 		ImageSafety struct {
