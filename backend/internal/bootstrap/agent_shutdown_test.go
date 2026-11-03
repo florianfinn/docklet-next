@@ -8,10 +8,12 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/di"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
@@ -173,8 +176,8 @@ func TestAgentShutdownWithholdsOnlyUncommittedAgentFailures(t *testing.T) {
 	}
 }
 
-// Edge reads run through the tunnel, not the listener; a read cancelled by the stop must never deliver its failure
-// (rows A3, A4).
+// Edge reads run through the tunnel, not the listener; a hub read (a command request) cancelled by the lifecycle stop must
+// never deliver its failure (row A5 over both transports).
 func TestAgentShutdownEdgeTunnelNeverDeliversCancelledFailure(t *testing.T) {
 	for _, transport := range []string{"websocket", "grpc"} {
 		t.Run(transport, func(t *testing.T) {
@@ -227,6 +230,103 @@ func TestAgentShutdownEdgeTunnelNeverDeliversCancelledFailure(t *testing.T) {
 				registry.Unregister("example")
 			}
 			require.Equal(t, map[string]int{"502 true": 30}, outcomes)
+		})
+	}
+}
+
+// Every end of the application context sets the signal first: a parent cancellation and a fatal actor-host failure
+// (the normal stop sets it in Run and in the stop hooks).
+func TestAppLifetimeSetsShutdownSignalBeforeEnding(t *testing.T) {
+	for _, source := range []string{"parent", "fatal"} {
+		t.Run(source, func(t *testing.T) {
+			parent, cancelParent := context.WithCancel(t.Context())
+			defer cancelParent()
+			signal := newShutdownSignalInternal()
+			lifetime := newAppLifetimeInternal(parent, signal)
+			defer lifetime.release()
+			if source == "parent" {
+				cancelParent()
+			} else {
+				actorHostFailure(lifetime.end)(errors.New("example failure"))
+			}
+			// Begin happens before the cancellation, so no observer of the ended context sees an unset signal.
+			<-lifetime.ctx.Done()
+			require.True(t, signal.begun())
+			if source == "fatal" {
+				require.ErrorIs(t, context.Cause(lifetime.ctx), di.ErrActorHostLost)
+			}
+		})
+	}
+}
+
+// The production stop sequence driven by each cancellation source never delivers a cancelled Edge read's failure
+// (rows A5 with the parent and fatal sources; review ACC-R2 probe adopted).
+func TestAgentShutdownEdgeCancellationSourcesNeverDeliverFailure(t *testing.T) {
+	for _, variant := range []string{"websocket/parent", "websocket/fatal", "grpc/parent", "grpc/fatal"} {
+		transport, source, _ := strings.Cut(variant, "/")
+		t.Run(variant, func(t *testing.T) {
+			registry := edge.NewTunnelRegistry()
+			tunnelServer := edge.NewTunnelServerWithRegistry(registry, func(context.Context, string) (string, error) { return "example", nil }, nil)
+			hubRouter := echo.New()
+			hubRouter.GET("/api/tunnel/connect", tunnelServer.HandleConnect)
+			hubLC := fxtest.NewLifecycle(t)
+			hubServer, err := NewHTTPServer(hubLC, HTTPServerParams{AppCtx: t.Context(), Config: &config.Config{Listen: "127.0.0.1", Port: "0", EdgeMTLSMode: "disabled"}, Router: hubRouter, TunnelServer: tunnelServer})
+			require.NoError(t, err)
+			hubLC.RequireStart()
+			defer hubLC.RequireStop()
+			outcomes := map[string]int{}
+			for i := 0; i < 100; i++ {
+				entered := make(chan struct{})
+				router := echo.New()
+				router.GET("/api/environments/0/images", func(c *echo.Context) error {
+					close(entered)
+					<-c.Request().Context().Done()
+					return c.JSON(http.StatusServiceUnavailable, imagetypes.Failure("image.usage-unavailable", 503))
+				})
+				parent, cancelParent := context.WithCancel(t.Context())
+				signal := newShutdownSignalInternal()
+				lifetime := newAppLifetimeInternal(parent, signal)
+				lc := fxtest.NewLifecycle(t)
+				cfg := &config.Config{AgentMode: true, EdgeAgent: true, Listen: "127.0.0.1", Port: "0", EdgeMTLSMode: "disabled", EdgeTransport: transport, ManagerApiUrl: "http://" + hubServer.Addr, AgentToken: "example"}
+				agentServer, err := NewHTTPServer(lc, HTTPServerParams{AppCtx: lifetime.ctx, Config: cfg, Router: router, Shutdown: signal})
+				require.NoError(t, err)
+				startEdgeTunnelClient(lifetime.ctx, lc, cfg, router, agentServer, signal)
+				lc.RequireStart()
+				stopped := make(chan error, 1)
+				go func() {
+					_ = waitForShutdown(parent, lifetime.ctx, make(chan os.Signal))
+					signal.Begin()
+					stopped <- lc.Stop(context.WithoutCancel(t.Context()))
+				}()
+				var tunnel *edge.AgentTunnel
+				require.Eventually(t, func() bool {
+					var ok bool
+					tunnel, ok = registry.Get("example").Get()
+					return ok && !tunnel.Conn.IsClosed()
+				}, 3*time.Second, 5*time.Millisecond)
+				rec := httptest.NewRecorder()
+				c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/environments/example/images", nil), rec)
+				finished := make(chan struct{})
+				go func() {
+					defer close(finished)
+					if e := edge.ProxyHTTPRequest(c, tunnel, "/api/environments/0/images"); e != nil {
+						t.Errorf("proxy: %v", e)
+					}
+				}()
+				shutdownWait(t, entered)
+				if source == "parent" {
+					cancelParent()
+				} else {
+					actorHostFailure(lifetime.end)(errors.New("example failure"))
+				}
+				require.NoError(t, <-stopped)
+				lifetime.release()
+				cancelParent()
+				shutdownWait(t, finished)
+				outcomes[fmt.Sprintf("%d %t", rec.Code, strings.Contains(rec.Body.String(), `"code":"agent.unavailable"`))]++
+				registry.Unregister("example")
+			}
+			require.Equal(t, map[string]int{"502 true": 100}, outcomes)
 		})
 	}
 }

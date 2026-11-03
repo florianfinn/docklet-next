@@ -79,10 +79,12 @@ func Bootstrap(ctx context.Context) error {
 	slog.InfoContext(ctx, "Arcane is starting...", "version", config.Version)
 	slog.InfoContext(ctx, "Arcane Identity Configuration", "puid", os.Getuid(), "pgid", os.Getgid())
 
-	appCtx, cancelAppCause := context.WithCancelCause(ctx)
-	cancelApp := context.CancelFunc(func() { cancelAppCause(nil) })
-	failApp := actorHostFailure(cancelAppCause)
-	appCtx = utils.WithAppLifecycleContext(appCtx)
+	shutdown := newShutdownSignalInternal()
+	lifetime := newAppLifetimeInternal(ctx, shutdown)
+	defer lifetime.release()
+	cancelApp := context.CancelFunc(func() { lifetime.end(nil) })
+	failApp := actorHostFailure(lifetime.end)
+	appCtx := utils.WithAppLifecycleContext(lifetime.ctx)
 
 	var db *database.DB
 	var err error
@@ -112,8 +114,7 @@ func Bootstrap(ctx context.Context) error {
 		}
 	}()
 
-	var shutdown *ShutdownSignal
-	app := fx.New(applicationOptions(appCtx, cfg, db, cancelApp, failApp), fx.Populate(&shutdown))
+	app := fx.New(applicationOptions(appCtx, cfg, db, cancelApp, failApp), fx.Replace(shutdown))
 
 	startCtx, cancelStart := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancelStart()
@@ -122,7 +123,7 @@ func Bootstrap(ctx context.Context) error {
 	}
 
 	fatalErr := waitForShutdown(ctx, appCtx, app.Done())
-	// Before any component stops, so agents can tell failures caused by the stop from those of a running agent.
+	// A stop by signal has not ended the application context yet; it must not stop anything before the signal is set.
 	shutdown.Begin()
 
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)

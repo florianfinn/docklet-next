@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"context"
 	"net/http"
 	"sync/atomic"
 )
@@ -21,6 +22,25 @@ func newShutdownSignalInternal() *ShutdownSignal { return &ShutdownSignal{} }
 func (s *ShutdownSignal) Begin() { s.stopping.Store(true) }
 
 func (s *ShutdownSignal) begun() bool { return s.stopping.Load() }
+
+// appLifetimeInternal ends the application context when the parent ends, on fatal failure or when the application
+// stops. The shutdown signal is always set first: request and session work derives from this context, and its
+// cancellation must already count as caused by the stop.
+type appLifetimeInternal struct {
+	ctx     context.Context
+	end     context.CancelCauseFunc
+	release func() bool
+}
+
+func newAppLifetimeInternal(parent context.Context, signal *ShutdownSignal) appLifetimeInternal {
+	ctx, cancel := context.WithCancelCause(context.WithoutCancel(parent))
+	end := func(cause error) {
+		signal.Begin()
+		cancel(cause)
+	}
+	release := context.AfterFunc(parent, func() { end(context.Cause(parent)) })
+	return appLifetimeInternal{ctx: ctx, end: end, release: release}
+}
 
 // agentShutdownInternal withholds a server failure that an agent request has not yet committed once shutdown has begun.
 // The request ends like a lost connection (http.ErrAbortHandler; the Edge tunnel sends nothing), which every hub
