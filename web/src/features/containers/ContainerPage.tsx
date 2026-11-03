@@ -193,7 +193,7 @@ function Body({ c, host, onEdit }: { c: ContainerInfo; host: Host | undefined; o
         </Card>
       </div>
       <div className="mt-4">
-        <ContainerHistory containerId={c.id} />
+        <ContainerHistory hostId={c.hostId} name={c.name} />
       </div>
       <div className="mt-4">
         <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>

@@ -22,14 +22,14 @@ function fixed(uptimePercent: number | null, buckets: HistoryBucket[]): RuntimeH
 
 function adapterWith(history: (range: HistoryRange) => RuntimeHistory) {
   const adapter = createDemoAdapter();
-  return { ...adapter, getContainerHistory: async (_id: string, range: HistoryRange) => history(range) };
+  return { ...adapter, getContainerHistory: async (_ref: unknown, range: HistoryRange) => history(range) };
 }
 
 const strip = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>('[role="list"] > [role="listitem"]')];
 
 describe("history section", () => {
   it("draws one bar per slot and switches the range", async () => {
-    const { container } = renderWithApp(<ContainerHistory containerId="h~a" />, adapterWith((r) => demoHistory("c:a", r, Date.parse("2026-11-03T10:00:00Z"))));
+    const { container } = renderWithApp(<ContainerHistory hostId="h" name="a" />, adapterWith((r) => demoHistory("c:a", r, Date.parse("2026-11-03T10:00:00Z"))));
     await waitFor(() => expect(strip(container).length).toBe(96));
     fireEvent.click(screen.getByRole("radio", { name: "7 Tage" }));
     await waitFor(() => expect(strip(container).length).toBe(84));
@@ -43,19 +43,19 @@ describe("history section", () => {
     const buckets = (["running", "unhealthy", "down", "stopped", "nodata"] as const).map((s, i) => at(i, s));
     const cases: [number | null, string][] = [[99.5, "ok"], [97, "warn"], [80, "err"], [null, "none"]];
     for (const [uptime, tone] of cases) {
-      const { container, unmount } = renderWithApp(<ContainerHistory containerId="h~a" />, adapterWith(() => fixed(uptime, buckets)));
+      const { container, unmount } = renderWithApp(<ContainerHistory hostId="h" name="a" />, adapterWith(() => fixed(uptime, buckets)));
       await waitFor(() => expect(container.querySelector("[data-uptime]")).not.toBeNull());
       expect([uptime, container.querySelector<HTMLElement>("[data-uptime]")!.dataset.uptime]).toEqual([uptime, tone]);
       unmount();
     }
-    const { container } = renderWithApp(<ContainerHistory containerId="h~a" />, adapterWith(() => fixed(100, buckets)));
+    const { container } = renderWithApp(<ContainerHistory hostId="h" name="a" />, adapterWith(() => fixed(100, buckets)));
     await waitFor(() => expect(strip(container).length).toBe(5));
     expect(strip(container).map((b) => [b.dataset.state, b.dataset.tone ?? "none"])).toEqual([["running", "ok"], ["unhealthy", "warn"], ["down", "err"], ["stopped", "gray"], ["nodata", "none"]]);
   });
 
   it("explains a stopped slot as not counted and names the exit code of a down slot", async () => {
     const b = (state: HistoryBucket["state"], m: Partial<HistoryBucket["minutes"]>, extra: Partial<HistoryBucket> = {}): HistoryBucket => ({ start: "2026-11-03T10:00:00Z", end: "2026-11-03T10:15:00Z", state, minutes: { ...minutes, ...m }, ...extra });
-    const { container } = renderWithApp(<ContainerHistory containerId="h~a" />, adapterWith(() => fixed(50, [b("stopped", { running: 5, stopped: 10 }), { ...b("down", { running: 12, down: 3 }, { exitCode: 137 }), start: "2026-11-03T10:15:00Z", end: "2026-11-03T10:30:00Z" }])));
+    const { container } = renderWithApp(<ContainerHistory hostId="h" name="a" />, adapterWith(() => fixed(50, [b("stopped", { running: 5, stopped: 10 }), { ...b("down", { running: 12, down: 3 }, { exitCode: 137 }), start: "2026-11-03T10:15:00Z", end: "2026-11-03T10:30:00Z" }])));
     await waitFor(() => expect(strip(container).length).toBe(2));
     fireEvent.focus(strip(container)[0]!);
     const stopped = await waitFor(() => document.querySelector<HTMLElement>('[data-bucket-tip="stopped"]')!);
@@ -67,7 +67,7 @@ describe("history section", () => {
   });
 
   it("shows resource summaries and the four totals", async () => {
-    const { container } = renderWithApp(<ContainerHistory containerId="h~a" />, adapterWith((r) => demoHistory("c:a", r, Date.parse("2026-11-03T10:00:00Z"))));
+    const { container } = renderWithApp(<ContainerHistory hostId="h" name="a" />, adapterWith((r) => demoHistory("c:a", r, Date.parse("2026-11-03T10:00:00Z"))));
     await waitFor(() => expect(container.querySelectorAll("[data-total]").length).toBe(4));
     expect([...container.querySelectorAll<HTMLElement>("[data-total]")].map((e) => e.dataset.total)).toEqual(["netRx", "netTx", "diskRead", "diskWrite"]);
     expect(/Spitze/.test(container.querySelector('[data-metric="cpu"]')!.textContent!)).toBe(true);

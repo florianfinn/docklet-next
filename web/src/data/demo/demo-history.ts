@@ -74,7 +74,7 @@ export function demoCapacity(hostIds: readonly string[], now = Date.now()): Host
 
 export function createDemoHistory(hostIds: () => readonly string[]): HistoryApi {
   return {
-    getContainerHistory: async (containerId, range) => demoHistory(`c:${containerId}`, range),
+    getContainerHistory: async ({ hostId, name }, range) => demoHistory(`c:${hostId}:${name}`, range),
     getStackHistory: async (stackId, range) => demoHistory(`s:${stackId}`, range),
     getCapacity: async () => demoCapacity(hostIds()),
   };

@@ -63,9 +63,14 @@ export interface HostCapacity {
   series: { at: string; used: number }[];
 }
 
+/** The hub keys container history by name on its host, so it continues across recreations. */
+export interface ContainerHistoryRef {
+  hostId: string;
+  name: string;
+}
+
 export interface HistoryApi {
-  /** `containerId` is the inventory id; history follows the container name. */
-  getContainerHistory(containerId: string, range: HistoryRange): Promise<RuntimeHistory>;
+  getContainerHistory(ref: ContainerHistoryRef, range: HistoryRange): Promise<RuntimeHistory>;
   getStackHistory(stackId: string, range: HistoryRange): Promise<RuntimeHistory>;
   getCapacity(): Promise<HostCapacity[]>;
 }

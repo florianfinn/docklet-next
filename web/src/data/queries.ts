@@ -8,7 +8,7 @@ import { keepPreviousData, useQuery, useQueryClient, type QueryClient, type Quer
 import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
-import type { HistoryRange } from "@/domain/history";
+import type { ContainerHistoryRef, HistoryRange } from "@/domain/history";
 import type { AppLocale } from "@/domain/locale";
 import { securityRecoveryInterval } from "@/domain/security";
 
@@ -136,9 +136,9 @@ export function useImages() {
 }
 
 /** History refreshes with the minute samples; a range switch keeps the previous bars until the new ones arrive. */
-export function useContainerHistory(containerId: string | undefined, range: HistoryRange) {
+export function useContainerHistory(ref: ContainerHistoryRef | undefined, range: HistoryRange) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.containerHistory(containerId ?? "", range), enabled: !!containerId, queryFn: () => adapter.getContainerHistory(containerId!, range), refetchInterval: 60_000, placeholderData: keepPreviousData });
+  return useQuery({ queryKey: queryKeys.containerHistory(ref?.hostId ?? "", ref?.name ?? "", range), enabled: !!ref?.name, queryFn: () => adapter.getContainerHistory(ref!, range), refetchInterval: 60_000, placeholderData: keepPreviousData });
 }
 
 export function useStackHistory(stackId: string | undefined, range: HistoryRange) {

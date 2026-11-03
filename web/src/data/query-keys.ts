@@ -10,7 +10,7 @@ export const queryKeys = {
   stack: (id: string) => ["stack", id],
   containers: ["containers"],
   historyRoot: ["history"],
-  containerHistory: (id: string, range: string) => ["history", "container", id, range],
+  containerHistory: (hostId: string, name: string, range: string) => ["history", "container", hostId, name, range],
   stackHistory: (id: string, range: string) => ["history", "stack", id, range],
   capacity: ["history", "capacity"],
   security: ["security"],

@@ -10,7 +10,7 @@ import { useTranslations } from "use-intl";
 
 import { useContainerHistory, useStackHistory } from "@/data/queries";
 import { formatBytes, formatDateTime, formatNumber, formatPercent, formatTime } from "@/domain/format";
-import { BUCKET_TONE, HISTORY_RANGES, type HistoryBucket, type HistoryRange, type RuntimeHistory } from "@/domain/history";
+import { BUCKET_TONE, HISTORY_RANGES, type ContainerHistoryRef, type HistoryBucket, type HistoryRange, type RuntimeHistory } from "@/domain/history";
 import { QueryError } from "@/shared/components/page";
 import { cn } from "@/shared/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
@@ -21,9 +21,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 const RANGE_KEY = { "24h": "r24h", "7d": "r7d", "30d": "r30d" } as const;
 
 /** History of one container; it follows the container name across recreations. */
-export function ContainerHistory({ containerId }: { containerId: string }) {
+export function ContainerHistory({ hostId, name }: ContainerHistoryRef) {
   const [range, setRange] = useState<HistoryRange>("24h");
-  return <HistorySection range={range} onRange={setRange} query={useContainerHistory(containerId, range)} />;
+  return <HistorySection range={range} onRange={setRange} query={useContainerHistory({ hostId, name }, range)} />;
 }
 
 /** History of one stack: each slot shows the worst state of its services. */
