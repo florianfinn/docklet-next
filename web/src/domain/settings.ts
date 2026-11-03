@@ -85,6 +85,22 @@ export interface ActivitySettings {
   maxFinishedActions: number;
   keepActionOutput: boolean;
   actionPresentation: ActionPresentation;
+  loadAlerts: LoadAlertSettings;
+}
+
+/** Sustained load alerts; the hub validates the same whole-number ranges. */
+export interface LoadAlertSettings {
+  enabled: boolean;
+  cpuPercent: number;
+  memoryPercent: number;
+  minutes: number;
+}
+export const LOAD_ALERT_DEFAULTS: LoadAlertSettings = { enabled: true, cpuPercent: 90, memoryPercent: 90, minutes: 10 };
+export const LOAD_ALERT_LIMITS = { percent: { min: 50, max: 100 }, minutes: { min: 5, max: 60 } } as const;
+
+export function loadAlertValueValid(kind: keyof typeof LOAD_ALERT_LIMITS, value: number): boolean {
+  const { min, max } = LOAD_ALERT_LIMITS[kind];
+  return Number.isInteger(value) && value >= min && value <= max;
 }
 
 /** Which base URL links in notifications use. */

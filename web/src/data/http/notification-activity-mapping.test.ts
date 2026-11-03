@@ -44,3 +44,21 @@ it.each([
   const run = renderRun(mapActivityDetail(detail), locale);
   expect([run.kind, run.title, run.progress, run.log.includes(message)]).toEqual(["auto-heal", title, 100, true]);
 });
+
+it.each([
+  ["de", "Anhaltende Last", "Anhaltend hohe Ressourcenauslastung", "Container wurde unerwartet beendet"],
+  ["en-US", "Sustained load", "Sustained resource load", "Container exited unexpectedly"],
+] as const)("renders a load alert activity and a condition event from their hub shapes in %s", (locale, title, message, condition) => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const detail = {
+      activity: { id: "load", type: "load_sustained", environmentId: "host", resourceType: "host", resourceId: "host:cpu", resourceName: "host:cpu", status: "success", progress: 0, latestMessage: "load.sustained", messageCode: "load.sustained", startedAt: "2026-11-03T12:00:00Z", endedAt: "2026-11-03T12:00:00Z", createdAt: "2026-11-03T12:00:00Z" },
+      messages: [], output: [], stepTrace: [], outputTruncated: false,
+    } as unknown as Detail;
+    const run = renderRun(mapActivityDetail(detail), locale);
+    expect([run.kind, run.title, run.log.includes(message)]).toEqual(["load-alert", title, true]);
+    const event = { id: "event", type: "container.condition.down", messageCode: "container.condition.down", severity: "error", title: "container.condition.down", description: "container.condition.down", resourceType: "container", resourceId: "c1", resourceName: "web", environmentId: "host", metadata: {}, timestamp: "2026-11-03T12:00:00Z", createdAt: "2026-11-03T12:00:00Z", updatedAt: "2026-11-03T12:00:00Z" } as unknown as Event;
+    expect(renderEvent(mapEvent(event), locale).title).toBe(condition);
+    expect(errors).not.toHaveBeenCalled();
+  } finally { errors.mockRestore(); }
+});

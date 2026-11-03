@@ -33,6 +33,7 @@ const KINDS: Record<string, ActionKind> = {
   container_restart: "restart", container_redeploy: "redeploy", container_edit: "recreate",
   vulnerability_scan: "scan", system_prune: "prune", auto_update: "update",
   container_auto_heal: "auto-heal",
+  load_sustained: "load-alert",
 };
 
 function required(value: unknown, field: string): asserts value {
@@ -61,8 +62,8 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
-  // Auto Heal and notification delivery codes live under runMessages.codes, keyed by their wire path.
-  if (code && /^(autoheal|notification)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
+  // Auto Heal, notification delivery, load and condition codes live under runMessages.codes, keyed by their wire path.
+  if (code && /^(autoheal|notification|load|container\.condition)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
   return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
 }
 

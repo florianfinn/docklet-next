@@ -114,4 +114,22 @@ describe("connected hub settings", () => {
     expect((output as HTMLButtonElement).getAttribute("data-state")).toBe("checked");
     expect(server.settings.keepActionOutput).toBe("false");
   });
+
+  it("writes load alert settings as hub keys and blocks a value outside the hub range", async () => {
+    const server = connectedServer();
+    Object.assign(server.settings, { loadAlertsEnabled: "true", loadAlertCpuPercent: "85", loadAlertMemoryPercent: "90", loadAlertMinutes: "10" });
+    renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/activity"], server.adapter);
+    const minutes = await screen.findByLabelText("Minuten über dem Schwellwert");
+    expect((screen.getByLabelText("CPU-Schwellwert (%)") as HTMLInputElement).value).toBe("85");
+    await userEvent.clear(minutes);
+    await userEvent.type(minutes, "4");
+    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(await screen.findByText("Bitte eine Zahl von 5 bis 60 eingeben.")).toBeTruthy();
+    expect(server.writes).toHaveLength(0);
+    await userEvent.type(minutes, "5");
+    await userEvent.click(screen.getByRole("switch", { name: /Warnungen bei anhaltender Last/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(server.writes[0]).toMatchObject({ loadAlertsEnabled: "false", loadAlertCpuPercent: "85", loadAlertMemoryPercent: "90", loadAlertMinutes: "45" });
+  });
 });

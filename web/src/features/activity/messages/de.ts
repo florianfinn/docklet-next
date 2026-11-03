@@ -72,6 +72,7 @@ export const deActivity: typeof enActivity = {
     prune: "Aufräumen",
     "agent-restart": "Agent-Neustart",
     "auto-heal": "Neustart durch Auto Heal",
+    "load-alert": "Anhaltende Last",
   },
   dismiss: "Hinweis schließen",
   notices: {

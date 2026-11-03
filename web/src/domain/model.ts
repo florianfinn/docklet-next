@@ -223,7 +223,8 @@ export type ActionKind =
   | "pull"
   | "prune"
   | "agent-restart"
-  | "auto-heal";
+  | "auto-heal"
+  | "load-alert";
 
 export type ActionStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 

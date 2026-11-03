@@ -9,7 +9,7 @@ import { discardResponse, drainResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
 import type { DockletAdapter } from "@/data/adapter";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
-import type { HubSettings, SettingsSection } from "@/domain/settings";
+import { LOAD_ALERT_DEFAULTS, type HubSettings, type LoadAlertSettings, type SettingsSection } from "@/domain/settings";
 import { unavailable } from "../capability";
 import type { CsrfClient } from "./csrf-client";
 
@@ -25,6 +25,17 @@ function boolean(values: CoreSettings, key: string): boolean {
   const value = field(values, key);
   if (value !== "true" && value !== "false") throw new Error(`settings.invalid.${key}`);
   return value === "true";
+}
+
+/** The hub seeds these keys; a missing key reads as its documented default. */
+function loadAlerts(values: CoreSettings): LoadAlertSettings {
+  const number = (key: string, fallback: number) => (values[key] === undefined ? fallback : Number(values[key]));
+  return {
+    enabled: values.loadAlertsEnabled === undefined ? LOAD_ALERT_DEFAULTS.enabled : boolean(values, "loadAlertsEnabled"),
+    cpuPercent: number("loadAlertCpuPercent", LOAD_ALERT_DEFAULTS.cpuPercent),
+    memoryPercent: number("loadAlertMemoryPercent", LOAD_ALERT_DEFAULTS.memoryPercent),
+    minutes: number("loadAlertMinutes", LOAD_ALERT_DEFAULTS.minutes),
+  };
 }
 
 export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> & Pick<DockletAdapter, "getBackupDefaultRetention" | "setBackupDefaultRetention"> {
@@ -98,7 +109,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       return {
         general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, stackStopMode: stackStopMode(values) },
         hostDefaults,
-        activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
+        activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation, loadAlerts: loadAlerts(values) },
       };
     }) as SettingsApi["getConnectedSettings"],
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
@@ -114,7 +125,8 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       }
       if (section === "activity") {
         const activity = value as HubSettings["activity"];
-        await write({ keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation });
+        const load = activity.loadAlerts;
+        await write({ keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation, loadAlertsEnabled: String(load.enabled), loadAlertCpuPercent: String(load.cpuPercent), loadAlertMemoryPercent: String(load.memoryPercent), loadAlertMinutes: String(load.minutes) });
         return;
       }
       throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");
