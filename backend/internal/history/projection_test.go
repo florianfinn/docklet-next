@@ -161,4 +161,16 @@ func TestUninspectedContainerKeepsConditionAndEpisode(t *testing.T) {
 	var alerts int64
 	require.NoError(t, s.db.Model(&activity.Activity{}).Where("type='load_sustained' AND resource_type='container' AND metadata LIKE '%\"cpu\"%'").Count(&alerts).Error)
 	require.EqualValues(t, 1, alerts)
+
+	// Repeated skips keep the state while listed; a container no longer listed loses it.
+	commit(skipped(sample))
+	commit(skipped(sample))
+	require.Equal(t, "container", s.snapshots.read(host.ID).Items[0].Kind)
+	gone := cloneSample(sample)
+	gone.Containers = nil
+	commit(*gone)
+	for _, c := range s.snapshots.read(host.ID).Items {
+		require.NotEqual(t, "container", c.Kind)
+	}
+	require.Empty(t, s.states[host.ID].conditions)
 }

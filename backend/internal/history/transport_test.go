@@ -46,9 +46,15 @@ type historyDocker struct {
 	exit               int
 	failed             bool
 	statsCalls         atomic.Int32
+	// A listed container whose inspect never answers within the producer deadline.
+	slow string
 }
 
 func (f *historyDocker) serve(w http.ResponseWriter, r *http.Request) {
+	if f.slow != "" && strings.HasSuffix(r.URL.Path, "/"+f.slow+"/json") {
+		<-r.Context().Done()
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
@@ -56,7 +62,11 @@ func (f *historyDocker) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(r.URL.Path, "/_ping"):
 		w.WriteHeader(200)
 	case strings.HasSuffix(r.URL.Path, "/containers/json"):
-		_ = json.NewEncoder(w).Encode([]any{map[string]any{"Id": f.id, "Names": []string{"/app"}, "State": f.state, "Labels": map[string]string{}}})
+		listed := []any{map[string]any{"Id": f.id, "Names": []string{"/app"}, "State": f.state, "Labels": map[string]string{}}}
+		if f.slow != "" {
+			listed = append(listed, map[string]any{"Id": f.slow, "Names": []string{"/lagging"}, "State": "running", "Labels": map[string]string{}})
+		}
+		_ = json.NewEncoder(w).Encode(listed)
 	case strings.HasSuffix(r.URL.Path, "/json"):
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": f.id, "Name": "/app", "Config": map[string]any{"Labels": map[string]string{}}, "State": map[string]any{"Status": f.state, "Running": f.state == "running", "StartedAt": f.started, "FinishedAt": "2026-11-03T12:00:00Z", "ExitCode": f.exit}, "RestartCount": 0})
 	case strings.HasSuffix(r.URL.Path, "/stats"):
@@ -132,7 +142,7 @@ func TestHB5HB8HB9ActualDirectAndEdgeSample(t *testing.T) {
 			setting, err := settings.NewSettingsService(t.Context(), db)
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, setting.Stop(context.WithoutCancel(t.Context()))) })
-			fake := &historyDocker{id: "first", state: "running", started: "2026-11-03T10:00:00Z"}
+			fake := &historyDocker{id: "first", state: "running", started: "2026-11-03T10:00:00Z", slow: "lagging"}
 			daemon := httptest.NewServer(http.HandlerFunc(fake.serve))
 			t.Cleanup(daemon.Close)
 			cli, err := client.New(client.WithHost(daemon.URL), client.WithAPIVersion("1.41"), client.WithHTTPClient(daemon.Client()))
@@ -143,6 +153,7 @@ func TestHB5HB8HB9ActualDirectAndEdgeSample(t *testing.T) {
 			projects := project.NewProjectService(db, setting, events, nil, dockerService, nil, nil, cfg, nil, nil)
 			containers := containerservice.NewContainerService(events, dockerService, nil, setting, projects)
 			producer := NewProducer(db, dockerService, setting)
+			producer.inspectTimeout = 200 * time.Millisecond
 			producer.hostSample = func(context.Context) (dto.HostSample, error) { return fixtureSample().Host, nil }
 			router := echo.New()
 			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("history", "test"))
@@ -190,6 +201,7 @@ func TestHB5HB8HB9ActualDirectAndEdgeSample(t *testing.T) {
 			sample, err := request()
 			require.NoError(t, err)
 			require.Len(t, sample.Containers, 1)
+			require.Equal(t, []string{"lagging"}, sample.Uninspected)
 			require.NotNil(t, sample.Containers[0].Stats)
 			require.Greater(t, fake.statsCalls.Load(), int32(0))
 			require.False(t, sample.Containers[0].StatsMissing)
