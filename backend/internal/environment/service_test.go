@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.; M15 resource authorization and isolated transport helpers.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.; M15 resource authorization and isolated transport helpers; M17 empty history deletion fixture.
 
 package environment
 
@@ -96,6 +96,11 @@ type testProjectRow struct {
 
 func (testProjectRow) TableName() string { return "projects" }
 
+// These service fixtures exercise deletion only; full history storage uses real goose tests.
+type testHistoryBucketRow struct{ HostID string }
+
+func (testHistoryBucketRow) TableName() string { return "history_buckets" }
+
 func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
 
@@ -109,6 +114,7 @@ func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 		&user.User{},
 		&apikey.ApiKey{},
 		&testProjectRow{},
+		&testHistoryBucketRow{},
 	))
 
 	sqlDB, err := db.DB()
