@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; M17 runtime history and personal preferences.
 
 // Package auth owns authentication, token issuance and verification, login
 // session policy, and the authentication HTTP surface.
@@ -59,6 +59,7 @@ func RegisterAuth(
 		authService:     authService,
 		settingsService: settingsService,
 	}
+	h.registerUIPreferences(api)
 	huma.Register(api, huma.Operation{
 		OperationID: "get-sign-in-mode",
 		Method:      http.MethodGet,

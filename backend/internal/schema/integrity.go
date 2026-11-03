@@ -2,7 +2,7 @@
 // Revision: b3607be5144101152c8eb7738d389e8c73986fba
 // Retrieved: 2026-10-16
 // License: Apache-2.0 AND BSD-3-Clause
-// Deviations: Empty-model schema generation using the ported retained integrity inventory.
+// Deviations: Empty-model schema generation using the ported retained integrity inventory; M17 explicit WITHOUT ROWID table options.
 
 package schema
 
@@ -25,9 +25,10 @@ type columnRule struct {
 	Default *string `json:"default"`
 }
 type integrityRules struct {
-	Columns     []columnRule
-	Constraints map[string][]string
-	Indexes     []string
+	Columns      []columnRule
+	Constraints  map[string][]string
+	Indexes      []string
+	WithoutRowID []string
 }
 
 // ApplyIntegrity is development-only: it refuses data and rebuilds empty model
@@ -160,7 +161,14 @@ func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
 	if err := db.Exec("DROP TABLE " + quote(table)).Error; err != nil {
 		return err
 	}
-	if err := db.Exec("CREATE TABLE " + quote(table) + " (" + strings.Join(definitions, ",") + ")").Error; err != nil {
+	suffix := ""
+	for _, name := range rules.WithoutRowID {
+		if name == table {
+			suffix = " WITHOUT ROWID"
+			break
+		}
+	}
+	if err := db.Exec("CREATE TABLE " + quote(table) + " (" + strings.Join(definitions, ",") + ")" + suffix).Error; err != nil {
 		return err
 	}
 	for _, index := range indexes {

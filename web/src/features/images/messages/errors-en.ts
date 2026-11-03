@@ -2,12 +2,20 @@
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230.
+// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys.
 
 import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "history_invalid-range": enBackend.errors.history["invalid-range"],
+  "history_sample-invalid": enBackend.errors.history["sample-invalid"],
+  "history_sample-too-large": enBackend.errors.history["sample-too-large"],
+  "history_unavailable": enBackend.errors.history["unavailable"],
+  "preferences_invalid": enBackend.errors.preferences["invalid"],
+  "preferences_no-user": enBackend.errors.preferences["no-user"],
+  "preferences_too-large": enBackend.errors.preferences["too-large"],
+  "preferences_unknown-section": enBackend.errors.preferences["unknown-section"],
   "volume_workspace-busy": "The volume is busy. Finish active operations and retry.",
   "backup_copy_mount-failed": "The archive was saved locally, but the copy target could not be mounted.",
   "backup_copy_write-failed": "The archive was saved locally, but its target copy failed.",

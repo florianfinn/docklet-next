@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
 
 package settings
 
@@ -73,6 +73,10 @@ type Settings struct {
 	ProjectsDirectory           SettingVariable `key:"projectsDirectory,envOverride" meta:"label=Projects Directory;type=text;keywords=projects,directory,path,folder,location,storage,files,compose,docker-compose;category=internal;description=Configure where project files are stored"`
 	FollowProjectSymlinks       SettingVariable `key:"followProjectSymlinks,envOverride" meta:"label=Follow Project Symlinks;type=boolean;keywords=projects,symlink,symlinks,symbolic links,compose,directory,discovery;category=general;description=Treat symlinked child directories inside the projects directory as Docker Compose projects"`
 	DiskUsagePath               SettingVariable `key:"diskUsagePath" meta:"label=Disk Usage Path;type=text;keywords=disk,usage,path,storage,folder,files;category=general;description=Path used for disk usage calculations"`
+	LoadAlertsEnabled           SettingVariable `key:"loadAlertsEnabled" meta:"label=Sustained load alerts;type=boolean;category=general"`
+	LoadAlertCpuPercent         SettingVariable `key:"loadAlertCpuPercent" meta:"label=CPU alert threshold;type=number;category=general"`
+	LoadAlertMemoryPercent      SettingVariable `key:"loadAlertMemoryPercent" meta:"label=Memory alert threshold;type=number;category=general"`
+	LoadAlertMinutes            SettingVariable `key:"loadAlertMinutes" meta:"label=Sustained load minutes;type=number;category=general"`
 	BaseServerURL               SettingVariable `key:"baseServerUrl" meta:"label=Base Server URL;type=text;keywords=base,url,server,domain,host,endpoint,address,link;category=general;description=Set the base URL for the application"`
 	SetupCompleted              SettingVariable `key:"setupCompleted" meta:"label=Setup Completed;type=boolean;category=internal;description=Whether first-run setup has finished"`
 	StackStopMode               SettingVariable `key:"stackStopMode,authrequired" meta:"label=Stack Stop Mode;type=select;category=general;description=Stop uses Compose down or stop"`

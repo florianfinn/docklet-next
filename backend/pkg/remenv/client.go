@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M17 runtime history and personal preferences.
 
 package remenv
 
@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	historyDTO "github.com/florianfinn/docklet-next/types/history"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
 	"maps"
@@ -163,6 +164,9 @@ func (c *Client) doDirectHTTPInternal(ctx context.Context, req Request) (*Respon
 	}
 	respBody, err := io.ReadAll(reader)
 	if req.ResponseLimit > 0 && int64(len(respBody)) > req.ResponseLimit {
+		if historyDTO.IsSampleRoute(req.Method, req.Path) {
+			return nil, historyDTO.Fail("history.sample-too-large", 502)
+		}
 		return nil, vulnerability.Fail("vulnerability.response-too-large", 502)
 	}
 	if err != nil {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences.
 
 package api
 
@@ -36,6 +36,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/health"
+	"github.com/florianfinn/docklet-next/backend/internal/history"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
@@ -269,6 +270,7 @@ type HandlerDeps struct {
 	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.Module
 	Dashboard         *dashboard.Module
+	History           *history.Module
 	Role              *role.Module
 	Upload            *upload.Module
 }
@@ -278,7 +280,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	e.JSONSerializer = jsonV2Serializer{}
 
 	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -361,6 +363,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	}
 
 	registerImageSafetyErrors(api)
+	registerHistoryErrors(api)
 	registerAccessSchemaInternal(api)
 	return api
 }
@@ -391,7 +394,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	apiGroup := e.Group("/api")
 
 	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -435,6 +438,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	registerImageSafetyErrors(api)
+	registerHistoryErrors(api)
 	registerAccessSchemaInternal(api)
 	return api
 }
@@ -448,6 +452,9 @@ type routeModule struct {
 }
 
 var routeModules = []routeModule{
+	{"history", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		d.History.RegisterRoutes(api, cfg != nil && (cfg.AgentMode || cfg.EdgeAgent))
+	}},
 	{"runtime", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
 		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
 			activity.RegisterRuntimeReceiverRoutes(api, d.RuntimeReceiver, "")

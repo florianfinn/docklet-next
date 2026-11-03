@@ -12,14 +12,14 @@ import { agentFixture } from "../scripts/agent-contract.mjs";
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("v9 backup vocabulary is fingerprinted and translated in both locales", () => {
-  const text = read("types/contract/testdata/agent-hub-v12.json");
+  const text = read("types/contract/testdata/agent-hub-v13.json");
   const fixture = JSON.parse(text);
   const source = read("types/contract/agent.go");
-  assert.match(source, /const AgentHubVersion = 12/);
-  assert.match(source, /const MinimumAgentVersion = 12/);
+  assert.match(source, /const AgentHubVersion = 13/);
+  assert.match(source, /const MinimumAgentVersion = 13/);
   assert.ok(source.includes(createHash("sha256").update(text).digest("hex")));
-  assert.equal(fixture.version, 12);
-  assert.equal(fixture.minimumAgentContractVersion, 12);
+  assert.equal(fixture.version, 13);
+  assert.equal(fixture.minimumAgentContractVersion, 13);
   const problem = read("types/backup/problem.go");
   const codes = problem.match(/Code\s+string\s+`[^`]*enum:"([^"]+)"/)[1].split(",");
   const reasons = problem.match(/Reason\s+string\s+`[^`]*enum:"([^"]+)"/)[1].split(",");
@@ -36,7 +36,7 @@ test("v9 backup vocabulary is fingerprinted and translated in both locales", () 
 
 test("backup admissions advertise accepted IDs and removed routes stay absent", () => {
   const document = JSON.parse(read("api/openapi.json"));
-  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v12.json")).volumeBackups;
+  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v13.json")).volumeBackups;
   for (const path of [
     "/environments/{id}/volumes/{volumeName}/backups",
     "/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore",
@@ -59,8 +59,8 @@ test("backup admissions advertise accepted IDs and removed routes stay absent", 
   assert.equal(fixture.edgeDownloadLimit, 512 * 2 ** 20);
 });
 
-test("v12 fingerprints bind and probe payload schemas", () => {
- const fixture = read("types/contract/testdata/agent-hub-v12.json");
+test("v13 fingerprints bind and probe payload schemas", () => {
+ const fixture = read("types/contract/testdata/agent-hub-v13.json");
  const spec = JSON.parse(read("api/openapi.json"));
  const manifest = JSON.parse(fixture);
  for (const name of ["VolumeBind", "VolumeBindConsumer", "VolumeBindMeasurement", "BackupTargetProbeRequest", "BackupTargetProbeResult"]) {

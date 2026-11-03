@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v12.json", import.meta.url);
+export function agentFixturePath() {
+  const source = readFileSync(agentURL, "utf8");
+  const version = source.match(/const AgentHubVersion = (\d+)/)?.[1];
+  if (!version) throw new Error("missing agent contract version");
+  return `types/contract/testdata/agent-hub-v${version}.json`;
+}
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -127,8 +132,8 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
-  manifest.version = 12;
-  manifest.minimumAgentContractVersion = 12;
+  manifest.version = Number(readFileSync(agentURL, "utf8").match(/const AgentHubVersion = (\d+)/)[1]);
+  manifest.minimumAgentContractVersion = Number(readFileSync(agentURL, "utf8").match(/const MinimumAgentVersion = (\d+)/)[1]);
   const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
     .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
     .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
@@ -228,10 +233,20 @@ export function agentFixture(spec, fixture) {
     shell: {frameProtocolVersion:1, binary:"stdin/stdout", text:"resize/close/exit", closeCodes:[1000,1008], wsStart:"allowlisted", closeReasonTransport:true},
     restart: {method:"POST", path:"/api/system/agent/restart", command:"system.agent.restart", route:"agent-only 202 after inspected self resolution; hub one-shot persisted observer", hubIntake:"POST /environments/{id}/agent/restart", hubRead:"GET /environments/{id}/agent/restarts/{runId}", recovery:"reserved interrupted; sent/awaiting observe without resend", acknowledgement:"durable acknowledged_at; response instance is evidence only"},
   };
+  const sample = document.paths["/environments/{id}/history/sample"]?.get;
+  if (!sample) throw new Error("missing history sample producer");
+  manifest.history = {
+    route: "GET /api/environments/0/history/sample", command: "history.sample",
+    responseLimit: 4 * 1024 * 1024, maxContainers: 2000, maxProjects: 1000,
+    stopIntentOwner: "Docker owning process", stopIntentValidity: "StartedAt <= recorded_at",
+    schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => name.startsWith("History")).map(([name, value]) => [name, {sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex")}])),
+    operationSha256: createHash("sha256").update(JSON.stringify(sample)).digest("hex"),
+  };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }
 
 export function updateAgentContract(spec, mode) {
+  const fixtureURL = new URL(`../${agentFixturePath()}`, import.meta.url);
   const current = readFileSync(fixtureURL);
   const fixture = agentFixture(spec, current);
   const digest = createHash("sha256").update(fixture).digest("hex");
