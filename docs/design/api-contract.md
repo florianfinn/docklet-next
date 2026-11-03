@@ -84,7 +84,7 @@ the mapping and its contract tests before that feature claims live data.
 | `UserUser`, `UserRoleAssignmentSummary` | `HubUser` | User rights need the agreed simple access projection. | Planned M15 Simple users with resource rights |
 | `NotificationResponse`, `NotificationUpdate`, `NotificationTestResponse` | `NotificationChannel`, `SettingsApi` | Typed provider configurations, `credentialsSet` and classified test codes give the UI channel kinds and safe status. | Contract v10; [notifications](notifications.md) |
 | `AutoHealSettings` | `AutoHealSettings` | Restart limits, exceptions and the environment-managed flag are a distinct persisted contract per host. | Contract v10; [Auto Heal](auto-heal.md) |
-| No service-widget DTO | Dashboard widget view models | Service polling, credentials and failure states have no wire contract yet. | Planned M17 Dashboard, history and service widgets |
+| `WidgetSummary`, `WidgetResult`, `WidgetConfig`, `WidgetConfigUpdate` | Dashboard service widget cards and settings | Hub-fetched results carry stale age and typed `widget.*` codes; configurations report only whether a credential exists. | Contract v13; [service widgets](service-widgets.md) |
 
 The table records existing mismatches, not a promise that every listed API
 operation is ready for production use. Some schema types are nested Docker
@@ -349,3 +349,17 @@ Environment DTOs include the non-secret `registrationRevision`. The
 `backupDefaultRetentionCount` setting initializes new plans only (default 7,
 0 keeps all, maximum 3650). Hub archives retain independent local and target-copy
 outcomes. No database migration or helper image change is required.
+
+## Runtime history, service widgets and preferences (v13)
+
+Agent contract v13, minimum v13, adds `GET /api/environments/0/history/sample` and the
+Edge command `history.sample` (`HistorySample`, 4 MiB on both transports). The hub
+alone serves the history, runtime-condition and capacity reads (`HistoryResponse`,
+`HistoryConditions`, `HistoryCapacity`); they are never forwarded to an agent. Service
+widget routes (`/api/service-widgets/...`) exist only in the hub. Profile preferences
+use `GET /auth/me/ui-preferences` and `PUT /auth/me/ui-preferences/{section}`
+(`PreferencesDocument`). New codes: `history.*`, `widget.*`, `preferences.*` and the
+notification event `sustained_load`. Migrations 016 and 017 run forward at hub and agent
+start. Hub and agents upgrade together; `tunnel/v1` is unchanged. Details:
+[runtime history](runtime-history.md), [service widgets](service-widgets.md),
+[preferences](preferences.md).
