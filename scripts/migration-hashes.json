@@ -14,5 +14,6 @@
   "sqlite/013_notifications_auto_heal.sql": "7243770613547b4785451281343ff88091b7f81dbd1f97168d16838f9d87f328",
   "sqlite/014_container_host_operations.sql": "20e41700aca7a5f53780ed33c138366b7708139c208c0222c3640e54ef0359db",
   "sqlite/015_simple_users.sql": "b3681f6932e07bb8f3af0331765655f5cba9868ed2e1a45def9dfa0f742f87d2",
-  "sqlite/016_runtime_history.sql": "0a6ea63519f1a7cf124fb572b93718f3c7d0d89491e87e18d25e0dab13eda34d"
+  "sqlite/016_runtime_history.sql": "0a6ea63519f1a7cf124fb572b93718f3c7d0d89491e87e18d25e0dab13eda34d",
+  "sqlite/017_service_widgets.sql": "a17d03e2fe73b30c8057c3f2a048936287b880ad815babaaf9f46f61c8d2de5c"
 }

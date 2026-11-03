@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history and stop-intent models.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models.
 
 package schema
 
@@ -41,12 +41,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/query"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
+	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	vulnerabilityDTO "github.com/florianfinn/docklet-next/types/vulnerability"
 )
 
 // Models is the persistent schema owned by the retained core modules.
 func Models() []any {
-	return append(append(activity.Models(), history.Models()...),
+	return append(append(append(activity.Models(), history.Models()...), widget.Models()...),
 		&runtimeintent.Row{},
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
 		&environment.Environment{}, &environment.AgentRestartRequest{}, &container.RecreateJournal{}, &container.OriginOverride{}, &event.Event{},

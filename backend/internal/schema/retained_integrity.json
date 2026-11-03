@@ -1,6 +1,9 @@
 {
   "withoutRowID": ["history_buckets"],
   "columns": [
+    {"table":"service_widgets","column":"kind","notNull":true,"check":"CHECK (kind IN ('plex','overseerr','minecraft'))"},
+    {"table":"service_widgets","column":"enabled","notNull":true,"default":"0","check":"CHECK (enabled IN (0,1))"},
+    {"table":"service_widgets","column":"revision","notNull":true,"check":"CHECK (revision > 0)"},
     {"table":"history_buckets","column":"kind","notNull":true,"check":"CHECK (kind IN ('host','container','stack'))"},
     {"table":"history_buckets","column":"host_id","notNull":true},
     {"table":"history_buckets","column":"entity_key","notNull":true},

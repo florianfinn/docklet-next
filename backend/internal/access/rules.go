@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules.
 
 package access
 
@@ -48,6 +48,13 @@ var Rules = map[string]Rule{
 	"get-history-capacity":                         {Kind: Admin},
 	"get-my-ui-preferences":                        {Kind: Self},
 	"put-my-ui-preferences":                        {Kind: Self},
+	"list-service-widgets":                         Rule{Kind: Self},
+	"get-service-widget":                           Rule{Kind: Self},
+	"get-service-widget-config":                    Rule{Kind: Admin},
+	"put-service-widget-config":                    Rule{Kind: Admin},
+	"test-service-widget":                          Rule{Kind: Admin},
+	"approve-service-widget-request":               Rule{Kind: Admin},
+	"decline-service-widget-request":               Rule{Kind: Admin},
 	"ack-job-run":                                  Rule{Kind: Admin},
 	"archive-project":                              Rule{Kind: App, Ref: ProjectPath, Level: Full},
 	"assign-container-origin":                      Rule{Kind: Admin},

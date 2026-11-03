@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences; hub-only service widget routes and neutral errors.
 
 package api
 
@@ -57,6 +57,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
+	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
@@ -271,6 +272,7 @@ type HandlerDeps struct {
 	Vulnerability     *vulnerability.Module
 	Dashboard         *dashboard.Module
 	History           *history.Module
+	Widget            *widget.Module
 	Role              *role.Module
 	Upload            *upload.Module
 }
@@ -280,7 +282,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	e.JSONSerializer = jsonV2Serializer{}
 
 	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -394,7 +396,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	apiGroup := e.Group("/api")
 
 	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -566,6 +568,9 @@ var routeModules = []routeModule{
 	}},
 	{"dashboard", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Dashboard.RegisterRoutes(api)
+	}},
+	{"widget", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Widget.RegisterRoutes(api)
 	}},
 	{"stream", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		handlers.RegisterStream(api, d.Dashboard.Handler(), d.Activity.Handler(), d.Environment.Handler(), d.Event.Service(), d.Version)

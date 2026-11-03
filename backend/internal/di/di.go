@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences; hub service widget module.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -46,6 +46,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
+	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler"
 	"github.com/florianfinn/docklet-next/backend/resources"
@@ -93,6 +94,7 @@ var ServiceOptions = fx.Options(
 		dashboard.NewDashboardService,
 		history.NewProducer,
 		history.NewService,
+		widget.NewService,
 		network.NewNetworkService,
 		port.NewPortService,
 		system.NewSystemService,
@@ -132,6 +134,7 @@ var ServiceOptions = fx.Options(
 		container.New,
 		dashboard.New,
 		history.New,
+		widget.New,
 		system.New,
 		volume.New,
 		updater.New,
