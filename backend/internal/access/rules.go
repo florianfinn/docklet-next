@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; hub widget read and administration rules.
 
 package access
 
@@ -40,6 +40,13 @@ type Rule struct {
 
 // Rules is an exact operation allowlist. Missing entries fail closed.
 var Rules = map[string]Rule{
+	"list-service-widgets":                         Rule{Kind: Self},
+	"get-service-widget":                           Rule{Kind: Self},
+	"get-service-widget-config":                    Rule{Kind: Admin},
+	"put-service-widget-config":                    Rule{Kind: Admin},
+	"test-service-widget":                          Rule{Kind: Admin},
+	"approve-service-widget-request":               Rule{Kind: Admin},
+	"decline-service-widget-request":               Rule{Kind: Admin},
 	"ack-job-run":                                  Rule{Kind: Admin},
 	"archive-project":                              Rule{Kind: App, Ref: ProjectPath, Level: Full},
 	"assign-container-origin":                      Rule{Kind: Admin},

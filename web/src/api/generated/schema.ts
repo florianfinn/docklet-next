@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 6ec950abe440327ae220340846e2a0b75f71d8e06d288939bc2e559ea61b0e85
+// Revision: 8033776684d0acef037e094690af43d3aafa3ad91ab79a7da6f86783e9c42631
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4730,6 +4730,102 @@ export interface paths {
          * @description Built-in roles are protected; deleting cascades all user assignments. Reserved for global admins.
          */
         delete: operations["delete-role"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list-service-widgets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/overseerr/requests/{requestId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approve-service-widget-request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/overseerr/requests/{requestId}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decline-service-widget-request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-service-widget"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/{kind}/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-service-widget-config"];
+        put: operations["put-service-widget-config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/{kind}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test-service-widget"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -13129,6 +13225,144 @@ export interface components {
             readonly $schema?: string;
             /** @description Whether the webhook is active */
             enabled: boolean;
+        };
+        WidgetActionResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetActionResult.json
+             */
+            readonly $schema?: string;
+            activityId: string;
+        };
+        WidgetCertificatePin: {
+            hostPort: string;
+            sha256: string;
+        };
+        WidgetConfig: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetConfig.json
+             */
+            readonly $schema?: string;
+            address: string;
+            enabled: boolean;
+            hasCredential: boolean;
+            /** @enum {string} */
+            kind: "plex" | "overseerr" | "minecraft";
+            openUrl: string;
+            /** Format: int64 */
+            revision: number;
+            stack?: components["schemas"]["WidgetStackReference"];
+            tlsPin?: components["schemas"]["WidgetCertificatePin"];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        WidgetConfigUpdate: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetConfigUpdate.json
+             */
+            readonly $schema?: string;
+            address: string;
+            credential?: string;
+            /**
+             * @default keep
+             * @enum {string}
+             */
+            credentialAction: "keep" | "replace" | "clear";
+            enabled: boolean;
+            openUrl: string;
+            stack?: components["schemas"]["WidgetStackReference"];
+            tlsPin?: components["schemas"]["WidgetCertificatePin"];
+        };
+        WidgetMediaRequest: {
+            createdAt: string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            mediaType: "movie" | "tv";
+            requestedBy: string;
+            title: string;
+        };
+        WidgetMinecraftData: {
+            /** Format: int64 */
+            max: number;
+            motd: string;
+            /** Format: int64 */
+            online: number;
+            players: string[] | null;
+            version: string;
+        };
+        WidgetOverseerrData: {
+            /** Format: int64 */
+            approved: number;
+            /** Format: int64 */
+            available: number;
+            /** Format: int64 */
+            pending: number;
+            requests: components["schemas"]["WidgetMediaRequest"][] | null;
+        };
+        WidgetPlexData: {
+            sessions: components["schemas"]["WidgetPlexSession"][] | null;
+            /** Format: int64 */
+            streams: number;
+            /** Format: int64 */
+            transcodes: number;
+        };
+        WidgetPlexSession: {
+            device: string;
+            /** Format: double */
+            progress: number;
+            quality: string;
+            subtitle: string;
+            title: string;
+            transcode: boolean;
+            user: string;
+        };
+        WidgetProblem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetProblem.json
+             */
+            readonly $schema?: string;
+            certificate?: components["schemas"]["WidgetCertificatePin"];
+            /** @enum {string} */
+            code: "widget.not-configured" | "widget.disabled" | "widget.unreachable" | "widget.timeout" | "widget.auth-failed" | "widget.bad-response" | "widget.redirect-refused" | "widget.tls-failed" | "widget.credential-unavailable" | "widget.invalid-config" | "widget.persistence-failed";
+        };
+        WidgetResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetResult.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            ageSeconds: number;
+            error?: components["schemas"]["WidgetProblem"];
+            /** Format: date-time */
+            fetchedAt?: string;
+            /** @enum {string} */
+            kind: "plex" | "overseerr" | "minecraft";
+            minecraft?: components["schemas"]["WidgetMinecraftData"];
+            overseerr?: components["schemas"]["WidgetOverseerrData"];
+            plex?: components["schemas"]["WidgetPlexData"];
+            stale: boolean;
+        };
+        WidgetStackReference: {
+            environmentId: string;
+            projectId: string;
+        };
+        WidgetSummary: {
+            configured: boolean;
+            enabled: boolean;
+            /** @enum {string} */
+            kind: "plex" | "overseerr" | "minecraft";
+            openUrl: string;
+            stack?: components["schemas"]["WidgetStackReference"];
         };
         WorkspaceFileContent: {
             content?: string;
@@ -33725,6 +33959,292 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-service-widgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetSummary"][] | null;
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "approve-service-widget-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetActionResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "decline-service-widget-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetActionResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "get-service-widget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "get-service-widget-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetConfig"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "put-service-widget-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WidgetConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetConfig"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "test-service-widget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WidgetConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
                 };
             };
         };
