@@ -9,7 +9,7 @@ import { STANDALONE } from "@/data/demo/fixtures/containers";
 import type { ContainerInfo, Service, Stack } from "@/domain/model";
 import { containerRuntime, serviceRuntime, stackStatus } from "@/domain/status";
 import { mapContainer, mapStack, type ContainerRow, type ProjectRow } from "./inventory-mapping";
-import { createConditionReader, readRuntimeConditions, withConditions } from "./runtime-conditions";
+import { createConditionReader, decodeConditionSnapshot, readRuntimeConditions, withConditions } from "./runtime-conditions";
 
 const item = (containerId: string, condition: string, extra: Record<string, unknown> = {}) => ({
   kind: "container", containerId, name: containerId, projectId: "", condition, reason: "exit", exitCode: 1, restarts10m: 0,
@@ -98,5 +98,30 @@ describe("runtime conditions", () => {
     expect(await state()).toBe("down");
     items = [item("c1", "stopped", { reason: "operator-stop" })];
     expect(await state()).toBe("stopped");
+  });
+
+  it.each([
+    ["a missing items field", { success: true, data: {} }],
+    ["non-object data", { success: true, data: "malformed" }],
+    ["data as a list", { success: true, data: [item("c1", "down")] }],
+    ["a failure envelope", { success: false, data: { items: [] } }],
+    ["items as text", { success: true, data: { items: "none" } }],
+    ["a container row without its restart count", { success: true, data: { items: [{ ...item("c2", "down"), restarts10m: undefined }] } }],
+    ["a container row with a text exit code", { success: true, data: { items: [{ ...item("c2", "down"), exitCode: "1" }] } }],
+    ["a non-object answer", "ok"],
+  ])("rejects %s as a snapshot, which keeps the known crash", async (_case, answer) => {
+    expect(() => decodeConditionSnapshot(answer)).toThrow("conditions.invalid");
+    let body: unknown = { success: true, data: { items: [item("c1", "down")] } };
+    const reader = createConditionReader("/api", (async () => new Response(JSON.stringify(body))) as typeof fetch);
+    await reader.read("h");
+    body = answer;
+    expect((await reader.read("h")).get("c1")?.condition).toBe("down");
+  });
+
+  it("accepts null and an empty list as authoritative empty snapshots and keeps stack and nodata rows out", () => {
+    expect(decodeConditionSnapshot({ success: true, data: { items: null } }).size).toBe(0);
+    expect(decodeConditionSnapshot({ success: true, data: { items: [] } }).size).toBe(0);
+    const decoded = decodeConditionSnapshot({ success: true, data: { items: [item("c1", "down", { exitCode: -1 }), item("c2", "nodata"), { ...item("p1", "down"), kind: "stack", containerId: "" }] } });
+    expect([...decoded.keys()]).toEqual(["c1"]);
   });
 });

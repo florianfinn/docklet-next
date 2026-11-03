@@ -14,24 +14,39 @@ export type ConditionsByContainer = ReadonlyMap<string, Omit<RuntimeCondition, "
 const KINDS: readonly unknown[] = ["container", "stack"];
 const CONDITIONS: readonly unknown[] = ["running", "unhealthy", "down", "stopped", "nodata"];
 
-function validRow(item: WireCondition | null | undefined): item is WireCondition {
-  if (!item || typeof item !== "object" || !KINDS.includes(item.kind) || !CONDITIONS.includes(item.condition)) return false;
-  return item.kind === "stack" || (typeof item.containerId === "string" && item.containerId !== "" && typeof item.sampledAt === "string");
+const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+const count = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+function validRow(row: unknown): row is WireCondition {
+  if (!isRecord(row) || !KINDS.includes(row.kind) || !CONDITIONS.includes(row.condition)) return false;
+  if (row.kind === "stack") return true;
+  return typeof row.containerId === "string" && row.containerId !== "" && typeof row.sampledAt === "string" && typeof row.reason === "string" && Number.isInteger(row.exitCode) && count(row.restarts10m);
+}
+
+/**
+ * Decodes one host's condition snapshot keyed by Docker id. Only a success envelope whose data
+ * object carries `items` as an array or null, with every row valid, is a snapshot; anything else
+ * throws, so a malformed answer never replaces a retained one. Null or an empty list clears.
+ */
+export function decodeConditionSnapshot(body: unknown): ConditionsByContainer {
+  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) throw new Error("conditions.invalid");
+  const items = body.data.items;
+  // An absent list is malformed; only null or a list is an authoritative snapshot.
+  if (items !== null && !Array.isArray(items)) throw new Error("conditions.invalid");
+  const rows: unknown[] = items ?? [];
+  if (!rows.every(validRow)) throw new Error("conditions.invalid");
+  return new Map((rows as WireCondition[]).flatMap((item) => item.kind === "container" && item.condition !== "nodata"
+    ? [[item.containerId, { condition: item.condition, reason: item.reason, ...(item.exitCode ? { exitCode: item.exitCode } : {}), ...(item.restarts10m ? { restarts10m: item.restarts10m } : {}), sampledAt: item.sampledAt }] as const]
+    : []));
 }
 
 export type ConditionReader = (hostId: string) => Promise<ConditionsByContainer>;
 
-/** Reads the container conditions of one host keyed by Docker id; throws when the read fails. */
+/** Reads the container conditions of one host; throws when the read fails or the answer is malformed. */
 async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string): Promise<ConditionsByContainer> {
   const response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/runtime-conditions`, { credentials: "same-origin", headers: { Accept: "application/json" } });
   if (!response.ok) { void response.body?.cancel(); throw new Error("conditions.unavailable"); }
-  const body = await response.json() as { success?: unknown; data?: { items?: WireCondition[] | null } };
-  if (body?.success !== true || !body.data || (body.data.items != null && !Array.isArray(body.data.items))) throw new Error("conditions.invalid");
-  // One malformed row makes the whole answer a failed read, so it never replaces a retained snapshot.
-  if (!(body.data.items ?? []).every(validRow)) throw new Error("conditions.invalid");
-  return new Map((body.data.items ?? []).flatMap((item) => item.kind === "container" && item.condition !== "nodata"
-    ? [[item.containerId, { condition: item.condition, reason: item.reason, ...(item.exitCode ? { exitCode: item.exitCode } : {}), ...(item.restarts10m ? { restarts10m: item.restarts10m } : {}), sampledAt: item.sampledAt }] as const]
-    : []));
+  return decodeConditionSnapshot(await response.json());
 }
 
 /**
