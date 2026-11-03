@@ -33,7 +33,7 @@ import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
 import { mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
-import { createHttpHistory } from "./history";
+import { createHttpHistory, createHttpUiPreferences } from "./history";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
@@ -697,6 +697,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     ...createHttpHistory(),
+    ...createHttpUiPreferences(),
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,

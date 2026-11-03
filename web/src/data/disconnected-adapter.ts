@@ -39,6 +39,8 @@ export function createDisconnectedAdapter(): DockletAdapter {
     getContainerHistory: unavailable,
     getStackHistory: unavailable,
     getCapacity: unavailable,
+    getUiPreferences: unavailable,
+    putUiPreference: unavailable,
     listHubBackups: unavailable,
     getHubBackupPolicies: unavailable,
     saveHubBackupPolicies: unavailable,
