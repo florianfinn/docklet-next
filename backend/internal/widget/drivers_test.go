@@ -239,3 +239,28 @@ func TestSW1MinecraftRealStatusProtocol(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "Hi there", stripFormatting(motd))
 }
+
+// AUTO-2: a requester known only by email is shown without a name; the address never leaves the hub.
+func TestOverseerrRequesterEmailStaysOnHub(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/request/count":
+			respond(w, `{"pending":1,"approved":0,"available":0}`)
+		case "/api/v1/request":
+			respond(w, `{"results":[{"id":1,"type":"movie","createdAt":"2026-11-03T12:00:00Z","requestedBy":{"email":"viewer@example.com"},"media":{"tmdbId":1,"mediaType":"movie"}}]}`)
+		case "/api/v1/movie/1":
+			respond(w, `{"title":"Movie"}`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	f := newFetchClient(dto.Config{Kind: dto.Overseerr, Address: server.URL}, "test-key")
+	defer f.close()
+	out, err := fetchOverseerr(t.Context(), f, 1, 1, newTitles(), time.Now())
+	require.NoError(t, err)
+	require.Equal(t, "", out.Requests[0].RequestedBy)
+	encoded, err := json.Marshal(out)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "example.com")
+}

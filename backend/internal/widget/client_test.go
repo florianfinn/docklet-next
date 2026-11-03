@@ -218,3 +218,23 @@ func TestHTTPFailuresStayNeutral(t *testing.T) {
 	cancel()
 	require.Equal(t, dto.Unreachable, transportProblem(ctx, context.Canceled).Code)
 }
+
+// SW2 boundary: three same-authority redirects are followed, a fourth is refused.
+func TestSW2FourthRedirectRefused(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+		if n < 4 {
+			http.Redirect(w, r, "/status/sessions?n="+strconv.Itoa(n+1), http.StatusFound)
+			return
+		}
+		respond(w, plexBody("Four"))
+	}))
+	defer server.Close()
+	f := newFetchClient(dto.Config{Kind: dto.Plex, Address: server.URL}, "")
+	defer f.close()
+	_, err := fetchPlex(t.Context(), f)
+	require.Equal(t, dto.RedirectRefused, problem(err).Code)
+	require.EqualValues(t, 4, hits.Load())
+}

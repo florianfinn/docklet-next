@@ -180,7 +180,6 @@ func fetchOverseerr(ctx context.Context, f *fetchClient, revision int64, generat
 				DisplayName  string `json:"displayName"`
 				Username     string `json:"username"`
 				PlexUsername string `json:"plexUsername"`
-				Email        string `json:"email"`
 			} `json:"requestedBy"`
 			Media *struct {
 				TMDBID    int64  `json:"tmdbId"`
@@ -229,15 +228,13 @@ func fetchOverseerr(ctx context.Context, f *fetchClient, revision int64, generat
 			title = text(*value)
 			titles.put(key, title, now)
 		}
+		// Widget data reaches every signed-in user, so the requester's email address is never used as a name.
 		name := r.RequestedBy.DisplayName
 		if name == "" {
 			name = r.RequestedBy.Username
 		}
 		if name == "" {
 			name = r.RequestedBy.PlexUsername
-		}
-		if name == "" {
-			name = r.RequestedBy.Email
 		}
 		out.Requests = append(out.Requests, dto.MediaRequest{ID: r.ID, Title: title, MediaType: media, RequestedBy: text(name), CreatedAt: text(*r.CreatedAt)})
 	}

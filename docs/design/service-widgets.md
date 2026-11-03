@@ -28,7 +28,9 @@ user sees the widgets and only administrators configure them (core adoption R8 a
   verification fails, the test shows the SHA-256 fingerprint of the server certificate
   and the administrator can trust exactly that certificate for this widget. The pin is
   bound to the configured host and port; a replaced certificate fails again until it is
-  trusted.
+  trusted. A pinned certificate is accepted on its fingerprint alone, without a name
+  check, so self-signed certificates on LAN addresses work; without a pin the usual
+  chain and host name verification applies.
 
 ## 2. Fetching
 
@@ -54,7 +56,9 @@ user sees the widgets and only administrators configure them (core adoption R8 a
   direct play or transcode (at most 20); totals of streams and transcodes.
 - **Overseerr:** counts of pending, approved and available requests and the five newest
   pending requests with title, media type, requester and age; titles are cached per
-  revision, media type and id. Administrators can approve or decline a request; the
+  revision, generation, media type and id. The requester is the display name, user name
+  or Plex name; the email address never leaves the hub, because widget data reaches every
+  signed-in user. Administrators can approve or decline a request; the
   action is recorded as an activity.
 - **Minecraft:** the Java server list ping: players online and maximum, up to twelve player
   names, message of the day without formatting codes, and version. No TPS, no session
