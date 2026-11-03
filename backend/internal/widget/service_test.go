@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -134,6 +135,32 @@ func TestSW3IndependentFlights(t *testing.T) {
 	require.Nil(t, wait(t, a).Error)
 	require.Nil(t, wait(t, b).Error)
 	require.EqualValues(t, 1, calls.Load())
+}
+
+func TestSW3CachePartitionValues(t *testing.T) {
+	s := testService(t)
+	plex := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { respond(w, plexBody("Plex partition")) }))
+	defer plex.Close()
+	overseerr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/count") {
+			respond(w, `{"pending":0,"approved":0,"available":0}`)
+		} else {
+			respond(w, `{"results":[]}`)
+		}
+	}))
+	defer overseerr.Close()
+	configure(t, s, dto.Plex, plex.URL)
+	configure(t, s, dto.Overseerr, overseerr.URL)
+	first := s.Get(t.Context(), dto.Plex)
+	require.Nil(t, first.Error)
+	require.NotNil(t, first.Plex)
+	other := s.Get(t.Context(), dto.Overseerr)
+	require.Nil(t, other.Error)
+	require.NotNil(t, other.Overseerr)
+	again := s.Get(t.Context(), dto.Plex)
+	require.Nil(t, again.Error)
+	require.NotNil(t, again.Plex, "a different widget must not replace the Plex cache partition")
+	require.Equal(t, "Plex partition", again.Plex.Sessions[0].Title)
 }
 
 func TestSW4BackoffAndStale(t *testing.T) {
