@@ -4,10 +4,11 @@
 // License: Apache-2.0
 // Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected first-run identity flow. Review #95: preserve cached rows during refetches and fall back to stack IDs when names are absent. Issue #77: session-bound closure and identity generation cleanup. M9 #204: preserve partial topology observations. M10 #231: production stack updates and lifecycle UI. Held-host security recovery for #263. Simple-user management, assigned-stack access and mode-aware self-service.
 
-import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
+import type { HistoryRange } from "@/domain/history";
 import type { AppLocale } from "@/domain/locale";
 import { securityRecoveryInterval } from "@/domain/security";
 
@@ -132,4 +133,21 @@ export function useImages() {
   const adapter = useAdapter();
   const client = useQueryClient();
   return useQuery({ queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages(initialBatches(client, queryKeys.images, signal)) });
+}
+
+/** History refreshes with the minute samples; a range switch keeps the previous bars until the new ones arrive. */
+export function useContainerHistory(containerId: string | undefined, range: HistoryRange) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.containerHistory(containerId ?? "", range), enabled: !!containerId, queryFn: () => adapter.getContainerHistory(containerId!, range), refetchInterval: 60_000, placeholderData: keepPreviousData });
+}
+
+export function useStackHistory(stackId: string | undefined, range: HistoryRange) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.stackHistory(stackId ?? "", range), enabled: !!stackId, queryFn: () => adapter.getStackHistory(stackId!, range), refetchInterval: 60_000, placeholderData: keepPreviousData });
+}
+
+export function useCapacity() {
+  const adapter = useAdapter();
+  const user = useIsUser();
+  return useQuery({ queryKey: queryKeys.capacity, enabled: !user, queryFn: () => adapter.getCapacity(), refetchInterval: 15 * 60_000 });
 }

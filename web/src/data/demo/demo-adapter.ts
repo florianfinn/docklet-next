@@ -40,6 +40,7 @@ import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from 
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable } from "../capability";
 import { createDemoUsers } from "./demo-users";
 import { createDemoHubBackups } from "./demo-hub-backups";
+import { createDemoHistory } from "./demo-history";
 
 export class DemoCommandError extends Error {
   readonly code: "not-found" | "recreate-not-allowed" | "managed-by-unraid";
@@ -154,6 +155,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     changePassword: async () => undefined,
     updateMyLocale: async (locale) => ({ id: "demo-admin", username: db.settings.auth.local.username, locale, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     ...createDemoHubBackups(options),
+    ...createDemoHistory(() => db.hosts.map((h) => h.id)),
     getCapability: async (operationId, resourceRef = HUB_REF) => {
       const knownResource = resourceRef.kind === "hub" ||
         (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||

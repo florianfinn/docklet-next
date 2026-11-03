@@ -21,6 +21,7 @@ import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ToneBadge } from "@/shared/components/tone";
 import { UpdatePanel } from "@/shared/components/updates/update-panel";
 import { HelpTarget } from "@/shared/help/help-tooltip";
+import { ContainerHistory } from "@/shared/history/HistorySection";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -190,6 +191,9 @@ function Body({ c, host, onEdit }: { c: ContainerInfo; host: Host | undefined; o
             <p className="text-xs text-muted-foreground">{ti("envMasked")}</p>
           </CardContent>
         </Card>
+      </div>
+      <div className="mt-4">
+        <ContainerHistory containerId={c.id} />
       </div>
       <div className="mt-4">
         <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>

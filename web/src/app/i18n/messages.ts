@@ -19,6 +19,7 @@ import { deSecurity } from "@/features/security/messages/de";
 import { deEditor } from "@/features/stacks/editor/messages/de";
 import { deStacks } from "@/features/stacks/messages/de";
 import { deHelp } from "@/shared/help/messages/de";
+import { deHistory } from "@/shared/history/messages/de";
 import { deCommon } from "@/shared/messages/de";
 import { deTheme } from "@/shared/theme/messages/de";
 import { deWorkspace } from "@/shared/workspace/messages/de";
@@ -46,6 +47,7 @@ export const messages: typeof enMessages = {
   stacks: deStacks,
   editor: deEditor,
   containers: deContainers,
+  history: deHistory,
   security: deSecurity,
   networks: {
     ...deNetworks,
