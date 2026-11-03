@@ -129,6 +129,18 @@ Later decisions that reverse, confirm or extend this record, newest first. Each
 entry names the owning milestone; the scope ledger above stays the target, and
 narrower behaviour in an older note is an interim state until that milestone.
 
+### 2026-11-03: M17 dashboard, history and service widgets
+
+The maintainer fixed the M17 scope ([runtime history](runtime-history.md),
+[service widgets](service-widgets.md), [personal preferences](preferences.md)). A
+container stopped outside Docklet with exit code 0 or 143 counts as stopped, not as a
+failure; Docklet stops are recorded on the owning host. The capacity widget gains a
+30-day line. Minecraft uses the status ping without a password; administrators can
+approve and decline Overseerr requests in the widget. https widgets always verify
+certificates, with an optional trusted certificate fingerprint instead of a bypass.
+Simple users get a reduced dashboard with the service widgets and their apps. All
+listed personal preferences move to the profile. Agent contract v13.
+
 ### 2026-11-01: M16 bind mounts and backup completion
 
 The maintainer fixed the M16 scope ([bind mounts](bind-mounts.md),

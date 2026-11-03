@@ -8,6 +8,9 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Arcane revision and module map](arcane-adoption.md) | Selected revision, local module identities and reproducible Go licence inventory |
 | [SQLite licence assessment](sqlite-license-assessment.md) | Exact compiled header grants, selected Go/web evidence and packaging boundaries |
 | [SQLite hub database](sqlite-database.md) | Driver, files, transactions, fresh schema, Francis, acceptance and the single implementation step |
+| [Runtime history](runtime-history.md) | M17 decision: minute sampling, four conditions, stop intents, downsampled history, capacity trend and sustained-load alerts |
+| [Service widgets](service-widgets.md) | M17 decision: hub-side Plex, Overseerr and Minecraft widgets, encrypted credentials, certificate pins, egress limits and app links |
+| [Personal preferences](preferences.md) | M17 decision: preference sections on the user profile, web synchronisation and the one-time browser migration |
 | [Bind mounts](bind-mounts.md) | M16 decision: bind keys, shared path rules, file browser and backups for directory and single-file binds, size scans |
 | [Backup completion](backup-completion.md) | M16 decision: hub archive copies to targets, draft target test, per-host delivery state, registration revision, backups overview |
 | [Volume backups and recovery](volume-backups.md) | Owning-host lifecycle, immutable targets, recovery keys, observed availability, archive validation and transport limits |
