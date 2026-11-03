@@ -60,7 +60,7 @@ export const enVisual = {
       schema: "The code contains no valid design settings.",
     },
     favorite: "Favorite",
-    favoriteHint: "The favorite stays stored in this browser and is the local default for “Reset to favorite”.",
+    favoriteHint: "The favorite is saved to your account and is your default for “Reset to favorite”.",
     saveFavorite: "Save current design as favorite",
     savedFavorite: "Favorite saved.",
     resetFavorite: "Reset to favorite",

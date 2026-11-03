@@ -112,18 +112,19 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
         <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border/50 px-4">
           <SidebarTrigger className="-ml-1" aria-label={t("toggleSidebar")} />
           <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-          <Breadcrumb aria-label={t("breadcrumb")}>
-            <BreadcrumbList>
+          <Breadcrumb aria-label={t("breadcrumb")} className="min-w-0">
+            <BreadcrumbList className="flex-nowrap">
               {crumbs.map((c, i) => (
                 <Fragment key={c.label}>
                   {i > 0 && <BreadcrumbSeparator />}
-                  <BreadcrumbItem>
+                  {/* Long identifiers (shown until the name loads) truncate instead of widening the page. */}
+                  <BreadcrumbItem className="min-w-0">
                     {c.to && i < crumbs.length - 1 ? (
                       <BreadcrumbLink asChild>
-                        <Link to={c.to}>{c.label}</Link>
+                        <Link to={c.to} className="truncate">{c.label}</Link>
                       </BreadcrumbLink>
                     ) : (
-                      <BreadcrumbPage>{c.label}</BreadcrumbPage>
+                      <BreadcrumbPage className="truncate">{c.label}</BreadcrumbPage>
                     )}
                   </BreadcrumbItem>
                 </Fragment>

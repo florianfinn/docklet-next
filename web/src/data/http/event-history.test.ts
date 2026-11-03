@@ -107,3 +107,22 @@ it("event arriving during trailing history queues one more sequential 792-row ob
     expect(f.calls).toHaveLength(24); expect(f.max()).toBe(1);
   } finally { firstGate.resolve(); secondGate.resolve(); stop(); }
 });
+
+it("asks the hub for events newest first by time, so ids unrelated to time never decide the order", async () => {
+  // Producer semantics: an unsortable or missing column falls back to the id tie-break only.
+  const rows = [
+    { id: "a-old", timestamp: "2026-11-01T08:00:00Z" },
+    { id: "b-new", timestamp: "2026-11-03T12:00:00Z" },
+    { id: "c-mid", timestamp: "2026-11-02T10:00:00Z" },
+  ].map((r) => ({ ...r, type: "project.deploy", messageCode: "project.deploy", severity: "success", createdAt: r.timestamp, title: "Example" }));
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "https://hub.example.com");
+    if (url.pathname.endsWith("/capabilities")) return json([{ operationId: "listEvents", available: true, resourceRef: { kind: "hub", id: "0" } }]);
+    const key = url.searchParams.get("sort") === "timestamp" ? "timestamp" : "id";
+    const sorted = [...rows].sort((a, b) => a[key].localeCompare(b[key]) || a.id.localeCompare(b.id));
+    if (url.searchParams.get("order") === "desc") sorted.reverse();
+    return json(sorted, 200, rows.length);
+  });
+  const adapter = createHttpAdapter({ fetch: fetcher, eventSource: () => new ActivitySource() as unknown as EventSource });
+  expect((await adapter.listEvents()).map((e) => e.id)).toEqual(["b-new", "c-mid", "a-old"]);
+});

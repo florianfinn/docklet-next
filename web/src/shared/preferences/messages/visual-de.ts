@@ -61,7 +61,7 @@ export const deVisual: typeof enVisual = {
       schema: "Der Code enthält keine gültigen Design-Einstellungen.",
     },
     favorite: "Favorit",
-    favoriteHint: "Der Favorit bleibt in diesem Browser gespeichert und ist der lokale Standard für „Auf Favorit zurücksetzen“.",
+    favoriteHint: "Der Favorit wird in deinem Konto gespeichert und ist dein Standard für „Auf Favorit zurücksetzen“.",
     saveFavorite: "Aktuelles Design als Favorit speichern",
     savedFavorite: "Favorit gespeichert.",
     resetFavorite: "Auf Favorit zurücksetzen",

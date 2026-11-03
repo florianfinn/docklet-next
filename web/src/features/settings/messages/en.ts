@@ -85,7 +85,7 @@ export const enSettings = {
     leaveTitle: "Discard unsaved changes?",
     leaveBody: "You are leaving “{section}”. Unsaved changes will be lost.",
     leaveConfirm: "Discard and switch",
-    browserLocal: "Saved in this browser, not on the hub.",
+    accountStored: "Saved to your account on the hub and used in every browser you sign in with. Without sign-in, the hub keeps one shared set.",
   },
   general: {
     hubName: "Hub name",
@@ -111,7 +111,7 @@ export const enSettings = {
     light: "Light",
     palette: "Color palette",
     paletteHint: "Choose a preset or adjust the three color roles individually. Applies to the dark and light scheme.",
-    previewHint: "Changes take effect immediately as a preview across the whole interface. Saving keeps them in this browser; discarding or leaving restores the saved state.",
+    previewHint: "Changes take effect immediately as a preview across the whole interface. Saving keeps them for your account; discarding or leaving restores the saved state.",
     previewActive: "Preview active – not saved yet. Discarding or leaving without saving restores the saved state.",
     density: "Density",
     densities: { compact: "Compact", comfortable: "Balanced", spacious: "Spacious" },

@@ -158,6 +158,7 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 	}
 	committed := false
 	invalidated := false
+	started := time.Now()
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current environment.Environment
 		if err := tx.Where("id=?", host.ID).Take(&current).Error; err != nil {
@@ -194,6 +195,8 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 		committed = true
 		return nil
 	})
+	// Debug-level timing of one host's minute write (write-load measurement, LOG_LEVEL=debug).
+	slog.DebugContext(ctx, "History minute written", "hostId", host.ID, "observations", len(observations), "committed", committed, "durationMs", time.Since(started).Milliseconds())
 	if err != nil {
 		return err
 	}

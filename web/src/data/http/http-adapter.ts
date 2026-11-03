@@ -362,7 +362,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     for (;;) {
       if (signal?.aborted) throw new CancelledError();
       let responseIncomplete = false;
-      const body = await read(operationId, route, { start, limit, order: "desc", ...(operationId === "list-activities" ? { includeSummary: "true" } : {}) }, (response) => { responseIncomplete = response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable"; observeResponse?.(response); }, signal);
+      const body = await read(operationId, route, { start, limit, order: "desc", ...(operationId === "list-activities" ? { includeSummary: "true" } : {}), ...(operationId === "listEvents" ? { sort: "timestamp" } : {}) }, (response) => { responseIncomplete = response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable"; observeResponse?.(response); }, signal);
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
       result.push(...body.data as never[]);
       start += body.data.length;

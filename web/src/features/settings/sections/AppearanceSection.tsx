@@ -60,7 +60,7 @@ export function AppearanceSection() {
   return (
     <SettingsForm
       title={t("sections.appearance")}
-      description={t("form.browserLocal")}
+      description={t("form.accountStored")}
       dirty={dirty}
       onDiscard={reset}
       onSave={async () => {

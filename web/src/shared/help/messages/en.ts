@@ -42,9 +42,9 @@ export const enHelp = {
     settingsAppearance: {
       theme: {
         title: "Color scheme",
-        short: "Dark or light interface for this browser.",
+        short: "Dark or light interface for your account.",
         full: "Switches between the dark and light scheme. The color roles are adjusted for both schemes so text stays readable.",
-        impact: "Applies only in this browser, not to other users.",
+        impact: "Applies to your account in every browser, not to other users.",
       },
       palette: {
         title: "Color palette",
@@ -56,7 +56,7 @@ export const enHelp = {
         title: "Density",
         short: "Spacing and row heights of the interface.",
         full: "Compact shows more rows at once, Spacious more room between elements. Content and functions do not change.",
-        impact: "Applies only in this browser.",
+        impact: "Applies to your account in every browser.",
       },
       motion: {
         title: "Animations",

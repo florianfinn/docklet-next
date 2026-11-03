@@ -10,6 +10,8 @@ import { STANDALONE } from "@/data/demo/fixtures/containers";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
 import type { ContainerInfo, RuntimeCondition, Service, Stack } from "@/domain/model";
 import { containerRuntime, RUNTIME_TONE, runtimeStatus, serviceRuntime, stackStatus, STACK_STATUS_TONE } from "@/domain/status";
+import { mapContainer, mapStack, type ContainerRow, type ProjectRow } from "@/data/http/inventory-mapping";
+import { observation } from "@/data/http/update-observation.test-support";
 import { renderWithApp } from "@/test/render";
 
 import { fleetUnits, matchesFleetFilter, remainderStart, unitState } from "./fleet-status";
@@ -103,6 +105,20 @@ describe("stacks without containers (FR1/HS2)", () => {
   });
 });
 
+describe("update arc from a real project update check (FR4)", () => {
+  it("marks the stack unit when the project check reports a service update while its container stays unchecked", () => {
+    const project = { id: "upd", name: "upd", path: "/srv/upd", status: "running", serviceCount: 1, runningCount: 1, runtimeServices: [{ name: "app", image: "example:1.0.0", status: "running", health: "none", containerId: "c1" }],
+      updateInfo: { status: "has_update", hasUpdate: true, imageCount: 1, checkedImageCount: 1, imagesWithUpdates: 1, imagesNotPulled: 0, errorCount: 0, serviceUpdates: { app: { imageRef: "example:1.0.0", updateInfo: observation("version") } } } } as unknown as ProjectRow;
+    const row = { id: "c1", names: ["/upd-app-1"], image: "example:1.0.0", state: "running", status: "Up", labels: { "com.docker.compose.project": "upd", "com.docker.compose.service": "app" }, origin: "compose" } as unknown as ContainerRow;
+    const container = mapContainer(row, host.id, [project], { stale: false });
+    const stack = mapStack(project, host.id, [container], { stale: false });
+    expect(container.update.state).toBe("unchecked");
+    expect(fleetUnits([host], [stack], [container]).map((u) => u.update)).toEqual([true]);
+    const current = mapStack({ ...project, updateInfo: { ...project.updateInfo!, hasUpdate: false, imagesWithUpdates: 0, status: "up_to_date", serviceUpdates: { app: { imageRef: "example:1.0.0", updateInfo: observation("current") } } } } as ProjectRow, host.id, [container], { stale: false });
+    expect(fleetUnits([host], [current], [container]).map((u) => u.update)).toEqual([false]);
+  });
+});
+
 describe("ring layout by container count (FR3)", () => {
   const overlaps = (segs: { start: number; end: number }[]) => segs.some((s, i) => i > 0 && s.start < segs[i - 1]!.end);
 
@@ -142,6 +158,17 @@ describe("ring rendering (FR4)", () => {
     expect(segs.map((p) => p.dataset.runtime)).toEqual(["running", "running"]);
     expect(/update/i.test(segs[1]!.getAttribute("aria-label")!)).toBe(true);
     expect(/update/i.test(segs[0]!.getAttribute("aria-label")!)).toBe(false);
+  });
+
+  it("draws a Direct host whose agent is unavailable as unreachable while its registration still says online", () => {
+    const direct = { ...host, status: "online" as const, inventory: { stale: true, reason: "agent.unavailable" as const, observedAt: "2026-11-03T10:00:00Z" } };
+    const containers = [ctr("a", "s1", "running"), ctr("b", "s2", "stopped", "none", cond("b", "down"))];
+    const units = fleetUnits([direct], [], containers);
+    expect(units.map((u) => u.state)).toEqual(["unreachable", "unreachable"]);
+    const { container } = renderWithApp(<FleetRing hosts={[direct]} units={units} label="Ring" center={{ value: "0/2", caption: "" }} />);
+    expect(container.querySelector("[stroke-dasharray]") !== null).toBe(true);
+    const readError = { ...direct, inventory: { stale: true, reason: "inventory.read-error" as const } };
+    expect(fleetUnits([readError], [], containers).map((u) => u.state)).toEqual(["running", "down"]);
   });
 
   it("dims segments outside the chip filter", () => {

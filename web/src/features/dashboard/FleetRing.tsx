@@ -9,7 +9,7 @@ import { setPreference, usePreference } from "@/shared/preferences/preferences-s
 import type { Host } from "@/domain/model";
 
 import { placeInfoCard, TONE_VAR, useSegmentPopup, type FleetSegment } from "./fleet-segments";
-import { FLEET_TONE, matchesFleetFilter, remainderStart, type FleetFilter, type FleetUnit } from "./fleet-status";
+import { FLEET_TONE, hostUnreachable, matchesFleetFilter, remainderStart, type FleetFilter, type FleetUnit } from "./fleet-status";
 import { arcPath, glowRegion, hitBand, hitCells, layoutRing, polar, ringGeometry, sectorPath, segmentFan } from "./ring-geometry";
 import { SegmentCard } from "./SegmentCard";
 import { SegmentMenu } from "./SegmentMenu";
@@ -171,10 +171,10 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true,
             d={arcPath(c, c, g.hostR, start + 0.5, end - 0.5)}
             data-host-arc={host.status}
             fill="none"
-            stroke={host.status === "offline" ? "var(--destructive)" : host.color}
+            stroke={hostUnreachable(host) ? "var(--destructive)" : host.color}
             strokeWidth={g.hostW}
             strokeLinecap="round"
-            strokeDasharray={host.status === "offline" ? "5 4" : undefined}
+            strokeDasharray={hostUnreachable(host) ? "5 4" : undefined}
             opacity={0.95}
           />
         ))}

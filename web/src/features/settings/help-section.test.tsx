@@ -19,7 +19,7 @@ describe("explanation settings", () => {
   it("keeps the mode as a draft until Save, discards it and stores it in this browser", async () => {
     renderWithApp(<HelpSection />);
     expect(mode().getByRole("radio", { name: "Ausführlich" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/^Wird in diesem Browser gespeichert/) !== null).toBe(true);
+    expect(screen.getByText(/^Wird in deinem Konto auf dem Hub gespeichert/) !== null).toBe(true);
 
     await userEvent.click(mode().getByRole("radio", { name: "Kurz" }));
     expect(screen.getByRole("status").textContent).toBe("Ungespeicherte Änderungen");

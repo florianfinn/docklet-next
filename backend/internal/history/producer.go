@@ -76,11 +76,11 @@ func sampleHost(ctx context.Context, path string) (dto.HostSample, error) {
 	used := memory.Used
 	used -= min(used, cgroup.ZFSARCReclaimable())
 	h.MemoryUsed, h.MemoryTotal = float64(used), float64(memory.Total)
-	usage, err := disk.UsageWithContext(ctx, path)
-	if err != nil {
-		return h, err
+	// The disk path is an optional capacity setting: when it is missing the minute is still
+	// recorded without a disk source, and capacity has no data for this host.
+	if usage, diskErr := disk.UsageWithContext(ctx, path); diskErr == nil {
+		h.DiskSource, h.DiskUsed, h.DiskTotal = path, float64(usage.Used), float64(usage.Total)
 	}
-	h.DiskSource, h.DiskUsed, h.DiskTotal = path, float64(usage.Used), float64(usage.Total)
 	interfaces, err := gnet.InterfacesWithContext(ctx)
 	if err != nil {
 		return h, err

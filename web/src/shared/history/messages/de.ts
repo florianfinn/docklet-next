@@ -17,7 +17,7 @@ export const deHistory: typeof enHistory = {
   noData: "Noch keine Daten",
   now: "jetzt",
   stripLabel: "Verfügbarkeit je Zeitabschnitt, älteste zuerst",
-  states: { running: "Läuft", unhealthy: "Unhealthy", down: "Ausgefallen", stopped: "Gestoppt", nodata: "Keine Daten" },
+  states: { running: "Läuft", unhealthy: "Ungesund", down: "Ausgefallen", stopped: "Gestoppt", nodata: "Keine Daten" },
   minutes: "{state}: {minutes} Min.",
   stoppedNote: "Bewusst gestoppt – zählt nicht als Ausfall",
   exitCode: "Exit-Code {code}",

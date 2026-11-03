@@ -114,7 +114,7 @@ describe("Auto Heal per host", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Atlas" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("combobox", { name: "Zeitfenster" }).textContent).toBe("45 Minuten");
-    await userEvent.click(within(dialog).getByRole("switch", { name: "Unhealthy-Container neu starten" }));
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Ungesunde Container neu starten" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
     const saved = await adapter.getAutoHealSettings("atlas");

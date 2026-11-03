@@ -43,9 +43,9 @@ export const deHelp: typeof enHelp = {
     settingsAppearance: {
       theme: {
         title: "Farbschema",
-        short: "Dunkle oder helle Oberfläche für diesen Browser.",
+        short: "Dunkle oder helle Oberfläche für dein Konto.",
         full: "Wechselt zwischen dunklem und hellem Schema. Die Farbrollen werden für beide Schemata so angepasst, dass Texte lesbar bleiben.",
-        impact: "Gilt nur in diesem Browser, nicht für andere Benutzer.",
+        impact: "Gilt für dein Konto in jedem Browser, nicht für andere Benutzer.",
       },
       palette: {
         title: "Farbpalette",
@@ -57,7 +57,7 @@ export const deHelp: typeof enHelp = {
         title: "Dichte",
         short: "Abstände und Zeilenhöhen der Oberfläche.",
         full: "Kompakt zeigt mehr Zeilen auf einmal, Großzügig mehr Luft zwischen den Elementen. Inhalte und Funktionen ändern sich nicht.",
-        impact: "Gilt nur in diesem Browser.",
+        impact: "Gilt für dein Konto in jedem Browser.",
       },
       motion: {
         title: "Animationen",

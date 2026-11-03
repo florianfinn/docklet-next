@@ -99,7 +99,7 @@ export const deCommon: typeof enCommon = {
     stopped: "Gestoppt",
     busy: "In Arbeit",
     unreachable: "Host getrennt",
-    unhealthy: "Unhealthy",
+    unhealthy: "Ungesund",
     starting: "Startet",
     restarting: "Startet neu",
     unknown: "Unbekannt",
