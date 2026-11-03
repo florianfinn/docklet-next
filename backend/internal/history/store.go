@@ -92,7 +92,8 @@ func upsertMinute(tx *gorm.DB, host string, minute int64, o observation) error {
 			updates = append(updates, c+"=excluded."+c)
 		}
 		for _, c := range []string{"disk_used_last", "disk_total_last", "disk_source"} {
-			updates = append(updates, c+"=CASE WHEN excluded.minutes_running>0 THEN excluded."+c+" ELSE history_buckets."+c+" END")
+			// Only a running minute with a measured disk source replaces the bucket's last disk values.
+			updates = append(updates, c+"=CASE WHEN excluded.minutes_running>0 AND excluded.disk_source<>'' THEN excluded."+c+" ELSE history_buckets."+c+" END")
 		}
 		sql := "INSERT INTO history_buckets (" + strings.Join(columns, ",") + ") VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(values)), ",") + ") ON CONFLICT(kind,host_id,entity_key,tier,bucket_start) DO UPDATE SET " + strings.Join(updates, ",") + " WHERE excluded.last_minute > history_buckets.last_minute"
 		if err := tx.Exec(sql, values...).Error; err != nil {

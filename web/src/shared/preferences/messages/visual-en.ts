@@ -70,7 +70,7 @@ export const enVisual = {
     noFavorite: "No favorite saved yet. Resetting uses the Docklet default.",
     savedAt: "Saved {time}",
     shipped: "Docklet default",
-    shippedHint: "Shipped default from the favorite of the designer trial: purple and cyan, compact, situation overview with a large ring and hosts on the right. Applies on the first visit; saved settings of this browser remain until you reset here. Hosts, host order and service connections are always kept.",
+    shippedHint: "Shipped default from the favorite of the designer trial: purple and cyan, compact, situation overview with a large ring and hosts on the right. Applies on the first visit; your saved settings remain until you reset here. Hosts, host order and service connections are always kept.",
     resetShipped: "Reset to Docklet default",
     resetShippedDone: "Docklet default applied.",
   },

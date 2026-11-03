@@ -71,7 +71,7 @@ export const deVisual: typeof enVisual = {
     noFavorite: "Noch kein Favorit gespeichert. Zurücksetzen nutzt den Docklet-Standard.",
     savedAt: "Gespeichert {time}",
     shipped: "Docklet-Standard",
-    shippedHint: "Mitgelieferter Standard aus dem Favoriten der Designer-Erprobung: Lila und Cyan, kompakt, Lagebild mit großem Ring und Hosts rechts. Gilt beim ersten Besuch; gespeicherte Einstellungen dieses Browsers bleiben, bis du hier zurücksetzt. Hosts, Hostreihenfolge und Dienst-Verbindungen bleiben immer erhalten.",
+    shippedHint: "Mitgelieferter Standard aus dem Favoriten der Designer-Erprobung: Lila und Cyan, kompakt, Lagebild mit großem Ring und Hosts rechts. Gilt beim ersten Besuch; deine gespeicherten Einstellungen bleiben, bis du hier zurücksetzt. Hosts, Hostreihenfolge und Dienst-Verbindungen bleiben immer erhalten.",
     resetShipped: "Auf Docklet-Standard zurücksetzen",
     resetShippedDone: "Docklet-Standard angewendet.",
   },

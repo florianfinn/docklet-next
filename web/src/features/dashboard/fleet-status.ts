@@ -68,7 +68,7 @@ export function unitState(containers: readonly ContainerInfo[], host: Host | und
 
 function unit(base: Pick<FleetUnit, "id" | "kind" | "hostId" | "name" | "stackId" | "origin">, list: ContainerInfo[], host: Host, stack?: Stack): FleetUnit {
   const state = unitState(list, host);
-  const runtimes = list.map((c) => containerRuntime(c, host));
+  const runtimes = list.map((c) => fleetState(c, host));
   return {
     ...base,
     containers: list,

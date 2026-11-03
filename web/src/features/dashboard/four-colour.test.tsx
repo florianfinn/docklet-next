@@ -14,7 +14,7 @@ import { mapContainer, mapStack, type ContainerRow, type ProjectRow } from "@/da
 import { observation } from "@/data/http/update-observation.test-support";
 import { renderWithApp } from "@/test/render";
 
-import { fleetUnits, matchesFleetFilter, remainderStart, unitState } from "./fleet-status";
+import { fleetBreakdown, fleetUnits, matchesFleetFilter, remainderStart, unitState } from "./fleet-status";
 import { FleetRing } from "./FleetRing";
 import { layoutRing, MIN_SEGMENT } from "./ring-geometry";
 
@@ -165,6 +165,9 @@ describe("ring rendering (FR4)", () => {
     const containers = [ctr("a", "s1", "running"), ctr("b", "s2", "stopped", "none", cond("b", "down"))];
     const units = fleetUnits([direct], [], containers);
     expect(units.map((u) => u.state)).toEqual(["unreachable", "unreachable"]);
+    // Retained containers of an unreachable host never count as currently running, like an offline Edge host.
+    expect(units.map((u) => u.running)).toEqual([0, 0]);
+    expect([fleetBreakdown([direct], units).containersRunning, fleetBreakdown([direct], units).containersUnreachable]).toEqual([0, 2]);
     const { container } = renderWithApp(<FleetRing hosts={[direct]} units={units} label="Ring" center={{ value: "0/2", caption: "" }} />);
     expect(container.querySelector("[stroke-dasharray]") !== null).toBe(true);
     const readError = { ...direct, inventory: { stale: true, reason: "inventory.read-error" as const } };

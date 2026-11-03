@@ -118,9 +118,10 @@ it("asks the hub for events newest first by time, so ids unrelated to time never
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "https://hub.example.com");
     if (url.pathname.endsWith("/capabilities")) return json([{ operationId: "listEvents", available: true, resourceRef: { kind: "hub", id: "0" } }]);
-    const key = url.searchParams.get("sort") === "timestamp" ? "timestamp" : "id";
-    const sorted = [...rows].sort((a, b) => a[key].localeCompare(b[key]) || a.id.localeCompare(b.id));
-    if (url.searchParams.get("order") === "desc") sorted.reverse();
+    // The requested column follows `order`; the id tie-break stays ascending.
+    const key = url.searchParams.get("sort") === "timestamp" ? "timestamp" : undefined;
+    const sign = url.searchParams.get("order") === "desc" ? -1 : 1;
+    const sorted = [...rows].sort((a, b) => (key ? sign * a[key].localeCompare(b[key]) : 0) || a.id.localeCompare(b.id));
     return json(sorted, 200, rows.length);
   });
   const adapter = createHttpAdapter({ fetch: fetcher, eventSource: () => new ActivitySource() as unknown as EventSource });

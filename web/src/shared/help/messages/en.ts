@@ -553,7 +553,7 @@ export const enHelp = {
       hide: {
         title: "Hide from overview",
         short: "Moves the entry to the “Hidden” category.",
-        full: "Affects only the display in this browser. The stack or container keeps running unchanged and can be shown again at any time.",
+        full: "Affects only your own display, in every browser you sign in with. The stack or container keeps running unchanged and can be shown again at any time.",
         impact: "Nothing is stopped or deleted.",
       },
       scan: {

@@ -395,3 +395,34 @@ func TestSampleHostWithoutDiskPath(t *testing.T) {
 	require.NotEmpty(t, present.DiskSource)
 	require.Positive(t, present.DiskTotal)
 }
+
+// A running minute without a disk measurement keeps the disk values already stored in its bucket,
+// like a minute whose whole sample failed.
+func TestCapacityRetainsMeasurementWithinBucket(t *testing.T) {
+	for _, diskOnly := range []bool{false, true} {
+		name := "whole-sample-failure"
+		if diskOnly {
+			name = "disk-source-absent"
+		}
+		t.Run(name, func(t *testing.T) {
+			s, host, now := samplerFixture(t)
+			sample := fixtureSample()
+			var fetchErr error
+			s.fetch = func(context.Context, environment.Environment) (dto.Sample, error) { return sample, fetchErr }
+			require.NoError(t, s.SampleHost(t.Context(), host, now))
+			before, err := s.Capacity(t.Context(), now)
+			require.NoError(t, err)
+			require.Len(t, before, 1)
+			if diskOnly {
+				sample.Host.DiskSource, sample.Host.DiskUsed, sample.Host.DiskTotal = "", 0, 0
+			} else {
+				fetchErr = errors.New("sample unavailable")
+			}
+			require.NoError(t, s.SampleHost(t.Context(), host, now.Add(time.Minute)))
+			after, err := s.Capacity(t.Context(), now.Add(time.Minute))
+			require.NoError(t, err)
+			require.Len(t, after, 1)
+			require.Equal(t, before[0].UsedBytes, after[0].UsedBytes)
+		})
+	}
+}

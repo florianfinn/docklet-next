@@ -554,7 +554,7 @@ export const deHelp: typeof enHelp = {
       hide: {
         title: "Aus Übersicht ausblenden",
         short: "Verschiebt den Eintrag in die Kategorie „Ausgeblendet“.",
-        full: "Betrifft nur die Anzeige in diesem Browser. Der Stack oder Container läuft unverändert weiter und lässt sich jederzeit wieder einblenden.",
+        full: "Betrifft nur deine eigene Anzeige, in jedem Browser, in dem du dich anmeldest. Der Stack oder Container läuft unverändert weiter und lässt sich jederzeit wieder einblenden.",
         impact: "Nichts wird gestoppt oder gelöscht.",
       },
       scan: {
