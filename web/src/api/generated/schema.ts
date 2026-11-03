@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 08a17841f8fbdfec2749931bd79444833275afee8b03cc28923d73312362c8b6
+// Revision: 8aa79676a28af5c0ff8e8f19556aaf810b0db49400fc48886f127da6a0578847
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -14510,43 +14510,7 @@ export interface operations {
                 };
             };
             /** @description Typed history or personal preference failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferencesProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferencesProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferencesProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferencesProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14589,7 +14553,7 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponsePreferencesDocument"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Bad Request */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -14599,7 +14563,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14609,7 +14573,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -14635,24 +14599,6 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferencesProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferencesProblem"];
                 };
             };
         };
@@ -15783,51 +15729,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BasePaginatedBackupHistoryEntry"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
                 };
             };
             /** @description Error */
@@ -18862,33 +18763,6 @@ export interface operations {
                 };
             };
             /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -19964,33 +19838,6 @@ export interface operations {
                 };
             };
             /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -20028,33 +19875,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseHistorySample"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
                 };
             };
             /** @description Typed history or personal preference failure */
@@ -22700,22 +22520,13 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListImageHistoryItem"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Typed neutral image or registry failure */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -22736,15 +22547,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
             /** @description Typed neutral image or registry failure */
             429: {
                 headers: {
@@ -22763,22 +22565,22 @@ export interface operations {
                     "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Typed neutral image or registry failure */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Typed neutral image or registry failure */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -25182,33 +24984,6 @@ export interface operations {
                 };
             };
             /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -26068,42 +25843,6 @@ export interface operations {
                 };
             };
             /** @description Typed history or personal preference failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -26844,22 +26583,13 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListAutoUpdateRecord"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Typed neutral image or registry failure */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -26880,15 +26610,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
             /** @description Typed neutral image or registry failure */
             429: {
                 headers: {
@@ -26907,22 +26628,22 @@ export interface operations {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Typed neutral image or registry failure */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed history or personal preference failure */
+            /** @description Typed neutral image or registry failure */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -34738,42 +34459,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseListHistoryCapacity"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
-                };
-            };
-            /** @description Typed history or personal preference failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryProblem"];
                 };
             };
             /** @description Typed history or personal preference failure */

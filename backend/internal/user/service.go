@@ -273,8 +273,9 @@ func (s *UserService) UpdateUser(ctx context.Context, localUser *User, actorPerm
 		if err := s.checkTargetPrivilegeInternal(ctx, tx, actorPerms, localUser.ID); err != nil {
 			return err
 		}
-		// disabled_at is owned by SetDisabled; an ordinary write never restores an enabled state.
-		result := tx.Model(&User{}).Where("id = ?", localUser.ID).Select("*").Omit("disabled_at").Updates(localUser)
+		// disabled_at is owned by SetDisabled and ui_preferences by PutUIPreferences; an ordinary
+		// write never restores an enabled state or a preference document read before it.
+		result := tx.Model(&User{}).Where("id = ?", localUser.ID).Select("*").Omit("disabled_at", "ui_preferences").Updates(localUser)
 		if err := result.Error; err != nil {
 			if isDuplicateKeyErrorInternal(tx, err) {
 				return ErrUsernameTaken

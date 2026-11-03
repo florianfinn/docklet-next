@@ -8,6 +8,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -62,4 +63,54 @@ func TestHB17CommittedEventMetadataAndLoadActivity(t *testing.T) {
 		require.EqualValues(t, 0, e.Metadata["exitCode"])
 		require.EqualValues(t, 0, e.Metadata["restarts"])
 	}
+}
+
+func countEvents(t *testing.T, s *Service, code string) int64 {
+	t.Helper()
+	var n int64
+	require.NoError(t, s.db.Model(&event.Event{}).Where("type=?", code).Count(&n).Error)
+	return n
+}
+
+// A failed host minute is no transition: an unchanged condition is not reported again afterwards.
+func TestConditionTransitionsSurviveFailedMinute(t *testing.T) {
+	s, host, now := samplerFixture(t)
+	down := fixtureSample()
+	down.Containers[0].State, down.Containers[0].ExitCode, down.Containers[0].Stats = "exited", 1, nil
+	minute := func(i int) time.Time { return now.Add(time.Duration(i) * time.Minute) }
+	require.NoError(t, s.commit(t.Context(), host, minute(0), down, nil))
+	require.NoError(t, s.commit(t.Context(), host, minute(1), dto.Sample{}, errors.New("agent unreachable")))
+	require.NoError(t, s.commit(t.Context(), host, minute(2), down, nil))
+	require.EqualValues(t, 1, countEvents(t, s, dto.EventDown))
+	require.NoError(t, s.commit(t.Context(), host, minute(3), dto.Sample{}, errors.New("agent unreachable")))
+	require.NoError(t, s.commit(t.Context(), host, minute(4), fixtureSample(), nil))
+	require.EqualValues(t, 1, countEvents(t, s, dto.EventRunningAgain))
+	require.EqualValues(t, 1, countEvents(t, s, dto.EventDown))
+}
+
+// One failed host minute keeps a container's alerted load episode: continuous load alerts once.
+func TestLoadEpisodeSurvivesFailedMinute(t *testing.T) {
+	s, host, now := samplerFixture(t)
+	setting, err := settings.NewSettingsService(t.Context(), s.db)
+	require.NoError(t, err)
+	defer setting.Stop(context.Background())
+	s.settings = setting
+	require.NoError(t, setting.SetStringSetting(t.Context(), "loadAlertMinutes", "5"))
+	sample := fixtureSample()
+	minute := 0
+	high := func(n int) {
+		for i := 0; i < n; i++ {
+			sample.Containers[0].Stats.CPUTotal += 95
+			sample.Containers[0].Stats.CPUSystem += 100
+			require.NoError(t, s.commit(t.Context(), host, now.Add(time.Duration(minute)*time.Minute), sample, nil))
+			minute++
+		}
+	}
+	high(8)
+	require.NoError(t, s.commit(t.Context(), host, now.Add(time.Duration(minute)*time.Minute), dto.Sample{}, errors.New("agent unreachable")))
+	minute++
+	high(8)
+	var alerts int64
+	require.NoError(t, s.db.Model(&activity.Activity{}).Where("type='load_sustained' AND resource_type='container' AND metadata LIKE '%\"cpu\"%'").Count(&alerts).Error)
+	require.EqualValues(t, 1, alerts)
 }

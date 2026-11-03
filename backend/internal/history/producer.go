@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -142,7 +143,9 @@ func (p *Producer) Sample(ctx context.Context) (dto.Sample, error) {
 			defer cancel()
 			inspected, err := cli.ContainerInspect(callCtx, c.ID, client.ContainerInspectOptions{})
 			if err != nil {
-				return err
+				// A container removed since the list, or one slow inspect, skips only that
+				// container for this minute; the host sample still counts.
+				return groupCtx.Err()
 			}
 			v := inspected.Container
 			item := dto.ContainerSample{ID: c.ID, Name: strings.TrimPrefix(v.Name, "/")}
@@ -182,6 +185,7 @@ func (p *Producer) Sample(ctx context.Context) (dto.Sample, error) {
 	if err = group.Wait(); err != nil {
 		return out, err
 	}
+	out.Containers = slices.DeleteFunc(out.Containers, func(c dto.ContainerSample) bool { return c.ID == "" })
 	if err = ctx.Err(); err != nil {
 		return out, err
 	}

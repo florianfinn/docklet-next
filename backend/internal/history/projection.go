@@ -20,13 +20,17 @@ import (
 	"uuid"
 )
 
-func (s *Service) projectTransitions(tx *gorm.DB, host string, now time.Time, current []dto.Condition, previous dto.Conditions) error {
-	before := map[string]dto.Condition{}
-	for _, c := range previous.Items {
+func containerConditions(items []dto.Condition) map[string]dto.Condition {
+	out := map[string]dto.Condition{}
+	for _, c := range items {
 		if c.Kind == "container" {
-			before[c.ContainerID] = c
+			out[c.ContainerID] = c
 		}
 	}
+	return out
+}
+
+func (s *Service) projectTransitions(tx *gorm.DB, host string, now time.Time, current []dto.Condition, before map[string]dto.Condition) error {
 	for _, c := range current {
 		if c.Kind != "container" {
 			continue
@@ -65,7 +69,9 @@ func (s *Service) projectTransitions(tx *gorm.DB, host string, now time.Time, cu
 	}
 	return nil
 }
-func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now time.Time, observations []observation, next *hostState) error {
+
+// projectLoad evaluates one minute; container episodes end only when a successful sample no longer reports them.
+func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now time.Time, observations []observation, sampled bool, next *hostState) error {
 	enabled, cpuThreshold, memoryThreshold, minutes := true, 90., 90., 10
 	if s.settings != nil {
 		cfg := s.settings.GetSettingsConfig()
@@ -100,7 +106,11 @@ func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now tim
 				continue
 			}
 			resource := o.kind
-			metadata := dto.LoadAlertMetadata{Metric: metric.name, Percent: *metric.value, Threshold: metric.threshold, Minutes: minutes, Host: host.Name, Container: o.key}
+			container := ""
+			if o.kind == "container" {
+				container = o.key
+			}
+			metadata := dto.LoadAlertMetadata{Metric: metric.name, Percent: *metric.value, Threshold: metric.threshold, Minutes: minutes, Host: host.Name, Container: container}
 			data := database.JSON(metadata.Fields())
 			row := activity.Activity{BaseModel: database.BaseModel{ID: uuid.New().String(), CreatedAt: now}, EnvironmentID: host.ID, Type: activityDTO.TypeLoadSustained, Status: activityDTO.StatusSuccess, ResourceType: &resource, ResourceID: new(o.key), ResourceName: new(o.key), StartedAt: now, EndedAt: new(now), MessageCode: "load.sustained", LatestMessage: "load.sustained", Metadata: data}
 			if err := tx.Create(&row).Error; err != nil {
@@ -110,6 +120,9 @@ func (s *Service) projectLoad(tx *gorm.DB, host environment.Environment, now tim
 				return err
 			}
 		}
+	}
+	if !sampled {
+		return nil
 	}
 	for key := range next.episodes {
 		if !alive[key] {

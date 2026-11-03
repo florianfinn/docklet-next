@@ -367,3 +367,17 @@ func TestHB18CapacitySlopeAndSource(t *testing.T) {
 		require.True(t, capacityGrowth(rows[3:], current).GrowthUnavailable)
 	}
 }
+
+// N4: a host that is down at the start of the current two-hour bucket keeps its last measured usage.
+func TestCapacityKeepsHostWithoutCurrentMeasurement(t *testing.T) {
+	s, host, now := samplerFixture(t)
+	base := now.Truncate(2 * time.Hour)
+	for i, running := range []int{120, 120, 0} {
+		start := base.Add(time.Duration(i-2) * 2 * time.Hour).Unix()
+		require.NoError(t, s.db.Create(&bucketRow{Kind: "host", HostID: host.ID, EntityKey: host.ID, Tier: 120, BucketStart: start, LastMinute: start, MinutesRunning: running, MinutesDown: 120 - running, DiskUsedLast: float64(40 + i), DiskTotalLast: 100, DiskSource: map[bool]string{true: "/example", false: ""}[running > 0]}).Error)
+	}
+	got, err := s.Capacity(t.Context(), now)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, 41., got[0].UsedBytes)
+}

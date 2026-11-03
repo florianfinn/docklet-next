@@ -256,3 +256,37 @@ func TestHB5HB8HB9ActualDirectAndEdgeSample(t *testing.T) {
 		})
 	}
 }
+
+// N1/AUTO-3: a container that vanishes between list and inspect is left out; the host minute still counts.
+func TestSampleSkipsContainerGoneBeforeInspect(t *testing.T) {
+	db := historyDB(t)
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/_ping"):
+			w.WriteHeader(200)
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			_ = json.NewEncoder(w).Encode([]any{map[string]any{"Id": "gone", "Names": []string{"/old"}, "State": "running"}, map[string]any{"Id": "kept", "Names": []string{"/app"}, "State": "exited"}})
+		case strings.HasSuffix(r.URL.Path, "/gone/json"):
+			http.Error(w, `{"message":"No such container: gone"}`, http.StatusNotFound)
+		case strings.HasSuffix(r.URL.Path, "/kept/json"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"Id": "kept", "Name": "/app", "Config": map[string]any{"Labels": map[string]string{}}, "State": map[string]any{"Status": "exited", "ExitCode": 0, "StartedAt": "2026-11-03T10:00:00Z", "FinishedAt": "2026-11-03T11:00:00Z"}})
+		default:
+			http.Error(w, "unexpected Docker route", 404)
+		}
+	}))
+	t.Cleanup(daemon.Close)
+	cli, err := client.New(client.WithHost(daemon.URL), client.WithAPIVersion("1.41"), client.WithHTTPClient(daemon.Client()))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cli.Close()) })
+	setting, err := settings.NewSettingsService(t.Context(), db)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, setting.Stop(context.WithoutCancel(t.Context()))) })
+	dockerService := docker.NewDockerClientService(t.Context(), db, &config.Config{Environment: "test"}, setting).WithClient(cli)
+	producer := NewProducer(db, dockerService, setting)
+	producer.hostSample = func(context.Context) (dto.HostSample, error) { return fixtureSample().Host, nil }
+	sample, err := producer.Sample(t.Context())
+	require.NoError(t, err)
+	require.Len(t, sample.Containers, 1)
+	require.Equal(t, "kept", sample.Containers[0].ID)
+}

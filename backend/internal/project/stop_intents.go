@@ -40,7 +40,8 @@ func (s *ProjectService) runningStopIntents(ctx context.Context, projectID, comp
 	}
 	rows := []runtimeintent.Row{}
 	for _, c := range list.Items {
-		if c.State != "running" {
+		// Restart loops and paused containers are stopped by the operation too, so they stay grey (K1).
+		if c.State != "running" && c.State != "restarting" && c.State != "paused" {
 			continue
 		}
 		name := ""

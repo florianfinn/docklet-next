@@ -160,4 +160,11 @@ administrator selects it. Episodes are kept in memory, so a hub restart starts t
 - No minutes are recorded while the hub is down.
 - A stop outside Docklet with an exit code other than 0 or 143 counts as a failure.
 - After a hub restart or a host edit, rates resume one minute later and load episodes
-  start again.
+  start again; each container that is down, unhealthy or in a restart loop is reported
+  once more as a condition event, and a load that lasts through the restart can alert
+  again.
+- A failed host minute is no transition: condition events and load episodes continue
+  from the last successful minute. A container that disappears between listing and
+  inspection, or whose inspection times out, is left out of that minute.
+- Commits of all hosts share one lock, and the runtime conditions route waits for a
+  running commit; at homelab scale this costs milliseconds.

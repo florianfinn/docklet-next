@@ -120,10 +120,15 @@ func (s *Service) Capacity(ctx context.Context, now time.Time) ([]dto.Capacity, 
 		if enabled == 0 {
 			continue
 		}
-		current := series[len(series)-1]
-		if current.MinutesRunning == 0 || current.DiskSource == "" {
+		// The newest bucket with a measured disk; a host that is down right now keeps its last usage and trend.
+		measured := len(series) - 1
+		for measured >= 0 && (series[measured].MinutesRunning == 0 || series[measured].DiskSource == "") {
+			measured--
+		}
+		if measured < 0 {
 			continue
 		}
+		current := series[measured]
 		c := capacityGrowth(series, current)
 		var err error
 		c.History, err = readHistory(ctx, s.db, "host", id, id, "30d", now)

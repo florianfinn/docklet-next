@@ -49,3 +49,22 @@ func TestPF4SectionAndDocumentLimits(t *testing.T) {
 	require.Equal(t, emptyUIPreferences(), decodeUIPreferences(t.Context(), "malformed"))
 	require.Equal(t, emptyUIPreferences(), decodeUIPreferences(t.Context(), "null"))
 }
+
+// A profile or login write with a stale user row keeps a preference section saved in between.
+func TestUpdateUserKeepsPreferenceDocument(t *testing.T) {
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "preferences.db")), database.MigrationOptions{})
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Exec("INSERT INTO users(id,username,password_hash,time_format) VALUES('first','first','','auto')").Error)
+	s := NewUserService(db, nil, nil)
+	stale, err := s.GetUserByID(t.Context(), "first")
+	require.NoError(t, err)
+	_, err = s.PutUIPreferences(t.Context(), "first", "help", map[string]any{"mode": "off"})
+	require.NoError(t, err)
+	stale.Locale = new("de")
+	_, err = s.UpdateUser(t.Context(), stale, nil)
+	require.NoError(t, err)
+	saved, err := s.UIPreferences(t.Context(), "first")
+	require.NoError(t, err)
+	require.Contains(t, saved.Sections, "help")
+}

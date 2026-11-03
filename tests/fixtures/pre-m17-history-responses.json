@@ -1,0 +1,295 @@
+{
+ "clear-activity-history": {
+  "method": "delete",
+  "path": "/environments/{id}/activities/history",
+  "responses": {
+   "200": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/BaseApiResponseActivityClearHistoryResult"
+      }
+     }
+    },
+    "description": "OK"
+   },
+   "default": {
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "$ref": "#/components/schemas/ErrorModel"
+      }
+     }
+    },
+    "description": "Error"
+   }
+  }
+ },
+ "get-image-history": {
+  "method": "get",
+  "path": "/environments/{id}/images/{name}/history",
+  "responses": {
+   "200": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/BaseApiResponseListImageHistoryItem"
+      }
+     }
+    },
+    "description": "OK"
+   },
+   "400": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "404": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "409": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "429": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "500": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "502": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "503": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/ImageOperationError"
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "default": {
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "$ref": "#/components/schemas/ErrorModel"
+      }
+     }
+    },
+    "description": "Error"
+   }
+  }
+ },
+ "get-updater-history": {
+  "method": "get",
+  "path": "/environments/{id}/updater/history",
+  "responses": {
+   "200": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/BaseApiResponseListAutoUpdateRecord"
+      }
+     }
+    },
+    "description": "OK"
+   },
+   "400": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "404": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "409": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "429": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "500": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "502": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "503": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ImageOperationError"
+        },
+        {
+         "$ref": "#/components/schemas/ErrorModel"
+        }
+       ]
+      }
+     }
+    },
+    "description": "Typed neutral image or registry failure"
+   },
+   "default": {
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "$ref": "#/components/schemas/ErrorModel"
+      }
+     }
+    },
+    "description": "Error"
+   }
+  }
+ },
+ "list-backup-history": {
+  "method": "get",
+  "path": "/backups/history",
+  "responses": {
+   "200": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/BasePaginatedBackupHistoryEntry"
+      }
+     }
+    },
+    "description": "OK"
+   },
+   "default": {
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "$ref": "#/components/schemas/ErrorModel"
+      }
+     }
+    },
+    "description": "Error"
+   }
+  }
+ }
+}

@@ -49,32 +49,48 @@ func personalHistoryErrorTransformer(ctx huma.Context, status string, value any)
 	return value, nil
 }
 
+// typedFailures lists the statuses at which each M17 operation returns its own problem
+// document. Routes are selected by operation id so older routes that share a path
+// word keep their contract; a generic error schema stays a oneOf alternative.
+var typedFailures = map[string][]string{
+	"get-history-sample":     {"502", "503"},
+	"get-container-history":  {"400", "503"},
+	"get-project-history":    {"400", "503"},
+	"get-host-history":       {"400", "503"},
+	"get-runtime-conditions": {"503"},
+	"get-history-capacity":   {"503"},
+	"get-my-ui-preferences":  {"403"},
+	"put-my-ui-preferences":  {"400", "403", "413"},
+}
+
 func registerHistoryErrors(api huma.API) {
-	for path, item := range api.OpenAPI().Paths {
-		preferences := strings.HasPrefix(path, "/auth/me/ui-preferences")
-		history := strings.Contains(path, "/history/") || strings.HasSuffix(path, "/history") || strings.HasSuffix(path, "/runtime-conditions")
-		if !preferences && !history {
-			continue
-		}
-		typ := reflect.TypeFor[historyDTO.Problem]()
-		if preferences {
-			typ = reflect.TypeFor[preferencesDTO.Problem]()
-		}
-		schema := api.OpenAPI().Components.Schemas.Schema(typ, true, "")
+	for _, item := range api.OpenAPI().Paths {
 		for _, op := range []*huma.Operation{item.Get, item.Put} {
 			if op == nil {
 				continue
 			}
-			for _, status := range []string{"400", "403", "413", "502", "503"} {
-				previous := op.Responses[status]
-				response := &huma.Response{Description: "Typed history or personal preference failure", Content: map[string]*huma.MediaType{"application/json": {Schema: schema}}}
-				if previous != nil {
+			statuses, ok := typedFailures[op.OperationID]
+			if !ok {
+				continue
+			}
+			typ := reflect.TypeFor[historyDTO.Problem]()
+			if strings.Contains(op.OperationID, "ui-preferences") {
+				typ = reflect.TypeFor[preferencesDTO.Problem]()
+			}
+			typed := api.OpenAPI().Components.Schemas.Schema(typ, true, "")
+			for _, status := range statuses {
+				schema := typed
+				response := &huma.Response{Description: "Typed history or personal preference failure", Content: map[string]*huma.MediaType{}}
+				if previous := op.Responses[status]; previous != nil {
+					response.Description = previous.Description
 					for kind, media := range previous.Content {
-						if kind != "application/json" {
-							response.Content[kind] = media
-						}
+						response.Content[kind] = media
+					}
+					if media := previous.Content["application/json"]; media != nil && media.Schema != nil {
+						schema = &huma.Schema{OneOf: []*huma.Schema{typed, media.Schema}}
 					}
 				}
+				response.Content["application/json"] = &huma.MediaType{Schema: schema}
 				op.Responses[status] = response
 			}
 		}
