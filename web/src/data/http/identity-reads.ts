@@ -25,7 +25,14 @@ export function releaseResponse(response: Response): void {
   releases.delete(response);
 }
 
-/** Status-only callers discard unread data and release request ownership immediately. */
+/** Status-only callers of a successful response release ownership and read its body to the end in the background with
+ * the native reader, so Chromium records a finished request rather than an aborted one (a stream reader does not). */
+export function drainResponse(response: Response): void {
+  releaseResponse(response);
+  void response.arrayBuffer().catch(() => undefined);
+}
+
+/** Status-only failures discard unread data and release request ownership immediately. */
 export function discardResponse(response: Response): void {
   releaseResponse(response);
   void response.body?.cancel().catch(() => undefined);

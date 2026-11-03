@@ -5,7 +5,7 @@
 // Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability.
 
 import { settingsProblem, SettingsProblemError } from "../settings-error";
-import { discardResponse } from "./identity-reads";
+import { discardResponse, drainResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
 import type { DockletAdapter } from "@/data/adapter";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
@@ -47,7 +47,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       } else discardResponse(response);
       throw new Error(`settings.write.${response.status}`);
     }
-    discardResponse(response);
+    drainResponse(response);
   }
 
   return {

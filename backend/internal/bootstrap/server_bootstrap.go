@@ -2,11 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener.
+// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener; agents withhold server failures caused by their shutdown.
 
 package bootstrap
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -47,6 +48,7 @@ type HTTPServerParams struct {
 	TunnelServer *edge.TunnelServer
 	System       *system.SystemService
 	Scheduler    schedulertypes.JobScheduler
+	Shutdown     *ShutdownSignal `optional:"true"`
 }
 
 // NewHTTPServer builds the shared HTTP/gRPC server and registers its lifecycle.
@@ -69,6 +71,10 @@ func NewHTTPServer(lc fx.Lifecycle, p HTTPServerParams) (*http.Server, error) {
 
 	// Request contexts deliberately do not inherit the app lifecycle marker.
 	baseCtx, cancelBase := context.WithCancel(context.Background()) //nolint:forbidigo // HTTP requests need a root without the application lifecycle marker.
+	shutdown := cmp.Or(p.Shutdown, newShutdownSignalInternal())
+	if p.Config.AgentMode {
+		httpHandler = agentShutdownInternal(shutdown, httpHandler)
+	}
 	srv, err := newHTTPServerInternal(baseCtx, listenAddr, httpHandler, protocols, useTLS, edgeCfg)
 	if err != nil {
 		cancelBase()
@@ -115,6 +121,7 @@ func NewHTTPServer(lc fx.Lifecycle, p HTTPServerParams) (*http.Server, error) {
 		OnStop: func(ctx context.Context) error {
 			// Shutdown does not cancel active request contexts, so unblock streaming
 			// handlers before waiting for the server to drain.
+			shutdown.Begin()
 			cancelBase()
 			shutdownErr := srv.Shutdown(ctx)
 			if shutdownErr != nil {

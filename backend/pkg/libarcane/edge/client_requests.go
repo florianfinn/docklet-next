@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation; M16 bind mounts and backup completion.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation; M16 bind mounts and backup completion; aborted handlers send no response.
 
 package edge
 
@@ -202,7 +202,9 @@ func (c *TunnelClient) handleCommandRequest(ctx context.Context, conn TunnelConn
 	}
 
 	recorder := newCommandResponseRecorderInternal(msg.ID, msg.Command, conn)
-	c.handler.ServeHTTP(recorder, req)
+	if c.serveLocalInternal(recorder, req) {
+		return
+	}
 	if closeErr := recorder.Close(); closeErr != nil {
 		slog.WarnContext(reqCtx, "Failed to finalize command response", "id", msg.ID, "command", msg.Command, "error", closeErr)
 	}
@@ -277,7 +279,9 @@ func (c *TunnelClient) handleRequest(ctx context.Context, conn TunnelConnection,
 	}
 
 	// Execute the request through the local handler
-	c.handler.ServeHTTP(rw, req)
+	if c.serveLocalInternal(rw, req) {
+		return
+	}
 
 	// Build response message
 	respHeaders := make(map[string]string)
@@ -302,6 +306,21 @@ func (c *TunnelClient) handleRequest(ctx context.Context, conn TunnelConnection,
 	}
 }
 
+// serveLocalInternal runs the local handler. A handler that aborts with http.ErrAbortHandler gets no response, as
+// with net/http: nothing is sent and the hub fails the pending request when the tunnel closes.
+func (c *TunnelClient) serveLocalInternal(w http.ResponseWriter, req *http.Request) (aborted bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if recovered != http.ErrAbortHandler { //nolint:errorlint // net/http compares the sentinel the same way
+				panic(recovered)
+			}
+			aborted = true
+		}
+	}()
+	c.handler.ServeHTTP(w, req)
+	return false
+}
+
 func isGRPCConnection(conn TunnelConnection) bool {
 	if conn == nil {
 		return false
@@ -323,7 +342,9 @@ func (c *TunnelClient) handleRequestStreaming(ctx context.Context, conn TunnelCo
 	}
 
 	recorder := newStreamingResponseRecorder(msg.ID, conn)
-	c.handler.ServeHTTP(recorder, req)
+	if c.serveLocalInternal(recorder, req) {
+		return
+	}
 
 	if closeErr := recorder.Close(); closeErr != nil {
 		slog.WarnContext(reqCtx, "Failed to finalize streamed response", "id", msg.ID, "error", closeErr)
