@@ -179,10 +179,8 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 		if now.Unix() <= latest || now.Unix() <= old.minute {
 			return nil
 		}
-		for _, o := range observations {
-			if err := upsertMinute(tx, host.ID, now.Unix(), o); err != nil {
-				return err
-			}
+		if err := upsertMinutes(tx, host.ID, now.Unix(), observations); err != nil {
+			return err
 		}
 		if fetchErr == nil {
 			if err := s.projectTransitions(tx, host.ID, now, conditions.Items, old.conditions); err != nil {

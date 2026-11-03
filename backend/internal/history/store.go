@@ -58,46 +58,64 @@ type observation struct {
 	exitCode                                              int
 }
 
+var bucketColumns = []string{"kind", "host_id", "entity_key", "tier", "bucket_start", "last_minute", "minutes_running", "minutes_unhealthy", "minutes_down", "minutes_stopped", "cpu_sum", "cpu_n", "cpu_max", "mem_sum", "mem_n", "mem_max", "mem_limit_max", "net_rx", "net_tx", "blk_read", "blk_write", "disk_used_last", "disk_total_last", "disk_source", "exit_code_last"}
+
+// bucketUpsert counts a minute only when it is newer than the bucket's last minute.
+var bucketUpsert = func() string {
+	updates := []string{}
+	for _, c := range []string{"minutes_running", "minutes_unhealthy", "minutes_down", "minutes_stopped", "cpu_sum", "cpu_n", "mem_sum", "mem_n", "net_rx", "net_tx", "blk_read", "blk_write"} {
+		updates = append(updates, c+"=history_buckets."+c+"+excluded."+c)
+	}
+	for _, c := range []string{"cpu_max", "mem_max", "mem_limit_max"} {
+		updates = append(updates, c+"=MAX(history_buckets."+c+",excluded."+c+")")
+	}
+	for _, c := range []string{"last_minute", "exit_code_last"} {
+		updates = append(updates, c+"=excluded."+c)
+	}
+	for _, c := range []string{"disk_used_last", "disk_total_last", "disk_source"} {
+		// Only a running minute with a measured disk source replaces the bucket's last disk values.
+		updates = append(updates, c+"=CASE WHEN excluded.minutes_running>0 AND excluded.disk_source<>'' THEN excluded."+c+" ELSE history_buckets."+c+" END")
+	}
+	return "INSERT INTO history_buckets (" + strings.Join(bucketColumns, ",") + ") VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(bucketColumns)), ",") + ") ON CONFLICT(kind,host_id,entity_key,tier,bucket_start) DO UPDATE SET " + strings.Join(updates, ",") + " WHERE excluded.last_minute > history_buckets.last_minute"
+}()
+
 func upsertMinute(tx *gorm.DB, host string, minute int64, o observation) error {
-	for _, tier := range []int{15, 120, 480} {
-		row := bucketRow{Kind: o.kind, HostID: host, EntityKey: o.key, Tier: tier, BucketStart: minute / int64(tier*60) * int64(tier*60), LastMinute: minute, MemLimitMax: o.memoryLimit, NetRx: o.rx, NetTx: o.tx, BlkRead: o.read, BlkWrite: o.write, DiskUsedLast: o.diskUsed, DiskTotalLast: o.diskTotal, DiskSource: o.diskSource, ExitCodeLast: o.exitCode}
-		switch o.state {
-		case dto.Running:
-			row.MinutesRunning = 1
-		case dto.Unhealthy:
-			row.MinutesUnhealthy = 1
-		case dto.Down:
-			row.MinutesDown = 1
-		case dto.Stopped:
-			row.MinutesStopped = 1
-		default:
-			continue
-		}
-		if o.cpu != nil {
-			row.CPUSum, row.CPUMax, row.CPUN = *o.cpu, *o.cpu, 1
-		}
-		if o.memory != nil {
-			row.MemSum, row.MemMax, row.MemN = *o.memory, *o.memory, 1
-		}
-		columns := []string{"kind", "host_id", "entity_key", "tier", "bucket_start", "last_minute", "minutes_running", "minutes_unhealthy", "minutes_down", "minutes_stopped", "cpu_sum", "cpu_n", "cpu_max", "mem_sum", "mem_n", "mem_max", "mem_limit_max", "net_rx", "net_tx", "blk_read", "blk_write", "disk_used_last", "disk_total_last", "disk_source", "exit_code_last"}
-		values := []any{row.Kind, row.HostID, row.EntityKey, row.Tier, row.BucketStart, row.LastMinute, row.MinutesRunning, row.MinutesUnhealthy, row.MinutesDown, row.MinutesStopped, row.CPUSum, row.CPUN, row.CPUMax, row.MemSum, row.MemN, row.MemMax, row.MemLimitMax, row.NetRx, row.NetTx, row.BlkRead, row.BlkWrite, row.DiskUsedLast, row.DiskTotalLast, row.DiskSource, row.ExitCodeLast}
-		updates := []string{}
-		for _, c := range []string{"minutes_running", "minutes_unhealthy", "minutes_down", "minutes_stopped", "cpu_sum", "cpu_n", "mem_sum", "mem_n", "net_rx", "net_tx", "blk_read", "blk_write"} {
-			updates = append(updates, c+"=history_buckets."+c+"+excluded."+c)
-		}
-		for _, c := range []string{"cpu_max", "mem_max", "mem_limit_max"} {
-			updates = append(updates, c+"=MAX(history_buckets."+c+",excluded."+c+")")
-		}
-		for _, c := range []string{"last_minute", "exit_code_last"} {
-			updates = append(updates, c+"=excluded."+c)
-		}
-		for _, c := range []string{"disk_used_last", "disk_total_last", "disk_source"} {
-			// Only a running minute with a measured disk source replaces the bucket's last disk values.
-			updates = append(updates, c+"=CASE WHEN excluded.minutes_running>0 AND excluded.disk_source<>'' THEN excluded."+c+" ELSE history_buckets."+c+" END")
-		}
-		sql := "INSERT INTO history_buckets (" + strings.Join(columns, ",") + ") VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(values)), ",") + ") ON CONFLICT(kind,host_id,entity_key,tier,bucket_start) DO UPDATE SET " + strings.Join(updates, ",") + " WHERE excluded.last_minute > history_buckets.last_minute"
-		if err := tx.Exec(sql, values...).Error; err != nil {
-			return err
+	return upsertMinutes(tx, host, minute, []observation{o})
+}
+
+// upsertMinutes writes one minute of every observation into all three tiers through one
+// statement prepared on the transaction, so the upsert is parsed once per host minute.
+func upsertMinutes(tx *gorm.DB, host string, minute int64, observations []observation) error {
+	ctx := tx.Statement.Context
+	stmt, err := tx.Statement.ConnPool.PrepareContext(ctx, bucketUpsert)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, o := range observations {
+		for _, tier := range []int{15, 120, 480} {
+			row := bucketRow{Kind: o.kind, HostID: host, EntityKey: o.key, Tier: tier, BucketStart: minute / int64(tier*60) * int64(tier*60), LastMinute: minute, MemLimitMax: o.memoryLimit, NetRx: o.rx, NetTx: o.tx, BlkRead: o.read, BlkWrite: o.write, DiskUsedLast: o.diskUsed, DiskTotalLast: o.diskTotal, DiskSource: o.diskSource, ExitCodeLast: o.exitCode}
+			switch o.state {
+			case dto.Running:
+				row.MinutesRunning = 1
+			case dto.Unhealthy:
+				row.MinutesUnhealthy = 1
+			case dto.Down:
+				row.MinutesDown = 1
+			case dto.Stopped:
+				row.MinutesStopped = 1
+			default:
+				continue
+			}
+			if o.cpu != nil {
+				row.CPUSum, row.CPUMax, row.CPUN = *o.cpu, *o.cpu, 1
+			}
+			if o.memory != nil {
+				row.MemSum, row.MemMax, row.MemN = *o.memory, *o.memory, 1
+			}
+			if _, err := stmt.ExecContext(ctx, row.Kind, row.HostID, row.EntityKey, row.Tier, row.BucketStart, row.LastMinute, row.MinutesRunning, row.MinutesUnhealthy, row.MinutesDown, row.MinutesStopped, row.CPUSum, row.CPUN, row.CPUMax, row.MemSum, row.MemN, row.MemMax, row.MemLimitMax, row.NetRx, row.NetTx, row.BlkRead, row.BlkWrite, row.DiskUsedLast, row.DiskTotalLast, row.DiskSource, row.ExitCodeLast); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

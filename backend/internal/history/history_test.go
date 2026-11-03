@@ -9,6 +9,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
@@ -190,6 +191,27 @@ func TestHB7TiersSlotsAndRetentionEdges(t *testing.T) {
 	var rows []bucketRow
 	require.NoError(t, db.Where("host_id='retention'").Find(&rows).Error)
 	require.Len(t, rows, 3)
+}
+
+// One prepared upsert writes every entity of a large minute into all tiers; a repeat counts nothing.
+func TestMinuteWritesEveryEntity(t *testing.T) {
+	db := historyDB(t)
+	minute := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC).Unix()
+	observations := []observation{}
+	for i := range 300 {
+		observations = append(observations, observation{kind: "container", key: fmt.Sprintf("app-%03d", i), state: dto.Running, cpu: new(float64(i))})
+	}
+	for range 2 {
+		require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return upsertMinutes(tx, "host", minute, observations) }))
+	}
+	rows := []bucketRow{}
+	require.NoError(t, db.Order("entity_key, tier").Find(&rows).Error)
+	require.Len(t, rows, len(observations)*3)
+	for i, r := range rows {
+		require.Equal(t, fmt.Sprintf("app-%03d", i/3), r.EntityKey)
+		require.Equal(t, 1, r.MinutesRunning)
+		require.Equal(t, float64(i/3), r.CPUSum)
+	}
 }
 func TestHB8SampleValidation(t *testing.T) {
 	for _, mutate := range []func(*dto.Sample){func(s *dto.Sample) { s.Containers = append(s.Containers, s.Containers[0]) }, func(s *dto.Sample) { s.Host.CPUBusy = math.NaN() }, func(s *dto.Sample) { s.Containers[0].State = "invented" }, func(s *dto.Sample) { s.Host.DiskUsed = -1 }, func(s *dto.Sample) { s.Projects = append(s.Projects, s.Projects[0]) }, func(s *dto.Sample) { s.Uninspected = []string{s.Containers[0].ID} }, func(s *dto.Sample) { s.Uninspected = []string{""} }, func(s *dto.Sample) { s.Uninspected = []string{"x", "x"} }, func(s *dto.Sample) { s.Uninspected = make([]string, 2001) }} {
