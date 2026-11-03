@@ -9,6 +9,7 @@ import type { DockletAdapter } from "../adapter";
 import { AdapterOutcomeError } from "../capability";
 import type { Host, InventoryObservation } from "@/domain/model";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
+import { readRuntimeConditions, withConditions } from "./runtime-conditions";
 import { mapStack, splitInventoryId, type ProjectRow } from "./inventory-mapping";
 
 export function createUserInventory(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, principal: () => CurrentUser | undefined, onState: (host: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listStacks" | "getStack"> {
@@ -19,8 +20,8 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
       const result = await Promise.all((await hosts()).map(async (host) => {
         let rows: Awaited<ReturnType<DockletAdapter["listStacks"]>> = [];
         try {
-          const projects = await list("list-projects", host.id, "projects");
-          rows = (projects.rows as ProjectRow[]).map((p) => mapStack(p, host.id, [], projects.observation));
+          const [projects, conditions] = await Promise.all([list("list-projects", host.id, "projects"), readRuntimeConditions(baseUrl, fetcher, host.id)]);
+          rows = withConditions({ stacks: (projects.rows as ProjectRow[]).map((p) => mapStack(p, host.id, [], projects.observation)), containers: [] }, conditions).stacks;
         } catch (error) {
           onState(host.id, inventoryFailure(host.id, error));
         }
