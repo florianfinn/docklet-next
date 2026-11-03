@@ -385,7 +385,6 @@ export interface ScheduledJob {
 
 export interface HostMetrics {
   diskUnavailable?: boolean;
-  growthUnavailable?: boolean;
   inventory?: InventoryObservation;
   cpuCores?: number;
   memTotalGb?: number;
@@ -394,7 +393,6 @@ export interface HostMetrics {
   cpu: number;
   mem: number;
   disk: number;
-  diskGrowthGbPerDay: number;
   cpuHistory: number[];
   memHistory: number[];
 }

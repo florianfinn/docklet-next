@@ -260,6 +260,7 @@ export const deDashboard: typeof enDashboard = {
     plenty: "Reichweite über ein Jahr",
     growth: "+{gb} GB/Tag",
     offline: "veraltet",
+    line: "Datenträgerbelegung der letzten 30 Tage",
   },
   schedule: {
     empty: "Nichts geplant.",

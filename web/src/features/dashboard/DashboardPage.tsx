@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { useTranslations } from "use-intl";
 
 import { useActionRuns, useMetrics } from "@/data/live";
-import { useEvents, useSchedule, useSecurity } from "@/data/queries";
+import { useCapacity, useEvents, useSchedule, useSecurity } from "@/data/queries";
 import { isHostVisible } from "@/domain/hosts";
 import type { Tone } from "@/domain/model";
 import { hasUpdate } from "@/domain/updates";
@@ -95,15 +95,16 @@ export default function DashboardPage() {
   const [configure, setConfigure] = useState<ServiceKind | null>(null);
   const [announce, setAnnounce] = useState("");
   const [now] = useState(() => Date.now());
+  const capacity = useCapacity();
 
   const visibleIds = useMemo(() => new Set(hosts.visible.map((h) => h.id)), [hosts.visible]);
   const images = useMemo(() => (security.data?.enabled ? security.data.images.filter((i) => !i.unavailable && !!i.scannedAt && isHostVisible(hosts.selection, i.hostId)) : []), [security.data, hosts.selection]);
   // Metrics tick every 2 s; disk-based items only need a coarse refresh.
   const diskKey = metrics ? Math.round(Object.values(metrics).reduce((n, m) => n + m.disk, 0)) : 0;
   const attention = useMemo(
-    () => attentionItems({ hosts: hosts.visible, stacks: stacks.visible, containers: containers.visible, runs, images, metrics, now }),
+    () => attentionItems({ hosts: hosts.visible, stacks: stacks.visible, containers: containers.visible, runs, images, metrics, capacity: capacity.data, now }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- diskKey stands in for metrics
-    [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey],
+    [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey, capacity.data],
   );
   const updates = stacks.visible.reduce((n, s) => n + s.services.filter((x) => hasUpdate(x.update)).length, 0) + containers.visible.filter((c) => c.origin !== "compose" && hasUpdate(c.update)).length;
   const unavailableSecurity = !!security.data?.unavailable?.some((h) => isHostVisible(hosts.selection, h.hostId)) || !!security.data?.images.some((i) => i.unavailable && isHostVisible(hosts.selection, i.hostId));

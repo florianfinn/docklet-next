@@ -1,4 +1,5 @@
 import { normalizeDockerReference } from "@/domain/docker-reference";
+import type { HostCapacity } from "@/domain/history";
 import type { ActionRun, ContainerInfo, Host, HostMetrics, ScannedImage, Stack, Tone } from "@/domain/model";
 
 export type AttentionKind = "unhealthy" | "offline" | "failed" | "critical" | "major" | "disk" | "unknownOrigin";
@@ -25,13 +26,15 @@ interface Input {
   runs: ActionRun[];
   images: ScannedImage[];
   metrics: Record<string, HostMetrics> | undefined;
+  /** Disk trend per host; without it only the fill level raises a disk item. */
+  capacity?: HostCapacity[];
   now: number;
 }
 
 const DAY = 86_400_000;
 
 /** Ranks what needs an operator now; every item maps to one direct action. */
-export function attentionItems({ hosts, stacks, containers, runs, images, metrics, now }: Input): AttentionItem[] {
+export function attentionItems({ hosts, stacks, containers, runs, images, metrics, capacity, now }: Input): AttentionItem[] {
   const out: AttentionItem[] = [];
   const offline = new Set(hosts.filter((h) => h.status === "offline").map((h) => h.id));
   for (const s of stacks) {
@@ -61,8 +64,8 @@ export function attentionItems({ hosts, stacks, containers, runs, images, metric
     }
     const m = metrics?.[h.id];
     if (m && h.status === "online") {
-      const freeGb = ((100 - m.disk) / 100) * h.diskTotalGb;
-      const days = m.diskGrowthGbPerDay > 0 ? Math.round(freeGb / m.diskGrowthGbPerDay) : Infinity;
+      const runway = capacity?.find((c) => c.hostId === h.id)?.daysUntilFull;
+      const days = runway === undefined ? Infinity : Math.round(runway);
       if (m.disk >= 80 || days < 60) out.push({ id: `d-${h.id}`, kind: "disk", tone: days < 30 ? "err" : "warn", weight: days < 30 ? 70 : 35, hostId: h.id, values: { host: h.name, percent: Math.round(m.disk), days: Number.isFinite(days) ? days : 999 } });
     }
   }

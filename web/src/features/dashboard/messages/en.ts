@@ -259,6 +259,7 @@ export const enDashboard = {
     plenty: "Runway over one year",
     growth: "+{gb} GB/day",
     offline: "outdated",
+    line: "Disk usage over the last 30 days",
   },
   schedule: {
     empty: "Nothing scheduled.",
