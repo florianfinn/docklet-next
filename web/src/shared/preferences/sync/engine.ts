@@ -41,13 +41,13 @@ export function createPreferenceSync({ api, bindings, storage, debounceMs = 1000
   let applying = false;
   const timers = new Map<UiSection, ReturnType<typeof setTimeout>>();
   const dirty = new Set<UiSection>();
-  // Local edits per section; a migration applies its captured value only if none happened meanwhile.
-  const edits = new Map<UiSection, number>();
+  // Sections edited locally since sign-in; their claimed legacy values are outdated.
+  const edits = new Set<UiSection>();
 
   const unsubscribe = bindings.map((b) =>
     b.store.subscribe(() => {
       if (applying || identity === null) return;
-      edits.set(b.section, (edits.get(b.section) ?? 0) + 1);
+      edits.add(b.section);
       dirty.add(b.section);
       if (loaded) schedule(b);
     }),
@@ -124,23 +124,24 @@ export function createPreferenceSync({ api, bindings, storage, debounceMs = 1000
   }
 
   async function migrate(gen: number, owner: string, doc: UiPreferencesDocument) {
-    const claim = readClaim();
-    if (!claim || claim.owner !== owner) return;
-    for (const section of Object.keys(claim.pending) as UiSection[]) {
+    const sections = Object.keys(readClaim()?.pending ?? {}) as UiSection[];
+    for (const section of sections) {
       if (gen !== generation) return;
-      const value = claim.pending[section]!;
-      if (!(section in doc.sections)) {
-        const before = edits.get(section) ?? 0;
+      // Re-read per section: a normal send of a newer edit removes its section from the claim.
+      const claim = readClaim();
+      if (!claim || claim.owner !== owner) return;
+      const value = claim.pending[section];
+      const binding = bindings.find((b) => b.section === section);
+      // Any local edit since sign-in is newer than the claimed value, which is then dropped unwritten.
+      if (value && binding && !(section in doc.sections) && !edits.has(section)) {
         try {
           await api.putUiPreference(section, value);
         } catch {
           return; // resumes with the next load of the same owner
         }
         if (gen !== generation) return;
-        const binding = bindings.find((b) => b.section === section);
-        // A newer edit wins locally and is written again after this older migration write.
-        if (binding && (edits.get(section) ?? 0) === before) apply(binding, value);
-        else if (binding) { dirty.add(section); schedule(binding); }
+        if (!edits.has(section)) apply(binding, value);
+        else { dirty.add(section); schedule(binding); } // the edit is written again after this older write
       }
       const current = readClaim();
       if (!current || current.owner !== owner) return;

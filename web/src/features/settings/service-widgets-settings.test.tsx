@@ -94,4 +94,20 @@ describe("Settings › Service widgets", () => {
     expect(within(plex).getByRole("button", { name: "Diesem Zertifikat vertrauen" }) !== null).toBe(true);
     expect(f.saved).toEqual([]);
   });
+
+  it("does not show a test answer that arrives after the tested draft was saved", async () => {
+    const f = adapter();
+    const answers: ((value: Awaited<ReturnType<typeof f.adapter.testServiceWidget>>) => void)[] = [];
+    f.adapter.testServiceWidget = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+    renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/serviceWidgets"], f.adapter);
+    const minecraft = await card("minecraft");
+    const address = within(minecraft).getByLabelText("Adresse");
+    await userEvent.clear(address);
+    await userEvent.type(address, "192.0.2.30:25565");
+    await userEvent.click(within(minecraft).getByRole("button", { name: "Verbindung testen" }));
+    await userEvent.click(within(minecraft).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(f.saved).toHaveLength(1));
+    await act(async () => answers[0]!({ kind: "minecraft", stale: false, ageSeconds: 0, minecraft: { online: 0, max: 10, motd: "", version: "1.21", players: [] } }));
+    expect(within(minecraft).queryByText(/Die Verbindung funktioniert/)).toBe(null);
+  });
 });

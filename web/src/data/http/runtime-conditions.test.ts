@@ -68,4 +68,35 @@ describe("runtime conditions", () => {
     answer = () => new Response("{}", { status: 503 });
     expect((await reader.read("h")).size).toBe(0);
   });
+
+  it("drops an answer that arrives after the identity reset", async () => {
+    let release!: (response: Response) => void;
+    let failing = false;
+    const reader = createConditionReader("/api", (async () => (failing ? new Response("{}", { status: 503 }) : new Promise<Response>((r) => { release = r; }))) as typeof fetch);
+    const late = reader.read("h");
+    await Promise.resolve();
+    reader.reset();
+    release(new Response(JSON.stringify({ success: true, data: { items: [item("c1", "down")] } })));
+    expect((await late).get("c1")?.condition).toBe("down");
+    failing = true;
+    expect((await reader.read("h")).size).toBe(0);
+  });
+
+  it.each([
+    ["an unknown condition", [item("c1", "unexpected")]],
+    ["a null row", [null]],
+    ["a container row without id", [item("", "down")]],
+    ["a row of unknown kind", [{ ...item("c1", "down"), kind: "volume" }]],
+    ["a valid row next to a malformed one", [item("c2", "running"), { ...item("c3", "down"), sampledAt: 5 }]],
+  ])("treats %s as a failed read that keeps the known crash, then accepts the next valid answer", async (_case, malformed) => {
+    let items: unknown[] = [item("c1", "down")];
+    const reader = createConditionReader("/api", (async () => new Response(JSON.stringify({ success: true, data: { items } }))) as typeof fetch);
+    const container: ContainerInfo = { ...STANDALONE[0]!, id: "h~c1", hostId: "h", state: "stopped", health: "none" };
+    const state = async () => containerRuntime(withConditions({ stacks: [], containers: [container] }, await reader.read("h")).containers[0]!, undefined);
+    expect(await state()).toBe("down");
+    items = malformed;
+    expect(await state()).toBe("down");
+    items = [item("c1", "stopped", { reason: "operator-stop" })];
+    expect(await state()).toBe("stopped");
+  });
 });

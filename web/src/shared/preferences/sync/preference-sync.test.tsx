@@ -27,7 +27,7 @@ function hub() {
   const servers = new Map<string, Server>();
   const puts: [string, UiSection, unknown][] = [];
   let session = "";
-  const gates: { load?: Promise<void>; failPut?: (section: UiSection) => boolean; failLoad?: boolean; put?: (value: unknown) => Promise<void> | undefined } = {};
+  const gates: { load?: Promise<void>; failPut?: (section: UiSection) => boolean; failLoad?: boolean; put?: (value: unknown, section: UiSection) => Promise<void> | undefined } = {};
   const server = (id: string) => servers.get(id) ?? servers.set(id, createMemoryUiPreferences()).get(id)!;
   const api: UiPreferencesApi = {
     async getUiPreferences() {
@@ -41,7 +41,7 @@ function hub() {
       if (gates.failPut?.(section)) throw new Error("put failed");
       puts.push([as, section, structuredClone(value)]);
       // A gated write reaches the server document only when released, like a slow request.
-      const wait = gates.put?.(value);
+      const wait = gates.put?.(value, section);
       if (wait) await wait;
       return server(as).putUiPreference(section, value);
     },
@@ -181,6 +181,48 @@ describe("failed loads and edits during the load (PF3)", () => {
     expect(helpStore.get().mode).toBe("off");
     await vi.advanceTimersByTimeAsync(1000);
     expect(h.server("a").document().sections.help).toEqual({ mode: "off" });
+  });
+
+  it("keeps an edit made during the pending load over the claimed legacy value, locally and on the hub", async () => {
+    legacy("docklet-react-opus.help", { mode: "compact" });
+    helpStore.set({ mode: "compact" });
+    const h = hub();
+    let release!: () => void;
+    h.gates.load = new Promise((r) => { release = r; });
+    const s = start(h.api);
+    h.signIn("a");
+    s.setIdentity("a");
+    await flush();
+    setHelpMode("off");
+    release();
+    await flush();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    expect(helpStore.get().mode).toBe("off");
+    expect(h.puts.map(([, section, value]) => [section, value])).toEqual([["help", { mode: "off" }]]);
+    expect(h.server("a").document().sections.help).toEqual({ mode: "off" });
+    expect(localStorage.getItem(CLAIM_KEY)).toBeNull();
+  });
+
+  it("never writes a claimed section that a newer edit superseded while an earlier section was migrating", async () => {
+    legacy("docklet-react-opus.hidden", { stacks: ["h~legacy"], containers: [] });
+    legacy("docklet-react-opus.help", { mode: "compact" });
+    hiddenStore.set({ stacks: ["h~legacy"], containers: [] });
+    helpStore.set({ mode: "compact" });
+    const h = hub();
+    let release!: () => void;
+    h.gates.put = (_value, section) => (section === "hidden" ? new Promise((r) => { release = r; }) : undefined);
+    const s = start(h.api);
+    h.signIn("a");
+    s.setIdentity("a");
+    await flush();
+    setHelpMode("off");
+    await vi.advanceTimersByTimeAsync(1000);
+    release();
+    await flush();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.puts.map(([, section, value]) => [section, value])).toEqual([["hidden", { stacks: ["h~legacy"], containers: [] }], ["help", { mode: "off" }]]);
+    expect([helpStore.get().mode, h.server("a").document().sections.help]).toEqual(["off", { mode: "off" }]);
   });
 
   it("keeps an edit made while the legacy import is still writing, locally and on the hub", async () => {

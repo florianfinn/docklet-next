@@ -47,19 +47,23 @@ async function server(handler: (request: IncomingMessage, response: ServerRespon
 const project = { id: "app", name: "Assigned", path: "/srv/stacks/app", isArchived: false, status: "running", serviceCount: 1, runningCount: 1, tags: [], createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" };
 
 // Runtime conditions of the test host: a crashed "owned" container, or a failing read.
-let conditions: "down" | "failing" | "none" = "none";
-afterEach(() => { conditions = "none"; });
+let conditions: "down" | "failing" | "none" | "delayed" = "none";
+// A delayed condition answer waits for this release; `viewer` is the signed-in identity.
+let releaseConditions: (() => void) | undefined;
+let viewer = "viewer";
+afterEach(() => { conditions = "none"; releaseConditions = undefined; viewer = "viewer"; });
 
 async function fixture(level: "restricted" | "full") {
   const seen: string[] = [];
   const baseUrl = await server((request, response) => {
     const url = new URL(request.url!, "https://hub.example.com"); seen.push(url.pathname);
     const send = (data: unknown, list = false, status = 200) => { response.writeHead(status, { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") }); response.end(JSON.stringify({ success: status === 200, data, ...(list ? { pagination: { totalItems: Array.isArray(data) ? data.length : 0 } } : {}) })); };
-    if (url.pathname === "/api/auth/me") return send({ id: "viewer", username: "viewer", requiresPasswordChange: false, isAdmin: false, assignments: [{ environmentId: "host", projectId: "app", level }] });
+    if (url.pathname === "/api/auth/me") return send({ id: viewer, username: viewer, requiresPasswordChange: false, isAdmin: false, assignments: [{ environmentId: "host", projectId: "app", level }] });
     if (url.pathname === "/api/environments") return send([{ id: "host", name: "Test host", color: "#336699", status: "online" }], true);
     if (url.pathname === "/api/capabilities") return send(["listHosts", "listStacks", "getStack"].map((operationId) => ({ operationId, resourceRef: { kind: url.searchParams.get("kind"), id: url.searchParams.get("id") }, available: true })));
     if (url.pathname.endsWith("/projects")) return send([project], true);
     if (url.pathname.endsWith("/runtime")) return send({ ...project, runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running", containerId: "owned" }] });
+    if (url.pathname.endsWith("/runtime-conditions") && conditions === "delayed") { releaseConditions = () => { conditions = "down"; send({ hostId: "host", sampledAt: "2026-11-01T00:00:00Z", items: [{ kind: "container", containerId: "owned", name: "web", projectId: "app", condition: "down", reason: "exit", exitCode: 1, restarts10m: 0, since: "2026-11-01T00:00:00Z", sampledAt: "2026-11-01T00:00:00Z" }] }); }; return; }
     if (url.pathname.endsWith("/runtime-conditions")) return conditions === "failing" ? send(null, false, 503) : send({ hostId: "host", sampledAt: "2026-11-01T00:00:00Z", items: conditions === "down" ? [{ kind: "container", containerId: "owned", name: "web", projectId: "app", condition: "down", reason: "exit", exitCode: 1, restarts10m: 0, since: "2026-11-01T00:00:00Z", sampledAt: "2026-11-01T00:00:00Z" }] : [] });
     if (url.pathname.endsWith("/updates")) return send(project);
     if (url.pathname.endsWith("/compose")) return send({ ...project, composeContent: "services: {}", envContent: "TZ=UTC" });
@@ -96,11 +100,27 @@ it("shows a user's crashed service red in the stack detail and keeps it red when
   expect(f.seen.filter((p) => p.endsWith("/runtime-conditions")).length).toBe(2);
 });
 
+it("never shows the previous user's conditions or a condition answer that arrives after another user signed in", async () => {
+  const f = await fixture("restricted");
+  conditions = "down";
+  expect((await f.adapter.getStack("host~app")).services.map((s) => s.condition?.condition)).toEqual(["down"]);
+  conditions = "delayed";
+  const late = f.adapter.getStack("host~app").catch(() => undefined);
+  await vi.waitFor(() => expect(releaseConditions).toBeDefined());
+  viewer = "next";
+  expect((await f.adapter.getCurrentUser())?.id).toBe("next");
+  releaseConditions!();
+  await late;
+  conditions = "failing";
+  const stack = await f.adapter.getStack("host~app");
+  expect(stack.services.map((s) => s.condition?.condition)).toEqual([undefined]);
+});
+
 it("keeps a user's reachable host when another assigned host fails", async () => {
   const baseUrl = await server((request, response) => {
     const url = new URL(request.url!, "https://hub.example.com");
     const send = (data: unknown, list = false, status = 200) => { response.writeHead(status, { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") }); response.end(JSON.stringify(status === 200 ? { success: true, data, ...(list ? { pagination: { totalItems: Array.isArray(data) ? data.length : 0 } } : {}) } : { code: "agent.unavailable" })); };
-    if (url.pathname === "/api/auth/me") return send({ id: "viewer", username: "viewer", requiresPasswordChange: false, isAdmin: false, assignments: [{ environmentId: "host", projectId: "app", level: "full" }, { environmentId: "down", projectId: "other", level: "full" }] });
+    if (url.pathname === "/api/auth/me") return send({ id: viewer, username: viewer, requiresPasswordChange: false, isAdmin: false, assignments: [{ environmentId: "host", projectId: "app", level: "full" }, { environmentId: "down", projectId: "other", level: "full" }] });
     if (url.pathname === "/api/environments") return send([{ id: "host", name: "Test host", color: "#336699", status: "online" }, { id: "down", name: "Down host", color: "#663399", status: "offline" }], true);
     if (url.pathname === "/api/capabilities") return send(["listHosts", "listStacks", "getStack"].map((operationId) => ({ operationId, resourceRef: { kind: url.searchParams.get("kind"), id: url.searchParams.get("id") }, available: true })));
     if (url.pathname.startsWith("/api/environments/down/")) return send(null, false, 503);

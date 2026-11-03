@@ -80,17 +80,19 @@ function WidgetForm({ kind, config }: { kind: ServiceKind; config: WidgetConfig 
   const commandError = useCommandError();
   const stacks = useStacks();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(draftOf(config));
-  const [tested, setTested] = useState<{ input: string; result: WidgetResult } | undefined>();
+  // Successful saves so far; a test started before a save never answers for the saved form.
+  const [saves, setSaves] = useState(0);
+  const [tested, setTested] = useState<{ input: string; saves: number; result: WidgetResult } | undefined>();
   const test = useMutation({
     mutationFn: (input: WidgetConfigInput) => adapter.testServiceWidget(kind, input),
-    onMutate: () => setTested(undefined),
-    onSuccess: (result, input) => setTested({ input: JSON.stringify(input), result }),
+    onMutate: () => { setTested(undefined); return saves; },
+    onSuccess: (result, input, started) => setTested({ input: JSON.stringify(input), saves: started, result }),
   });
   if (!draft) return null;
   // A test answer belongs to the draft it tested: a late answer, an edit, discard or save hides it.
   const current = JSON.stringify(inputOf(draft));
-  const result = tested?.input === current ? tested.result : undefined;
-  const testFailed = test.isError && JSON.stringify(test.variables) === current;
+  const result = tested?.input === current && tested.saves === saves ? tested.result : undefined;
+  const testFailed = test.isError && test.context === saves && JSON.stringify(test.variables) === current;
   const credential = CREDENTIAL_KIND[kind];
   const id = (field: string) => `sw-${kind}-${field}`;
   return (
@@ -104,6 +106,7 @@ function WidgetForm({ kind, config }: { kind: ServiceKind; config: WidgetConfig 
         const saved = await adapter.saveServiceWidgetConfig(kind, inputOf(submitted));
         // The submitted credential leaves the form; later typing is kept.
         commit(draftOf(saved), submitted);
+        setSaves((n) => n + 1);
         void client.invalidateQueries({ queryKey: queryKeys.serviceWidgets });
       }}
     >

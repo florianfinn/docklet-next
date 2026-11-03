@@ -11,6 +11,14 @@ import { splitInventoryId } from "./inventory-mapping";
 type WireCondition = components["schemas"]["HistoryCondition"];
 export type ConditionsByContainer = ReadonlyMap<string, Omit<RuntimeCondition, "containerId">>;
 
+const KINDS: readonly unknown[] = ["container", "stack"];
+const CONDITIONS: readonly unknown[] = ["running", "unhealthy", "down", "stopped", "nodata"];
+
+function validRow(item: WireCondition | null | undefined): item is WireCondition {
+  if (!item || typeof item !== "object" || !KINDS.includes(item.kind) || !CONDITIONS.includes(item.condition)) return false;
+  return item.kind === "stack" || (typeof item.containerId === "string" && item.containerId !== "" && typeof item.sampledAt === "string");
+}
+
 export type ConditionReader = (hostId: string) => Promise<ConditionsByContainer>;
 
 /** Reads the container conditions of one host keyed by Docker id; throws when the read fails. */
@@ -19,7 +27,9 @@ async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string):
   if (!response.ok) { void response.body?.cancel(); throw new Error("conditions.unavailable"); }
   const body = await response.json() as { success?: unknown; data?: { items?: WireCondition[] | null } };
   if (body?.success !== true || !body.data || (body.data.items != null && !Array.isArray(body.data.items))) throw new Error("conditions.invalid");
-  return new Map((body.data.items ?? []).flatMap((item) => item?.kind === "container" && item.containerId && item.condition !== "nodata"
+  // One malformed row makes the whole answer a failed read, so it never replaces a retained snapshot.
+  if (!(body.data.items ?? []).every(validRow)) throw new Error("conditions.invalid");
+  return new Map((body.data.items ?? []).flatMap((item) => item.kind === "container" && item.condition !== "nodata"
     ? [[item.containerId, { condition: item.condition, reason: item.reason, ...(item.exitCode ? { exitCode: item.exitCode } : {}), ...(item.restarts10m ? { restarts10m: item.restarts10m } : {}), sampledAt: item.sampledAt }] as const]
     : []));
 }
