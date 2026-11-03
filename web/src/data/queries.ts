@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
 import type { ContainerHistoryRef, HistoryRange } from "@/domain/history";
+import type { ServiceKind } from "@/domain/service-widgets";
 import type { AppLocale } from "@/domain/locale";
 import { securityRecoveryInterval } from "@/domain/security";
 
@@ -150,4 +151,22 @@ export function useCapacity() {
   const adapter = useAdapter();
   const user = useIsUser();
   return useQuery({ queryKey: queryKeys.capacity, enabled: !user, queryFn: () => adapter.getCapacity(), refetchInterval: 15 * 60_000 });
+}
+
+/** Refresh matches the hub cache interval of each kind, so a poll never outruns it. */
+const WIDGET_REFRESH: Record<ServiceKind, number> = { plex: 15_000, minecraft: 30_000, overseerr: 60_000 };
+
+export function useServiceWidgets() {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.serviceWidgets, queryFn: () => adapter.listServiceWidgets(), refetchInterval: 60_000 });
+}
+
+export function useServiceWidget(kind: ServiceKind, enabled = true) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.serviceWidget(kind), enabled, queryFn: () => adapter.getServiceWidget(kind), refetchInterval: WIDGET_REFRESH[kind] });
+}
+
+export function useServiceWidgetConfig(kind: ServiceKind) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.serviceWidgetConfig(kind), queryFn: () => adapter.getServiceWidgetConfig(kind) });
 }

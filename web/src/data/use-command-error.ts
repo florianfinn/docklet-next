@@ -7,6 +7,7 @@
 import { operationReasonKey } from "./operation-reason";
 import { useCallback } from "react";
 import { useTranslations } from "use-intl";
+import { isWidgetErrorCode } from "@/domain/service-widgets";
 import { AdapterOutcomeError } from "./capability";
 
 /** Exception messages and unknown server codes have no UI translation contract. */
@@ -14,6 +15,7 @@ export function useCommandError() {
   const operation = useTranslations("containers.operationReasons");
   const t = useTranslations("common.commandErrors");
   const capability = useTranslations("activity.capability");
+  const widget = useTranslations("dashboard.services.errors");
   return useCallback((error: unknown): string => {
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
@@ -21,6 +23,7 @@ export function useCommandError() {
       if (key && !["agent.unavailable", "agent.invalid-token", "agent.update-required"].includes(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code)) return operation(key);
       if (outcome.kind === "not-available") return capability(outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable");
       if (outcome.kind === "error") {
+        if (isWidgetErrorCode(outcome.code)) return widget(outcome.code.slice("widget.".length) as Parameters<typeof widget>[0]);
         switch (outcome.code) {
           case "agent.unavailable": return t("unreachable");
           case "agent.invalid-token": return t("credentialRejected");
@@ -31,5 +34,5 @@ export function useCommandError() {
       }
     }
     return t("failed");
-  }, [t, capability, operation]);
+  }, [t, capability, operation, widget]);
 }

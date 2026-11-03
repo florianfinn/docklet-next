@@ -34,6 +34,7 @@ import { createHostCommands } from "./host-commands";
 import { mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createHttpHistory, createHttpUiPreferences } from "./history";
+import { createHttpServiceWidgets } from "./service-widgets";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
@@ -698,6 +699,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     ...createHttpHistory(baseUrl, client),
     ...createHttpUiPreferences(baseUrl, client),
+    ...createHttpServiceWidgets(baseUrl, client),
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,

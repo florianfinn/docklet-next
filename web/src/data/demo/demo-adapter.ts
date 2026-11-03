@@ -41,6 +41,7 @@ import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable } from "../ca
 import { createDemoUsers } from "./demo-users";
 import { createDemoHubBackups } from "./demo-hub-backups";
 import { createDemoHistory } from "./demo-history";
+import { createDemoServiceWidgets } from "./demo-service-widgets";
 import { createMemoryUiPreferences } from "./demo-ui-preferences";
 
 export class DemoCommandError extends Error {
@@ -157,6 +158,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     updateMyLocale: async (locale) => ({ id: "demo-admin", username: db.settings.auth.local.username, locale, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     ...createDemoHubBackups(options),
     ...createDemoHistory(() => db.hosts.map((h) => h.id)),
+    ...serviceWidgets(),
     ...uiPreferences(),
     getCapability: async (operationId, resourceRef = HUB_REF) => {
       const knownResource = resourceRef.kind === "hub" ||
@@ -642,6 +644,12 @@ function draftServices(compose: string): { name: string; image: string }[] {
 }
 
 export { containerId };
+
+/** Only the adapter methods of the in-memory service widgets. */
+function serviceWidgets() {
+  const { reset: _reset, ...api } = createDemoServiceWidgets();
+  return api;
+}
 
 /** Only the adapter methods of the in-memory preference document. */
 function uiPreferences() {

@@ -61,9 +61,9 @@ export const SECTION_BINDINGS: readonly SectionBinding[] = [
     store: layoutStore,
     legacyKey: "docklet-react-opus.dashboard",
     toWire: ({ order, hidden, sizes }) => ({ order, hidden, sizes }),
-    fromWire: (raw, current) => {
+    fromWire: (raw) => {
       const { order, hidden, sizes } = obj(raw);
-      return { ...mergeLayout(raw === undefined ? DEFAULT_LAYOUT : { order, hidden, sizes }, DEFAULT_LAYOUT), services: current.services };
+      return mergeLayout(raw === undefined ? DEFAULT_LAYOUT : { order, hidden, sizes }, DEFAULT_LAYOUT);
     },
   }),
   bind({ section: "fleetView", store: fleetViewStore, legacyKey: "docklet-react-opus.fleet-view", toWire: (s) => s, fromWire: (raw) => mergeFleetView(obj(raw), DEFAULT_FLEET_VIEW) }),

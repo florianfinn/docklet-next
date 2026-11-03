@@ -2,10 +2,12 @@ import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { CalendarClock, Check, Gauge, HardDrive, History, LayoutGrid, Plus, Radar, ScrollText, ShieldAlert, Siren, SlidersHorizontal, Globe } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
+import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useActionRuns, useMetrics } from "@/data/live";
-import { useCapacity, useEvents, useSchedule, useSecurity } from "@/data/queries";
+import { useCapacity, useEvents, useSchedule, useSecurity, useServiceWidgets } from "@/data/queries";
+import { useIsUser } from "@/data/use-principal";
 import { isHostVisible } from "@/domain/hosts";
 import type { Tone } from "@/domain/model";
 import { hasUpdate } from "@/domain/updates";
@@ -34,7 +36,6 @@ import {
   widgetSize,
   withTransition,
   type CoreWidgetId,
-  type ServiceKind,
   type WidgetId,
   type WidgetSize,
 } from "./dashboard-layout";
@@ -42,9 +43,8 @@ import { DashboardSkeleton } from "./DashboardSkeleton";
 import { OpsSummary } from "./OpsSummary";
 import { useAttentionText } from "./attention-text";
 import { AppIcon } from "./services/app-icons";
-import { SERVICE_META } from "./services/service-data";
-import { ServiceConfigDialog } from "./services/ServiceConfigDialog";
 import { ServiceWidgetBody } from "./services/ServiceWidgets";
+import { SERVICE_COLOR } from "./services/widget-meta";
 import { useSortableGrid } from "./use-sortable-grid";
 import { useWidgetGrid, useWidgetResize } from "./use-widget-grid";
 import { AttentionWidget } from "./widgets/AttentionWidget";
@@ -92,7 +92,11 @@ export default function DashboardPage() {
   const attentionText = useAttentionText();
   const [editing, setEditing] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const [configure, setConfigure] = useState<ServiceKind | null>(null);
+  const navigate = useNavigate();
+  const admin = !useIsUser();
+  const widgets = useServiceWidgets();
+  const summaries = useMemo(() => new Map((widgets.data ?? []).map((w) => [w.kind, w])), [widgets.data]);
+  const openWidgetSettings = admin ? () => navigate("/settings/serviceWidgets") : undefined;
   const [announce, setAnnounce] = useState("");
   const [now] = useState(() => Date.now());
   const capacity = useCapacity();
@@ -112,7 +116,12 @@ export default function DashboardPage() {
   const critical = security.data?.enabled && !unavailableSecurity && images.length ? images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0) : undefined;
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
-  const visible = visibleWidgets(layout).filter((id) => import.meta.env.DEV || !isServiceWidget(id));
+  // Users only see service widgets that an administrator set up and turned on.
+  const visible = visibleWidgets(layout).filter((id) => {
+    if (!isServiceWidget(id)) return true;
+    const summary = summaries.get(id);
+    return !!summary && (admin || (summary.configured && summary.enabled));
+  });
   const apply = (fn: () => void) => withTransition(() => flushSync(fn), animate);
   const title = (id: WidgetId) => (isServiceWidget(id) ? t(`services.${id}.name`) : t(`widget.${id}.title`));
   const onCommit = useCallback(
@@ -144,7 +153,10 @@ export default function DashboardPage() {
   };
 
   const body = (id: WidgetId): ReactNode => {
-    if (isServiceWidget(id)) return import.meta.env.DEV ? <ServiceWidgetBody kind={id} config={layout.services[id]} onConfigure={() => setConfigure(id)} /> : null;
+    if (isServiceWidget(id)) {
+      const summary = summaries.get(id);
+      return summary ? <ServiceWidgetBody kind={id} summary={summary} admin={admin} /> : <WidgetBodySkeleton />;
+    }
     switch (id) {
       case "attention":
         return <AttentionWidget items={attention} hosts={hosts.byId} />;
@@ -236,7 +248,7 @@ export default function DashboardPage() {
                   description={isServiceWidget(id) ? t(`services.${id}.desc`) : t(`widget.${id}.desc`)}
                   icon={isServiceWidget(id) ? <AppIcon kind={id} /> : META[id].icon}
                   tone={isServiceWidget(id) ? undefined : META[id].tone}
-                  accent={isServiceWidget(id) ? SERVICE_META[id].color : undefined}
+                  accent={isServiceWidget(id) ? SERVICE_COLOR[id] : undefined}
                   slotRef={grid.slotRef(id)}
                   cardRef={grid.cardRef(id)}
                   chrome={{
@@ -248,7 +260,7 @@ export default function DashboardPage() {
                     onPointerDown: (e) => grid.onPointerDown(id, e),
                     onMove: (delta) => move(id, delta),
                     onHide: () => apply(() => layoutStore.set((l) => toggleWidget(l, id))),
-                    onConfigure: import.meta.env.DEV && isServiceWidget(id) ? () => setConfigure(id) : undefined,
+                    onConfigure: isServiceWidget(id) ? openWidgetSettings : undefined,
                     size: sizeOf(id),
                     columns: columns,
                     limits: { minW: WIDGET_MIN[id].w, maxW: Math.min(MAX_WIDGET_COLUMNS, columns), minH: WIDGET_MIN[id].h, maxH: MAX_WIDGET_ROWS },
@@ -264,8 +276,7 @@ export default function DashboardPage() {
           )}
         </>
       )}
-      <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} onConfigure={import.meta.env.DEV ? setConfigure : undefined} />
-      {import.meta.env.DEV && <ServiceConfigDialog kind={configure} onOpenChange={(o) => !o && setConfigure(null)} />}
+      <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} services={widgets.data ?? []} admin={admin} onConfigure={openWidgetSettings} />
     </>
   );
 }

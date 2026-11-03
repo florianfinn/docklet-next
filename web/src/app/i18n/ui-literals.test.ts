@@ -9,7 +9,7 @@ import { uiLiterals } from "./ui-literals.test-support";
 const sources = import.meta.glob<string>(["/src/**/*.{ts,tsx}", "!/src/**/*.test.{ts,tsx}", "!/src/**/*.test-support.ts", "!/src/**/*.d.ts", "!/src/**/messages/**", "!/src/test/**"], { query: "?raw", import: "default", eager: true });
 
 // Demo backend messages are localized at display time or represent raw logs and files.
-const DATA = [/^src\/data\/demo\//, /^src\/features\/dashboard\/services\/service-data\.ts$/, /^src\/features\/activity\/sample-run\.ts$/, /^src\/features\/stacks\/editor\/new-stack-draft\.ts$/];
+const DATA = [/^src\/data\/demo\//, /^src\/features\/activity\/sample-run\.ts$/, /^src\/features\/stacks\/editor\/new-stack-draft\.ts$/];
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
 function checkSources(input: Record<string, string>, exceptions = uiLiteralExceptions): string[] {

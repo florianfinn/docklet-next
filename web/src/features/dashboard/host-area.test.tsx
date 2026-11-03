@@ -41,22 +41,21 @@ describe("factory dashboard layout", () => {
       { w: 2, h: 3 },
       { w: 1, h: 6 },
     ]);
-    // No service is connected by default; demo content needs an explicit connect.
-    expect(Object.values(DEFAULT_LAYOUT.services).map((s) => s.status)).toEqual(["unconfigured", "unconfigured", "unconfigured"]);
+    // Service widget configuration lives on the hub, not in the layout.
+    expect("services" in DEFAULT_LAYOUT).toBe(false);
   });
 
   it("never replaces a stored custom layout with the new factory sizes or order", () => {
-    const custom = { order: ["load", "attention", "timeline"], hidden: ["security"], sizes: { load: { w: 2, h: 5 } }, services: {} };
+    const custom = { order: ["load", "attention", "timeline"], hidden: ["security"], sizes: { load: { w: 2, h: 5 } } };
     const merged = mergeLayout(custom, DEFAULT_LAYOUT);
     expect([merged.order.slice(0, 3), merged.hidden.includes("security"), merged.sizes]).toEqual([["load", "attention", "timeline"], true, { load: { w: 2, h: 5 } }]);
     expect(widgetSize(merged, "attention")).toEqual({ w: 1, h: 4 });
   });
 
-  it("shows the unconfigured services honestly on a fresh dashboard", async () => {
+  it("shows hub service widget data on a fresh dashboard", async () => {
     renderWithApp(<DashboardPage />);
     const plex = await waitFor(() => document.querySelector<HTMLElement>('[data-widget="plex"]') ?? Promise.reject(new Error("plex missing")));
-    expect(within(plex).getByText("Konfiguration fehlt") !== null).toBe(true);
-    expect(within(plex).queryByRole("list", { name: "Aktive Streams" })).toBe(null);
+    expect(await within(plex).findByRole("list", { name: "Aktive Streams" }) !== null).toBe(true);
     expect(document.querySelector('[data-widget-slot="security"]')?.getAttribute("data-size")).toBe("2x3");
   });
 });
