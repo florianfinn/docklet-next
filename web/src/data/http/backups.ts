@@ -56,12 +56,14 @@ export function createBackups(options: Options) {
   const retained = new Map<string, BackupOverview>();
   let retainedOwner = options.generation();
   const path = (host: string) => `/environments/${encodeURIComponent(host)}/volumes`;
-  function begin(host: string) {
+  // A host change discards stale reads; a write's outcome is known once it is answered, so only an identity change
+  // discards it.
+  function begin(host: string, write = false) {
     if (!versions.has(host)) versions.set(host, 0);
     const identity = options.generation(),
       version = versions.get(host) ?? 0;
     return () => {
-      if (identity !== options.generation() || version !== (versions.get(host) ?? 0)) throw new CancelledError();
+      if (identity !== options.generation() || (!write && version !== (versions.get(host) ?? 0))) throw new CancelledError();
     };
   }
   async function require(operation: string, ref: ResourceRef) {
@@ -91,7 +93,7 @@ export function createBackups(options: Options) {
     });
   }
   async function response(host: string, route: string, init: RequestInit = {}) {
-    const check = begin(host);
+    const check = begin(host, !!init.method && init.method !== "GET");
     let result: Response;
     try {
       result = await client.fetch(`${baseUrl}${route}`, {
@@ -150,7 +152,7 @@ export function createBackups(options: Options) {
     return { host, name, route: `${path(host)}/${encodeURIComponent(name)}` };
   }
   async function admit(host: string, route: string, value: object, volume?: string): Promise<string> {
-    const check = begin(host);
+    const check = begin(host, true);
     let id: string;
     try {
       id = (await request<{ activityId: string }>(host, route, "POST", value)).activityId;
