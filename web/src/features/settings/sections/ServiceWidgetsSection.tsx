@@ -80,13 +80,17 @@ function WidgetForm({ kind, config }: { kind: ServiceKind; config: WidgetConfig 
   const commandError = useCommandError();
   const stacks = useStacks();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(draftOf(config));
-  const [result, setResult] = useState<WidgetResult | undefined>();
+  const [tested, setTested] = useState<{ input: string; result: WidgetResult } | undefined>();
   const test = useMutation({
     mutationFn: (input: WidgetConfigInput) => adapter.testServiceWidget(kind, input),
-    onMutate: () => setResult(undefined),
-    onSuccess: setResult,
+    onMutate: () => setTested(undefined),
+    onSuccess: (result, input) => setTested({ input: JSON.stringify(input), result }),
   });
   if (!draft) return null;
+  // A test answer belongs to the draft it tested: a late answer, an edit, discard or save hides it.
+  const current = JSON.stringify(inputOf(draft));
+  const result = tested?.input === current ? tested.result : undefined;
+  const testFailed = test.isError && JSON.stringify(test.variables) === current;
   const credential = CREDENTIAL_KIND[kind];
   const id = (field: string) => `sw-${kind}-${field}`;
   return (
@@ -94,7 +98,7 @@ function WidgetForm({ kind, config }: { kind: ServiceKind; config: WidgetConfig 
       title={td(`${kind}.name`)}
       description={td(`${kind}.desc`)}
       dirty={dirty}
-      onDiscard={() => { reset(); setResult(undefined); }}
+      onDiscard={reset}
       onSave={async () => {
         const submitted = draft;
         const saved = await adapter.saveServiceWidgetConfig(kind, inputOf(submitted));
@@ -153,7 +157,7 @@ function WidgetForm({ kind, config }: { kind: ServiceKind; config: WidgetConfig 
           <Button type="button" variant="outline" className="self-start" disabled={!draft.address.trim() || test.isPending} onClick={() => test.mutate(inputOf(draft))}>
             {test.isPending ? t("testing") : t("test")}
           </Button>
-          {test.isError && <p className="text-sm text-destructive" role="status">{commandError(test.error)}</p>}
+          {testFailed && <p className="text-sm text-destructive" role="status">{commandError(test.error)}</p>}
           {result && <TestResult result={result} onTrust={() => result.error?.certificate && patch({ tlsPin: result.error.certificate })} />}
         </div>
       </FieldGroup>

@@ -26,6 +26,7 @@ import type { CurrentUser } from "../api";
 import { createHttpUsers, USER_OPERATIONS } from "./users";
 import { createUserInventory } from "./user-inventory";
 import { createInventoryReader } from "./inventory";
+import { createConditionReader } from "./runtime-conditions";
 import { mapHost } from "./hosts";
 import { createSystemComponents } from "./system-components";
 import { createHostRestarts } from "./host-restarts";
@@ -232,6 +233,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let principal: CurrentUser | undefined;
   let identityGeneration = 0;
   let lifetimeGeneration = 0;
+  // Aborted when another identity takes over, so a pending or retried owner write never runs as the next user.
+  let ownedWrites = new AbortController();
   const identityListeners = new Set<() => void>();
   let identityCheck: Promise<boolean> | undefined;
   let stopIdentityCheck: (() => void) | undefined;
@@ -284,11 +287,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
+    conditions.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
-    if (!retain) { actions.reset(true); ++lifetimeGeneration; identityListeners.forEach((notify) => notify()); }
+    if (!retain) { actions.reset(true); ++lifetimeGeneration; ownedWrites.abort(); ownedWrites = new AbortController(); identityListeners.forEach((notify) => notify()); }
   }
   function invalidateIdentity(change: SessionChange) {
     if (change === "confirmed" && authenticated) return;
@@ -642,8 +646,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       };
     } });
   }
-  const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
-  const userInventory = scopedObservations((observe) => createUserInventory(baseUrl, fetcher, listHosts, () => principal, observe));
+  const conditions = createConditionReader(baseUrl, fetcher);
+  const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe, conditions.read));
+  const userInventory = scopedObservations((observe) => createUserInventory(baseUrl, fetcher, listHosts, () => principal, observe, conditions.read));
   const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
   const backups = createBackups({
@@ -698,7 +703,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     ...createHttpHistory(baseUrl, client),
-    ...createHttpUiPreferences(baseUrl, client),
+    ...createHttpUiPreferences(baseUrl, client, () => ownedWrites.signal),
     ...createHttpServiceWidgets(baseUrl, client),
     kind: "http",
     mappedOperations: IMPLEMENTED,

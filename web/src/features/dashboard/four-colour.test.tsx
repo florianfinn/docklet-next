@@ -89,6 +89,20 @@ describe("four-colour runtime mapping (FR1)", () => {
   });
 });
 
+describe("stacks without containers (FR1/HS2)", () => {
+  it("keeps a stack that was taken down as a grey segment through stop, down and redeploy, and unreachable when its host is offline", () => {
+    const stack = { id: `${host.id}~web`, hostId: host.id, name: "web", reportedStatus: "stopped", services: [] } as unknown as Stack;
+    const units = (containers: ContainerInfo[]) => fleetUnits([host], [stack], containers).map((u) => [u.stackId, u.state, u.containers.length]);
+    expect(units([ctr("a", stack.id, "running")])).toEqual([[stack.id, "running", 1]]);
+    expect(units([ctr("a", stack.id, "stopped")])).toEqual([[stack.id, "stopped", 1]]);
+    expect(units([])).toEqual([[stack.id, "stopped", 0]]);
+    expect(units([ctr("b", stack.id, "running")])).toEqual([[stack.id, "running", 1]]);
+    const away = { ...stack, id: `${offline.id}~web`, hostId: offline.id };
+    expect(fleetUnits([offline], [away], []).map((u) => u.state)).toEqual(["unreachable"]);
+    expect(fleetUnits([host], [away], [])).toEqual([]);
+  });
+});
+
 describe("ring layout by container count (FR3)", () => {
   const overlaps = (segs: { start: number; end: number }[]) => segs.some((s, i) => i > 0 && s.start < segs[i - 1]!.end);
 

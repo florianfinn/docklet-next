@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original Settings › Service widgets gesture tests for issues #332 and #333 (SW7, SW8, SW15).
 
-import { waitFor, within } from "@testing-library/react";
+import { act, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -68,5 +68,30 @@ describe("Settings › Service widgets", () => {
     await waitFor(() => expect(f.saved).toHaveLength(2));
     expect([f.saved[1]!.credentialAction, "credential" in f.saved[1]!]).toEqual(["clear", false]);
     expect(within(await card("minecraft")).queryByLabelText(/Token|API-Schlüssel/)).toBe(null);
+  });
+
+  it("drops a late test answer once the tested draft was discarded or edited, so trust is never offered for another address", async () => {
+    const f = adapter();
+    const answers: ((value: Awaited<ReturnType<typeof f.adapter.testServiceWidget>>) => void)[] = [];
+    f.adapter.testServiceWidget = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+    renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/serviceWidgets"], f.adapter);
+    const plex = await card("plex");
+    const address = within(plex).getByLabelText("Adresse");
+    const offer = { kind: "plex" as const, stale: false, ageSeconds: 0, error: { code: "widget.tls-failed" as const, certificate } };
+    await userEvent.clear(address);
+    await userEvent.type(address, "https://plex.example.com:32400");
+    await userEvent.click(within(plex).getByRole("button", { name: "Verbindung testen" }));
+    await userEvent.click(within(plex).getByRole("button", { name: "Verwerfen" }));
+    await act(async () => answers[0]!(offer));
+    expect(within(plex).queryByText(certificate.sha256)).toBe(null);
+    await userEvent.clear(address);
+    await userEvent.type(address, "https://plex.example.com:32400");
+    await userEvent.click(within(plex).getByRole("button", { name: "Verbindung testen" }));
+    await userEvent.type(address, "0");
+    await act(async () => answers[1]!(offer));
+    expect(within(plex).queryByRole("button", { name: "Diesem Zertifikat vertrauen" })).toBe(null);
+    await userEvent.type(address, "{Backspace}");
+    expect(within(plex).getByRole("button", { name: "Diesem Zertifikat vertrauen" }) !== null).toBe(true);
+    expect(f.saved).toEqual([]);
   });
 });

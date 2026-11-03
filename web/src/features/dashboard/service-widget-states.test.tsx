@@ -4,12 +4,14 @@
 // License: Apache-2.0
 // Deviations: Original service widget card state tests for issues #332 and #333 (SW9, SW11, SW13).
 
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import type { ServiceKind, WidgetResult, WidgetSummary } from "@/domain/service-widgets";
+import { queryKeys } from "@/data/query-keys";
 import { renderWithApp } from "@/test/render";
 
 import { ServiceWidgetBody } from "./services/ServiceWidgets";
@@ -59,5 +61,26 @@ describe("service widget card states", () => {
     await waitFor(() => expect(adapter.getServiceWidget.mock.calls.length).toBeGreaterThanOrEqual(3));
     const open = screen.getByRole("link", { name: "Overseerr öffnen" });
     expect([open.getAttribute("href"), open.getAttribute("target"), open.getAttribute("rel")]).toEqual(["https://requests.example.com", "_blank", "noopener noreferrer"]);
+  });
+
+  it("keeps the last good data with its age and a read failure when a refetch fails, and recovers on the next answer", async () => {
+    let fail = false;
+    const adapter = adapterWith((kind) => {
+      if (fail) throw new Error("hub unreachable");
+      return { kind, stale: false, ageSeconds: 0, minecraft: { online: 2, max: 10, motd: "Example server", version: "1.21", players: ["alpha"] } };
+    });
+    let client: QueryClient | undefined;
+    function Probe() { client = useQueryClient(); return <ServiceWidgetBody kind="minecraft" summary={summary("minecraft")} admin />; }
+    renderWithApp(<Probe />, adapter);
+    expect(await screen.findByText("Example server") !== null).toBe(true);
+    expect(screen.queryByRole("status")).toBe(null);
+    fail = true;
+    await act(() => client!.refetchQueries({ queryKey: queryKeys.serviceWidget("minecraft") }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/Der Hub war nicht erreichbar/);
+    expect(screen.getByText("Example server") !== null).toBe(true);
+    expect(document.querySelector('[data-slot="alert"]')).toBe(null);
+    fail = false;
+    await act(() => client!.refetchQueries({ queryKey: queryKeys.serviceWidget("minecraft") }));
+    await waitFor(() => expect(screen.queryByRole("status")).toBe(null));
   });
 });

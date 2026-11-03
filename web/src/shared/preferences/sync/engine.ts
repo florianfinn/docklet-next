@@ -41,10 +41,13 @@ export function createPreferenceSync({ api, bindings, storage, debounceMs = 1000
   let applying = false;
   const timers = new Map<UiSection, ReturnType<typeof setTimeout>>();
   const dirty = new Set<UiSection>();
+  // Local edits per section; a migration applies its captured value only if none happened meanwhile.
+  const edits = new Map<UiSection, number>();
 
   const unsubscribe = bindings.map((b) =>
     b.store.subscribe(() => {
       if (applying || identity === null) return;
+      edits.set(b.section, (edits.get(b.section) ?? 0) + 1);
       dirty.add(b.section);
       if (loaded) schedule(b);
     }),
@@ -127,6 +130,7 @@ export function createPreferenceSync({ api, bindings, storage, debounceMs = 1000
       if (gen !== generation) return;
       const value = claim.pending[section]!;
       if (!(section in doc.sections)) {
+        const before = edits.get(section) ?? 0;
         try {
           await api.putUiPreference(section, value);
         } catch {
@@ -134,7 +138,9 @@ export function createPreferenceSync({ api, bindings, storage, debounceMs = 1000
         }
         if (gen !== generation) return;
         const binding = bindings.find((b) => b.section === section);
-        if (binding && !dirty.has(section)) apply(binding, value);
+        // A newer edit wins locally and is written again after this older migration write.
+        if (binding && (edits.get(section) ?? 0) === before) apply(binding, value);
+        else if (binding) { dirty.add(section); schedule(binding); }
       }
       const current = readClaim();
       if (!current || current.owner !== owner) return;
@@ -150,6 +156,7 @@ export function createPreferenceSync({ api, bindings, storage, debounceMs = 1000
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
       dirty.clear();
+      edits.clear();
       loaded = false;
       identity = id;
       if (id === null) return;

@@ -119,13 +119,14 @@ export function createHttpHistory(baseUrl: string, client: CsrfClient): HistoryA
   };
 }
 
-export function createHttpUiPreferences(baseUrl: string, client: CsrfClient): UiPreferencesApi {
+/** `owner` is the signal of the current identity; requests started under it never dispatch for a later one. */
+export function createHttpUiPreferences(baseUrl: string, client: CsrfClient, owner: () => AbortSignal | undefined = () => undefined): UiPreferencesApi {
   return {
     async getUiPreferences() {
-      return mapDocument(await request(client, `${baseUrl}/auth/me/ui-preferences`));
+      return mapDocument(await request(client, `${baseUrl}/auth/me/ui-preferences`, { signal: owner() }));
     },
     async putUiPreference(section, sectionValue) {
-      return mapDocument(await request(client, `${baseUrl}/auth/me/ui-preferences/${encodeURIComponent(section)}`, { method: "PUT", body: JSON.stringify({ value: sectionValue }) }));
+      return mapDocument(await request(client, `${baseUrl}/auth/me/ui-preferences/${encodeURIComponent(section)}`, { method: "PUT", body: JSON.stringify({ value: sectionValue }), signal: owner() }));
     },
   };
 }

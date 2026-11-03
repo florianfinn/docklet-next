@@ -365,6 +365,8 @@ export interface OpsEvent {
   hostId?: string;
   stackId?: string;
   actionId?: string;
+  /** A container runtime condition change from the hub's history (fleet ring feed). */
+  condition?: boolean;
 }
 
 export type JobKind = "backup" | "scan" | "update-check" | "auto-update";

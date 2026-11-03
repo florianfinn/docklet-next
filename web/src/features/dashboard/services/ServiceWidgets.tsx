@@ -207,18 +207,21 @@ export function ServiceWidgetBody({ kind, summary, admin }: { kind: ServiceKind;
   if (!summary.configured) return <Notice icon={<Plug className="size-6 text-muted-foreground" aria-hidden />} title={t("notConfigured")} body={t("notConfiguredBody")} action={setUp} />;
   if (!summary.enabled) return <Notice icon={<Power className="size-6 text-muted-foreground" aria-hidden />} title={t("disabled")} body={t("disabledBody")} action={setUp} />;
   if (query.isPending) return <Rows />;
-  if (query.isError) return <QueryError error={query.error} compact onRetry={() => void query.refetch()} />;
+  // A failed refetch keeps the last good answer with its age; only a first failure shows the error panel.
+  if (!query.data) return <QueryError error={query.error} compact onRetry={() => void query.refetch()} />;
   const result = query.data;
+  const unreadable = query.isError;
+  const ageSeconds = result.ageSeconds + (unreadable ? Math.max(0, query.errorUpdatedAt - query.dataUpdatedAt) / 1000 : 0);
   const hasData = !!(result.plex || result.overseerr || result.minecraft);
   if (!hasData) return <Notice icon={<TriangleAlert className="size-6 text-destructive" aria-hidden />} title={t("failed")} body={result.error ? t(widgetErrorKey(result.error)) : t("errors.bad-response")} action={result.error?.code === "widget.invalid-config" || result.error?.code === "widget.credential-unavailable" ? setUp : undefined} />;
   const name = t(`${kind}.name`);
   return (
-    <div className="flex h-full flex-col gap-2" data-widget-state={result.stale ? "stale" : "data"}>
-      {result.stale && (
+    <div className="flex h-full flex-col gap-2" data-widget-state={result.stale || unreadable ? "stale" : "data"}>
+      {(result.stale || unreadable) && (
         <p className="flex items-center gap-1.5 text-[11px] text-warning" role="status">
           <TriangleAlert className="size-3.5" aria-hidden />
-          {t("stale", { minutes: Math.max(1, Math.round(result.ageSeconds / 60)) })}
-          {result.error && <span className="text-muted-foreground">· {t(widgetErrorKey(result.error))}</span>}
+          {t("stale", { minutes: Math.max(1, Math.round(ageSeconds / 60)) })}
+          {unreadable ? <span className="text-muted-foreground">· {t("readFailed")}</span> : result.error && <span className="text-muted-foreground">· {t(widgetErrorKey(result.error))}</span>}
         </p>
       )}
       <div className="min-h-0 flex-1">

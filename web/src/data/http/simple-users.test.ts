@@ -46,6 +46,10 @@ async function server(handler: (request: IncomingMessage, response: ServerRespon
 }
 const project = { id: "app", name: "Assigned", path: "/srv/stacks/app", isArchived: false, status: "running", serviceCount: 1, runningCount: 1, tags: [], createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" };
 
+// Runtime conditions of the test host: a crashed "owned" container, or a failing read.
+let conditions: "down" | "failing" | "none" = "none";
+afterEach(() => { conditions = "none"; });
+
 async function fixture(level: "restricted" | "full") {
   const seen: string[] = [];
   const baseUrl = await server((request, response) => {
@@ -56,6 +60,7 @@ async function fixture(level: "restricted" | "full") {
     if (url.pathname === "/api/capabilities") return send(["listHosts", "listStacks", "getStack"].map((operationId) => ({ operationId, resourceRef: { kind: url.searchParams.get("kind"), id: url.searchParams.get("id") }, available: true })));
     if (url.pathname.endsWith("/projects")) return send([project], true);
     if (url.pathname.endsWith("/runtime")) return send({ ...project, runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running", containerId: "owned" }] });
+    if (url.pathname.endsWith("/runtime-conditions")) return conditions === "failing" ? send(null, false, 503) : send({ hostId: "host", sampledAt: "2026-11-01T00:00:00Z", items: conditions === "down" ? [{ kind: "container", containerId: "owned", name: "web", projectId: "app", condition: "down", reason: "exit", exitCode: 1, restarts10m: 0, since: "2026-11-01T00:00:00Z", sampledAt: "2026-11-01T00:00:00Z" }] : [] });
     if (url.pathname.endsWith("/updates")) return send(project);
     if (url.pathname.endsWith("/compose")) return send({ ...project, composeContent: "services: {}", envContent: "TZ=UTC" });
     if (url.pathname.endsWith("/projects/app")) return send(project);
@@ -79,6 +84,16 @@ it("W1 builds a user's list and runtime detail over real HTTP without host conta
   expect(f.seen.some((p) => p.endsWith("/containers"))).toBe(false);
   expect(f.seen.some((p) => p.endsWith("/runtime"))).toBe(true);
   await expect(f.adapter.getStack("host~foreign")).rejects.toThrow("not-found");
+});
+
+it("shows a user's crashed service red in the stack detail and keeps it red when a condition refresh fails", async () => {
+  const f = await fixture("restricted");
+  conditions = "down";
+  const state = (stack: { services: { condition?: { condition: string } }[] }) => stack.services.map((s) => s.condition?.condition);
+  expect(state(await f.adapter.getStack("host~app"))).toEqual(["down"]);
+  conditions = "failing";
+  expect(state(await f.adapter.getStack("host~app"))).toEqual(["down"]);
+  expect(f.seen.filter((p) => p.endsWith("/runtime-conditions")).length).toBe(2);
 });
 
 it("keeps a user's reachable host when another assigned host fails", async () => {

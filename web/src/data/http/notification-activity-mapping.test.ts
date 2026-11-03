@@ -46,8 +46,8 @@ it.each([
 });
 
 it.each([
-  ["de", "Anhaltende Last", "Anhaltend hohe Ressourcenauslastung", "Container wurde unerwartet beendet"],
-  ["en-US", "Sustained load", "Sustained resource load", "Container exited unexpectedly"],
+  ["de", "Anhaltende Last", "Anhaltend hohe Ressourcenauslastung", "web wurde unerwartet beendet (Exit 137)"],
+  ["en-US", "Sustained load", "Sustained resource load", "web exited unexpectedly (exit 137)"],
 ] as const)("renders a load alert activity and a condition event from their hub shapes in %s", (locale, title, message, condition) => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
@@ -57,8 +57,19 @@ it.each([
     } as unknown as Detail;
     const run = renderRun(mapActivityDetail(detail), locale);
     expect([run.kind, run.title, run.log.includes(message)]).toEqual(["load-alert", title, true]);
-    const event = { id: "event", type: "container.condition.down", messageCode: "container.condition.down", severity: "error", title: "container.condition.down", description: "container.condition.down", resourceType: "container", resourceId: "c1", resourceName: "web", environmentId: "host", metadata: {}, timestamp: "2026-11-03T12:00:00Z", createdAt: "2026-11-03T12:00:00Z", updatedAt: "2026-11-03T12:00:00Z" } as unknown as Event;
+    const event = { id: "event", type: "container.condition.down", messageCode: "container.condition.down", severity: "error", title: "container.condition.down", description: "container.condition.down", resourceType: "container", resourceId: "c1", resourceName: "web", environmentId: "host", metadata: { hostId: "host", containerName: "web", exitCode: 137, restarts: 0 }, timestamp: "2026-11-03T12:00:00Z", createdAt: "2026-11-03T12:00:00Z", updatedAt: "2026-11-03T12:00:00Z" } as unknown as Event;
     expect(renderEvent(mapEvent(event), locale).title).toBe(condition);
+    expect(mapEvent(event).condition).toBe(true);
     expect(errors).not.toHaveBeenCalled();
   } finally { errors.mockRestore(); }
+});
+
+it.each([
+  ["de", "restart-loop", { containerName: "db", exitCode: 0, restarts: 4 }, "db befindet sich in einer Neustartschleife (4 Neustarts in 10 Min.)"],
+  ["en-US", "restart-loop", { containerName: "db", exitCode: 0, restarts: 4 }, "db is in a restart loop (4 restarts in 10 min)"],
+  ["en-US", "down", { containerName: "", exitCode: 0, restarts: 0 }, "web exited unexpectedly"],
+  ["en-US", "running-again", { containerName: "db", exitCode: 0, restarts: 0 }, "db is running again"],
+] as const)("names the container, exit code and restarts of a %s %s condition event", (locale, kind, metadata, title) => {
+  const event = { id: "event", type: `container.condition.${kind}`, messageCode: `container.condition.${kind}`, severity: "warning", title: `container.condition.${kind}`, description: "", resourceType: "container", resourceId: "c1", resourceName: "web", environmentId: "host", metadata: { hostId: "host", ...metadata }, timestamp: "2026-11-03T12:00:00Z" } as unknown as Event;
+  expect(renderEvent(mapEvent(event), locale).title).toBe(title);
 });

@@ -67,6 +67,7 @@ export const deDashboard: typeof enDashboard = {
     of: "von {total}",
   },
   ring: {
+    feed: "Letzte Zustandswechsel von Containern",
     updateAvailable: "Update verfügbar",
     chips: {
       label: "Stackring filtern",
@@ -124,6 +125,7 @@ export const deDashboard: typeof enDashboard = {
     active: "Aktiv",
     disabledBody: "Dieses Widget ist unter Einstellungen › Service-Widgets ausgeschaltet.",
     failed: "Keine Daten",
+    readFailed: "Der Hub war nicht erreichbar; neuer Versuch läuft automatisch.",
     stale: "Daten von vor {minutes, plural, one {# Minute} other {# Minuten}}",
     open: "{name} öffnen",
     openStack: "Stack öffnen",

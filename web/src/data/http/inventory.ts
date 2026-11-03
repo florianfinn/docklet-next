@@ -9,15 +9,15 @@ import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation } from "@/domain/model";
 import { withoutSystem } from "@/domain/system";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
-import { readRuntimeConditions, withConditions } from "./runtime-conditions";
+import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
-export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
+export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
   function fail(code: string): never { throw new AdapterOutcomeError({ kind: "error", code }); }
   async function hostInventory(host: Host) {
     try {
-      const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects"), list("list-containers", host.id, "containers"), readRuntimeConditions(baseUrl, fetcher, host.id)]);
+      const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects"), list("list-containers", host.id, "containers"), readConditions(host.id)]);
       const observation: InventoryObservation = { ...projects.observation, ...(containers.observation.stale ? containers.observation : {}), stale: projects.observation.stale || containers.observation.stale };
       onState(host.id, observation);
       const projectRows = projects.rows as ProjectRow[];

@@ -223,7 +223,7 @@ export const enRunMessages = {
   codes: {
     load: { sustained: "Sustained resource load" },
     container: {
-      condition: {"down": "Container exited unexpectedly", "unhealthy": "Container is unhealthy", "restart-loop": "Container is in a restart loop", "running-again": "Container is running again"},
+      condition: {"down": "{name} exited unexpectedly{exitCode, plural, =0 {} other { (exit #)}}", "unhealthy": "{name} is unhealthy", "restart-loop": "{name} is in a restart loop ({restarts, plural, one {# restart} other {# restarts}} in 10 min)", "running-again": "{name} is running again"},
       "origin-locked": "Container origin prevents this operation",
       "recreate-recovered": "Recreate interrupted; original restored",
       "recreate-ambiguous": "Recreate needs manual cleanup",

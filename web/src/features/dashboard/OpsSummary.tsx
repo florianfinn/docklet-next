@@ -18,6 +18,7 @@ import { fleetBreakdown, fleetUnits, problemCounts, problemItems, type FleetBrea
 import { FleetChips } from "./FleetChips";
 import { orderHosts, useFleetView, type HostAreaSize } from "./fleet-view-store";
 import { FleetLine } from "./FleetLine";
+import { ConditionFeed } from "./ConditionFeed";
 import { FleetRing, UnraidRingToggle } from "./FleetRing";
 import { usePreference } from "@/shared/preferences/preferences-store";
 import { HostCards } from "./HostCards";
@@ -172,6 +173,7 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
           <div className="basis-full"><UnraidRingToggle /></div>
         </div>
         {chips}
+        <ConditionFeed />
       </div>
     );
   }
@@ -179,6 +181,7 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
     <div className="flex flex-col items-center gap-3">
       <FleetRing hosts={hosts} units={units} label={label} center={center} size={view.ringSize} fan={view.fan} highlight={highlight} />
       {chips}
+      <ConditionFeed />
     </div>
   );
 }

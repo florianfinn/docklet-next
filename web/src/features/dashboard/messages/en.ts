@@ -66,6 +66,7 @@ export const enDashboard = {
     of: "of {total}",
   },
   ring: {
+    feed: "Recent container condition changes",
     updateAvailable: "update available",
     chips: {
       label: "Filter the stack ring",
@@ -123,6 +124,7 @@ export const enDashboard = {
     active: "Active",
     disabledBody: "This widget is turned off in Settings › Service widgets.",
     failed: "No data",
+    readFailed: "The hub could not be reached; retrying automatically.",
     stale: "Data from {minutes, plural, one {# minute} other {# minutes}} ago",
     open: "Open {name}",
     openStack: "Open stack",

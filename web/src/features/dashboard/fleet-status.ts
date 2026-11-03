@@ -49,6 +49,8 @@ const WORST: readonly RuntimeStatus[] = ["down", "unhealthy", "restarting"];
 /** Worst container wins (down, then unhealthy or restarting); grey only when all are stopped. */
 export function unitState(containers: readonly ContainerInfo[], host: Host | undefined): FleetState {
   if (host?.status === "offline") return "unreachable";
+  // A known stack whose containers were removed (taken down) is stopped, not unknown.
+  if (!containers.length) return "stopped";
   const states = containers.map((c) => containerRuntime(c, host));
   for (const s of WORST) if (states.includes(s)) return s;
   if (states.every((s) => s === "unknown")) return "unknown";
@@ -77,7 +79,7 @@ export function remainderStart(start: number, end: number, unit: FleetUnit): num
 
 const GROUP_ORDER: readonly Exclude<ContainerOrigin, "compose">[] = ["standalone", "unraid", "unknown"];
 
-/** Units per host in host order: stacks by name, then the origin groups. */
+/** Units per host in host order: stacks by name (also those without containers), then the origin groups. */
 export function fleetUnits(hosts: readonly Host[], stacks: readonly Stack[], containers: readonly ContainerInfo[]): FleetUnit[] {
   const out: FleetUnit[] = [];
   const names = new Map(stacks.map((s) => [s.id, s.name]));
@@ -85,6 +87,7 @@ export function fleetUnits(hosts: readonly Host[], stacks: readonly Stack[], con
     const own = containers.filter((c) => c.hostId === host.id);
     const byStack = new Map<string, ContainerInfo[]>();
     for (const c of own) if (c.stackId) byStack.set(c.stackId, [...(byStack.get(c.stackId) ?? []), c]);
+    for (const s of stacks) if (s.hostId === host.id && !byStack.has(s.id)) byStack.set(s.id, []);
     const stackUnits = [...byStack].map(([stackId, list]) => unit({ id: `stack:${stackId}`, kind: "stack", hostId: host.id, name: names.get(stackId) ?? stackId, stackId }, list, host));
     stackUnits.sort((a, b) => a.name.localeCompare(b.name, "de", { numeric: true, sensitivity: "base" }));
     out.push(...stackUnits);
