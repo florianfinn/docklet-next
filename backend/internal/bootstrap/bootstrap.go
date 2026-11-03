@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown.
 
 package bootstrap
 
@@ -112,7 +112,8 @@ func Bootstrap(ctx context.Context) error {
 		}
 	}()
 
-	app := fx.New(applicationOptions(appCtx, cfg, db, cancelApp, failApp))
+	var shutdown *ShutdownSignal
+	app := fx.New(applicationOptions(appCtx, cfg, db, cancelApp, failApp), fx.Populate(&shutdown))
 
 	startCtx, cancelStart := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancelStart()
@@ -121,6 +122,8 @@ func Bootstrap(ctx context.Context) error {
 	}
 
 	fatalErr := waitForShutdown(ctx, appCtx, app.Done())
+	// Before any component stops, so agents can tell failures caused by the stop from those of a running agent.
+	shutdown.Begin()
 
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelStop()
@@ -165,6 +168,7 @@ func applicationOptions(appCtx context.Context, cfg *config.Config, db *database
 		fx.Provide(
 			func() context.Context { return appCtx },
 			newConfiguredHTTPClientInternal,
+			newShutdownSignalInternal,
 		),
 		di.ActorOptions,
 		di.ServiceOptions,
@@ -374,18 +378,20 @@ func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, api
 	}
 }
 
-func startEdgeTunnelClient(appCtx context.Context, lc fx.Lifecycle, cfg *config.Config, router *echo.Echo, _ *http.Server) {
+func startEdgeTunnelClient(appCtx context.Context, lc fx.Lifecycle, cfg *config.Config, router *echo.Echo, _ *http.Server, shutdown *ShutdownSignal) {
 	var stop func(context.Context) error
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			var startErr error
-			stop, startErr = startEdgeTunnelClientIfConfigured(appCtx, cfg, router)
+			stop, startErr = startEdgeTunnelClientIfConfigured(appCtx, cfg, agentShutdownInternal(shutdown, router))
 			if startErr != nil {
 				slog.ErrorContext(appCtx, "Failed to start edge tunnel client", "error", startErr)
 			}
 			return nil
 		},
+		// Appended after the HTTP server, so this hook stops first: the signal precedes the tunnel session's cancellation.
 		OnStop: func(ctx context.Context) error {
+			shutdown.Begin()
 			if stop == nil {
 				return nil
 			}
