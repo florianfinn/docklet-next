@@ -18,6 +18,7 @@ import { AppShell } from "./shell/AppShell";
 import { navigationForRoutes } from "./shell/nav-items";
 
 const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage"));
+const UserDashboard = lazy(() => import("@/features/dashboard/UserDashboard"));
 const StacksPage = lazy(() => import("@/features/stacks/overview/StacksPage"));
 const StackPage = lazy(() => import("@/features/stacks/detail/StackPage"));
 const ContainersPage = lazy(() => import("@/features/containers/ContainersPage"));
@@ -50,14 +51,16 @@ function LoginRoute() {
   return useAdapter().kind === "http" ? <ProductLoginPage /> : <DemoLoginPage />;
 }
 
-function LandingRoute() { return <Navigate to={useIsUser() ? "/stacks" : "/dashboard"} replace />; }
+function LandingRoute() { return <Navigate to="/dashboard" replace />; }
+
+function DashboardRoute() { return useIsUser() ? <UserDashboard /> : <DashboardPage />; }
 
 const shellRoutes: RouteObject[] = [
   {
     errorElement: <RouteError />,
     children: [
       { index: true, element: <LandingRoute /> },
-      { path: "dashboard", element: <DashboardPage /> },
+      { path: "dashboard", element: <DashboardRoute /> },
       { path: "stacks", element: <StacksPage /> },
       { path: "stacks/new", element: <StackPage /> },
       { path: "stacks/:stackId", element: <StackPage /> },

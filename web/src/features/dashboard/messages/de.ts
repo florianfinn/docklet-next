@@ -6,6 +6,7 @@ export const deDashboard: typeof enDashboard = {
   growthUnavailable: "Wachstum noch nicht verfügbar",
   title: "Dashboard",
   description: "Lagebild aller gefilterten Hosts. Stacks und Container verwaltest du in eigenen Bereichen.",
+  userDescription: "Dienst-Widgets und die Anwendungen deiner Stacks.",
   customize: "Anpassen",
   done: "Fertig",
   widgets: "Widgets",

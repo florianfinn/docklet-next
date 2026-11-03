@@ -5,6 +5,7 @@ export const enDashboard = {
   growthUnavailable: "Growth not yet available",
   title: "Dashboard",
   description: "Situation overview of all filtered hosts. You manage stacks and containers in their own sections.",
+  userDescription: "Service widgets and the applications of your stacks.",
   customize: "Customize",
   done: "Done",
   widgets: "Widgets",

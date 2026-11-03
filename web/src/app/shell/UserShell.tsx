@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original reduced shell using the approved free sidebar primitives.
 
-import { Layers } from "lucide-react";
+import { LayoutDashboard, Layers } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { Suspense } from "react";
 import { useTranslations } from "use-intl";
@@ -21,11 +21,11 @@ import { ShellEffects } from "./ShellEffects";
 export function UserShell() {
   const t = useTranslations("shell");
   const { pathname } = useLocation();
-  const allowed = pathname === "/profile" || pathname === "/" || pathname === "/stacks" || /^\/stacks\/[^/]+$/.test(pathname) && pathname !== "/stacks/new";
+  const allowed = pathname === "/profile" || pathname === "/" || pathname === "/dashboard" || pathname === "/stacks" || /^\/stacks\/[^/]+$/.test(pathname) && pathname !== "/stacks/new";
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   return <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}><ShellEffects /><Sidebar variant="floating" collapsible="icon">
-    <SidebarHeader><NavLink to="/stacks" className="p-3 font-semibold">{t("brand")}</NavLink></SidebarHeader>
-    <SidebarContent><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={pathname.startsWith("/stacks")}><NavLink to="/stacks"><Layers />{t("nav.stacks")}</NavLink></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarContent>
+    <SidebarHeader><NavLink to="/dashboard" className="p-3 font-semibold">{t("brand")}</NavLink></SidebarHeader>
+    <SidebarContent><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={pathname === "/dashboard"}><NavLink to="/dashboard"><LayoutDashboard />{t("nav.dashboard")}</NavLink></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton asChild isActive={pathname.startsWith("/stacks")}><NavLink to="/stacks"><Layers />{t("nav.stacks")}</NavLink></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarContent>
     <SidebarFooter><FreeUserMenu onNavigate={() => {}} /></SidebarFooter>
   </Sidebar><SidebarInset className="min-w-0 bg-transparent"><header className="glass sticky top-0 z-30 flex h-14 items-center border-b px-4"><SidebarTrigger aria-label={t("toggleSidebar")} /></header>
     <main id="main-content" className="min-w-0 p-4 md:p-7"><Suspense fallback={null}>{allowed ? <Outlet /> : <div role="status"><h1 className="text-xl font-semibold">{t("unavailable.title")}</h1><p className="text-sm text-muted-foreground">{t("unavailable.body")}</p></div>}</Suspense></main>

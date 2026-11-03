@@ -79,6 +79,8 @@ configures each kind and tests a draft before saving. Dashboard cards replace th
 development-only cards and show loading, not configured, error, stale and data states.
 Simple users get a reduced dashboard with the configured service widgets and the apps
 widget of their assigned stacks, without infrastructure data or Overseerr actions.
+Their Dashboard navigation entry and landing route lead there; the administrator
+dashboard and its host, update, security, schedule and event reads never mount for them.
 
 The apps widget lists stacks whose Compose metadata names an http or https address
 (`x-arcane: urls`); the first such address opens in a new tab.
