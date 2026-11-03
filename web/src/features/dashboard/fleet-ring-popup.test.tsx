@@ -74,7 +74,7 @@ describe("fleet ring", () => {
     expect(problemItems(items).length).toBe(1);
     expect(items.some((i) => i.kind === "critical")).toBe(true);
     const b = fleetBreakdown([online!, offline!], units());
-    expect([b.running, b.problem, b.unreachable, b.stopped, b.hostsOffline, b.containersUnreachable]).toEqual([1, 1, 2, 0, 1, 2]);
+    expect([b.running, b.unhealthy, b.unreachable, b.stopped, b.hostsOffline, b.containersUnreachable]).toEqual([1, 1, 2, 0, 1, 2]);
   });
 });
 
@@ -95,7 +95,7 @@ describe("fleet units", () => {
     // Two stacks (by name), one Run group with both docker-run containers, one Unraid group.
     expect(units.map((u) => [u.kind, u.name, u.containers.length, u.state])).toEqual([
       ["stack", "api", 2, "unhealthy"],
-      ["stack", "Shop", 2, "partial"],
+      ["stack", "Shop", 2, "running"],
       ["group", "standalone", 2, "running"],
       ["group", "unraid", 1, "running"],
     ]);

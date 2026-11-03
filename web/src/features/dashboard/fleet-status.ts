@@ -1,25 +1,25 @@
 import type { ContainerInfo, ContainerOrigin, Host, Stack, Tone } from "@/domain/model";
-import { containerRuntime, runtimeStatus, RUNTIME_TONE, type RuntimeStatus } from "@/domain/status";
+import { containerRuntime, RUNTIME_TONE, type RuntimeStatus } from "@/domain/status";
+import { hasUpdate } from "@/domain/updates";
 
 import type { AttentionItem, AttentionKind } from "./attention";
 
 /**
- * State of one ring segment. Workloads on a disconnected host are
- * "unreachable": a connectivity problem, drawn red and dashed, never claimed
- * to be unhealthy or stopped. Their last known runtime state stays available.
- * "partial": some containers of a stack or group run, others are stopped.
+ * State of one ring segment in the four colours (#371). Workloads on a
+ * disconnected host are "unreachable": red, pale and dashed, never claimed to be
+ * down or stopped. Their last known runtime state stays available.
  */
-export type FleetState = RuntimeStatus | "unreachable" | "partial";
+export type FleetState = RuntimeStatus | "unreachable";
 
-export const FLEET_TONE: Record<FleetState, Tone> = { ...RUNTIME_TONE, unreachable: "err", partial: "warn" };
+export const FLEET_TONE: Record<FleetState, Tone> = { ...RUNTIME_TONE, unreachable: "err" };
 
 export function fleetState(container: ContainerInfo, host: Host | undefined): FleetState {
   return host?.status === "offline" ? "unreachable" : containerRuntime(container, host);
 }
 
-/** What Docker reported before the host disconnected. */
+/** What Docker and the hub reported before the host disconnected. */
 export function lastKnownState(container: ContainerInfo): RuntimeStatus {
-  return runtimeStatus(container.state, container.health, true);
+  return containerRuntime(container, undefined);
 }
 
 /**
@@ -38,18 +38,41 @@ export interface FleetUnit {
   containers: ContainerInfo[];
   state: FleetState;
   running: number;
+  /** Stopped containers of a unit that is not stopped as a whole: the grey remainder. */
+  stopped: number;
+  /** Some container has an image update (orange inner arc). */
+  update: boolean;
 }
 
-const WORST: readonly RuntimeStatus[] = ["unhealthy", "restarting", "unknown", "starting"];
+const WORST: readonly RuntimeStatus[] = ["down", "unhealthy", "restarting"];
 
-/** Aggregated state: the worst problem wins; a mix of running and stopped is "partial". */
+/** Worst container wins (down, then unhealthy or restarting); grey only when all are stopped. */
 export function unitState(containers: readonly ContainerInfo[], host: Host | undefined): FleetState {
   if (host?.status === "offline") return "unreachable";
   const states = containers.map((c) => containerRuntime(c, host));
   for (const s of WORST) if (states.includes(s)) return s;
-  if (states.every((s) => s === "stopped")) return "stopped";
-  if (states.some((s) => s === "stopped")) return "partial";
-  return "running";
+  if (states.every((s) => s === "unknown")) return "unknown";
+  if (states.every((s) => s === "stopped" || s === "unknown")) return "stopped";
+  return states.includes("running") ? "running" : "starting";
+}
+
+function unit(base: Pick<FleetUnit, "id" | "kind" | "hostId" | "name" | "stackId" | "origin">, list: ContainerInfo[], host: Host): FleetUnit {
+  const state = unitState(list, host);
+  const runtimes = list.map((c) => containerRuntime(c, host));
+  return {
+    ...base,
+    containers: list,
+    state,
+    running: runtimes.filter((s) => s === "running").length,
+    stopped: state === "stopped" || state === "unreachable" ? 0 : runtimes.filter((s) => s === "stopped").length,
+    update: list.some((c) => hasUpdate(c.update)),
+  };
+}
+
+/** Grey share at the end of a partly stopped segment; whole stopped segments are grey already. */
+export function remainderStart(start: number, end: number, unit: FleetUnit): number | undefined {
+  if (!unit.stopped || !unit.containers.length) return undefined;
+  return end - ((end - start) * unit.stopped) / unit.containers.length;
 }
 
 const GROUP_ORDER: readonly Exclude<ContainerOrigin, "compose">[] = ["standalone", "unraid", "unknown"];
@@ -62,22 +85,12 @@ export function fleetUnits(hosts: readonly Host[], stacks: readonly Stack[], con
     const own = containers.filter((c) => c.hostId === host.id);
     const byStack = new Map<string, ContainerInfo[]>();
     for (const c of own) if (c.stackId) byStack.set(c.stackId, [...(byStack.get(c.stackId) ?? []), c]);
-    const stackUnits = [...byStack].map(([stackId, list]): FleetUnit => ({
-      id: `stack:${stackId}`,
-      kind: "stack",
-      hostId: host.id,
-      name: names.get(stackId) ?? stackId,
-      stackId,
-      containers: list,
-      state: unitState(list, host),
-      running: list.filter((c) => containerRuntime(c, host) === "running").length,
-    }));
+    const stackUnits = [...byStack].map(([stackId, list]) => unit({ id: `stack:${stackId}`, kind: "stack", hostId: host.id, name: names.get(stackId) ?? stackId, stackId }, list, host));
     stackUnits.sort((a, b) => a.name.localeCompare(b.name, "de", { numeric: true, sensitivity: "base" }));
     out.push(...stackUnits);
     for (const origin of GROUP_ORDER) {
       const list = own.filter((c) => !c.stackId && c.origin === origin);
-      if (list.length)
-        out.push({ id: `group:${host.id}:${origin}`, kind: "group", hostId: host.id, name: origin, origin, containers: list, state: unitState(list, host), running: list.filter((c) => containerRuntime(c, host) === "running").length });
+      if (list.length) out.push(unit({ id: `group:${host.id}:${origin}`, kind: "group", hostId: host.id, name: origin, origin }, list, host));
     }
   }
   return out;
@@ -86,15 +99,18 @@ export function fleetUnits(hosts: readonly Host[], stacks: readonly Stack[], con
 export interface FleetBreakdown {
   /** Stacks and groups. */
   units: number;
+  /** Running or starting. */
   running: number;
-  partial: number;
-  starting: number;
-  /** Unhealthy or restarting on a connected host. */
-  problem: number;
+  /** Unhealthy or in a restart loop on a connected host. */
+  unhealthy: number;
+  /** Crashed or exited with an error. */
+  down: number;
   stopped: number;
   unknown: number;
   /** Units without current state because their host is disconnected. */
   unreachable: number;
+  /** Units with an image update. */
+  updates: number;
   hostsOffline: number;
   /** Containers behind the units, and how many of them run. */
   containers: number;
@@ -103,18 +119,29 @@ export interface FleetBreakdown {
   containersUnreachable: number;
 }
 
+/** Filter chip of the ring: one of the four colours, or units with updates. */
+export type FleetFilter = "down" | "unhealthy" | "stopped" | "running" | "update";
+
+export function matchesFleetFilter(u: FleetUnit, filter: FleetFilter): boolean {
+  if (filter === "update") return u.update;
+  if (filter === "down") return u.state === "down" || u.state === "unreachable";
+  if (filter === "unhealthy") return u.state === "unhealthy" || u.state === "restarting";
+  if (filter === "stopped") return u.state === "stopped" || u.state === "unknown";
+  return u.state === "running" || u.state === "starting";
+}
+
 export function fleetBreakdown(hosts: Host[], units: readonly FleetUnit[]): FleetBreakdown {
   const byId = new Map(hosts.map((h) => [h.id, h]));
-  const out: FleetBreakdown = { units: units.length, running: 0, partial: 0, starting: 0, problem: 0, stopped: 0, unknown: 0, unreachable: 0, hostsOffline: hosts.filter((h) => h.status === "offline").length, containers: 0, containersRunning: 0, containersUnreachable: 0 };
+  const out: FleetBreakdown = { units: units.length, running: 0, unhealthy: 0, down: 0, stopped: 0, unknown: 0, unreachable: 0, updates: 0, hostsOffline: hosts.filter((h) => h.status === "offline").length, containers: 0, containersRunning: 0, containersUnreachable: 0 };
   for (const u of units) {
     const s = u.state;
-    if (s === "running") out.running++;
-    else if (s === "partial") out.partial++;
-    else if (s === "starting") out.starting++;
-    else if (s === "unhealthy" || s === "restarting") out.problem++;
+    if (s === "running" || s === "starting") out.running++;
+    else if (s === "unhealthy" || s === "restarting") out.unhealthy++;
+    else if (s === "down") out.down++;
     else if (s === "stopped") out.stopped++;
     else if (s === "unreachable") out.unreachable++;
     else out.unknown++;
+    if (u.update) out.updates++;
     out.containers += u.containers.length;
     out.containersRunning += u.running;
     if (byId.get(u.hostId)?.status === "offline") out.containersUnreachable += u.containers.length;

@@ -95,8 +95,7 @@ export const deCommon: typeof enCommon = {
   },
   status: {
     running: "Läuft",
-    partial: "Teilweise",
-    problem: "Problem",
+    down: "Ausgefallen",
     stopped: "Gestoppt",
     busy: "In Arbeit",
     unreachable: "Host getrennt",

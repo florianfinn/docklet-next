@@ -98,8 +98,8 @@ export default function StacksPage() {
   const counts = useMemo(() => {
     const st = stacks.visible.map((s) => stackStatus(s, hosts.byId.get(s.hostId)));
     return {
-      running: st.filter((s) => s === "running" || s === "partial").length,
-      problems: st.filter((s) => s === "problem" || s === "unreachable").length,
+      running: st.filter((s) => s === "running").length,
+      problems: st.filter((s) => s === "down" || s === "unhealthy" || s === "unreachable").length,
       updates: stacks.visible.reduce((n, s) => n + summarizeUpdates(s.services).pending, 0),
     };
   }, [stacks.visible, hosts.byId]);

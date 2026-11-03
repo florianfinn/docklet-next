@@ -133,7 +133,22 @@ export interface PortMapping {
   protocol?: "tcp" | "udp";
 }
 
+/**
+ * Hub-side runtime condition of one container incarnation (see runtime history design).
+ * `containerId` is the inventory id; a condition for another id never applies.
+ */
+export interface RuntimeCondition {
+  containerId: string;
+  condition: "running" | "unhealthy" | "down" | "stopped";
+  reason: string;
+  exitCode?: number;
+  restarts10m?: number;
+  sampledAt: string;
+}
+
 export interface Service {
+  /** Hub condition of this service's container, merged from runtime conditions. */
+  condition?: RuntimeCondition;
   containersRemoved?: boolean;
   containerId?: string;
   name: string;
@@ -290,6 +305,8 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  /** Hub condition of this container, merged from runtime conditions. */
+  condition?: RuntimeCondition;
   imageId?: string;
   inventory?: InventoryObservation;
   restrictions?: { recreate: boolean; reason: string };
