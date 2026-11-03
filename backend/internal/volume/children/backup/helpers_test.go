@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture; M17 owning-host stop intent and inspect boundary.
 
 package backup
 
@@ -28,6 +28,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/project"
+	"github.com/florianfinn/docklet-next/backend/internal/runtimeintent"
 )
 
 func TestResolveBackupStorageMountFromMountsInternal(t *testing.T) {
@@ -198,7 +200,16 @@ func TestBackupMountWarningFromArcaneMountsInternal(t *testing.T) {
 func setupVolumeBackupLifecycleTestInternal(t *testing.T, handler http.Handler) (*Service, *client.Client) {
 	t.Helper()
 
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/containers/") && strings.HasSuffix(r.URL.Path, "/json") && !strings.HasSuffix(r.URL.Path, "/containers/json") {
+			path := strings.TrimSuffix(r.URL.Path, "/json")
+			id := path[strings.LastIndex(path, "/")+1:]
+			w.Header().Set("Content-Type", "application/json")
+			assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"Id": id, "Name": "/" + id, "Config": map[string]any{"Labels": map[string]string{}}}))
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
 	t.Cleanup(server.Close)
 	dockerClient, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.41"))
 	require.NoError(t, err)
@@ -206,11 +217,12 @@ func setupVolumeBackupLifecycleTestInternal(t *testing.T, handler http.Handler) 
 
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&event.Event{}))
+	require.NoError(t, gormDB.AutoMigrate(&event.Event{}, &runtimeintent.Row{}))
 	db := &database.DB{DB: gormDB}
 	dockerService := docker.NewDockerClientService(t.Context(), db, &config.Config{}, nil).WithClient(dockerClient)
 	eventService := event.NewEventService(db, &config.Config{}, nil)
-	containerService := containerdomain.NewContainerService(eventService, dockerService, nil, nil, nil)
+	projects := project.NewProjectService(db, nil, eventService, nil, dockerService, nil, nil, &config.Config{}, nil, nil)
+	containerService := containerdomain.NewContainerService(eventService, dockerService, nil, nil, projects)
 	return NewService(Dependencies{StopContainer: containerService.StopContainer, StartContainer: containerService.StartContainer}), dockerClient
 }
 

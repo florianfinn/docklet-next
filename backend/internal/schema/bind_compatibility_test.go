@@ -2,7 +2,7 @@
 // Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion.
+// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; M17 retains the exact historical fifteen-migration fixture.
 
 package schema
 
@@ -27,13 +27,16 @@ func TestM15DatabaseStoresBindKeysWithoutMigration(t *testing.T) {
 	defer pool.Close()
 	names, err := filepath.Glob("../../resources/migrations/sqlite/*.sql")
 	require.NoError(t, err)
-	require.Len(t, names, 15)
 	fs := fstest.MapFS{}
 	for _, name := range names {
+		if filepath.Base(name) > "015_simple_users.sql" {
+			continue
+		}
 		body, err := os.ReadFile(name)
 		require.NoError(t, err)
 		fs[filepath.Base(name)] = &fstest.MapFile{Data: body}
 	}
+	require.Len(t, fs, 15)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, fs)
 	require.NoError(t, err)
 	_, err = provider.UpTo(t.Context(), 15)

@@ -17,11 +17,11 @@ import (
 )
 
 type bucketRow struct {
-	Kind             string
-	HostID           string
-	EntityKey        string
-	Tier             int
-	BucketStart      int64
+	Kind             string `gorm:"primaryKey"`
+	HostID           string `gorm:"primaryKey;index:idx_history_host"`
+	EntityKey        string `gorm:"primaryKey"`
+	Tier             int    `gorm:"primaryKey;autoIncrement:false"`
+	BucketStart      int64  `gorm:"primaryKey;autoIncrement:false"`
 	LastMinute       int64
 	MinutesRunning   int
 	MinutesUnhealthy int
@@ -45,6 +45,9 @@ type bucketRow struct {
 }
 
 func (bucketRow) TableName() string { return "history_buckets" }
+
+// Models supplies the history-owned shape to the development schema proof.
+func Models() []any { return []any{&bucketRow{}} }
 
 type observation struct {
 	kind, key, identity                                   string

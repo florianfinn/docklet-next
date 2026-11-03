@@ -1,8 +1,8 @@
-// Source: docklet-next/issues/338
-// Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
-// Retrieved: 2026-11-03
-// License: Apache-2.0
-// Deviations: Original sustained-load opt-in preserving existing event defaults.
+// Source: getarcaneapp/arcane/backend/internal/notification/service.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Extract subscription defaults; M17 sustained-load opt-in preserves existing defaults.
 
 package notification
 
