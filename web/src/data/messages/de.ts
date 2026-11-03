@@ -2,6 +2,9 @@ import type { enBackend } from "./en";
 
 export const deBackend: typeof enBackend = {
   errors: {
+    "history": {"sample-too-large": "Die Verlaufsstichprobe überschreitet die Größenbegrenzung.", "sample-invalid": "Der Host hat eine ungültige Verlaufsstichprobe geliefert.", "unavailable": "Der Verlauf ist nicht verfügbar.", "invalid-range": "Wähle einen Verlaufszeitraum von 24h, 7d oder 30d."},
+    "preferences": {"no-user": "Diese Identität hat keine persönlichen Einstellungen.", "unknown-section": "Unbekannter Einstellungsbereich.", "invalid": "Einstellungen müssen ein Objekt enthalten.", "too-large": "Die Einstellungen überschreiten die Größenbegrenzung."},
+
     "feature-disabled": "Diese Funktion ist deaktiviert.",
     "vulnerability": {
       "agent-job-retired": "Dieser lokale Schwachstellenauftrag des Agents wurde eingestellt.",

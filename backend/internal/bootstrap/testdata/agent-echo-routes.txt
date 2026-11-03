@@ -29,6 +29,7 @@ GET /api/environments/:id/containers/:containerId/logs/download
 GET /api/environments/:id/containers/:containerId/processes
 GET /api/environments/:id/containers/counts
 GET /api/environments/:id/diagnostics/actors
+GET /api/environments/:id/history/sample
 GET /api/environments/:id/image-updates/by-refs
 GET /api/environments/:id/image-updates/check
 GET /api/environments/:id/image-updates/check/:imageId

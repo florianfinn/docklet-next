@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/history"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
@@ -64,6 +65,7 @@ var RuntimeOptions = fx.Options(fx.Provide(provideRuntimeInternal))
 var ServiceOptions = fx.Options(
 	fx.Invoke(wireImageSafety),
 	fx.Invoke(wireNotifications),
+	fx.Invoke(wireHistory),
 	RuntimeOptions,
 	fx.Supply(
 		resources.FS,
@@ -89,6 +91,8 @@ var ServiceOptions = fx.Options(
 		build.NewBuildService,
 		container.NewContainerService,
 		dashboard.NewDashboardService,
+		history.NewProducer,
+		history.NewService,
 		network.NewNetworkService,
 		port.NewPortService,
 		system.NewSystemService,
@@ -127,6 +131,7 @@ var ServiceOptions = fx.Options(
 		image.New,
 		container.New,
 		dashboard.New,
+		history.New,
 		system.New,
 		volume.New,
 		updater.New,

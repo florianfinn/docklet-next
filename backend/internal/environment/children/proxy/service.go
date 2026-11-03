@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.; status-first one-shot restart acknowledgement.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.; status-first one-shot restart acknowledgement; M17 runtime history and personal preferences.
 
 // Package proxy owns the transport to remote environment agents: request
 // building, edge tunnel routing, JSON decoding and configuration pushes.
@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	historyDTO "github.com/florianfinn/docklet-next/types/history"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"log/slog"
@@ -180,6 +181,9 @@ func (s *Service) Execute(
 
 	if vulnerability.IsRoute(method, path) {
 		request.ResponseLimit = vulnerability.ResponseLimit
+	}
+	if historyDTO.IsSampleRoute(method, path) {
+		request.ResponseLimit = historyDTO.SampleLimit
 	}
 	resp, err := s.client.Do(ctx, request)
 	if err != nil {

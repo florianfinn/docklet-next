@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Canonical provider wire types; sender aliases retained; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Canonical provider wire types; sender aliases retained; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences.
 
 package notifications
 
@@ -44,6 +44,7 @@ const (
 	NotificationEventBackupFailed       = wire.NotificationEventBackupFailed
 	NotificationEventDeployFailed       = wire.NotificationEventDeployFailed
 	NotificationEventHostOffline        = wire.NotificationEventHostOffline
+	NotificationEventSustainedLoad      = wire.NotificationEventSustainedLoad
 	EmailTLSModeNone                    = wire.TLSModeNone
 	EmailTLSModeStartTLS                = wire.TLSModeStartTLS
 	EmailTLSModeSSL                     = wire.TLSModeSSL

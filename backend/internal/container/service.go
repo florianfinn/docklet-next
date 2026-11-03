@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M17 runtime history and personal preferences.
 
 package container
 
@@ -429,7 +429,18 @@ func (s *ContainerService) StopContainer(ctx context.Context, containerID string
 		action:    "stop",
 		eventType: event.EventTypeContainerStop,
 		runContainerAction: func(dockerClient *client.Client) error {
-			_, err := dockerClient.ContainerStop(ctx, containerID, client.ContainerStopOptions{Timeout: new(30)})
+			before, err := dockerClient.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+			if err != nil {
+				return err
+			}
+			_, err = dockerClient.ContainerStop(ctx, containerID, client.ContainerStopOptions{Timeout: new(30)})
+			if err == nil {
+				composeProject := ""
+				if before.Container.Config != nil {
+					composeProject = before.Container.Config.Labels["com.docker.compose.project"]
+				}
+				return s.projectService.RecordContainerStopIntent(ctx, before.Container.ID, before.Container.Name, composeProject)
+			}
 			return err
 		},
 	})
