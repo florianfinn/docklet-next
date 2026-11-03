@@ -2,13 +2,15 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original Settings › Service widgets gesture tests for issues #332 and #333 (SW7, SW8, SW15).
+// Deviations: Original Settings › Service widgets gesture tests for issues #332 and #333 (SW7, SW8, SW15) and draft retention across failed refreshes.
 
 import { act, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { queryKeys } from "@/data/query-keys";
 import type { ServiceKind, WidgetConfigInput } from "@/domain/service-widgets";
 import { renderRoutes } from "@/test/render";
 
@@ -109,5 +111,40 @@ describe("Settings › Service widgets", () => {
     await waitFor(() => expect(f.saved).toHaveLength(1));
     await act(async () => answers[0]!({ kind: "minecraft", stale: false, ageSeconds: 0, minecraft: { online: 0, max: 10, motd: "", version: "1.21", players: [] } }));
     expect(within(minecraft).queryByText(/Die Verbindung funktioniert/)).toBe(null);
+  });
+
+  it("keeps an unsaved draft and credential through a failed refresh of its configuration", async () => {
+    const f = adapter();
+    let fail = false;
+    const getServiceWidgetConfig = vi.fn(async (kind: ServiceKind) => {
+      if (kind === "overseerr" && fail) throw new Error("config read failed");
+      return f.adapter.getServiceWidgetConfig(kind);
+    });
+    let client!: QueryClient;
+    function Capture() {
+      client = useQueryClient();
+      return null;
+    }
+    renderRoutes([{ path: "/settings/:section", element: <><Capture /><SettingsPage /></> }], ["/settings/serviceWidgets"], { ...f.adapter, getServiceWidgetConfig });
+    const overseerr = await card("overseerr");
+    const address = within(overseerr).getByLabelText("Adresse") as HTMLInputElement;
+    await userEvent.clear(address);
+    await userEvent.type(address, "http://draft.example.com:5055");
+    await userEvent.type(within(overseerr).getByLabelText("API-Schlüssel"), "example-key");
+    fail = true;
+    // Saving another kind refetches every widget configuration; this refetch of Overseerr fails.
+    const minecraft = await card("minecraft");
+    await userEvent.clear(within(minecraft).getByLabelText("Adresse"));
+    await userEvent.type(within(minecraft).getByLabelText("Adresse"), "192.0.2.30:25565");
+    await userEvent.click(within(minecraft).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(client.getQueryState(queryKeys.serviceWidgetConfig("overseerr"))?.status).toBe("error"));
+    expect(!!within(document.body).queryByRole("alert")).toBe(true);
+    const form = () => (document.querySelector('[data-widget-settings="overseerr"]') as HTMLElement | null);
+    expect(form() === null).toBe(false);
+    fail = false;
+    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.serviceWidgetConfig("overseerr") }); });
+    await waitFor(() => expect(client.getQueryState(queryKeys.serviceWidgetConfig("overseerr"))?.status).toBe("success"));
+    expect((within(form()!).getByLabelText("Adresse") as HTMLInputElement).value).toBe("http://draft.example.com:5055");
+    expect((within(form()!).getByLabelText("API-Schlüssel") as HTMLInputElement).value).toBe("example-key");
   });
 });

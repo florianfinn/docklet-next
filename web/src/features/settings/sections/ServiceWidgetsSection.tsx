@@ -170,9 +170,15 @@ function WidgetForm({ kind, config }: { kind: ServiceKind; config: WidgetConfig 
 
 function WidgetSettings({ kind }: { kind: ServiceKind }) {
   const config = useServiceWidgetConfig(kind);
-  if (config.isError) return <QueryError error={config.error} onRetry={() => void config.refetch()} />;
-  if (!config.data) return <Skeleton className="h-96 rounded-2xl" />;
-  return <WidgetForm kind={kind} config={config.data} />;
+  const retry = () => void config.refetch();
+  if (!config.data) return config.isError ? <QueryError error={config.error} onRetry={retry} /> : <Skeleton className="h-96 rounded-2xl" />;
+  // A failed refresh keeps the mounted form and its unsaved draft; the error shows above it.
+  return (
+    <div className="flex flex-col gap-2">
+      {config.isError && <QueryError compact error={config.error} onRetry={retry} />}
+      <WidgetForm kind={kind} config={config.data} />
+    </div>
+  );
 }
 
 /** Administrators configure each widget kind; the hub fetches and never returns a stored credential. */
