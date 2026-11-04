@@ -32,7 +32,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function createHttpHubBackups(baseUrl: string, client: CsrfClient, uploadFactory: () => XMLHttpRequest = () => new XMLHttpRequest()): HubBackupApi {
+export function createHttpHubBackups(baseUrl: string, client: CsrfClient, uploadFactory: () => XMLHttpRequest = () => new XMLHttpRequest(), admit: () => Promise<void> = async () => {}): HubBackupApi {
   async function request(route: string, init?: RequestInit): Promise<unknown> {
     let response: Response;
     try {
@@ -160,6 +160,8 @@ export function createHttpHubBackups(baseUrl: string, client: CsrfClient, upload
       return body as HubBackupOperation;
     },
     async downloadHubBackup(id) {
+      // The browser navigation bypasses fetch, so it takes the session's logout admission itself.
+      await admit();
       const link = document.createElement("a");
       link.href = `${baseUrl}/backups/${encodeURIComponent(id)}/download`;
       link.download = "";

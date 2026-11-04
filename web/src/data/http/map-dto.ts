@@ -92,6 +92,11 @@ function eventTitle(event: Event): MessageCode {
     : { code: "runMessages.codes.notification.delivery-failed-via", params: { provider: via }, sourceText: event.title };
 }
 
+function knownBackupError(error: string): MessageCode | undefined {
+  const key = backupCodeKey(error);
+  return key ? { code: key, params: {} } : undefined;
+}
+
 /** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
 function vulnerabilityError(error: string): MessageCode | undefined {
   return (VULNERABILITY_CODES as readonly string[]).includes(error) ? { code: `images.errors.${error.replaceAll(".", "_")}`, params: {} } : undefined;
@@ -160,8 +165,9 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: kind === "auto-heal" && run.status !== "running" && run.status !== "queued" ? 100 : run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
+    // Known backup codes are translated even when older job rows carry no backup context.
     error: run.error
-      ? (backup ? coded(run.error, "", "error") : vulnerabilityError(run.error))
+      ? (backup ? coded(run.error, "", "error") : knownBackupError(run.error) ?? vulnerabilityError(run.error))
         ?? coded(
           lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") || run.messageCode?.startsWith("container.recreate-") ? run.messageCode : undefined),
           run.error,

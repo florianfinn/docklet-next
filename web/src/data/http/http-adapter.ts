@@ -169,6 +169,8 @@ const IMPLEMENTED = new Set<string>([
   "subscribeMetrics",
 ]);
 const RECONNECT_MS = 250;
+// Public reads of `/auth/...` routes keep their own outcomes after a sign-out.
+const AUTH_READS = new Set(["getAuthConfiguration", "getUiPreferences"]);
 
 export interface HttpAdapterOptions {
   baseUrl?: string;
@@ -205,12 +207,28 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
-  const identityReads = createIdentityReads(options.fetch ?? globalThis.fetch);
+  // The outcome of a running logout (true: signed out), and whether reads stay closed until the next sign-in.
+  let closing: Promise<boolean> | undefined;
+  let signedOut = false;
+  /** The one admission rule for every physical non-auth read and socket handshake: wait while a logout runs, refuse
+   * once it signed out. Requests dispatched earlier keep running. */
+  async function admit(): Promise<void> {
+    if (closing && await closing) throw new CancelledError();
+    if (signedOut) throw new CancelledError();
+  }
+  const network = options.fetch ?? globalThis.fetch;
+  // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.
+  const identityReads = createIdentityReads(async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if ((closing || signedOut) && (method === "GET" || method === "HEAD") && !path.includes("/auth/")) await admit();
+    return network(input, init);
+  });
   const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
   const client = { token: rawClient.token, fetch: (async (input, init) => {
     const version = identityGeneration;
-    const response = await rawClient.fetch(input, init);
     const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
+    const response = await rawClient.fetch(input, init);
     // Auth and activity/runtime consumers already own their authoritative 401 path.
     const ownedRejection = ["/auth/login", "/auth/password", "/auth/me"].some((suffix) => path.endsWith(suffix)) || /\/(activities|runtime-runs)(\/|$)|\/(capabilities|environments)$/.test(path);
     if (version === identityGeneration && response.status === 401 && !ownedRejection) {
@@ -295,6 +313,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!retain) { actions.reset(true); ++lifetimeGeneration; ownedWrites.abort(); ownedWrites = new AbortController(); identityListeners.forEach((notify) => notify()); }
   }
   function invalidateIdentity(change: SessionChange) {
+    if (change === "established" || change === "renewed") signedOut = false;
     if (change === "confirmed" && authenticated) return;
     const retain = change === "renewed" && authenticated;
     suspendIdentity(retain, change !== "lost");
@@ -393,10 +412,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     void pending.finally(() => { if (identityCheck === pending) identityCheck = undefined; }).catch(() => undefined);
     return pending;
   }
-  const metrics = createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost, checkIdentity);
+  const metrics = createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost, checkIdentity, admit);
   const logs = createRuntimeLogs({
     baseUrl, socket: options.webSocket ?? ((url) => new WebSocket(url)), capability: getCapability,
-    authenticated: () => authenticated,
+    authenticated: () => authenticated, admit,
     checkIdentity: async (signal) => {
       const version = identityGeneration;
       const response = await client.fetch(`${baseUrl}/auth/me`, { signal, credentials: "same-origin" });
@@ -407,7 +426,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
-  const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
+  const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, admit, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
@@ -566,7 +585,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function connect(): void {
-    if (!authenticated || source || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || closing || signedOut || source || (!actionListeners.size && !changeListeners.size)) return;
     sourceOpen = false;
     let opened: Source;
     try {
@@ -598,11 +617,20 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function scheduleReconnect(): void {
-    if (!authenticated || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || closing || signedOut || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       connect();
     }, RECONNECT_MS);
+  }
+
+  /** Closes the event stream for a running logout; a failed logout connects again. */
+  function pauseStream(): void {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+    source?.close();
+    source = undefined;
+    sourceOpen = false;
   }
 
   function disconnectIfUnused(): void {
@@ -658,6 +686,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     generation: () => identityGeneration,
     hosts: listHosts,
     changed: backupChanged,
+    admit,
     accepted: (host, id) => {
       refreshHost(host);
       targets.notify(host, id, undefined, true);
@@ -674,9 +703,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   });
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
+  const auth = createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; });
   const adapter: DockletAdapter = {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; }),
+    ...auth,
+    async logout() {
+      // Taken before admission closes: a read still bootstrapping the token may need its retry to finish it.
+      await client.token();
+      let settle!: (out: boolean) => void;
+      closing = new Promise((resolve) => { settle = resolve; });
+      pauseStream();
+      try {
+        await auth.logout();
+      } catch (error) {
+        // A session already lost meanwhile counts as signed out; only a live session reopens its reads.
+        if (authenticated) { closing = undefined; settle(false); connect(); throw error; }
+      }
+      signedOut = true;
+      closing = undefined;
+      settle(true);
+    },
     ...createHttpUsers(baseUrl, client),
     ...createHostCommands(baseUrl, client, requireCapability, () => {
       backups.invalidate();
@@ -701,7 +747,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
     ...createSettingsCore(baseUrl, client),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
-    ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
+    ...createHttpHubBackups(baseUrl, client, options.uploadFactory, admit),
     ...createHttpHistory(baseUrl, client),
     ...createHttpUiPreferences(baseUrl, client, () => ownedWrites.signal),
     ...createHttpServiceWidgets(baseUrl, client),
@@ -840,13 +886,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     active: () => authenticated,
     listen: (notify) => { identityListeners.add(notify); return () => { identityListeners.delete(notify); }; },
   });
+  // Concurrent `listActions` callers share one flight; they also share its converted outcome.
+  const outcomes = new WeakMap<Promise<unknown>, Promise<unknown>>();
+  function sharedOutcome(flight: Promise<unknown>, convert: (error: unknown) => never): Promise<unknown> {
+    let outcome = outcomes.get(flight);
+    if (!outcome) { outcome = flight.catch(convert); outcomes.set(flight, outcome); }
+    return outcome;
+  }
   // Guard public reads and partial publishers in addition to transport bodies.
   return new Proxy(adapter, { get(target, key, receiver) {
     const method: unknown = Reflect.get(target, key, receiver);
-    if (typeof method !== "function" || !/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
+    if (typeof method !== "function") return method;
+    // After a sign-out, a refused non-auth read ends as cancellation whatever error its reader mapped the refusal to.
+    const signedOutCancels = (error: unknown) => { throw signedOut && !AUTH_READS.has(String(key)) ? new CancelledError() : error; };
+    // File and archive reads keep their own lifetimes; only their sign-out outcome is aligned.
+    if (/^(read|browse|download)/.test(String(key))) return (...args: unknown[]) => (method(...args) as Promise<unknown>).catch(signedOutCancels);
+    if (!/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
     return (...args: unknown[]) => {
       // Auth and activities already implement their specialized renewal re-read.
-      if (key === "getCurrentUser" || key === "getAuthMode" || key === "listActions") return method(...args);
+      if (key === "getCurrentUser" || key === "getAuthMode") return method(...args);
+      if (key === "listActions") return sharedOutcome(method(...args) as Promise<unknown>, signedOutCancels);
       const owner = lifetimeGeneration;
       const invoke = async (retryRenewal = true): Promise<unknown> => {
         const version = identityGeneration;
@@ -862,7 +921,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           throw error;
         }
       };
-      return invoke();
+      return invoke().catch(signedOutCancels);
     };
   } });
 }

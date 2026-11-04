@@ -22,6 +22,8 @@ export function createShellSockets(options: {
   fetch: typeof globalThis.fetch;
   capability: (id: string) => Promise<CapabilityDescriptor>;
   authenticated: () => boolean;
+  /** Resolves when a socket handshake may start; rejects once the session signed out. */
+  admit?: () => Promise<void>;
 }) {
   const sessions = new Set<() => void>();
   const open: OpenShell = (id, query, push) => {
@@ -60,6 +62,7 @@ export function createShellSockets(options: {
         if (!["auto", "sh", "bash"].includes(query.shell) || [cols, rows].some((v) => !Number.isInteger(v) || v < 1 || v > 1000)) { exit("container.shell-invalid"); return; }
         if (!options.authenticated()) { exit("authentication.required"); return; }
         const capability = await options.capability(id);
+        await options.admit?.();
         if (!active) return;
         if (!capability.available) { exit(capability.disabledReasonCode ?? "capability.unavailable"); return; }
         const address = shellAddress(options.baseUrl, id, query);
