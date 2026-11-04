@@ -211,10 +211,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     const version = identityGeneration;
     const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    // Reads of a closing session never start, and running ones are cancelled; auth routes stay open.
+    // Non-auth reads wait while a logout runs and are cancelled once it signed out; running reads finish.
     if ((method === "GET" || method === "HEAD") && !path.includes("/auth/")) {
-      if (closing) throw new CancelledError();
-      init = { ...init, signal: init?.signal ? AbortSignal.any([init.signal, sessionReads.signal]) : sessionReads.signal };
+      if (closing && await closing) throw new CancelledError();
+      if (signedOut) throw new CancelledError();
     }
     const response = await rawClient.fetch(input, init);
     // Auth and activity/runtime consumers already own their authoritative 401 path.
@@ -238,9 +238,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let authenticated = true;
   let principal: CurrentUser | undefined;
   let identityGeneration = 0;
-  // Set from the start of a logout until the next sign-in; a failed logout reopens reads.
-  let closing = false;
-  let sessionReads = new AbortController();
+  // The outcome of a running logout (true: signed out), and whether reads stay closed until the next sign-in.
+  let closing: Promise<boolean> | undefined;
+  let signedOut = false;
   let lifetimeGeneration = 0;
   // Aborted when another identity takes over, so a pending or retried owner write never runs as the next user.
   let ownedWrites = new AbortController();
@@ -304,7 +304,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!retain) { actions.reset(true); ++lifetimeGeneration; ownedWrites.abort(); ownedWrites = new AbortController(); identityListeners.forEach((notify) => notify()); }
   }
   function invalidateIdentity(change: SessionChange) {
-    if (change === "established" || change === "renewed") closing = false;
+    if (change === "established" || change === "renewed") signedOut = false;
     if (change === "confirmed" && authenticated) return;
     const retain = change === "renewed" && authenticated;
     suspendIdentity(retain, change !== "lost");
@@ -576,7 +576,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function connect(): void {
-    if (!authenticated || source || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || closing || signedOut || source || (!actionListeners.size && !changeListeners.size)) return;
     sourceOpen = false;
     let opened: Source;
     try {
@@ -608,11 +608,20 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function scheduleReconnect(): void {
-    if (!authenticated || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || closing || signedOut || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       connect();
     }, RECONNECT_MS);
+  }
+
+  /** Closes the event stream for a running logout; a failed logout connects again. */
+  function pauseStream(): void {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+    source?.close();
+    source = undefined;
+    sourceOpen = false;
   }
 
   function disconnectIfUnused(): void {
@@ -689,15 +698,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...methods,
     ...auth,
     async logout() {
-      closing = true;
-      sessionReads.abort();
-      sessionReads = new AbortController();
+      let settle!: (out: boolean) => void;
+      closing = new Promise((resolve) => { settle = resolve; });
+      pauseStream();
       try {
         await auth.logout();
       } catch (error) {
-        closing = false;
-        throw error;
+        // A session already lost meanwhile counts as signed out; only a live session reopens its reads.
+        if (authenticated) { closing = undefined; settle(false); connect(); throw error; }
       }
+      signedOut = true;
+      closing = undefined;
+      settle(true);
     },
     ...createHttpUsers(baseUrl, client),
     ...createHostCommands(baseUrl, client, requireCapability, () => {

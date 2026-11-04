@@ -92,12 +92,12 @@ function eventTitle(event: Event): MessageCode {
     : { code: "runMessages.codes.notification.delivery-failed-via", params: { provider: via }, sourceText: event.title };
 }
 
-/** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
 function knownBackupError(error: string): MessageCode | undefined {
   const key = backupCodeKey(error);
   return key ? { code: key, params: {} } : undefined;
 }
 
+/** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
 function vulnerabilityError(error: string): MessageCode | undefined {
   return (VULNERABILITY_CODES as readonly string[]).includes(error) ? { code: `images.errors.${error.replaceAll(".", "_")}`, params: {} } : undefined;
 }
