@@ -72,7 +72,7 @@ up, and hub-local volume backups follow the hub zone.
      Australia/Lord_Howe maps 02:15 after 02:30), so the search evaluates every `W` from the
      start until 3 h of floating time past the first `W` whose mapped instant is after `t`, and
      returns the **earliest** mapped instant strictly after `t` (equal instants once); robfig's zero
-     time ends the search with zero.
+     time ends the search; the result is zero only if no candidate was found before it.
    So the fold never fires a second time, also after a restart inside the fold.
 3. **Zone in the coordinator record, not in the text.** The coordinator `QueueRecord` gains
    `Zone string` (the IANA name its `NextRun` was computed in). `Checkpoint(jobID, schedule, zone,
