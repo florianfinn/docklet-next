@@ -209,8 +209,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
   const client = { token: rawClient.token, fetch: (async (input, init) => {
     const version = identityGeneration;
-    const response = await rawClient.fetch(input, init);
     const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    // Reads of a closing session never start, and running ones are cancelled; auth routes stay open.
+    if ((method === "GET" || method === "HEAD") && !path.includes("/auth/")) {
+      if (closing) throw new CancelledError();
+      init = { ...init, signal: init?.signal ? AbortSignal.any([init.signal, sessionReads.signal]) : sessionReads.signal };
+    }
+    const response = await rawClient.fetch(input, init);
     // Auth and activity/runtime consumers already own their authoritative 401 path.
     const ownedRejection = ["/auth/login", "/auth/password", "/auth/me"].some((suffix) => path.endsWith(suffix)) || /\/(activities|runtime-runs)(\/|$)|\/(capabilities|environments)$/.test(path);
     if (version === identityGeneration && response.status === 401 && !ownedRejection) {
@@ -232,6 +238,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let authenticated = true;
   let principal: CurrentUser | undefined;
   let identityGeneration = 0;
+  // Set from the start of a logout until the next sign-in; a failed logout reopens reads.
+  let closing = false;
+  let sessionReads = new AbortController();
   let lifetimeGeneration = 0;
   // Aborted when another identity takes over, so a pending or retried owner write never runs as the next user.
   let ownedWrites = new AbortController();
@@ -295,6 +304,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!retain) { actions.reset(true); ++lifetimeGeneration; ownedWrites.abort(); ownedWrites = new AbortController(); identityListeners.forEach((notify) => notify()); }
   }
   function invalidateIdentity(change: SessionChange) {
+    if (change === "established" || change === "renewed") closing = false;
     if (change === "confirmed" && authenticated) return;
     const retain = change === "renewed" && authenticated;
     suspendIdentity(retain, change !== "lost");
@@ -674,9 +684,21 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   });
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
+  const auth = createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; });
   const adapter: DockletAdapter = {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; }),
+    ...auth,
+    async logout() {
+      closing = true;
+      sessionReads.abort();
+      sessionReads = new AbortController();
+      try {
+        await auth.logout();
+      } catch (error) {
+        closing = false;
+        throw error;
+      }
+    },
     ...createHttpUsers(baseUrl, client),
     ...createHostCommands(baseUrl, client, requireCapability, () => {
       backups.invalidate();
