@@ -78,6 +78,98 @@ function conditionTitle(event: Event, meta: Record<string, unknown> | undefined)
   return { code: `runMessages.codes.container.condition.${kind}`, params: { name, exitCode: count(meta?.exitCode), restarts: count(meta?.restarts) }, sourceText: event.title };
 }
 
+// Hub event codes with a catalogued title; the type keeps this list complete against the event codes of the contract.
+type HubEventCode = Exclude<Extract<Event["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment" | "webhook"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
+export const HUB_EVENT_CODES: readonly string[] = Object.keys({
+  "container.start": true,
+  "container.stop": true,
+  "container.restart": true,
+  "container.delete": true,
+  "container.create": true,
+  "container.scan": true,
+  "container.update": true,
+  "container.deploy": true,
+  "container.kill": true,
+  "container.pause": true,
+  "container.unpause": true,
+  "container.die": true,
+  "container.oom": true,
+  "container.rename": true,
+  "container.unhealthy": true,
+  "container.error": true,
+  "image.pull": true,
+  "image.load": true,
+  "image.import": true,
+  "image.tag": true,
+  "image.untag": true,
+  "image.commit": true,
+  "image.delete": true,
+  "image.prune": true,
+  "image.scan": true,
+  "image.vulnerability_scan": true,
+  "image.error": true,
+  "project.deploy": true,
+  "project.delete": true,
+  "project.start": true,
+  "project.stop": true,
+  "project.create": true,
+  "project.update": true,
+  "project.error": true,
+  "volume.create": true,
+  "volume.rename": true,
+  "volume.delete": true,
+  "volume.prune": true,
+  "volume.error": true,
+  "volume.file.create": true,
+  "volume.file.delete": true,
+  "volume.file.upload": true,
+  "volume.file.update": true,
+  "volume.workspace.update": true,
+  "volume.backup.create": true,
+  "volume.backup.delete": true,
+  "volume.backup.restore": true,
+  "volume.backup.restore_files": true,
+  "volume.backup.download": true,
+  "volume.backup.target.key_viewed": true,
+  "network.create": true,
+  "network.delete": true,
+  "network.connect": true,
+  "network.disconnect": true,
+  "network.prune": true,
+  "network.error": true,
+  "system.prune": true,
+  "system.auto_update": true,
+  "system.upgrade": true,
+  "user.login": true,
+  "user.logout": true,
+  "environment.create": true,
+  "environment.connect": true,
+  "environment.disconnect": true,
+  "environment.update": true,
+  "environment.delete": true,
+  "environment.api_key.regenerated": true,
+  "environment.mtls.ca_generated": true,
+  "environment.mtls.cert_issued": true,
+  "environment.mtls.enroll": true,
+  "environment.mtls.download": true,
+  "webhook.create": true,
+  "webhook.update": true,
+  "webhook.delete": true,
+  "webhook.trigger": true,
+} satisfies Record<HubEventCode, true>);
+const EVENT_TITLES = new Set(HUB_EVENT_CODES);
+
+/** Catalogue key of an event title: the wire code with underscores for dots, renamed where it reads like a credential. */
+export const eventTitleKey = (code: string) => (code === "environment.api_key.regenerated" ? "environment_host_key_regenerated" : code.replaceAll(".", "_"));
+
+/** A hub event title from the catalogue, naming its resource or user as data. */
+function hubEventTitle(event: Event): MessageCode | undefined {
+  if (!EVENT_TITLES.has(event.messageCode)) return undefined;
+  const title = { code: `runMessages.events.labels.${eventTitleKey(event.messageCode)}`, params: {} };
+  const name = event.resourceName || (event.messageCode.startsWith("user.") ? event.username : "") || "";
+  return name ? { code: "runMessages.events.named", params: { title, name }, sourceText: event.title } : { ...title, sourceText: event.title };
+}
+
 /** A delivery failure names its channel and typed reason; sender diagnostics never reach the title. */
 function eventTitle(event: Event): MessageCode {
   const meta = event.metadata as Record<string, unknown> | undefined;
@@ -89,7 +181,7 @@ function eventTitle(event: Event): MessageCode {
     const channel = isProvider(provider) ? { code: `settings.notifications.kinds.${provider}`, params: {} } : String(provider ?? event.resourceName ?? "");
     return { code: "runMessages.codes.notification.send", params: { provider: channel }, sourceText: event.title };
   }
-  if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return message(event.messageCode, event.title);
+  if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return hubEventTitle(event) ?? message(event.messageCode, event.title);
   const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
   const reason = meta?.reason;
   return typeof reason === "string" && (DELIVERY_REASONS as readonly string[]).includes(reason)

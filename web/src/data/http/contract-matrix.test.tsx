@@ -237,7 +237,8 @@ describe("#38 adapter contract matrix", () => {
     const demoEvent = (await demo.listEvents()).find((item) => item.id === event.id)!;
     const wireEvent = (await http.listEvents())[0]!;
     expect([wireEvent.id, wireEvent.kind, wireEvent.level, wireEvent.stackId]).toEqual([demoEvent.id, demoEvent.kind, demoEvent.level, demoEvent.stackId ? inventoryId(event.environmentId ?? "0", demoEvent.stackId) : undefined]);
-    expect(wireEvent.title.code).toBe("project.deploy");
+    // Hub event titles render from the catalogue, keyed by their wire code.
+    expect(wireEvent.title.code).toBe("runMessages.events.labels.project_deploy");
   });
 
   it("5 rejects transport and DTO mapping errors without an empty fallback", async () => {
