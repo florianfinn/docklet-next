@@ -5,6 +5,10 @@ policy scheduling and notifications. The hub owns policy, schedule and notificat
 state. Executors retain the existing image update/restore runtime and its safety
 checks. Standalone containers receive observations only.
 
+The [update policy model](update-policy-model.md) (M18) replaces the stack-only modes, the
+master gates and the per-host schedules below; the admission, revalidation and notification
+invariants of this note stay binding.
+
 ## Policy trigger state table
 
 | State / event | Admission and durable result |
