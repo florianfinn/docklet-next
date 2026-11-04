@@ -48,6 +48,8 @@ interface Options {
   hosts: () => Promise<Host[]>;
   changed: () => void;
   accepted: (host: string, activityId: string) => void;
+  /** Resolves when a browser download may start; rejects once the session signed out. */
+  admit?: () => Promise<void>;
 }
 
 export function createBackups(options: Options) {
@@ -298,6 +300,7 @@ export function createBackups(options: Options) {
       // Direct and hub-local archives stream to disk through a browser download; Edge keeps the
       // bounded buffered read with its early size refusal and typed messages.
       if ((await options.hosts()).find((h) => h.id === host)?.connection !== "edge") {
+        await options.admit?.();
         const link = document.createElement("a");
         link.href = `${baseUrl}${route}`;
         link.download = `${name}-${runId}.tar.gz`;

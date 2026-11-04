@@ -686,6 +686,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     generation: () => identityGeneration,
     hosts: listHosts,
     changed: backupChanged,
+    admit,
     accepted: (host, id) => {
       refreshHost(host);
       targets.notify(host, id, undefined, true);
@@ -707,6 +708,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...methods,
     ...auth,
     async logout() {
+      // Taken before admission closes: a read still bootstrapping the token may need its retry to finish it.
+      await client.token();
       let settle!: (out: boolean) => void;
       closing = new Promise((resolve) => { settle = resolve; });
       pauseStream();
@@ -744,7 +747,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
     ...createSettingsCore(baseUrl, client),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
-    ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
+    ...createHttpHubBackups(baseUrl, client, options.uploadFactory, admit),
     ...createHttpHistory(baseUrl, client),
     ...createHttpUiPreferences(baseUrl, client, () => ownedWrites.signal),
     ...createHttpServiceWidgets(baseUrl, client),
@@ -883,15 +886,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     active: () => authenticated,
     listen: (notify) => { identityListeners.add(notify); return () => { identityListeners.delete(notify); }; },
   });
+  // Concurrent `listActions` callers share one flight; they also share its converted outcome.
+  const outcomes = new WeakMap<Promise<unknown>, Promise<unknown>>();
+  function sharedOutcome(flight: Promise<unknown>, convert: (error: unknown) => never): Promise<unknown> {
+    let outcome = outcomes.get(flight);
+    if (!outcome) { outcome = flight.catch(convert); outcomes.set(flight, outcome); }
+    return outcome;
+  }
   // Guard public reads and partial publishers in addition to transport bodies.
   return new Proxy(adapter, { get(target, key, receiver) {
     const method: unknown = Reflect.get(target, key, receiver);
-    if (typeof method !== "function" || !/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
+    if (typeof method !== "function") return method;
+    // After a sign-out, a refused non-auth read ends as cancellation whatever error its reader mapped the refusal to.
+    const signedOutCancels = (error: unknown) => { throw signedOut && !AUTH_READS.has(String(key)) ? new CancelledError() : error; };
+    // File and archive reads keep their own lifetimes; only their sign-out outcome is aligned.
+    if (/^(read|browse|download)/.test(String(key))) return (...args: unknown[]) => (method(...args) as Promise<unknown>).catch(signedOutCancels);
+    if (!/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
     return (...args: unknown[]) => {
       // Auth and activities already implement their specialized renewal re-read.
-      if (key === "getCurrentUser" || key === "getAuthMode" || key === "listActions") return method(...args);
-      // After a sign-out, a refused non-auth read ends as cancellation whatever error its reader mapped the refusal to.
-      const signedOutCancels = (error: unknown) => { throw signedOut && !AUTH_READS.has(String(key)) ? new CancelledError() : error; };
+      if (key === "getCurrentUser" || key === "getAuthMode") return method(...args);
+      if (key === "listActions") return sharedOutcome(method(...args) as Promise<unknown>, signedOutCancels);
       const owner = lifetimeGeneration;
       const invoke = async (retryRenewal = true): Promise<unknown> => {
         const version = identityGeneration;

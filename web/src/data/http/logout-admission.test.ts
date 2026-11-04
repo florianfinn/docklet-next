@@ -2,7 +2,7 @@
 // Revision: ac06d647bfce487c7a04398db744de24a4dd3de3
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original tests of the logout admission at physical retries, socket handshakes and public read errors (M17 acceptance M17-A2, review M17-AR3/AR4/AR5).
+// Deviations: Original tests of the logout admission at physical retries, socket handshakes, browser downloads and public read errors (M17 acceptance M17-A2, review M17-AR3 to AR7).
 
 import { CancelledError } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
@@ -17,7 +17,8 @@ const settle = async () => { for (let i = 0; i < 100; i++) await Promise.resolve
 const infrastructure = (f: ReturnType<typeof sessionFixture>) => f.calls.filter((c) => !c.path.includes("/auth/")).length;
 const failure = () => new Response(JSON.stringify({ code: "http.error" }), { status: 500 });
 const widget = { kind: "plex", stale: false, ageSeconds: 0, plex: { streams: 1, transcodes: 0, sessions: [] } };
-afterEach(() => { vi.useRealTimers(); });
+const cancelled = (read: Promise<unknown>) => read.then(() => "resolved", (error: unknown) => error instanceof CancelledError ? "cancelled" : "failed");
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 function retryFixture() {
   const logout = deferred<Response>(), reached = deferred<void>();
@@ -183,4 +184,95 @@ it("signs out when a read is still bootstrapping the CSRF token as the logout st
   expect(await Promise.race([out, settle().then(() => "stuck")])).toBe("out");
   // Its later requests start during the logout, so the read ends with the session instead of waiting forever.
   expect(await read).toBe("ended");
+});
+
+it("finishes a logout whose start meets a token bootstrap read that needs its transport retry", async () => {
+  const reached = deferred<void>();
+  let reject!: (error: unknown) => void;
+  let reads = 0;
+  const f = sessionFixture((url) => {
+    if (!url.pathname.endsWith("/history/capacity")) return undefined;
+    if (++reads > 1) return envelope([]);
+    reached.resolve();
+    return new Promise<Response>((_resolve, fail) => { reject = fail; });
+  });
+  const reading = f.adapter.getCapacity().catch(() => undefined);
+  await reached.promise;
+  let outcome = "pending";
+  const logout = f.adapter.logout().then(() => { outcome = "out"; }, () => { outcome = "failed"; });
+  reject(new TypeError("Example connection reset"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(outcome).toBe("out");
+  await logout;
+  await reading;
+});
+
+it("ends file, archive and activity reads during and after a sign-out as cancellation", async () => {
+  const logout = deferred<Response>();
+  const f = sessionFixture((url) => (url.pathname.endsWith("/auth/logout") ? logout.promise : undefined));
+  await f.adapter.getCurrentUser();
+  const pending = f.adapter.logout();
+  await settle();
+  const reads = () => [
+    f.adapter.readFile("0~example", "/a.txt"), f.adapter.downloadFile!("0~example", "/a.txt"),
+    f.adapter.readProjectFile!("0~example", "/a.txt"), f.adapter.downloadProjectFile!("0~example", "/a.txt"),
+    f.adapter.browseBackup("0~example", "example-run"), f.adapter.downloadBackup("0~example", "example-run"),
+  ].map(cancelled);
+  const held = reads();
+  await settle();
+  logout.resolve(envelope({}));
+  await pending;
+  expect(await Promise.all(held)).toEqual(Array(6).fill("cancelled"));
+  expect(await Promise.all(reads())).toEqual(Array(6).fill("cancelled"));
+  const first = f.adapter.listActions(), second = f.adapter.listActions();
+  expect(first === second).toBe(true);
+  expect(await Promise.all([cancelled(first), cancelled(second)])).toEqual(["cancelled", "cancelled"]);
+  expect(infrastructure(f)).toBe(0);
+});
+
+it("starts no volume archive download whose capability read completes during a logout", async () => {
+  const capability = deferred<Response>(), reached = deferred<void>(), logout = deferred<Response>();
+  const f = sessionFixture((url) => {
+    if (url.pathname.endsWith("/auth/logout")) return logout.promise;
+    if (url.pathname.endsWith("/capabilities") && url.searchParams.get("kind") === "volume") { reached.resolve(); return capability.promise; }
+  });
+  await f.adapter.getCurrentUser();
+  await f.adapter.listHosts();
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const download = cancelled(f.adapter.downloadBackup("0~example", "example-run"));
+  await reached.promise;
+  const pending = f.adapter.logout();
+  await settle();
+  capability.resolve(envelope([{ operationId: "downloadBackup", resourceRef: { kind: "volume", id: "0~example" }, available: true }]));
+  await settle();
+  expect(click.mock.calls.length).toBe(0);
+  logout.resolve(envelope({}));
+  await pending;
+  expect(await download).toBe("cancelled");
+  expect(click.mock.calls.length).toBe(0);
+});
+
+it("holds a hub archive download during a logout and starts it only when the logout failed", async () => {
+  const outcomes = [deferred<Response>(), deferred<Response>()];
+  let logouts = 0;
+  const f = sessionFixture((url) => (url.pathname.endsWith("/auth/logout") ? outcomes[logouts++]!.promise : undefined));
+  await f.adapter.getCurrentUser();
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const failing = f.adapter.logout().catch(() => undefined);
+  await settle();
+  const held = cancelled(f.adapter.downloadHubBackup("example-backup"));
+  await settle();
+  expect(click.mock.calls.length).toBe(0);
+  outcomes[0]!.resolve(failure());
+  await failing;
+  expect(await held).toBe("resolved");
+  expect(click.mock.calls.length).toBe(1);
+  const succeeding = f.adapter.logout();
+  await settle();
+  const refused = cancelled(f.adapter.downloadHubBackup("example-backup"));
+  outcomes[1]!.resolve(envelope({}));
+  await succeeding;
+  expect(await refused).toBe("cancelled");
+  expect(await cancelled(f.adapter.downloadHubBackup("example-backup"))).toBe("cancelled");
+  expect(click.mock.calls.length).toBe(1);
 });
