@@ -32,7 +32,7 @@ export function mapHostMetrics(value: unknown, hostId: string, previous?: HostMe
     cpuHistory: [...previous?.cpuHistory ?? [], cpu].slice(-60), memHistory: [...previous?.memHistory ?? [], mem].slice(-60), inventory: { stale: false, observedAt: new Date().toISOString() } };
 }
 
-export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, listHosts: () => Promise<Host[]>, requireCapability: (op: string) => Promise<void>, socketFactory: (url: string) => MetricsSocket, onState: (hostId: string, state: InventoryObservation) => void, checkIdentity: () => Promise<boolean> = async () => true) {
+export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, listHosts: () => Promise<Host[]>, requireCapability: (op: string) => Promise<void>, socketFactory: (url: string) => MetricsSocket, onState: (hostId: string, state: InventoryObservation) => void, checkIdentity: () => Promise<boolean> = async () => true, admit: () => Promise<void> = async () => {}) {
   const retained: Record<string, HostMetrics> = {};
   const containers: MetricsSnapshot["containers"] = {};
   const listeners = new Set<(snapshot: MetricsSnapshot) => void>();
@@ -55,6 +55,8 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
       await requireCapability("subscribeMetrics");
       if (current !== generation || !authenticated) return;
       const hosts = await listHosts();
+      // Socket handshakes below follow the session's logout admission; nothing is awaited between it and them.
+      await admit();
       if (current !== generation) return;
       const ids = new Set(hosts.map((h) => h.id));
       for (const id of Object.keys(retained)) if (!ids.has(id)) delete retained[id];

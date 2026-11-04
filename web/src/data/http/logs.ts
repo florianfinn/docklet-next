@@ -18,6 +18,8 @@ interface Options {
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
   authenticated: () => boolean;
   checkIdentity: (signal: AbortSignal) => Promise<boolean>;
+  /** Resolves when a socket handshake may start; rejects once the session signed out. */
+  admit?: () => Promise<void>;
 }
 interface Channel {
   address: ReturnType<typeof logAddress>;
@@ -116,6 +118,8 @@ export function createRuntimeLogs(options: Options) {
     let capability: CapabilityDescriptor;
     try { capability = await options.capability(ch.kind === "stack" ? "subscribeLogs" : "subscribeContainerLogs", { kind: ch.kind, id: ch.id }); }
     catch { if (current(ch, epoch)) state(ch, "unavailable"); return; }
+    // A sign-out resets every channel; nothing is awaited between admission and the handshake.
+    try { await options.admit?.(); } catch { return; }
     if (!current(ch, epoch) || !options.authenticated()) return;
     if (!capability.available) { state(ch, "unavailable"); return; }
     ch.attempt = ++attempt;
