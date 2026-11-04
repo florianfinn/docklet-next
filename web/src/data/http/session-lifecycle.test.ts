@@ -68,7 +68,8 @@ it("aborts a pending read and ignores its response even when fetch ignores Abort
   f.state.blocked = deferred<Response>();
   const pending = f.adapter.listHosts().catch((error: unknown) => error); await settle();
   const signal = f.calls.find(({ path }) => path.endsWith("/environments"))!.init.signal!;
-  await f.adapter.logout(); expect(signal.aborted).toBe(true);
+  // The logout waits up to its drain bound for this unanswered read, then ends the session.
+  const out = f.adapter.logout(); await vi.advanceTimersByTimeAsync(5_000); await out; expect(signal.aborted).toBe(true);
   await f.adapter.login("operator", "example-password");
   f.state.blocked.resolve(envelope([{ id: "old-identity" }])); f.state.blocked = undefined;
   expect(await pending).toMatchObject({ message: "CancelledError" });

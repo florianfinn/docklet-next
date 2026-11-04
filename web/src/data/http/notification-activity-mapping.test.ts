@@ -2,7 +2,7 @@
 // Revision: 693beb34e4f331cd918c2183f07b2f935a8620e7
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original delivery failure event and Auto Heal activity mapping tests from the hub producer shapes.
+// Deviations: Original delivery event and Auto Heal activity mapping tests from the hub producer shapes.
 
 import { expect, it, vi } from "vitest";
 
@@ -28,6 +28,20 @@ it.each([
     const meta = { eventType: "deploy_failed", notificationId: "n", provider: "ntfy", status: "failed" };
     expect(renderEvent(mapEvent(failure({ ...meta, reason: "delivery-unreachable" })), locale).title).toBe(withReason);
     expect(renderEvent(mapEvent(failure({ ...meta, reason: "raw sender diagnostic" })), locale).title).toBe(withoutReason);
+    expect(errors).not.toHaveBeenCalled();
+  } finally { errors.mockRestore(); }
+});
+
+// Shape of a persisted hub delivery event (notification service producer), as retained in the M17 acceptance.
+const sent = { ...failure({ eventType: "deploy_failed", notificationId: "n", provider: "gotify", status: "success" }), type: "notification.send", messageCode: "notification.send", severity: "success", title: "Notification sent via gotify", description: "deploy_failed", resourceName: "gotify" } as unknown as Event;
+
+it.each([
+  ["de", "Benachrichtigung über Gotify gesendet"],
+  ["en-US", "Notification sent via Gotify"],
+] as const)("renders a sent notification with its channel in %s", (locale, title) => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(renderEvent(mapEvent(sent), locale).title).toBe(title);
     expect(errors).not.toHaveBeenCalled();
   } finally { errors.mockRestore(); }
 });

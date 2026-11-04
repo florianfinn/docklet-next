@@ -169,6 +169,8 @@ const IMPLEMENTED = new Set<string>([
   "subscribeMetrics",
 ]);
 const RECONNECT_MS = 250;
+// Longest wait of a logout for answers to reads sent before it.
+const LOGOUT_DRAIN_MS = 5_000;
 // Public reads of `/auth/...` routes keep their own outcomes after a sign-out.
 const AUTH_READS = new Set(["getAuthConfiguration", "getUiPreferences"]);
 
@@ -217,12 +219,21 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (signedOut) throw new CancelledError();
   }
   const network = options.fetch ?? globalThis.fetch;
+  // Admitted reads still waiting for their answer; a logout lets them land before the session ends.
+  const answering = new Set<Promise<void>>();
   // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.
   const identityReads = createIdentityReads(async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    if ((closing || signedOut) && (method === "GET" || method === "HEAD") && !path.includes("/auth/")) await admit();
-    return network(input, init);
+    const read = (method === "GET" || method === "HEAD") && !path.includes("/auth/");
+    if (read && (closing || signedOut)) await admit();
+    const answer = network(input, init);
+    if (read) {
+      const landed = answer.then(() => undefined, () => undefined);
+      answering.add(landed);
+      void landed.then(() => answering.delete(landed));
+    }
+    return answer;
   });
   const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
   const client = { token: rawClient.token, fetch: (async (input, init) => {
@@ -713,6 +724,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       let settle!: (out: boolean) => void;
       closing = new Promise((resolve) => { settle = resolve; });
       pauseStream();
+      // The hub answers reads still in flight with 401 once the session is gone, so they land first (bounded).
+      let drained: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([Promise.all([...answering]), new Promise((resolve) => { drained = setTimeout(resolve, LOGOUT_DRAIN_MS); })]);
+      clearTimeout(drained);
       try {
         await auth.logout();
       } catch (error) {

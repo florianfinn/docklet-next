@@ -2,7 +2,7 @@
 // Revision: ac06d647bfce487c7a04398db744de24a4dd3de3
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original tests of the logout admission at physical retries, socket handshakes, browser downloads and public read errors (M17 acceptance M17-A2, review M17-AR3 to AR7).
+// Deviations: Original tests of the logout admission at physical retries, socket handshakes, browser downloads and public read errors (M17 acceptance M17-A2 and its rerun drain, review M17-AR3 to AR7).
 
 import { CancelledError } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
@@ -275,4 +275,41 @@ it("holds a hub archive download during a logout and starts it only when the log
   expect(await refused).toBe("cancelled");
   expect(await cancelled(f.adapter.downloadHubBackup("example-backup"))).toBe("cancelled");
   expect(click.mock.calls.length).toBe(1);
+});
+
+it("lets reads sent before a logout receive their answers before the logout request", async () => {
+  const held = deferred<Response>(), reached = deferred<void>();
+  const f = sessionFixture((url) => {
+    if (url.pathname.endsWith("/service-widgets/plex")) { reached.resolve(); return held.promise; }
+  });
+  await f.adapter.getCurrentUser();
+  const read = f.adapter.getServiceWidget("plex");
+  await reached.promise;
+  const pending = f.adapter.logout();
+  await settle();
+  const logouts = () => f.calls.filter((c) => c.path.endsWith("/auth/logout")).length;
+  expect(logouts()).toBe(0);
+  held.resolve(new Response(JSON.stringify(widget)));
+  expect((await read).kind).toBe("plex");
+  await pending;
+  expect(logouts()).toBe(1);
+});
+
+it("sends the logout after a bounded wait for a read that does not answer", async () => {
+  vi.useFakeTimers();
+  const reached = deferred<void>();
+  const f = sessionFixture((url) => {
+    if (url.pathname.endsWith("/service-widgets/plex")) { reached.resolve(); return new Promise<Response>(() => {}); }
+  });
+  await f.adapter.getCurrentUser();
+  void f.adapter.getServiceWidget("plex").catch(() => undefined);
+  await reached.promise;
+  const pending = f.adapter.logout();
+  const logouts = () => f.calls.filter((c) => c.path.endsWith("/auth/logout")).length;
+  await vi.advanceTimersByTimeAsync(4_900);
+  expect(logouts()).toBe(0);
+  await vi.advanceTimersByTimeAsync(200);
+  await settle();
+  expect(logouts()).toBe(1);
+  await pending;
 });
