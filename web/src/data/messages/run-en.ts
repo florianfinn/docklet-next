@@ -267,6 +267,7 @@ export const enRunMessages = {
       "interrupted": "Auto Heal attempt interrupted",
     },
     notification: {
+      "send": "Notification sent via {provider}",
       "delivery-failed": "Notification delivery failed",
       "delivery-failed-via": "Notification via {provider} failed",
       "delivery-failed-reason": "Notification via {provider} failed: {reason}",

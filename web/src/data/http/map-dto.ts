@@ -84,6 +84,11 @@ function eventTitle(event: Event): MessageCode {
   const condition = conditionTitle(event, meta);
   if (condition) return condition;
   const provider = meta?.provider;
+  // A sent notification names its channel; the hub's English title is only the fallback.
+  if (event.messageCode === "notification.send") {
+    const channel = isProvider(provider) ? { code: `settings.notifications.kinds.${provider}`, params: {} } : String(provider ?? event.resourceName ?? "");
+    return { code: "runMessages.codes.notification.send", params: { provider: channel }, sourceText: event.title };
+  }
   if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return message(event.messageCode, event.title);
   const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
   const reason = meta?.reason;
