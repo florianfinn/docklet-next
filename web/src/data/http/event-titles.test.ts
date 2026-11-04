@@ -61,8 +61,15 @@ it.each([
   ["system.upgrade", "System upgrade completed", { resourceName: undefined }, "Systemaktualisierung abgeschlossen", "System upgrade completed"],
   ["webhook.trigger", "Webhook trigger failed: Example hook", { severity: "error", resourceName: "Example hook" }, "Webhook-Auslösung fehlgeschlagen: Example hook", "Webhook trigger failed: Example hook"],
   ["webhook.trigger", "Webhook triggered: Example hook", { severity: "success", resourceName: "Example hook" }, "Webhook ausgelöst: Example hook", "Webhook triggered: Example hook"],
-  ["volume.prune", "Volume prune: bulk_prune", { resourceName: "bulk_prune" }, "Volumes bereinigt", "Volumes pruned"],
-  ["network.delete", "Network deleted: bulk_prune", { resourceName: "bulk_prune" }, "Netzwerk gelöscht", "Network deleted"],
+  ["volume.prune", "Volume prune: bulk_prune", { resourceId: "", resourceName: "bulk_prune" }, "Volumes bereinigt", "Volumes pruned"],
+  ["network.delete", "Network deleted: bulk_prune", { resourceId: "", resourceName: "bulk_prune", metadata: { action: "prune" } }, "Netzwerk gelöscht", "Network deleted"],
+  ["image.prune", "Docker image prune: prune", { resourceId: "", resourceName: "prune" }, "Images bereinigt", "Images pruned"],
+  // Real resources and users with these names keep them.
+  ["volume.delete", "Volume deleted: prune", { resourceId: "prune", resourceName: "prune" }, "Volume gelöscht: prune", "Volume deleted: prune"],
+  ["network.delete", "Network deleted: bulk_prune", { resourceId: "net-1", resourceName: "bulk_prune" }, "Netzwerk gelöscht: bulk_prune", "Network deleted: bulk_prune"],
+  ["user.login", "User logged in: prune", { resourceName: undefined, username: "prune" }, "Benutzer angemeldet: prune", "User signed in: prune"],
+  ["container.start", "Container started: auto_updater", { resourceName: "auto_updater" }, "Container gestartet: auto_updater", "Container started: auto_updater"],
+  ["system.auto_update", "Auto-update: constructor", { resourceName: "auto_updater", metadata: { phase: "constructor" } }, "Automatische Aktualisierung", "Automatic update"],
 ] as const)("keeps the producer's phase or outcome for %s: %s", (code, title, extra, de, en) => {
   const mapped = mapEvent(event(code, title, extra));
   expect([renderEvent(mapped, "de").title, renderEvent(mapped, "en-US").title]).toEqual([de, en]);

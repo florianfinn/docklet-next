@@ -162,31 +162,32 @@ const EVENT_TITLES = new Set(HUB_EVENT_CODES);
 /** Catalogue key of an event title: the wire code with underscores for dots, renamed where it reads like a credential. */
 export const eventTitleKey = (code: string) => (code === "environment.api_key.regenerated" ? "environment_host_key_regenerated" : code.replaceAll(".", "_"));
 
-// Resource names some producers write as markers rather than names.
-const GENERATED_NAMES = new Set(["auto_updater", "bulk_prune", "prune"]);
+// Bulk prunes record a marker instead of a resource: no resource id, a prune code or action, and one of these names.
+const PRUNE_MARKERS = new Set(["bulk_prune", "prune"]);
 // Phases of an automatic update run, which share one event code; each names its own target from the metadata.
-const AUTO_UPDATE_PHASES: Record<string, { key: string; name: string[] }> = {
-  start: { key: "start", name: [] }, complete: { key: "complete", name: [] },
-  image: { key: "image_pull", name: ["imageNew", "imageOld"] }, image_pull: { key: "image_pull", name: ["imageNew", "imageOld"] },
-  image_prune: { key: "image_prune", name: ["imageId"] },
-  container: { key: "container", name: ["resourceName", "container", "containerId"] }, project: { key: "project", name: ["projectName", "projectId"] },
-};
+const AUTO_UPDATE_PHASES = new Map<string, { key: string; name: string[] }>([
+  ["start", { key: "start", name: [] }], ["complete", { key: "complete", name: [] }],
+  ["image", { key: "image_pull", name: ["imageNew", "imageOld"] }], ["image_pull", { key: "image_pull", name: ["imageNew", "imageOld"] }],
+  ["image_prune", { key: "image_prune", name: ["imageId"] }],
+  ["container", { key: "container", name: ["resourceName", "container", "containerId"] }], ["project", { key: "project", name: ["projectName", "projectId"] }],
+]);
 /** Variant keys of codes whose producers tell phase or outcome apart by metadata or severity. */
-export const EVENT_TITLE_VARIANTS = [...new Set(Object.values(AUTO_UPDATE_PHASES).map(({ key }) => `system_auto_update_${key}`))].concat("system_upgrade_failed", "system_upgrade_partial", "webhook_trigger_failed");
+export const EVENT_TITLE_VARIANTS = [...new Set([...AUTO_UPDATE_PHASES.values()].map(({ key }) => `system_auto_update_${key}`))].concat("system_upgrade_failed", "system_upgrade_partial", "webhook_trigger_failed");
 
 /** Catalogue key and named target of an event, keeping the phase and outcome its producer recorded. */
 function eventLabel(event: Event): { key: string; name: string } {
   const meta = (event.metadata ?? {}) as Record<string, unknown>;
   const text = (value: unknown) => (typeof value === "string" ? value : "");
   if (event.messageCode === "system.auto_update") {
-    const phase = AUTO_UPDATE_PHASES[text(meta.phase)];
+    const phase = AUTO_UPDATE_PHASES.get(text(meta.phase));
     return phase ? { key: `system_auto_update_${phase.key}`, name: phase.name.map((field) => text(meta[field])).find(Boolean) ?? "" } : { key: "system_auto_update", name: "" };
   }
   const key = eventTitleKey(event.messageCode);
   const outcome = event.severity === "error" && (event.messageCode === "system.upgrade" || event.messageCode === "webhook.trigger") ? "_failed"
     : event.severity === "warning" && event.messageCode === "system.upgrade" ? "_partial" : "";
   const name = event.resourceName || (event.messageCode.startsWith("user.") ? event.username : "") || "";
-  return { key: key + outcome, name: GENERATED_NAMES.has(name) ? "" : name };
+  const marker = !event.resourceId && PRUNE_MARKERS.has(name) && (event.messageCode.endsWith(".prune") || meta.action === "prune");
+  return { key: key + outcome, name: marker ? "" : name };
 }
 
 /** A hub event title from the catalogue, naming its resource or user as data. */
