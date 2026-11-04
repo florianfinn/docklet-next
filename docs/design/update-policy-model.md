@@ -145,7 +145,8 @@ stays as accepted.
   target has been absent for 7 days (`missing_since` column set on the first complete read without
   the target, cleared when it reappears). A recreate's temporary rename never reaches 7 days; a
   partial or failed read never sets or advances `missing_since`. Scheduled rows are never pruned
-  automatically; the settings table shows them as "target missing" with a remove action.
+  automatically; the settings table shows them as "target missing" with a remove action. Remove sets the
+  policy to `check`; the row then follows the check-mode pruning rule.
 - Late observations commit conditionally: `UPDATE … WHERE id = ? AND registration_id = ? AND
   revision = ?`; a row is created only inside a transaction that sees the environment row. So a
   slow check cannot resurrect a deleted environment's rows or overwrite a newer policy.
