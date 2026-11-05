@@ -100,7 +100,8 @@ lifecycle in [images and updates](images-updates.md).
 
 1. `LifecycleRequest.services []string` (optional; empty = whole stack), frozen in the intent.
    Preflight validates every name against the current model (`update.invalid-target`, 400) and
-   checks only the selected services.
+   decides only on the selected services; the observation refresh may cover the whole stack, and an
+   unselected service's failed observation never blocks the update.
 2. **Shared source.** The version rewrite is per service (`lifecycle_inputs.go:201-212`), so other
    services with the same literal reference are not changed. If the selected service's image field
    is a YAML alias/anchor shared with another service, the update is refused with
