@@ -31,7 +31,7 @@ import (
 // same reference is a rebuild that keeps it. A rebuild cannot move a tag that an
 // unselected service also runs.
 func TestServiceScopeNativeCandidateAndLiteralRewrite(t *testing.T) {
-	for _, mode := range []string{"tag-policy", "rebuild", "rebuild-shared"} {
+	for _, mode := range []string{"tag-policy", "rebuild", "rebuild-shared", "rebuild-alias"} {
 		t.Run(mode, func(t *testing.T) { serviceScopeNativeCandidate(t, mode) })
 	}
 }
@@ -42,6 +42,9 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "http://")
 	oldRef, newRef := host+"/app:1.0.0", host+"/app:1.1.0"
+	if mode == "rebuild-alias" {
+		oldRef = host + "/app:latest"
+	}
 	image, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64"})
 	require.NoError(t, err)
 	tag, err := name.NewTag(newRef, name.Insecure)
@@ -49,8 +52,11 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 	require.NoError(t, remote.Write(tag, image, remote.WithContext(t.Context())))
 	labels := "    labels:\n      com.getarcaneapp.arcane.updater.strategy: tag\n"
 	sideRef := oldRef
-	if mode == "rebuild" {
+	switch mode {
+	case "rebuild":
 		sideRef = host + "/side:1.0.0"
+	case "rebuild-alias":
+		sideRef = host + "/app" // the same tag, spelled with the implied latest
 	}
 	if mode != "tag-policy" {
 		labels = ""
@@ -79,7 +85,7 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 		}}, nil
 	})
 	intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: current.SavedRevision, Services: []string{"app"}})
-	if mode == "rebuild-shared" {
+	if mode == "rebuild-shared" || mode == "rebuild-alias" {
 		lifecycleCode(t, err, "update.service-coupled")
 		assertNoServiceAdmission(t, f)
 		return

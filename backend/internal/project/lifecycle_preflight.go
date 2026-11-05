@@ -182,7 +182,7 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		// A rebuild moves the shared tag; an unselected service on the same
 		// reference would run an image its reference no longer names.
 		for other, peer := range current.Services {
-			if kind == "rebuild" && other != key && peer.Reference == img.Reference && !lifecycleServiceSelected(request.Services, other) {
+			if kind == "rebuild" && other != key && equalLifecycleReference(peer.Reference, img.Reference) && !lifecycleServiceSelected(request.Services, other) {
 				return nil, lifecycleFailure("update.service-coupled")
 			}
 		}
