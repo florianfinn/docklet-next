@@ -8,7 +8,7 @@ import { useCapability } from "@/data/use-capability";
 import { useActionRuns } from "@/data/live";
 import { useScanAction } from "./use-scan-action";
 import { ScanProgress } from "./ScanProgress";
-import { useSecurity, useStacks } from "@/data/queries";
+import { useContainers, useSecurity, useStacks } from "@/data/queries";
 import { isHostVisible } from "@/domain/hosts";
 import { useMotionEnabled } from "@/shared/theme/use-design-tokens";
 import { NAV_TAB, NAV_TABS_LIST } from "@/shared/components/nav-tabs";
@@ -60,6 +60,7 @@ export default function SecurityPage() {
   const enableCapability = useCapability("setScanEnabled");
   const security = useSecurity();
   const stacks = useStacks();
+  const containers = useContainers();
   const hosts = useHostScope();
   const animate = useMotionEnabled();
   const runs = useActionRuns();
@@ -145,7 +146,7 @@ export default function SecurityPage() {
             <FindingsTab findings={data.findings} hosts={hosts.byId} highlight={highlight} />
           </TabsContent>
           <TabsContent value="images">
-            <ImagesTab images={data.images} stacks={stacks.data ?? []} hosts={hosts.byId} />
+            <ImagesTab images={data.images} stacks={stacks.data ?? []} hosts={hosts.byId} containers={containers.data} />
           </TabsContent>
         </Tabs>
       )}

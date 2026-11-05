@@ -12,6 +12,7 @@ import { useContainers } from "@/data/queries";
 import { formatTime } from "@/domain/format";
 import type { ContainerInfo, Host } from "@/domain/model";
 import { containerRuntime, RUNTIME_TONE } from "@/domain/status";
+import { ContainerScanCoverage } from "./ContainerScanCoverage";
 import { imageHref } from "@/features/images/image-links";
 import { HostChip } from "@/shared/components/host-chip";
 import { ContainerMemory } from "@/shared/components/container-memory";
@@ -190,6 +191,7 @@ function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | un
           </CardHeader>
           <CardContent className="flex flex-col gap-3 px-4">
             <ContainerFacts c={c} host={host} />
+            <ContainerScanCoverage c={c} />
             <p className="text-xs text-muted-foreground">{ti("envMasked")}</p>
           </CardContent>
         </Card>

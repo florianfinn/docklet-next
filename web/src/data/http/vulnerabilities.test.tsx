@@ -115,7 +115,7 @@ it.each([390, 1280])("keeps the scan controls and findings usable at %s px with 
   expect(screen.getAllByText("23.00%")).toHaveLength(2);
   expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
   expect(screen.getByRole("button", { name: "Scan now" }) !== null).toBe(true);
-  expect(screen.getByRole("table", { name: "Vulnerabilities" }).parentElement?.className).toContain("overflow-x-auto");
+  expect(screen.getByRole("table", { name: "Vulnerabilities" }).parentElement?.getAttribute("data-slot")).toBe("security-fit");
   act(() => happy.happyDOM.setViewport({ width: 1280, height: 800 }));
 });
 

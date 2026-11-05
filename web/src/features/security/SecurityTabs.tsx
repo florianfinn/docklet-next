@@ -4,7 +4,7 @@ import { useTranslations } from "use-intl";
 
 import { formatRelative } from "@/domain/format";
 import { COLLATOR } from "@/domain/hosts";
-import type { Finding, Host, ScannedImage, ScanRun, Severity, Stack } from "@/domain/model";
+import type { ContainerInfo, Finding, Host, ScannedImage, ScanRun, Severity, Stack } from "@/domain/model";
 import { StatStrip } from "@/shared/component-set/stat-strip";
 import { HostChip } from "@/shared/components/host-chip";
 import { ToneBadge } from "@/shared/components/tone";
@@ -12,6 +12,7 @@ import { activeFilters, applyColumnFilters, type ColumnFilter, type FilterValues
 import type { SortState } from "@/shared/lib/table-sort";
 
 import { SecurityTable } from "./SecurityTable";
+import { imageCoverage } from "./platform-coverage";
 import { FINDING_GROUPS, IMAGE_GROUPS } from "./security-layout";
 
 import { RiskGauge, SevDot, ShareBar, TrendChart } from "./OverviewCharts";
@@ -205,7 +206,7 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
   );
 }
 
-export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stacks" | "hosts">) {
+export function ImagesTab({ images, stacks, hosts, containers = [] }: Pick<Data, "images" | "stacks" | "hosts"> & { containers?: readonly ContainerInfo[] }) {
   const t = useTranslations("security");
   const tf = useTranslations("common.columnFilters");
   const [values, setValues] = useState<FilterValues>({});
@@ -241,15 +242,18 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
   return (
     <SecurityTable
       label={t("tabs.images")}
-      fitKey={JSON.stringify([images, stacks.map((s) => s.name), [...hosts.values()].map((h) => h.name)])}
+      fitKey={JSON.stringify([images, stacks.map((s) => s.name), [...hosts.values()].map((h) => h.name), containers.map((c) => [c.name, c.imagePlatform])])}
       condensed={IMAGE_GROUPS}
       rows={rows.map((im) => {
         const stack = stacks.find((s) => s.id === im.stackId);
+        const coverage = imageCoverage(im, containers);
         return {
           id: `${im.hostId}:${im.id ?? im.ref}`,
           color: worst(im),
           cells: {
-            image: <><div className="font-mono">{im.ref}</div>{im.platform && <div className="text-muted-foreground" title={t("notCovered")}>{t("scannedPlatform", { platform: im.platform })}</div>}</>,
+            image: <><div className="font-mono">{im.ref}</div>{im.platform && <div className="text-muted-foreground" title={t("notCovered")}>{t("scannedPlatform", { platform: im.platform })}</div>}
+              {coverage["not-covered"].length > 0 && <div className="text-warning">{t("coverage.notCovered", { names: coverage["not-covered"].join(", ") })}</div>}
+              {coverage.unknown.length > 0 && <div className="text-muted-foreground">{t("coverage.unknown", { names: coverage.unknown.join(", ") })}</div>}</>,
             stack: stack ? <Link to={`/stacks/${stack.id}`} className="text-primary-text hover:underline">{stack.name}</Link> : "–",
             host: <HostChip host={hosts.get(im.hostId)} />,
             usage: t(`usage.${im.usage}`),

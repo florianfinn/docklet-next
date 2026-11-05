@@ -63,6 +63,7 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   return {
     redeployDisabled: row.redeployDisabled === true,
     imageId: row.imageId ? inventoryId(hostId, row.imageId) : undefined,
+    imagePlatform: row.imagePlatform || "unknown",
     id: inventoryId(hostId, row.id), name: row.names[0].replace(/^\//, ""), hostId,
     ...(owner && origin === "compose" ? { stackId: inventoryId(hostId, owner.id), stackName: owner.name } : {}),
     ...(service ? { serviceName: service } : {}), origin, originSource, image,

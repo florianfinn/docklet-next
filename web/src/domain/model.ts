@@ -313,6 +313,8 @@ export interface ContainerInfo {
   /** Hub condition of this container, merged from runtime conditions. */
   condition?: RuntimeCondition;
   imageId?: string;
+  /** Manifest platform the daemon reports for this container's image; "unknown" when it reports none. */
+  imagePlatform?: string;
   inventory?: InventoryObservation;
   restrictions?: { recreate: boolean; reason: string };
   id: string;
