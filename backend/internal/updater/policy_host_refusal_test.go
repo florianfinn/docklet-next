@@ -27,7 +27,7 @@ func (refusalResolver) ResolveRuntimeTarget(_ context.Context, target activity.R
 
 func TestImagePolicyChildPersistsRestartRefusal(t *testing.T) {
 	f := newPolicyFixture(t)
-	one := f.save(t, "example-stack", "apply")
+	one := f.save(t, "example-stack", "scheduled")
 	service := activity.NewRuntimeService(activity.NewActivityService(f.db, nil), refusalResolver{})
 	generation, err := service.InitializeGeneration(t.Context())
 	require.NoError(t, err)

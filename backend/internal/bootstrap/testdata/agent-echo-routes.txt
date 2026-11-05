@@ -72,10 +72,10 @@ GET /api/environments/:id/system/docker/info
 GET /api/environments/:id/system/upgrade/check
 GET /api/environments/:id/updater/:kind/:targetId/restore-points
 GET /api/environments/:id/updater/history
+GET /api/environments/:id/updater/policies
 GET /api/environments/:id/updater/policies/:kind/:targetId
 GET /api/environments/:id/updater/projects/:projectId/baseline
 GET /api/environments/:id/updater/restore-points
-GET /api/environments/:id/updater/schedules
 GET /api/environments/:id/updater/status
 GET /api/environments/:id/updater/system-image-hints
 GET /api/environments/:id/uploads/:kind/:uploadId
@@ -130,6 +130,7 @@ POST /api/environments/:id/containers/:containerId/commit
 POST /api/environments/:id/containers/:containerId/edit
 POST /api/environments/:id/containers/:containerId/kill
 POST /api/environments/:id/containers/:containerId/pause
+POST /api/environments/:id/containers/:containerId/previous-image/restore
 POST /api/environments/:id/containers/:containerId/recreate
 POST /api/environments/:id/containers/:containerId/redeploy
 POST /api/environments/:id/containers/:containerId/restart
@@ -197,6 +198,7 @@ POST /api/environments/:id/vulnerabilities/scan
 POST /api/environments/:id/vulnerabilities/unignore/bulk
 POST /api/settings/search
 POST /api/system/agent/restart
+POST /api/updater/check-all
 PUT /api/environments/:id/auto-heal
 PUT /api/environments/:id/containers/:containerId/auto-update
 PUT /api/environments/:id/job-schedules
@@ -204,7 +206,6 @@ PUT /api/environments/:id/projects/:projectId
 PUT /api/environments/:id/projects/:projectId/workspace
 PUT /api/environments/:id/settings
 PUT /api/environments/:id/updater/policies/:kind/:targetId
-PUT /api/environments/:id/updater/schedules
 PUT /api/environments/:id/uploads/:kind/:uploadId/chunks/:index
 PUT /api/environments/:id/volumes/:volumeName/backup-policy
 PUT /api/environments/:id/volumes/:volumeName/workspace

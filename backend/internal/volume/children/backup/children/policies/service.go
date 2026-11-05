@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; single owning-host policy, target selection and scheduler-produced next-run metadata; M12 backup foundation; stable codes instead of diagnostics on policy failures, including the scheduled activity and target progress.
+// Deviations: Local module namespace; single owning-host policy, target selection and scheduler-produced next-run metadata; M12 backup foundation; stable codes instead of diagnostics on policy failures, including the scheduled activity and target progress; M18 live scheduling, policy and contract foundation.
 
 package policies
 
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/danielgtaylor/huma/v2"
+	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	backupdto "github.com/florianfinn/docklet-next/types/backup"
 	"log/slog"
 	"strings"
@@ -38,6 +39,7 @@ const defaultSchedule = "0 0 2 * * *"
 type Dependencies struct {
 	ValidateTarget func(context.Context, string) error
 	DB             *database.DB
+	ZoneProvider   scheduleutil.ZoneProvider
 	Location       *time.Location
 	Activity       *activity.ActivityService
 	AlreadyRunning error
@@ -95,6 +97,9 @@ func (s *Service) GetBackupPolicies(ctx context.Context, volumeName string) (*vo
 		return nil, err
 	}
 	location := s.deps.Location
+	if s.deps.ZoneProvider != nil {
+		location = s.deps.ZoneProvider.Location()
+	}
 	if location == nil {
 		location = time.UTC
 	}

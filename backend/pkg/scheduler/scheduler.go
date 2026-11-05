@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package scheduler
 
@@ -21,7 +21,6 @@ import (
 )
 
 var (
-	cronScheduleParser             = scheduleutil.Parser()
 	errJobSchedulerStoppedInternal = errors.New("job scheduler stopped")
 )
 
@@ -37,10 +36,11 @@ type jobSchedulerInternal struct {
 	supervisors map[string]*watcherSupervisorInternal
 	context     context.Context
 	cancel      context.CancelFunc
-	location    *time.Location
+	zones       scheduleutil.ZoneProvider
 	coordinator *runs.Coordinator
 	stopping    bool
 	started     bool
+	now         func() time.Time
 }
 
 func NewJobScheduler(ctx context.Context, coordinator *runs.Coordinator, location *time.Location) (st.JobScheduler, error) {
@@ -54,7 +54,7 @@ func NewJobScheduler(ctx context.Context, coordinator *runs.Coordinator, locatio
 	return &jobSchedulerInternal{
 			context:     lifetime,
 			cancel:      cancel,
-			location:    location,
+			zones:       scheduleutil.FixedZone(location),
 			coordinator: coordinator,
 			jobsByID:    map[string]st.Job{},
 			watchers:    map[string]st.BusWatcher{},
@@ -151,7 +151,7 @@ func (js *jobSchedulerInternal) StartScheduler(ctx context.Context) error {
 		_, watching := js.watchers[record.JobID]
 		js.mu.RUnlock()
 		if record.EnvironmentID == "0" && record.Schedule != "" && !js.HasJob(record.JobID) && !watching {
-			if checkpointErr := js.coordinator.Checkpoint(ctx, record.JobID, "", time.Time{}); checkpointErr != nil {
+			if checkpointErr := js.coordinator.Checkpoint(ctx, record.JobID, "", js.GetLocation().String(), time.Time{}); checkpointErr != nil {
 				return checkpointErr
 			}
 		}
@@ -167,32 +167,40 @@ func (js *jobSchedulerInternal) StartScheduler(ctx context.Context) error {
 
 func (js *jobSchedulerInternal) installInternal(ctx context.Context, job st.Job) error {
 	next := time.Time{}
+	location := js.GetLocation()
 	schedule := job.Schedule(ctx)
 	should := true
 	if conditional, ok := job.(st.ConditionalJob); ok {
 		should = conditional.ShouldSchedule(ctx)
 	}
 	if should {
-		parsed, err := cronScheduleParser.Parse(schedule)
+		parsed, err := scheduleutil.Parse(schedule, location)
 		if err != nil {
 			return err
 		}
-		next = parsed.Next(time.Now().In(js.location))
+		now := time.Now()
+		if js.now != nil {
+			now = js.now()
+		}
+		next = parsed.Next(now)
 	}
 	if !should {
 		schedule = ""
 	}
-	return js.coordinator.Checkpoint(ctx, job.Name(), schedule, next)
+	return js.coordinator.Checkpoint(ctx, job.Name(), schedule, location.String(), next)
 }
 
 func (js *jobSchedulerInternal) AddJob(ctx context.Context, job st.Job) error {
-	if err := js.RegisterJob(job); err != nil {
-		return err
+	if job == nil {
+		return errors.New("scheduler job unavailable")
 	}
-	js.mu.RLock()
-	started := js.started
-	js.mu.RUnlock()
-	if !started {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	if js.stopping {
+		return errJobSchedulerStoppedInternal
+	}
+	js.jobsByID[job.Name()] = job
+	if !js.started {
 		return nil
 	}
 	return js.installInternal(ctx, job)
@@ -204,16 +212,34 @@ func (js *jobSchedulerInternal) RescheduleJob(ctx context.Context, job st.Job) e
 
 func (js *jobSchedulerInternal) RemoveJob(ctx context.Context, id string) {
 	js.mu.Lock()
+	defer js.mu.Unlock()
 	delete(js.jobsByID, id)
 	started := js.started
-	js.mu.Unlock()
 	if started {
-		if err := js.coordinator.Checkpoint(ctx, id, "", time.Time{}); err != nil {
+		if err := js.coordinator.Checkpoint(ctx, id, "", js.GetLocation().String(), time.Time{}); err != nil {
 			slog.ErrorContext(ctx, "Unschedule failed", "job", id, "error", err)
 		}
 	}
 }
-func (js *jobSchedulerInternal) GetLocation() *time.Location { return js.location }
+func (js *jobSchedulerInternal) GetLocation() *time.Location { return js.zones.Location() }
+
+func (js *jobSchedulerInternal) SetZoneProvider(provider scheduleutil.ZoneProvider) {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	js.zones = provider
+}
+
+// Reinstall moves future occurrences together; queued and running work retains
+// its existing ownership and is never caught up because of a zone change.
+func (js *jobSchedulerInternal) Reinstall(ctx context.Context) error {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	var err error
+	for _, job := range js.jobsByID {
+		err = errors.Join(err, js.installInternal(ctx, job))
+	}
+	return err
+}
 func (js *jobSchedulerInternal) Stop(ctx context.Context) error {
 	js.mu.Lock()
 	js.stopping = true

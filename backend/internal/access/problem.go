@@ -9,6 +9,7 @@ package access
 import (
 	"encoding/json"
 	"github.com/danielgtaylor/huma/v2"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/user"
 )
 
@@ -16,6 +17,11 @@ func Problem(status int, code string) *user.AccessProblem {
 	return &user.AccessProblem{Code: user.AccessCode(code), Status: status, Detail: code}
 }
 func WriteProblem(ctx huma.Context, status int, code string) error {
+	if code == string(UpdatePermissionDenied) {
+		ctx.SetHeader("Content-Type", "application/json")
+		ctx.SetStatus(status)
+		return json.NewEncoder(ctx.BodyWriter()).Encode(imageDTO.Failure(code, status))
+	}
 	ctx.SetHeader("Content-Type", "application/problem+json")
 	ctx.SetStatus(status)
 	return json.NewEncoder(ctx.BodyWriter()).Encode(Problem(status, code))

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
 
 package project
 
@@ -84,7 +84,7 @@ func setupProjectTestDB(t *testing.T) *database.DB {
 	t.Helper()
 	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Project{}, &ProjectTag{}, &settings.SettingVariable{}, &imageupdate.ImageUpdateRecord{}, &event.Event{}))
+	require.NoError(t, db.AutoMigrate(append(projectPolicyFixtureModels(), &Project{}, &ProjectTag{}, &settings.SettingVariable{}, &imageupdate.ImageUpdateRecord{}, &event.Event{})...))
 	return &database.DB{DB: db}
 }
 

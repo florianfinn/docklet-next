@@ -92,7 +92,9 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		return volume.BackupOverview{}, err
 	}
 	result := volume.BackupOverview{TimeZone: "UTC", Volumes: []volume.BackupVolumeOverview{}, Targets: []volume.UsableBackupTarget{{ID: "local", Name: "Local", Kind: "local"}}, Repository: volume.BackupRepositorySummary{Mode: "volume", Available: true}}
-	if s.deps.Location != nil {
+	if s.deps.ZoneProvider != nil {
+		result.TimeZone = s.deps.ZoneProvider.Location().String()
+	} else if s.deps.Location != nil {
 		result.TimeZone = s.deps.Location.String()
 	}
 	settings := map[string]string{}

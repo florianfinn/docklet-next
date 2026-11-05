@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; preserve scheduled network-prune removal semantics; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; preserve scheduled network-prune removal semantics; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package prune
 
@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
+	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -32,7 +33,6 @@ import (
 	"log/slog"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +42,7 @@ import (
 type Service struct {
 	imageGuard         *guard.Service
 	location           *time.Location
+	zones              scheduleutil.ZoneProvider
 	dockerClient       func(ctx context.Context) (*client.Client, error)
 	activityService    *activity.ActivityService
 	imageUpdateService *imageupdate.ImageUpdateService
@@ -50,6 +51,8 @@ type Service struct {
 	pruneMu            sync.Mutex
 	runningPrunes      map[string]string
 }
+
+func (s *Service) SetZoneProvider(provider scheduleutil.ZoneProvider) { s.zones = provider }
 
 func NewService(
 	location *time.Location,
@@ -702,26 +705,6 @@ func pruneSelectedReferencesInternal(resources []pruneResourceInternal, usage cl
 		}
 	}
 	return selectedContainers, imageRefs, volumeRefs
-}
-
-func (s *Service) pruneCutoffInternal(raw string) (time.Time, error) {
-	now := time.Now()
-	location := s.location
-	if location == nil {
-		location = time.UTC
-	}
-	if duration, err := time.ParseDuration(raw); err == nil && duration >= 0 {
-		return now.Add(-duration), nil
-	}
-	for _, format := range []string{time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02"} {
-		if value, err := time.ParseInLocation(format, raw, location); err == nil {
-			return value, nil
-		}
-	}
-	if seconds, err := strconv.ParseFloat(raw, 64); err == nil {
-		return time.Unix(int64(seconds), int64((seconds-float64(int64(seconds)))*1e9)), nil
-	}
-	return time.Time{}, fmt.Errorf("unsupported prune cutoff %q", raw)
 }
 
 func (s *Service) removePruneResourceInternal(ctx context.Context, dockerClient *client.Client, resource pruneResourceInternal) error {

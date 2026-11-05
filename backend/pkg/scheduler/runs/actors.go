@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only local persistence.
+// Deviations: Local module namespace; SQLite-only local persistence; M18 live scheduling, policy and contract foundation.
 
 package runs
 
@@ -19,7 +19,6 @@ import (
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/host/local"
-	"github.com/robfig/cron/v3"
 	kit "go.getarcane.app/kit/pkg"
 
 	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
@@ -278,16 +277,17 @@ func (a *coordinatorActorInternal) Alarm(ctx context.Context, name string, data 
 	if occurrence.Generation != record.Generation || occurrence.Sequence != record.Sequence {
 		return nil
 	}
-	now := time.Now().UTC()
-	schedule, err := scheduleutil.Parser().Parse(record.Schedule)
+	now := a.q.clock().UTC()
+	loc, err := time.LoadLocation(record.Zone)
 	if err != nil {
 		return err
 	}
-	if spec, ok := schedule.(*cron.SpecSchedule); ok {
-		spec.Location = a.q.location
+	schedule, err := scheduleutil.Parse(record.Schedule, loc)
+	if err != nil {
+		return err
 	}
 	trigger := "scheduled"
-	nextOccurrence := schedule.Next(record.NextRun.In(a.q.location))
+	nextOccurrence := schedule.Next(record.NextRun)
 	if !nextOccurrence.After(now) {
 		trigger = "recovery"
 	}
@@ -317,7 +317,7 @@ func (a *coordinatorActorInternal) Alarm(ctx context.Context, name string, data 
 		markActivitySyncInternal(&state, run)
 	}
 	record.LastEnqueuedAt = now
-	record.NextRun = schedule.Next(now.In(a.q.location))
+	record.NextRun = schedule.Next(now)
 	record.Sequence++
 	state.Revision++
 	if setStateErr := a.saveStateInternal(ctx, state); setStateErr != nil {

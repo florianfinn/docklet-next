@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M18 live scheduling, policy and contract foundation.
 
 package runs
 
@@ -34,7 +34,7 @@ func (e occurrenceEnvelopeInternal) Decode(value any) error {
 func TestAlarmIgnoresStaleGeneration(t *testing.T) {
 	q := newResolutionQueueInternal(t)
 	next := time.Now().UTC().Add(time.Hour)
-	require.NoError(t, q.Checkpoint(t.Context(), "schedule", "0 * * * * *", next))
+	require.NoError(t, q.Checkpoint(t.Context(), "schedule", "0 * * * * *", "UTC", next))
 	before, err := q.ScheduleState(t.Context(), "schedule")
 	require.NoError(t, err)
 	q.enabled.Store(true)
@@ -150,7 +150,7 @@ func TestCapacityGroupsReserveHealthSlots(t *testing.T) {
 
 func TestReconciliationRepairsMissingAlarm(t *testing.T) {
 	q := newResolutionQueueInternal(t)
-	require.NoError(t, q.Checkpoint(t.Context(), "repair", "0 * * * * *", time.Now().UTC().Add(time.Hour)))
+	require.NoError(t, q.Checkpoint(t.Context(), "repair", "0 * * * * *", "UTC", time.Now().UTC().Add(time.Hour)))
 	q.enabled.Store(true)
 	defer q.enabled.Store(false)
 	record, err := q.ScheduleState(t.Context(), "repair")

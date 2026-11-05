@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 // Package updater owns automatic container and project updates: deciding what
 // is out of date, applying the update, and the HTTP surface that drives it.
@@ -10,13 +10,9 @@ package updater
 
 import (
 	"net/http"
-	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 	runtimeActivity "github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/types/activity"
-	"github.com/florianfinn/docklet-next/types/base"
-	"github.com/florianfinn/docklet-next/types/updater"
 
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -102,19 +98,6 @@ func RegisterUpdater(api huma.API, updaterService *UpdaterService, appCtx handle
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermImageUpdatesRead, h.GetUpdaterHistory)
 
-	acceptedSchema := huma.SchemaFromType(api.OpenAPI().Components.Schemas, reflect.TypeFor[base.ApiResponse[activity.Activity]]())
-	completedSchema := huma.SchemaFromType(api.OpenAPI().Components.Schemas, reflect.TypeFor[base.ApiResponse[*updater.Result]]())
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "update-container",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/containers/{containerId}/update",
-		Summary:     "Update a single container",
-		Description: "Pull the latest image and apply the appropriate update strategy for a specific container",
-		Tags:        []string{"Updater", "Containers"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-		Responses: map[string]*huma.Response{
-			"200": {Description: "Container update completed", Content: map[string]*huma.MediaType{"application/json": {Schema: completedSchema}}},
-			"202": {Description: "Container update accepted", Content: map[string]*huma.MediaType{"application/json": {Schema: acceptedSchema}}},
-		},
-	}, authz.PermImageUpdatesCheck, h.updateContainerInternal)
+	runtimeActivity.RegisterRuntimeLifecycle(api, activities, runtimeActivity.RuntimeUpdateContainer, huma.Operation{OperationID: "update-container", Method: http.MethodPost, Path: "/environments/{id}/containers/{containerId}/update", Tags: []string{"Updater", "Containers"}, Security: handlerutil.DefaultOperationSecurity()})
+	runtimeActivity.RegisterRuntimeLifecycle(api, activities, runtimeActivity.RuntimeRestoreContainerImage, huma.Operation{OperationID: "restore-container-image", Method: http.MethodPost, Path: "/environments/{id}/containers/{containerId}/previous-image/restore", Tags: []string{"Updater", "Containers"}, Security: handlerutil.DefaultOperationSecurity()})
 }

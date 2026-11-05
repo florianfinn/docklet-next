@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.; M15 resource authorization and isolated transport helpers; M17 empty history deletion fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.; M15 resource authorization and isolated transport helpers; M17 empty history deletion fixture; M18 live scheduling, policy and contract foundation.
 
 package environment
 
@@ -21,6 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
+	policyModels "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
@@ -107,7 +108,7 @@ func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
 	db, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&access.Assignment{},
+	require.NoError(t, db.AutoMigrate(&policyModels.Policy{}, &policyModels.Child{}, &policyModels.Candidate{}, &policyModels.Notice{}, &access.Assignment{},
 		&Environment{},
 		&registry.ContainerRegistry{},
 		&settings.SettingVariable{},

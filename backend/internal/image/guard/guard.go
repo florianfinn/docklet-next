@@ -99,7 +99,7 @@ func (s *Service) Reasons(ctx context.Context, id string) ([]imageDTO.Protection
 
 // Protect/Release require the caller's image lease; they never infer settlement.
 func (s *Service) Protect(ctx context.Context, p Protection) error {
-	if p.ImageID == "" || p.OwnerID == "" || (p.Reason != "restore-point" && p.Reason != "active-update" && p.Reason != "system") {
+	if p.ImageID == "" || p.OwnerID == "" || (p.Reason != "restore-point" && p.Reason != "active-update" && p.Reason != "system" && p.Reason != "container-previous") {
 		return imageDTO.Failure("image.invalid-reference", 400)
 	}
 	if s.DB == nil {

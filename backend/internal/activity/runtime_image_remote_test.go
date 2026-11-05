@@ -249,7 +249,7 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		router := echo.New()
 		api := runtimeImageAPI(router)
 		updater.RegisterUpdater(api, owner, handlerutil.NewActivityAppContext(t.Context()))
-		req := httptest.NewRequest(http.MethodGet, "/environments/0/updater/policies/project/"+target.ID, http.NoBody)
+		req := httptest.NewRequest(http.MethodGet, "/environments/0/updater/policies/stack/"+target.ID, http.NoBody)
 		req = req.WithContext(context.WithValue(req.Context(), middleware.ContextKeyUserPermissions, &authz.PermissionSet{Sudo: true}))
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, req)
@@ -271,7 +271,9 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 			store := policy.Store{DB: f.db.DB}
 			one, err := store.Policy(t.Context(), command.Store.EnvironmentID, command.Store.RegistrationID, target.ID)
 			require.NoError(t, err)
-			one.Mode, one.ActorID, one.TargetIdentity = "apply", command.Actor.ID, intent.TargetIdentity
+			require.NoError(t, f.db.Exec("INSERT OR IGNORE INTO environments(id,name,api_url,enabled) VALUES(?,?,?,1)", command.Store.EnvironmentID, "Remote", "https://agent.example.com").Error)
+			one.Mode, one.ActorID, one.TargetIdentity = "scheduled", command.Actor.ID, intent.TargetIdentity
+			one.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
 			require.NoError(t, store.SavePolicy(t.Context(), one, 0))
 			one.Revision = 1
 			child, fresh, err := store.PrepareChild(t.Context(), one, "example-policy-job")
@@ -283,7 +285,7 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		admitted, err := f.hub.Admit(t.Context(), command)
 		require.NoError(t, err)
 		if intent.Policy != nil {
-			require.NoError(t, f.db.Model(&policy.Policy{}).Where("id = ?", intent.Policy.PolicyID).Updates(map[string]any{"mode": "off", "revision": 2}).Error)
+			require.NoError(t, f.db.Model(&policy.Policy{}).Where("id = ?", intent.Policy.PolicyID).Updates(map[string]any{"mode": "check", "window_kind": nil, "window_day": nil, "window_time": nil, "revision": 2}).Error)
 		}
 		ref := activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID}
 		_, err = f.control.Start(t.Context(), ref, command.Options)

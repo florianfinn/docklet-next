@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package volume
 
@@ -33,7 +33,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 )
 
 type VolumeService struct {
@@ -111,12 +110,7 @@ func NewVolumeService(
 		Exec:             service.execInContainerInternal,
 		BackupVolumeName: backupVolumeName,
 		EncryptionKey:    encryptionKey,
-		Location: func() *time.Location {
-			if cfg != nil {
-				return cfg.GetLocation()
-			}
-			return time.UTC
-		}(),
+		ZoneProvider:     cfg,
 	}
 	if containerService != nil {
 		backupDeps.StopContainer, backupDeps.StartContainer = containerService.StopContainer, containerService.StartContainer

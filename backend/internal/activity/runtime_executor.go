@@ -142,6 +142,8 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 	ctx = updaterDTO.WithExecutionIdentity(ctx, updaterDTO.ExecutionIdentity{RunID: command.ProposedRunID, RegistrationID: command.Store.RegistrationID})
 	ctx = context.WithValue(ctx, dockertypes.ProgressWriterKey{}, output)
 	switch command.Operation {
+	case RuntimeUpdateContainer, RuntimeRestoreContainerImage:
+		return unavailableContainerImage(ctx, command)
 	case RuntimeUpdateProject, RuntimeRestoreProject:
 		port, ok := a.projects.(runtimeImageLifecyclePort)
 		if !ok {

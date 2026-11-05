@@ -238,6 +238,7 @@ func runtimeActivityTypeInternal(operation, target string) (activitytypes.Type, 
 			"redeploy-project": activitytypes.TypeProjectRedeploy, "update-project": activitytypes.TypeProjectUpdate, "restore-project": activitytypes.TypeProjectRestore}[operation]
 	} else if target == "container" {
 		kind = map[string]activitytypes.Type{"start-container": activitytypes.TypeContainerStart,
+			"update-container": activitytypes.TypeContainerRedeploy, "restore-container-image": activitytypes.TypeContainerRedeploy,
 			"recreate-container": activitytypes.TypeContainerEdit, "redeploy-container": activitytypes.TypeContainerRedeploy, "stop-container": activitytypes.TypeContainerStop, "restart-container": activitytypes.TypeContainerRestart}[operation]
 	}
 	return kind, kind != ""

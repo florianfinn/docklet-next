@@ -8,6 +8,13 @@ import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "agent_unavailable": deBackend.errors.agent.unavailable,
+  "container_origin-locked": "Docklet verwaltet keine Updates für diesen Container.",
+  "container_recreate-ambiguous": "Der Ersatzcontainer konnte nicht eindeutig ermittelt werden.",
+  "container_recreate-recovered": "Der Ersatzcontainer wurde wiederhergestellt.",
+  "deploy_point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen.",
+  "settings_invalid-time-zone": "Wähle eine gültige Zeitzone.",
+  "update_service-coupled": "Dieser Dienst muss zusammen mit seinem Stack aktualisiert werden.",
   "history_invalid-range": deBackend.errors.history["invalid-range"],
   "history_sample-invalid": deBackend.errors.history["sample-invalid"],
   "history_sample-too-large": deBackend.errors.history["sample-too-large"],

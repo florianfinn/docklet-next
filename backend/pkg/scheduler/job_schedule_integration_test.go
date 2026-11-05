@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite temp-file persistence fixture; retired image schedules reject writes across restart.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture; retired image schedules reject writes across restart; M18 live scheduling, policy and contract foundation.
 
 package scheduler
 
@@ -64,7 +64,7 @@ func TestDeprecatedImagePollingScheduleRefusesWithoutRuntimeJob(t *testing.T) {
 		require.NotEqual(t, "image-polling", row.ID)
 		require.NotEqual(t, "auto-update", row.ID)
 	}
-	require.NoError(t, restartSettings.SetBoolSetting(ctx, "pollingEnabled", false))
+	require.Error(t, restartSettings.SetBoolSetting(ctx, "pollingEnabled", false))
 	_, err = restartJobs.UpdateJobSchedules(ctx, jobschedule.Update{PollingInterval: &requestedSchedule})
 	require.Equal(t, "update.schedule-hub-owned", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	require.Equal(t, baseline, restartSettings.GetStringSetting(ctx, "pollingInterval", ""))

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status; M15 simple-user rights and identity contracts; M17 runtime history and personal preferences.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; transactional host edits and credential revision fencing.; hub-owned one-shot restart wiring; the generic update never writes the host status; M15 simple-user rights and identity contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package environment
 
@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/entityjobs"
@@ -439,6 +440,9 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 
 	var affected []string
 	remove := func(tx *gorm.DB) error {
+		if err := policy.DeleteEnvironment(tx, id); err != nil {
+			return err
+		}
 		if err := tx.Exec("DELETE FROM history_buckets WHERE host_id=?", id).Error; err != nil {
 			return err
 		}

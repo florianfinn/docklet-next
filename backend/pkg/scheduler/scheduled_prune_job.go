@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package scheduler
 
@@ -47,8 +47,7 @@ func (j *ScheduledPruneJob) ShouldSchedule(ctx context.Context) bool {
 func (j *ScheduledPruneJob) Schedule(ctx context.Context) string {
 	schedule := cmp.Or(j.settingsService.GetStringSetting(ctx, "scheduledPruneInterval", "0 0 0 * * *"), "0 0 0 * * *")
 
-	parser := scheduleutil.Parser()
-	if _, err := parser.Parse(schedule); err != nil {
+	if _, err := scheduleutil.Parse(schedule, nil); err != nil {
 		slog.WarnContext(ctx, "Invalid cron expression for scheduled-prune, using default", "invalidSchedule", schedule, "error", err)
 		return "0 0 0 * * *"
 	}

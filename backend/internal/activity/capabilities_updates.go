@@ -13,8 +13,8 @@ import (
 )
 
 type updateCapabilityRule struct {
-	host, admin bool
-	grants      []string
+	host, admin, container bool
+	grants                 []string
 }
 
 var updateReadGrants = []string{authz.PermProjectsRead, authz.PermImageUpdatesRead}
@@ -29,11 +29,12 @@ var updateCapabilityRules = map[string]updateCapabilityRule{
 	"deleteRestorePoint":     {grants: updateWriteGrants},
 	"listHostRestorePoints":  {host: true, admin: true, grants: []string{authz.PermImageUpdatesRead}},
 	"deleteHostRestorePoint": {host: true, admin: true, grants: []string{authz.PermImageUpdatesRead}},
-	"getAutoUpdatePolicy":    {grants: updateReadGrants}, "setAutoUpdate": {grants: updateNotifyGrants},
-	"setAutoUpdateApply":   {grants: updateApplyGrants},
-	"listSchedule":         {host: true, grants: []string{authz.PermJobsManage}},
-	"saveUpdateSchedule":   {host: true, grants: []string{authz.PermJobsManage}},
-	"listSystemComponents": {host: true, grants: []string{authz.PermImageUpdatesRead}},
+	"getAutoUpdatePolicy":    {container: true, grants: updateReadGrants}, "setAutoUpdate": {container: true, grants: updateNotifyGrants},
+	"setAutoUpdateApply":     {admin: true, container: true, grants: updateApplyGrants},
+	"installContainerUpdate": {container: true, grants: []string{authz.PermContainersRedeploy, authz.PermActivitiesRead}},
+	"setContainerAutoUpdate": {admin: true, container: true, grants: updateApplyGrants},
+	"checkAllUpdates":        {admin: true, host: true, grants: []string{authz.PermJobsManage}},
+	"listSystemComponents":   {host: true, grants: []string{authz.PermImageUpdatesRead}},
 }
 
 func updateCapabilityAllowed(operation string, ref capability.ResourceRef, ps *authz.PermissionSet) bool {
@@ -42,11 +43,19 @@ func updateCapabilityAllowed(operation string, ref capability.ResourceRef, ps *a
 		return false
 	}
 	env, raw, scoped := strings.Cut(ref.ID, "~")
+	if operation == "installContainerUpdate" || operation == "setContainerAutoUpdate" {
+		if ref.Kind != "container" {
+			return false
+		}
+	}
+	if operation == "checkAllUpdates" {
+		return ref.Kind == "hub" && ref.ID == "0" && ps.IsGlobalAdmin()
+	}
 	if rule.host {
 		if ref.Kind != "host" || scoped || env == "" {
 			return false
 		}
-	} else if ref.Kind != "stack" || !scoped || env == "" || raw == "" || strings.Contains(raw, "~") {
+	} else if (ref.Kind != "stack" && !(rule.container && ref.Kind == "container")) || !scoped || env == "" || raw == "" || strings.Contains(raw, "~") {
 		return false
 	}
 	if rule.admin && !ps.IsGlobalAdmin() {

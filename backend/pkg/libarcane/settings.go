@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key.
+// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation.
 
 package libarcane
 
@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/robfig/cron/v3"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	kit "go.getarcane.app/kit/pkg"
 )
 
@@ -60,14 +60,10 @@ var timeoutSettingKeys = []string{
 
 var cronSettingKeys = []string{
 	"scheduledPruneInterval",
-	"autoUpdateInterval",
-	"pollingInterval",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
 	"expiredSessionsCleanupInterval",
 }
-
-var cronParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 // TimeoutSettingKeys returns the settings propagated to remote environments.
 func TimeoutSettingKeys() []string {
@@ -82,6 +78,6 @@ func ValidateCronSetting(key, value string) error {
 	if value == "" || !IsCronSettingKey(key) {
 		return nil
 	}
-	_, err := cronParser.Parse(value)
+	_, err := schedule.Parse(value, nil)
 	return err
 }

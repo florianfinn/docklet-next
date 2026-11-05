@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories; notification and Auto Heal contracts and delivery for #296; M18 live scheduling, policy and contract foundation.
 
 package job
 
@@ -24,7 +24,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/jobschedule"
 	"github.com/florianfinn/docklet-next/types/meta"
 	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/robfig/cron/v3"
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -68,7 +67,6 @@ type JobService struct {
 	cfg           *config.Config
 	scheduler     scheduler.JobController
 	lifecycleCtx  context.Context
-	location      *time.Location // Timezone for cron schedule calculations
 
 	// environment-health is no longer a single scheduler job — it fans out to one
 	// dynamic job per environment owned by environment.EnvironmentService. These bridge the Jobs
@@ -96,7 +94,6 @@ func NewJobService(
 		db:          db,
 		settings:    localSettings,
 		cfg:         cfg,
-		location:    cfg.GetLocation(),
 	}
 
 	if coordinator != nil {
@@ -132,9 +129,7 @@ func (s *JobService) GetJobSchedules(ctx context.Context) jobschedule.Config {
 		EnvironmentHealthInterval:      s.settings.GetStringSetting(ctx, "environmentHealthInterval", defaults.EnvironmentHealthInterval.Value),
 		EventCleanupInterval:           s.settings.GetStringSetting(ctx, "eventCleanupInterval", defaults.EventCleanupInterval.Value),
 		ExpiredSessionsCleanupInterval: s.settings.GetStringSetting(ctx, "expiredSessionsCleanupInterval", defaults.ExpiredSessionsCleanupInterval.Value),
-		AutoUpdateInterval:             s.settings.GetStringSetting(ctx, "autoUpdateInterval", defaults.AutoUpdateInterval.Value),
 		DockerClientRefreshInterval:    s.settings.GetStringSetting(ctx, "dockerClientRefreshInterval", defaults.DockerClientRefreshInterval.Value),
-		PollingInterval:                s.settings.GetStringSetting(ctx, "pollingInterval", defaults.PollingInterval.Value),
 		ScheduledPruneInterval:         s.settings.GetStringSetting(ctx, "scheduledPruneInterval", defaults.ScheduledPruneInterval.Value),
 		VulnerabilityScanInterval:      s.settings.GetStringSetting(ctx, "vulnerabilityScanInterval", defaults.VulnerabilityScanInterval.Value),
 		ImageAutoPatchInterval:         s.settings.GetStringSetting(ctx, "imageAutoPatchInterval", defaults.ImageAutoPatchInterval.Value),
@@ -171,12 +166,11 @@ func (s *JobService) UpdateJobSchedules(ctx context.Context, updates jobschedule
 	}
 
 	// Validate inputs (cron expressions)
-	parser := scheduleutil.Parser()
 	for _, field := range fields {
 		if field.update == nil || *field.update == "" {
 			continue
 		}
-		if _, err := parser.Parse(*field.update); err != nil {
+		if _, err := scheduleutil.Parse(*field.update, s.cfg.Location()); err != nil {
 			return jobschedule.Config{}, fmt.Errorf("invalid cron expression for %s: %w", field.key, err)
 		}
 	}
@@ -226,7 +220,7 @@ func (s *JobService) RescheduleJobsForSettingKeys(ctx context.Context, changedKe
 
 	var rescheduleErrors []error
 	for jobID, jobMeta := range meta.GetAllJobMetadata() {
-		if updater.IsImagePolicyJob(jobID) {
+		if jobID == "auto-update" || jobID == "image-polling" {
 			continue
 		}
 		if !jobMetadataAffectedBySettingInternal(jobMeta, changed) {
@@ -270,9 +264,6 @@ func (s *JobService) rescheduleAffectedJobInternal(ctx context.Context, jobID st
 	// Continuous bus watchers have no cron entry to reschedule; notify the
 	// watcher so it re-reads its poll schedule instead.
 	if jobMeta.IsContinuous {
-		if jobID == "image-polling" && s.settings != nil {
-			return s.settings.NotifySettingsChanges(s.jobRescheduleContextInternal(ctx), "pollingInterval")
-		}
 		return nil
 	}
 
@@ -353,7 +344,10 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 	jobs := make([]jobschedule.JobStatus, 0, len(allMetadata))
 
 	for _, jobMeta := range allMetadata {
-		if updater.IsImagePolicyJob(jobMeta.ID) {
+		if jobMeta.ID == "auto-update" || jobMeta.ID == "image-polling" {
+			continue
+		}
+		if jobMeta.ID == "update-check" && s.cfg != nil && (s.cfg.AgentMode || s.cfg.EdgeAgent) {
 			continue
 		}
 		schedule := s.getJobScheduleInternal(ctx, jobMeta)
@@ -361,7 +355,7 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 		enabled := s.isJobEnabledInternal(ctx, jobMeta)
 		prerequisites := s.evaluatePrerequisitesInternal(ctx, jobMeta)
 
-		if s.scheduler != nil && (jobMeta.SettingsKey != "" || jobMeta.ID == "upgrade-log-cleanup" || jobMeta.ID == "vulnerability-scan") && jobMeta.ID != "environment-health" {
+		if s.scheduler != nil && (jobMeta.SettingsKey != "" || jobMeta.ID == "update-check" || jobMeta.ID == "upgrade-log-cleanup" || jobMeta.ID == "vulnerability-scan") && jobMeta.ID != "environment-health" {
 			if runtimeState, ok := s.scheduler.GetJobRuntimeState(jobMeta.ID); ok {
 				schedule = cmp.Or(runtimeState.Schedule, schedule)
 				nextRun = runtimeState.NextRun
@@ -369,6 +363,7 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 		}
 
 		jobStatus := jobMeta.ToJobStatus(schedule, nextRun, enabled, prerequisites)
+		jobStatus.TimeZone = s.cfg.Location().String()
 		if jobMeta.ID == "vulnerability-scan" {
 			jobStatus.Description = "Starts one scan of in-use images per eligible host; execution continues on each host"
 		}
@@ -394,10 +389,20 @@ func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListRe
 }
 
 func (s *JobService) getJobScheduleInternal(ctx context.Context, localMeta meta.JobMetadata) string {
+	if localMeta.ID == "update-check" {
+		switch s.settings.GetStringSetting(ctx, "updateCheckInterval", "12h") {
+		case "6h":
+			return "0 0 */6 * * *"
+		case "24h":
+			return "0 0 0 * * *"
+		default:
+			return "0 0 */12 * * *"
+		}
+	}
 	if localMeta.ID == "vulnerability-scan" {
 		return s.vulnerabilitySchedule(ctx)
 	}
-	// Continuous jobs with a settings key (image-polling) are event-driven but
+	// Continuous jobs with a settings key are event-driven but
 	// also poll on that cron schedule, so surface the real expression.
 	if localMeta.IsContinuous && localMeta.SettingsKey == "" {
 		return "continuous"
@@ -454,20 +459,10 @@ func (s *JobService) calculateNextRunInternal(schedule string) *time.Time {
 		return nil
 	}
 
-	// Parse schedule and force it to use the same timezone as the scheduler.
-	parser := scheduleutil.Parser()
-	sched, err := parser.Parse(schedule)
+	location := s.cfg.Location()
+	sched, err := scheduleutil.Parse(schedule, location)
 	if err != nil {
 		return nil
-	}
-
-	location := time.UTC
-	if s != nil && s.location != nil {
-		location = s.location
-	}
-
-	if specSchedule, ok := sched.(*cron.SpecSchedule); ok {
-		specSchedule.Location = location
 	}
 
 	// Calculate next run using the configured timezone.
@@ -479,7 +474,7 @@ func (s *JobService) Coordinator() *runs.Coordinator { return s.runs }
 
 // ActivityID assigns a summary identity before a visible run is persisted.
 func (s *JobService) ActivityID(run scheduler.Run) string {
-	if _, kind, owned := updater.ParseImagePolicyJob(run.JobID); owned && (kind == "auto-update" || run.Trigger == "manual") {
+	if strings.HasPrefix(run.JobID, "update-window:") || run.JobID == "update-check" && run.Trigger == "manual" {
 		return uuid.New().String()
 	}
 	// A remotely delivered run already has a summary on its accepting manager.
@@ -519,14 +514,6 @@ func (s *JobService) SyncRunActivity(ctx context.Context, run scheduler.Run) err
 	name := current.JobID
 	if metadata, found := meta.GetJobMetadata(current.JobID); found {
 		name = metadata.Name
-	}
-	if env, kind, owned := updater.ParseImagePolicyJob(current.JobID); owned {
-		current.EnvironmentID = env
-		current.ActivityEnvironmentID = env
-		current.JobID = kind
-		if metadata, found := meta.GetJobMetadata(kind); found {
-			name = metadata.Name
-		}
 	}
 	return s.activity.SyncJobRun(ctx, runtime.ProjectRunOutcome(current), name)
 }
@@ -640,9 +627,6 @@ func (s *JobService) validateLocalJobInternal(ctx context.Context, jobID string)
 }
 
 func (s *JobService) authorizeRunInternal(ctx context.Context, run scheduler.Run) error {
-	if env, _, owned := updater.ParseImagePolicyJob(run.JobID); owned {
-		run.EnvironmentID = env
-	}
 	if run.RequestedBy == "" {
 		if run.Trigger == "manual" && !s.cfg.AgentMode {
 			return errors.New("requesting user unavailable")
@@ -663,17 +647,11 @@ func (s *JobService) authorizeRunInternal(ctx context.Context, run scheduler.Run
 }
 
 func (s *JobService) executeRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if retiredUpdateControl(run.JobID) != nil {
+		return scheduler.Outcome{Status: scheduler.Failed, Code: "update.agent-local-job-disabled"}, nil
+	}
 	if (run.JobID == "vulnerability-scan" || run.JobID == "vulnerability-risk") && (run.EnvironmentID != "0" || s.cfg.AgentMode || s.cfg.EdgeAgent) {
 		return scheduler.Outcome{Status: scheduler.Failed, Code: "vulnerability.agent-job-retired"}, nil
-	}
-	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
-		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
-	}
-	if env, kind, owned := updater.ParseImagePolicyJob(run.JobID); owned {
-		if s.imagePolicies == nil {
-			return scheduler.Outcome{Status: scheduler.Failed, Code: "update.persistence-failed"}, nil
-		}
-		return s.imagePolicies.RunImagePolicyHost(s.runContextInternal(ctx, run), env, kind)
 	}
 	if err := s.authorizeRunInternal(ctx, run); err != nil {
 		return scheduler.Outcome{Status: scheduler.Failed}, err
@@ -740,24 +718,18 @@ func classifyOutcomeInternal(jobID string, outcome scheduler.Outcome, err error)
 
 func safeJobInternal(jobID string) bool {
 	switch jobID {
-	case "image-polling", "environment-health", "docker-client-refresh", "event-cleanup", "expired-sessions-cleanup", "activity-sweep", "upload-sessions-cleanup":
+	case "update-check", "environment-health", "docker-client-refresh", "event-cleanup", "expired-sessions-cleanup", "activity-sweep", "upload-sessions-cleanup":
 		return true
 	}
 	return strings.HasPrefix(jobID, "environment-health:")
 }
 
 func (s *JobService) reconcileRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if retiredUpdateControl(run.JobID) != nil {
+		return scheduler.Outcome{Status: scheduler.Failed, Code: "update.agent-local-job-disabled"}, nil
+	}
 	if (run.JobID == "vulnerability-scan" || run.JobID == "vulnerability-risk") && (run.EnvironmentID != "0" || s.cfg.AgentMode || s.cfg.EdgeAgent) {
 		return scheduler.Outcome{Status: scheduler.Failed, Code: "vulnerability.agent-job-retired"}, nil
-	}
-	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
-		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
-	}
-	if env, _, owned := updater.ParseImagePolicyJob(run.JobID); owned {
-		if s.imagePolicies == nil {
-			return scheduler.Outcome{Status: scheduler.Failed, Code: "update.persistence-failed"}, nil
-		}
-		return s.imagePolicies.ReconcileImagePolicyHost(ctx, env, run)
 	}
 	if err := s.authorizeRunInternal(ctx, run); err != nil {
 		return scheduler.Outcome{Status: scheduler.Failed}, err
@@ -810,22 +782,7 @@ func (s *JobService) reconcileRunInternal(ctx context.Context, run scheduler.Run
 func (s *JobService) runContextInternal(ctx context.Context, run scheduler.Run) context.Context {
 	ctx = utils.WithActivityBatchID(ctx, run.ID)
 	ctx = jobcontext.WithExecution(ctx, run, func(target scheduler.TargetOutcome) error {
-		return s.runs.UpdateRun(ctx, run, func(current *scheduler.Run) error {
-			if current.Status != scheduler.Running || current.Owner != run.Owner {
-				return runs.ErrRunConflict
-			}
-			for index := range current.Outcome.Targets {
-				if current.Outcome.Targets[index].ID == target.ID {
-					if len(target.RecoveryData) == 0 {
-						target.RecoveryData = current.Outcome.Targets[index].RecoveryData
-					}
-					current.Outcome.Targets[index] = target
-					return nil
-				}
-			}
-			current.Outcome.Targets = append(current.Outcome.Targets, target)
-			return nil
-		})
+		return s.runs.Progress(ctx, run, target)
 	})
 	return ctx
 }

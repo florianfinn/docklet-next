@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package system
 
@@ -114,10 +114,6 @@ func NewSystemService(
 	actorRuntime *francis.Runtime,
 	apiKeys *apikey.ApiKeyService,
 ) *SystemService {
-	location := time.UTC
-	if cfg != nil {
-		location = cfg.GetLocation()
-	}
 	s := &SystemService{
 		db:               db,
 		dockerService:    dockerService,
@@ -127,9 +123,10 @@ func NewSystemService(
 		dockerHostMemoryCache: hot.NewHotCache[struct{}, dockerHostMemoryInfo](hot.LRU, 1).
 			WithTTL(dockerHostMemoryCacheTTL).
 			Build(),
-		prune:   prune.NewService(location, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
+		prune:   prune.NewService(nil, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
 		upgrade: upgrade.NewService(db, dockerService, versionService, eventService, settingsService, projectService, resolveUpgraderRuntimeOptionsInternal),
 	}
+	s.prune.SetZoneProvider(cfg)
 	s.backup = systembackup.NewService(systembackup.Dependencies{
 		Store:        s.backupStoreInternal(),
 		DB:           db,

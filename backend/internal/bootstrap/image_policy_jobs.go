@@ -20,9 +20,9 @@ func registerImagePolicyJobs(params registerJobsParams) error {
 	}
 	lifetime, cancel := context.WithCancel(params.AppCtx)
 	refresh := func(context.Context) error {
-		return scheduler.RefreshImagePolicyJobs(params.AppCtx, params.Scheduler, params.Updater)
+		return scheduler.RefreshUpdateWindows(params.AppCtx, params.Scheduler, params.Updater)
 	}
-	params.Updater.ConfigureImagePolicies(params.Environment, refresh)
+	params.Updater.ConfigureImagePolicies(params.Environment, refresh, params.Container)
 	params.Updater.ConfigureSystemImageHints(params.Environment, params.Version)
 	if err := refresh(params.AppCtx); err != nil {
 		cancel()

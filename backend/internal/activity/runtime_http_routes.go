@@ -81,7 +81,7 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 	} else {
 		middleware.RegisterWithPermission(api, op, runtimePermissionInternal(operation), func(ctx context.Context, input *runtimeContainerHTTPInput) (*huma.StreamResponse, error) {
 			options := RuntimeOptions{}
-			if runtimeRecreateOperation(operation) {
+			if runtimeRecreateOperation(operation) || runtimeContainerImageOperation(operation) {
 				if input.Key == "" || !runtimeWantsAsync(input.Prefer) {
 					if operation == RuntimeRedeployContainer {
 						return nil, &containerDTO.Problem{Code: "update.path-retired", Status: 409}

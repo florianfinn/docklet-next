@@ -179,6 +179,10 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 		}
 	}
 	for table := range tableSQL {
+		if table == "settings" {
+			require.Equal(t, [][]string{{"updateNotify", "false"}, {"vulnerabilityScanSchedule", `{"mode":"manual"}`}}, sqlRows(t, actual, "SELECT key,value FROM settings ORDER BY key"))
+			continue
+		}
 		if table == "docklet_database_metadata" {
 			continue
 		}

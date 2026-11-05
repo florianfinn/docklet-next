@@ -43,7 +43,7 @@ func TestStartupRetiresSystemVolumeJobsIdempotentlyAndRetainsHistory(t *testing.
 	jobs.SetScheduler(t.Context(), clock)
 	t.Cleanup(func() { require.NoError(t, clock.Stop(context.WithoutCancel(t.Context()))) })
 	for _, id := range []string{"system-backup:volumes:daily", "system-backup:volumes:weekly"} {
-		require.NoError(t, q.Checkpoint(t.Context(), id, "0 0 0 * * *", time.Now().Add(-time.Hour)))
+		require.NoError(t, q.Checkpoint(t.Context(), id, "0 0 0 * * *", "UTC", time.Now().Add(-time.Hour)))
 		for _, status := range []st.RunStatus{st.Queued, st.Waiting, st.Running, st.Retrying, st.NeedsAttention, st.Succeeded} {
 			run, err := q.Submit(t.Context(), st.Request{JobID: id})
 			require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestStartupRetiresSystemVolumeJobsIdempotentlyAndRetainsHistory(t *testing.
 		}
 	}
 	// An unrelated Hub archive job retains its schedule and pending work.
-	require.NoError(t, q.Checkpoint(t.Context(), "system-backup:hub-daily", "0 0 0 * * *", time.Now().Add(time.Hour)))
+	require.NoError(t, q.Checkpoint(t.Context(), "system-backup:hub-daily", "0 0 0 * * *", "UTC", time.Now().Add(time.Hour)))
 	unrelated, err := q.Submit(t.Context(), st.Request{JobID: "system-backup:hub-daily"})
 	require.NoError(t, err)
 	for start := range 2 {

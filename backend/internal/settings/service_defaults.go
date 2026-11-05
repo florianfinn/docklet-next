@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -26,6 +26,9 @@ import (
 // DefaultSettingsConfig returns the canonical default settings model used by Arcane.
 func DefaultSettingsConfig() *Settings {
 	return &Settings{
+		UpdateCheckInterval:                   SettingVariable{Value: "12h"},
+		UpdateNotify:                          SettingVariable{Value: "false"},
+		TimeZone:                              SettingVariable{Value: ""},
 		LoadAlertsEnabled:                     SettingVariable{Value: "true"},
 		LoadAlertCpuPercent:                   SettingVariable{Value: "90"},
 		LoadAlertMemoryPercent:                SettingVariable{Value: "90"},
@@ -33,11 +36,7 @@ func DefaultSettingsConfig() *Settings {
 		ProjectsDirectory:                     SettingVariable{Value: "/app/data/projects"},
 		FollowProjectSymlinks:                 SettingVariable{Value: "false"},
 		DiskUsagePath:                         SettingVariable{Value: "/app/data/projects"},
-		AutoUpdate:                            SettingVariable{Value: "false"},
-		AutoUpdateInterval:                    SettingVariable{Value: "0 0 0 * * *"},
 		AutoUpdateExcludedContainers:          SettingVariable{Value: ""},
-		PollingEnabled:                        SettingVariable{Value: "true"},
-		PollingInterval:                       SettingVariable{Value: "0 0 * * * *"},
 		ImageEventWatcherEnabled:              SettingVariable{Value: "false"},
 		DockerClientRefreshInterval:           SettingVariable{Value: "0 */5 * * * *"},
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
@@ -91,8 +90,7 @@ func DefaultSettingsConfig() *Settings {
 		AuthSessionTimeout:                    SettingVariable{Value: "1440"},
 		AuthPasswordPolicy:                    SettingVariable{Value: "strong"},
 		FeatureVulnerabilityManagementEnabled: SettingVariable{Value: "true"},
-		VulnerabilityScanEnabled:              SettingVariable{Value: "false"},
-		VulnerabilityScanSchedule:             SettingVariable{Value: ""},
+		VulnerabilityScanSchedule:             SettingVariable{Value: `{"mode":"manual"}`},
 		VulnerabilityNotifyCritical:           SettingVariable{Value: "false"},
 		VulnerabilityNotifyHigh:               SettingVariable{Value: "false"},
 		VulnerabilityNotifyFailed:             SettingVariable{Value: "false"},
@@ -286,7 +284,7 @@ func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, fiel
 }
 
 func (s *SettingsService) shouldProcessField(key, attrs string, isEnvOnlyMode bool) bool {
-	if key == "" || strings.Contains(attrs, "internal") {
+	if key == "" || strings.Contains(attrs, "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" {
 		return false
 	}
 

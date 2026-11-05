@@ -34,10 +34,10 @@ func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
 	require.NoError(t, pool.Close())
 	db, err := database.InitializeHub(t.Context(), raw, database.MigrationOptions{})
 	require.NoError(t, err)
-	p := Policy{ID: "policy", EnvironmentID: "0", RegistrationID: "registration", TargetID: "example-stack", TargetIdentity: "identity", Mode: "off", Revision: 1, Candidates: "[]"}
+	p := Policy{ID: "policy", EnvironmentID: "0", RegistrationID: "registration", TargetID: "example-stack", TargetIdentity: "identity", Mode: "check", Revision: 1, Candidates: "[]"}
 	require.NoError(t, db.Create(&p).Error)
 	for _, query := range []string{
-		"UPDATE stack_update_policies SET mode='container'", "UPDATE stack_update_policies SET revision=0",
+		"UPDATE update_policies SET mode='container'", "UPDATE update_policies SET revision=0",
 	} {
 		require.ErrorContains(t, db.Exec(query).Error, "CHECK constraint failed")
 	}
@@ -50,7 +50,7 @@ func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
 	require.Equal(t, "synthetic-encrypted-payload", payload)
 	var saved Policy
 	require.NoError(t, db.First(&saved, "id = ?", "policy").Error)
-	require.Equal(t, "off", saved.Mode)
+	require.Equal(t, "check", saved.Mode)
 	var integrity string
 	require.NoError(t, db.Raw("PRAGMA integrity_check").Scan(&integrity).Error)
 	require.Equal(t, "ok", integrity)

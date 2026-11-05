@@ -28,7 +28,8 @@ func AccessMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
 			params.ProjectID = ctx.Param("projectId")
 			params.ContainerID = ctx.Param("containerId")
 			params.RunID = ctx.Param("runId")
-			if ctx.Operation().OperationID == "deploy-project" {
+			params.PolicyKind, params.PolicyTarget = ctx.Param("kind"), ctx.Param("targetId")
+			if ctx.Operation().OperationID == "deploy-project" || ctx.Operation().OperationID == "set-auto-update-policy" {
 				req := humaecho.Unwrap(ctx).Request()
 				if req.Body != nil {
 					body, err := io.ReadAll(io.LimitReader(req.Body, 1<<20))

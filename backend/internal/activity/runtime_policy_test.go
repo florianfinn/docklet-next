@@ -88,7 +88,9 @@ func policyCommand(t *testing.T, f *b1FixtureInternal) (RuntimeCommand, policy.P
 	store := policy.Store{DB: f.store.svc.db.DB}
 	p, err := store.Policy(t.Context(), c.Store.EnvironmentID, c.Store.RegistrationID, c.Target.ID)
 	require.NoError(t, err)
-	p.Mode = "apply"
+	p.Mode = "scheduled"
+	p.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
+	require.NoError(t, f.store.svc.db.Exec("INSERT OR IGNORE INTO environments(id,name,api_url,enabled) VALUES(?,?,?,1)", c.Store.EnvironmentID, "Example", "https://agent.example.com").Error)
 	p.ActorID = c.Actor.ID
 	p.TargetIdentity = c.Options.Lifecycle.TargetIdentity
 	require.NoError(t, store.SavePolicy(t.Context(), p, 0))
@@ -108,7 +110,8 @@ func TestRuntimePolicyAdmissionRevisionAndAtomicChild(t *testing.T) {
 			c, p := policyCommand(t, f)
 			if boundary == "stale" {
 				f.resolver.resolve = func(_ context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
-					p.Mode = "off"
+					p.Mode = "check"
+					p.SetWindow(nil)
 					require.NoError(t, (policy.Store{DB: f.store.svc.db.DB}).SavePolicy(t.Context(), p, 1))
 					return RuntimeResolvedTarget{Target: target}, nil
 				}
@@ -137,7 +140,8 @@ func TestRuntimePolicyAdmissionRevisionAndAtomicChild(t *testing.T) {
 			require.Equal(t, c.ProposedRunID, admitted.ActivityID)
 			require.Equal(t, "admitted", child.Status)
 			require.Equal(t, admitted.ActivityID, child.RuntimeID)
-			p.Mode = "off"
+			p.Mode = "check"
+			p.SetWindow(nil)
 			require.NoError(t, (policy.Store{DB: f.store.svc.db.DB}).SavePolicy(t.Context(), p, 1))
 			retained, found, err := f.service.RetainedCommand(t.Context(), c)
 			require.NoError(t, err)

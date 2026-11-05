@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296; M14 stack stop mode override validation; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296; M14 stack stop mode override validation; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -92,7 +92,7 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 		if retiredVulnerabilitySetting(key) {
 			continue
 		}
-		isInternal := slices.Contains(tagParts[1:], "internal")
+		isInternal := slices.Contains(tagParts[1:], "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify"
 
 		if isInternal {
 			if val, ok := settingsMap[key]; ok {

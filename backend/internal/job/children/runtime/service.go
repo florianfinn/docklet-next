@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M18 live scheduling, policy and contract foundation.
 
 // Package runtime projects durable run history and scheduler runtime state
 // onto job statuses.
@@ -207,6 +207,7 @@ func ApplyRunStatus(status *jobschedule.JobStatus, jobRuns []scheduler.Run) {
 
 func dynamicJobStatus(ctx context.Context, jobScheduler scheduler.JobScheduler, job scheduler.Job, category string, managerOnly bool) jobschedule.JobStatus {
 	child := jobschedule.JobStatus{
+		TimeZone:       jobScheduler.GetLocation().String(),
 		ID:             job.Name(),
 		Name:           job.Name(),
 		Category:       category,

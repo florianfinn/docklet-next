@@ -8,6 +8,13 @@ import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "agent_unavailable": enBackend.errors.agent.unavailable,
+  "container_origin-locked": "Docklet does not manage updates for this container.",
+  "container_recreate-ambiguous": "The container replacement could not be identified.",
+  "container_recreate-recovered": "The container replacement was recovered.",
+  "deploy_point-unavailable": "The deployment completed without a restore point.",
+  "settings_invalid-time-zone": "Choose a valid time zone.",
+  "update_service-coupled": "This service must be updated together with its stack.",
   "history_invalid-range": enBackend.errors.history["invalid-range"],
   "history_sample-invalid": enBackend.errors.history["sample-invalid"],
   "history_sample-too-large": enBackend.errors.history["sample-too-large"],

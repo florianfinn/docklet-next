@@ -63,8 +63,8 @@ func newPolicyFixture(t *testing.T) *policyFixture {
 		defer cancel()
 		require.NoError(t, cfg.Stop(ctx))
 	})
-	require.NoError(t, cfg.UpdateSetting(t.Context(), "autoUpdate", "true"))
-	require.NoError(t, cfg.UpdateSetting(t.Context(), "pollingEnabled", "true"))
+	require.NoError(t, cfg.UpdateSetting(t.Context(), "updateNotify", "true"))
+	require.NoError(t, f.db.Exec("INSERT OR IGNORE INTO environments (id,name,api_url,enabled) VALUES (?,?,?,?)", "0", "Local", "", true).Error)
 	f.s = &UpdaterService{config: &config.Config{}, deps: updaterDependenciesInternal{DB: f.db, Settings: cfg}}
 	f.p = &imagePolicyService{store: policy.Store{DB: f.db.DB}}
 	f.s.policies = f.p
@@ -77,13 +77,6 @@ func newPolicyFixture(t *testing.T) *policyFixture {
 			return ctx, huma.Error403Forbidden("Synthetic revoked grants")
 		}
 		return ctx, nil
-	}
-	f.p.ports.scheduleActor = func(context.Context, string, string, string) error {
-		f.scheduleActors++
-		if f.scheduleRevoked {
-			return huma.Error403Forbidden("Synthetic revoked schedule grants")
-		}
-		return nil
 	}
 	f.p.ports.baseline = func(context.Context, string, string) (dto.BaselineStatus, error) { return f.baseline, nil }
 	f.p.ports.check = func(context.Context, string, string) (*projectDTO.UpdateInfo, error) {
@@ -128,10 +121,17 @@ func newPolicyFixture(t *testing.T) *policyFixture {
 		f.notifications++
 		return 1, nil
 	}
-	schedule, err := f.p.store.Schedule(t.Context(), "0", "example-registration")
-	require.NoError(t, err)
-	schedule.ActorID = "example-schedule-actor"
-	require.NoError(t, f.p.store.SaveSchedule(t.Context(), schedule, 0))
+	f.p.ports.targets = func(ctx context.Context, env string) ([]updateTarget, error) {
+		var rows []policy.Policy
+		if e := f.db.WithContext(ctx).Where("environment_id=?", env).Order("target_id").Find(&rows).Error; e != nil {
+			return nil, e
+		}
+		out := []updateTarget{}
+		for _, r := range rows {
+			out = append(out, updateTarget{Kind: r.TargetKind, ID: r.TargetID, Name: r.TargetID, Eligible: true})
+		}
+		return out, nil
+	}
 	return f
 }
 func (f *policyFixture) save(t *testing.T, target, mode string) policy.Policy {
@@ -139,6 +139,11 @@ func (f *policyFixture) save(t *testing.T, target, mode string) policy.Policy {
 	p, err := f.p.store.Policy(t.Context(), "0", "example-registration", target)
 	require.NoError(t, err)
 	p.Mode = mode
+	if mode == "scheduled" {
+		p.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
+	} else {
+		p.SetWindow(nil)
+	}
 	p.TargetIdentity = f.baseline.TargetIdentity
 	p.ActorID = "example-actor"
 	p.ActorKeyID = "example-key"
@@ -154,7 +159,7 @@ func (f *policyFixture) run(t *testing.T, kind string, run st.Run) st.Outcome {
 	if run.AttemptCount == 0 {
 		run.AttemptCount = 1
 	}
-	out, err := f.s.RunImagePolicyHost(jobcontext.WithExecution(t.Context(), run, nil), "0", kind)
+	out, err := runFixtureWindows(f.s, jobcontext.WithExecution(t.Context(), run, nil), "0", kind)
 	require.NoError(t, err)
 	return out
 }
@@ -176,36 +181,7 @@ func (f *policyFixture) reopen(t *testing.T) {
 		require.NoError(t, cfg.Stop(ctx))
 	})
 }
-func TestImagePolicyModes(t *testing.T) {
-	for _, mode := range []string{"off", "notify", "apply"} {
-		t.Run(mode, func(t *testing.T) {
-			f := newPolicyFixture(t)
-			f.save(t, "example-stack", mode)
-			out := f.run(t, "auto-update", st.Run{})
-			require.Len(t, out.Targets, 1)
-			if mode != "apply" {
-				require.Zero(t, f.checks)
-				require.Zero(t, f.admissions)
-			} else {
-				require.Equal(t, 1, f.admissions)
-				require.Equal(t, 1, f.waits)
-				require.Equal(t, st.Succeeded, out.Targets[0].Status)
-			}
-			require.Zero(t, f.notifications)
-			if mode == "off" {
-				f.run(t, "image-polling", st.Run{})
-				require.Zero(t, f.checks)
-				require.Zero(t, f.notifications)
-			}
-			if mode == "notify" {
-				out = f.run(t, "image-polling", st.Run{})
-				require.Equal(t, st.Succeeded, out.Targets[0].Status)
-				require.Equal(t, 1, f.notifications)
-				require.Zero(t, f.admissions)
-			}
-		})
-	}
-}
+
 func TestImagePolicyAdmissionRefusals(t *testing.T) {
 	tests := []struct {
 		name, code string
@@ -227,7 +203,7 @@ func TestImagePolicyAdmissionRefusals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "example-stack", "apply")
+			f.save(t, "example-stack", "scheduled")
 			tt.setup(t, f)
 			out := f.run(t, "auto-update", st.Run{})
 			require.Len(t, out.Targets, 1)
@@ -239,31 +215,11 @@ func TestImagePolicyAdmissionRefusals(t *testing.T) {
 		})
 	}
 }
-func TestImagePolicyMasterAndScheduleActorGates(t *testing.T) {
-	for _, gate := range []string{"autoUpdate", "pollingEnabled", "actor"} {
-		t.Run(gate, func(t *testing.T) {
-			f := newPolicyFixture(t)
-			f.save(t, "example-stack", "apply")
-			if gate == "actor" {
-				f.scheduleRevoked = true
-			} else {
-				require.NoError(t, f.s.deps.Settings.UpdateSetting(t.Context(), gate, "false"))
-			}
-			out := f.run(t, "auto-update", st.Run{})
-			require.Zero(t, f.checks)
-			require.Zero(t, f.admissions)
-			if gate == "actor" {
-				require.Equal(t, "update.permission-denied", out.Code)
-			} else {
-				require.Equal(t, st.Skipped, out.Status)
-			}
-		})
-	}
-}
+
 func TestImagePolicyChangedBeforeAdmissionRefuses(t *testing.T) {
 	f := newPolicyFixture(t)
-	p := f.save(t, "example-stack", "apply")
-	f.beforeAdmission = func(dto.PolicyBinding) { f.save(t, "example-stack", "off") }
+	p := f.save(t, "example-stack", "scheduled")
+	f.beforeAdmission = func(dto.PolicyBinding) { f.save(t, "example-stack", "check") }
 	out := f.run(t, "auto-update", st.Run{})
 	require.Zero(t, f.admissions)
 	require.Zero(t, f.waits)
@@ -274,11 +230,11 @@ func TestImagePolicyChangedBeforeAdmissionRefuses(t *testing.T) {
 }
 func TestImagePolicyFrozenAfterAdmissionAndSerialChildren(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	f.save(t, "b-stack", "scheduled")
 	f.afterAdmission = func(b dto.PolicyBinding) {
 		if f.admissions == 1 {
-			f.save(t, "a-stack", "off")
+			f.save(t, "a-stack", "check")
 		}
 	}
 	f.wait = func(id string) (a.RuntimeSnapshot, error) {
@@ -291,31 +247,11 @@ func TestImagePolicyFrozenAfterAdmissionAndSerialChildren(t *testing.T) {
 	require.Equal(t, st.Succeeded, out.Status)
 	require.EqualValues(t, 1, f.bindings[0].Revision, "accepted revision is frozen despite subsequent off")
 }
-func TestImagePolicyRevalidatesBeforeEachChild(t *testing.T) {
-	for _, actor := range []string{"policy", "schedule"} {
-		t.Run(actor, func(t *testing.T) {
-			f := newPolicyFixture(t)
-			f.save(t, "a-stack", "apply")
-			f.save(t, "b-stack", "apply")
-			f.wait = func(id string) (a.RuntimeSnapshot, error) {
-				if actor == "policy" {
-					f.revoked = true
-				} else {
-					f.scheduleRevoked = true
-				}
-				return f.receipts[id], nil
-			}
-			out := f.run(t, "auto-update", st.Run{})
-			require.Equal(t, 1, f.admissions)
-			require.Len(t, out.Targets, 2)
-			require.Equal(t, "update.permission-denied", out.Targets[1].Code)
-		})
-	}
-}
+
 func TestImagePolicyUnknownChildStopsHost(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	f.save(t, "b-stack", "scheduled")
 	f.wait = func(string) (a.RuntimeSnapshot, error) {
 		return a.RuntimeSnapshot{RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeUnknown}}, nil
 	}
@@ -328,7 +264,7 @@ func TestImagePolicyRestartRetryAndCheckpointNeverReplay(t *testing.T) {
 	for _, boundary := range []string{"prepared", "admitted", "missed", "retry", "duplicate"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			p := f.save(t, "example-stack", "apply")
+			p := f.save(t, "example-stack", "scheduled")
 			run := st.Run{ID: uuid.NewString(), AttemptCount: 1}
 			if boundary == "prepared" || boundary == "admitted" {
 				child, _, err := f.p.store.PrepareChild(t.Context(), p, run.ID)
@@ -366,7 +302,7 @@ func TestImagePolicyNotificationDeliveryAndRestartDedup(t *testing.T) {
 	for _, delivery := range []string{"sent", "unconfigured", "failed"} {
 		t.Run(delivery, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "example-stack", "notify")
+			f.save(t, "example-stack", "check")
 			f.p.ports.notify = func(_ context.Context, env, id string, c dto.UpdateCandidate) (int, error) {
 				f.notifications++
 				if delivery == "failed" {
@@ -385,8 +321,8 @@ func TestImagePolicyNotificationDeliveryAndRestartDedup(t *testing.T) {
 			require.False(t, first.Stale)
 			require.Equal(t, "1.1.0", first.Candidates[0].Version)
 			f.reopen(t)
-			f.save(t, "example-stack", "off")
-			f.save(t, "example-stack", "notify")
+			f.save(t, "example-stack", "check")
+			f.save(t, "example-stack", "check")
 			for range 2 {
 				_, err = f.s.CheckPolicyProject(t.Context(), "0", "example-stack")
 				require.NoError(t, err)
@@ -409,40 +345,24 @@ func TestImagePolicyAPIConfigurationCannotApply(t *testing.T) {
 	f := newPolicyFixture(t)
 	out, err := f.s.GetImagePolicy(t.Context(), "0", "example-stack")
 	require.NoError(t, err)
-	require.Equal(t, "off", out.Mode)
+	require.Equal(t, "check", out.Mode)
 	require.True(t, out.Stale)
-	_, err = f.s.SaveImagePolicy(t.Context(), "0", "example-stack", dto.UpdatePolicyInput{Mode: "apply"}, "example-actor", "example-key")
+	_, err = f.s.SaveImagePolicy(t.Context(), "0", "example-stack", dto.UpdatePolicyInput{Mode: "scheduled", Window: &dto.UpdateWindow{Kind: "daily", Time: "04:00"}}, "example-actor", "example-key")
 	require.NoError(t, err)
 	require.Zero(t, f.checks)
 	require.Zero(t, f.admissions)
 	require.Zero(t, f.notifications)
 }
 
-func TestImagePolicyRevokedDuringCheckCannotNotify(t *testing.T) {
-	f := newPolicyFixture(t)
-	f.save(t, "example-stack", "notify")
-	check := f.p.ports.check
-	f.p.ports.check = func(ctx context.Context, env, target string) (*projectDTO.UpdateInfo, error) {
-		result, err := check(ctx, env, target)
-		f.revoked = true
-		return result, err
-	}
-	out := f.run(t, "image-polling", st.Run{})
-	require.Equal(t, "update.permission-denied", out.Targets[0].Code)
-	require.Zero(t, f.notifications)
-	var count int64
-	require.NoError(t, f.db.Model(&policy.Notice{}).Count(&count).Error)
-	require.Zero(t, count)
-}
 func TestImagePolicyCanBeDisabledWithoutOfflineObservation(t *testing.T) {
 	f := newPolicyFixture(t)
-	p := f.save(t, "example-stack", "apply")
+	p := f.save(t, "example-stack", "scheduled")
 	f.p.ports.baseline = func(context.Context, string, string) (dto.BaselineStatus, error) {
 		return dto.BaselineStatus{}, errors.New("synthetic offline target")
 	}
-	result, err := f.s.SaveImagePolicy(t.Context(), "0", "example-stack", dto.UpdatePolicyInput{Mode: "off", ExpectedRevision: p.Revision}, "example-actor", "example-key")
+	result, err := f.s.SaveImagePolicy(t.Context(), "0", "example-stack", dto.UpdatePolicyInput{Mode: "check", ExpectedRevision: p.Revision}, "example-actor", "example-key")
 	require.NoError(t, err)
-	require.Equal(t, "off", result.Mode)
+	require.Equal(t, "check", result.Mode)
 	require.Equal(t, p.Revision+1, result.Revision)
 	require.Zero(t, f.admissions)
 }
@@ -450,7 +370,7 @@ func TestImagePolicyBusyAndInvalidCandidateNeverApply(t *testing.T) {
 	for _, state := range []string{"busy", "missing platform", "invalid digest"} {
 		t.Run(state, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "example-stack", "apply")
+			f.save(t, "example-stack", "scheduled")
 			if state == "busy" {
 				f.p.ports.admit = func(context.Context, string, string, string, dto.LifecycleRequest, dto.PolicyBinding) (activity.RuntimeAdmissionResult, error) {
 					return activity.RuntimeAdmissionResult{}, imageDTO.Failure("image.busy", 409)
@@ -475,7 +395,7 @@ func TestImagePolicyBusyAndInvalidCandidateNeverApply(t *testing.T) {
 
 func TestImagePolicyQueuedBeforeHubStartDoesNotCatchUp(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "example-stack", "apply")
+	f.save(t, "example-stack", "scheduled")
 	f.p.startedAt = time.Now().UTC()
 	out := f.run(t, "auto-update", st.Run{ID: uuid.NewString(), AttemptCount: 1, Trigger: "scheduled", CreatedAt: f.p.startedAt.Add(-time.Minute)})
 	require.Equal(t, st.Skipped, out.Status)
@@ -485,8 +405,8 @@ func TestImagePolicyQueuedBeforeHubStartDoesNotCatchUp(t *testing.T) {
 
 func TestImagePolicyUnknownChildBlocksLaterHostBatchesUntilReceipt(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	f.save(t, "b-stack", "scheduled")
 	f.wait = func(id string) (a.RuntimeSnapshot, error) {
 		snapshot := a.RuntimeSnapshot{RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeUnknown}}
 		f.receipts[id] = snapshot
@@ -514,7 +434,7 @@ func TestImagePolicyUnknownChildBlocksLaterHostBatchesUntilReceipt(t *testing.T)
 
 func TestImagePolicyUnknownHostDoesNotBlockAnotherHost(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "local-stack", "apply")
+	f.save(t, "local-stack", "scheduled")
 	f.wait = func(id string) (a.RuntimeSnapshot, error) {
 		if f.admissions == 1 {
 			unknown := a.RuntimeSnapshot{RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeUnknown}}
@@ -527,18 +447,15 @@ func TestImagePolicyUnknownHostDoesNotBlockAnotherHost(t *testing.T) {
 	require.Equal(t, "runtime.outcome-unknown", local.Targets[0].Code)
 	env := "example-remote"
 	require.NoError(t, f.db.Create(&environment.Environment{BaseModel: database.BaseModel{ID: env}, Name: "Example remote", ApiUrl: "https://agent.example.com", Enabled: true, Status: "online"}).Error)
-	schedule, err := f.p.store.Schedule(t.Context(), env, "example-registration")
-	require.NoError(t, err)
-	schedule.ActorID = "example-schedule-actor"
-	require.NoError(t, f.p.store.SaveSchedule(t.Context(), schedule, 0))
 	one, err := f.p.store.Policy(t.Context(), env, "example-registration", "remote-stack")
 	require.NoError(t, err)
-	one.Mode = "apply"
+	one.Mode = "scheduled"
+	one.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
 	one.ActorID = "example-actor"
 	one.TargetIdentity = f.baseline.TargetIdentity
 	require.NoError(t, f.p.store.SavePolicy(t.Context(), one, 0))
 	run := st.Run{ID: uuid.NewString(), AttemptCount: 1, CreatedAt: time.Now().UTC()}
-	remote, err := f.s.RunImagePolicyHost(jobcontext.WithExecution(t.Context(), run, nil), env, "auto-update")
+	remote, err := runFixtureWindows(f.s, jobcontext.WithExecution(t.Context(), run, nil), env, "auto-update")
 	require.NoError(t, err)
 	require.Equal(t, st.Succeeded, remote.Status)
 	require.Equal(t, 2, f.admissions)

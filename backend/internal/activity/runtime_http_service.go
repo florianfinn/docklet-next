@@ -70,6 +70,8 @@ func runtimePermissionInternal(operation RuntimeOperation) string {
 		return authz.PermContainersEdit
 	case RuntimeRedeployContainer:
 		return authz.PermContainersRedeploy
+	case RuntimeUpdateContainer, RuntimeRestoreContainerImage:
+		return authz.PermContainersRedeploy
 	case RuntimeStartContainer:
 		return authz.PermContainersStart
 	case RuntimeStopContainer:
@@ -156,7 +158,7 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		if err != nil {
 			return empty, noRef, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
 		}
-		if runtimeRecreateOperation(operation) {
+		if runtimeRecreateOperation(operation) || runtimeContainerImageOperation(operation) {
 			if h.ports.GuardContainer == nil {
 				return empty, noRef, &RuntimeTargetError{Code: "container.origin-locked"}
 			}

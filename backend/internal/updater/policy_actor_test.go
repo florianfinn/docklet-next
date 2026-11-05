@@ -51,7 +51,7 @@ func TestPolicyActorResolvesCurrentKeyAndCompleteGrants(t *testing.T) {
 }
 
 func TestPolicySaveRightsMatchMode(t *testing.T) {
-	for _, mode := range []string{"off", "notify", "apply"} {
+	for _, mode := range []string{"check", "scheduled"} {
 		for _, full := range []bool{false, true} {
 			t.Run(mode+map[bool]string{false: "/read-check", true: "/apply-grants"}[full], func(t *testing.T) {
 				f := newPolicyFixture(t)
@@ -59,7 +59,7 @@ func TestPolicySaveRightsMatchMode(t *testing.T) {
 				require.NoError(t, f.db.Create(&userdomain.User{BaseModel: database.BaseModel{ID: "example-actor"}, Username: "operator"}).Error)
 				grants := database.StringSlice{authz.PermProjectsRead, authz.PermImageUpdatesCheck, authz.PermImageUpdatesRead}
 				if full {
-					grants = append(grants, authz.PermJobsManage, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
+					grants = authz.AllPermissions()
 				}
 				require.NoError(t, f.db.Create(&role.Role{ID: authz.BuiltInRoleAdmin, Name: "Admin", Permissions: database.StringSlice(authz.AllPermissions())}).Error)
 				require.NoError(t, f.db.Create(&role.UserRoleAssignment{UserID: "example-actor", RoleID: authz.BuiltInRoleAdmin}).Error)
@@ -70,8 +70,13 @@ func TestPolicySaveRightsMatchMode(t *testing.T) {
 					require.NoError(t, f.db.Create(&role.ApiKeyPermission{ApiKeyID: key.ID, Permission: grant}).Error)
 				}
 				f.p.ports.actor = f.s.imagePolicyActor
-				result, err := f.s.SaveImagePolicy(t.Context(), "0", "stack", dto.UpdatePolicyInput{Mode: mode}, "example-actor", key.ID)
-				if mode == "apply" && !full {
+				result, err := f.s.SaveImagePolicy(t.Context(), "0", "stack", dto.UpdatePolicyInput{Mode: mode, Window: func() *dto.UpdateWindow {
+					if mode == "scheduled" {
+						return &dto.UpdateWindow{Kind: "daily", Time: "04:00"}
+					}
+					return nil
+				}()}, "example-actor", key.ID)
+				if mode == "scheduled" && !full {
 					require.Error(t, err)
 				} else {
 					require.NoError(t, err)

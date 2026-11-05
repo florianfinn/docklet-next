@@ -11,9 +11,9 @@ import (
 	"encoding/json"
 	"github.com/Masterminds/semver/v3"
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
@@ -27,6 +27,15 @@ import (
 func policyTarget(id string, status st.RunStatus, code string) st.TargetOutcome {
 	return st.TargetOutcome{ID: id, ResourceType: "project", Status: status, Code: code, Message: code}
 }
+
+// Update jobs aggregate targets across hosts and kinds. Consumers use the
+// explicit identity fields; the qualified ID is the coordinator's merge key.
+func qualifyUpdateTarget(env, kind, id string, out st.TargetOutcome) st.TargetOutcome {
+	out.ID = env + "~" + kind + "~" + id
+	out.EnvironmentID, out.TargetKind, out.TargetID = env, kind, id
+	out.ResourceType = kind
+	return out
+}
 func policyResult(outcome st.Outcome) st.Outcome {
 	if outcome.Status == st.Failed {
 		return outcome
@@ -39,88 +48,6 @@ func policyResult(outcome st.Outcome) st.Outcome {
 	}
 	return outcome
 }
-func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string) (st.Outcome, error) {
-	p, err := s.hubPolicies()
-	if err != nil {
-		return st.Outcome{Status: st.Skipped, Code: "update.agent-local-job-disabled"}, nil
-	}
-	previous, ok := jobcontext.Run(ctx)
-	if !ok || previous.ID == "" || !IsImagePolicyJob(job) {
-		return st.Outcome{Status: st.Failed, Code: "update.invalid-target"}, nil
-	}
-	if previous.AttemptCount > 1 || previous.Trigger == "recovery" {
-		return s.ReconcileImagePolicyHost(ctx, env, previous)
-	}
-	// A queued wrapper from an earlier hub process must not start a missed
-	// check/apply batch merely because it had not yet incremented its attempt.
-	if !p.startedAt.IsZero() && previous.CreatedAt.Before(p.startedAt) {
-		return s.ReconcileImagePolicyHost(ctx, env, previous)
-	}
-	row, err := s.ImagePolicySchedule(ctx, env)
-	if err != nil {
-		return st.Outcome{Status: st.Failed, Code: policyCode(err, "runtime.target-unavailable")}, nil
-	}
-	if !s.ImagePolicyEnabled(ctx, row, job) {
-		code := "job.skipped"
-		if row.ActorID == "" {
-			code = "update.schedule-owner-unset"
-		}
-		return st.Outcome{Status: st.Skipped, Code: code}, nil
-	}
-	if job == "auto-update" {
-		blocked, err := s.imagePolicyHostHold(ctx, p, env, row.RegistrationID)
-		if err != nil {
-			return st.Outcome{Status: st.Failed, Code: "update.persistence-failed"}, nil
-		}
-		if blocked != nil {
-			return st.Outcome{Status: st.Failed, Code: "runtime.outcome-unknown", Targets: []st.TargetOutcome{*blocked}}, nil
-		}
-	}
-	// The schedule actor needs jobs authority; policy actors additionally prove
-	// operation grants before each new check and each runtime child admission.
-	actor, key := row.ActorID, row.ActorKeyID
-	if previous.RequestedBy != "" {
-		actor, key = previous.RequestedBy, previous.RequestedWithKey
-	}
-	var policies []policy.Policy
-	if err = p.store.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ?", env, row.RegistrationID).Order("target_id").Find(&policies).Error; err != nil {
-		return st.Outcome{Status: st.Failed, Code: "update.persistence-failed"}, nil
-	}
-	if p.ports.scheduleActor == nil || p.ports.scheduleActor(ctx, env, actor, key) != nil {
-		out := st.Outcome{Status: st.Failed, Code: "update.permission-denied"}
-		for _, one := range policies {
-			if job == "auto-update" && one.Mode == "apply" {
-				target := s.recordImagePolicyStatus(ctx, p, one, job, policyTarget(one.TargetID, st.Failed, "update.permission-denied"))
-				out.Targets = append(out.Targets, target)
-				if target.Code == "update.persistence-failed" {
-					out.Code = target.Code
-				}
-			}
-		}
-		return out, nil
-	}
-	out := st.Outcome{Status: st.Succeeded}
-	for _, one := range policies {
-		if ctx.Err() != nil {
-			return policyResult(out), ctx.Err()
-		}
-		if p.ports.scheduleActor(ctx, env, actor, key) != nil {
-			out.Targets = append(out.Targets, s.recordImagePolicyStatus(ctx, p, one, job, policyTarget(one.TargetID, st.Failed, "update.permission-denied")))
-			continue
-		}
-		target, uncertain := s.runImagePolicyTarget(ctx, p, one, previous.ID, job)
-		out.Targets = append(out.Targets, target)
-		if err = jobcontext.Progress(ctx, target); err != nil {
-			return policyResult(out), err
-		}
-		if uncertain {
-			out.Status = st.Failed
-			out.Code = "runtime.outcome-unknown"
-			break
-		}
-	}
-	return policyResult(out), nil
-}
 func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
 	target, uncertain := s.executeImagePolicyTarget(ctx, p, one, jobRun, job)
 	return s.recordImagePolicyStatus(ctx, p, one, job, target), uncertain
@@ -129,7 +56,7 @@ func (s *UpdaterService) recordImagePolicyStatus(ctx context.Context, p *imagePo
 	if target.Code == "update.permission-denied" {
 		target.Status = st.Failed
 	}
-	if one.Mode == "off" || job == "auto-update" && one.Mode != "apply" {
+	if job == "auto-update" && one.Mode != "scheduled" {
 		return target
 	}
 	changes := map[string]any{"code": target.Code}
@@ -138,7 +65,7 @@ func (s *UpdaterService) recordImagePolicyStatus(ctx context.Context, p *imagePo
 	} else if target.Status == st.Succeeded {
 		changes["checked_at"] = policyNow()
 	}
-	if err := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(changes).Error; err != nil {
+	if err := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND registration_id = ? AND revision = ?", one.ID, one.RegistrationID, one.Revision).Updates(changes).Error; err != nil {
 		target.Status = st.Failed
 		target.Code = "update.persistence-failed"
 		target.Message = target.Code
@@ -147,68 +74,86 @@ func (s *UpdaterService) recordImagePolicyStatus(ctx context.Context, p *imagePo
 }
 func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
 	skip := func(code string) (st.TargetOutcome, bool) { return policyTarget(one.TargetID, st.Skipped, code), false }
-	if one.Mode == "off" || job == "auto-update" && one.Mode != "apply" {
+	if job == "auto-update" && one.Mode != "scheduled" {
 		return skip("job.skipped")
 	}
-	actorCtx, err := p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, job == "auto-update")
-	if err != nil {
-		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
+	actorCtx := ctx
+	var err error
+	if job == "auto-update" {
+		actorCtx, err = p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, true)
+		if err != nil {
+			return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
+		}
 	}
-	reg, err := p.ports.host(actorCtx, one.EnvironmentID)
+	reg, err := p.ports.host(ctx, one.EnvironmentID)
 	if err != nil || reg != one.RegistrationID {
 		return skip("update.target-changed")
 	}
-	baseline, err := p.ports.baseline(actorCtx, one.EnvironmentID, one.TargetID)
-	if err != nil {
-		return skip(policyCode(err, "runtime.target-unavailable"))
-	}
-	if baseline.TargetIdentity != one.TargetIdentity {
-		return skip("update.target-changed")
-	}
-	if job == "auto-update" && baseline.AutoExcluded {
-		return skip("update.auto-excluded")
-	}
-	if job == "auto-update" && !baseline.Available {
-		code := baseline.Code
-		if code == "" {
-			code = "update.baseline-unavailable"
+	var baseline dto.BaselineStatus
+	var resolved updateTarget
+	var check *projectDTO.UpdateInfo
+	if one.TargetKind == "container" {
+		resolved, err = p.findContainerTarget(ctx, one.EnvironmentID, one.TargetID)
+		if err != nil {
+			return skip(policyCode(err, "update.check-unavailable"))
 		}
-		return skip(code)
+		if job == "auto-update" && resolved.AutoExcluded {
+			return skip("update.auto-excluded")
+		}
+		check, err = p.ports.checkContainer(ctx, one.EnvironmentID, resolved)
+	} else {
+		baseline, err = p.ports.baseline(ctx, one.EnvironmentID, one.TargetID)
+		if job == "auto-update" {
+			if err != nil {
+				return skip(policyCode(err, "runtime.target-unavailable"))
+			}
+			if baseline.TargetIdentity != one.TargetIdentity {
+				return skip("update.target-changed")
+			}
+			if baseline.AutoExcluded {
+				return skip("update.auto-excluded")
+			}
+			if !baseline.Available {
+				code := baseline.Code
+				if code == "" {
+					code = "update.baseline-unavailable"
+				}
+				return skip(policyCode(imageDTO.Failure(code, 409), "update.persistence-failed"))
+			}
+		}
+		check, err = p.ports.check(ctx, one.EnvironmentID, one.TargetID)
 	}
-	check, err := p.ports.check(actorCtx, one.EnvironmentID, one.TargetID)
 	if err != nil || check == nil {
 		return skip(policyCode(err, "update.check-unavailable"))
 	}
-	if check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
+	if check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
 		return skip("update.check-unavailable")
 	}
-	// Bounded remote reads may outlive a revocation. Notifications and new
-	// admissions must use the policy actor's current rights after that wait.
-	actorCtx, err = p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, job == "auto-update")
-	if err != nil {
-		return skip("update.permission-denied")
-	}
-	candidates, err := s.observeImagePolicy(actorCtx, p, one, check)
+	candidates, err := s.observeImagePolicy(ctx, p, one, check)
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, policyCode(err, "update.persistence-failed")), false
 	}
-	if job == "image-polling" || len(candidates) == 0 {
+	if job != "auto-update" || len(candidates) == 0 {
 		return policyTarget(one.TargetID, st.Succeeded, ""), false
 	}
-	// Revalidate before this child, independently of the earlier bounded check.
 	actorCtx, err = p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, true)
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
 	}
 	child, fresh, err := p.store.PrepareChild(actorCtx, one, jobRun)
 	if err != nil {
-		return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
+		return policyTarget(one.TargetID, st.Failed, policyCode(err, "update.persistence-failed")), false
 	}
 	if !fresh {
 		return s.reconcileImagePolicyChild(ctx, p, one.EnvironmentID, one.TargetID, child)
 	}
 	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID}
-	accepted, err := p.ports.admit(actorCtx, one.EnvironmentID, one.TargetID, child.ID, dto.LifecycleRequest{ExpectedRevision: baseline.SavedRevision}, binding)
+	var accepted activity.RuntimeAdmissionResult
+	if one.TargetKind == "container" {
+		accepted, err = p.ports.admitContainer(actorCtx, one.EnvironmentID, resolved.ContainerID, child.ID, binding)
+	} else {
+		accepted, err = p.ports.admit(actorCtx, one.EnvironmentID, one.TargetID, child.ID, dto.LifecycleRequest{ExpectedRevision: baseline.SavedRevision}, binding)
+	}
 	if err != nil {
 		code := policyCode(err, "update.persistence-failed")
 		// An admission storage failure can be after commit. A receipt wins over
@@ -220,7 +165,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 		if found {
 			return imagePolicySnapshotTarget(one.TargetID, child.ID, snapshot)
 		}
-		changed := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "prepared").Updates(map[string]any{"status": "refused", "code": code})
+		changed := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "prepared").Updates(map[string]any{"status": "refused", "code": code, "settled_at": policyNow()})
 		if changed.Error != nil {
 			return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
 		}
@@ -235,7 +180,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	}
 	target, uncertain := imagePolicySnapshotTarget(one.TargetID, accepted.ActivityID, snapshot)
 	if !uncertain {
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Update("status", "settled").Error; err != nil {
+		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Updates(map[string]any{"status": "settled", "settled_at": policyNow()}).Error; err != nil {
 			return policyTargetWithActivity(one.TargetID, accepted.ActivityID, st.Failed, "update.persistence-failed"), true
 		}
 	}
@@ -247,18 +192,20 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 func (s *UpdaterService) imagePolicyHostHold(ctx context.Context, p *imagePolicyService, env, registration string) (*st.TargetOutcome, error) {
 	var children []struct {
 		policy.Child
-		TargetID string
+		TargetID   string
+		TargetKind string
 	}
-	err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Select("image_policy_children.*, stack_update_policies.target_id").Joins("JOIN stack_update_policies ON stack_update_policies.id = image_policy_children.policy_id").Where("stack_update_policies.environment_id = ? AND stack_update_policies.registration_id = ? AND image_policy_children.status = ?", env, registration, "admitted").Order("image_policy_children.id").Scan(&children).Error
+	err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Select("image_policy_children.*, update_policies.target_id, update_policies.target_kind").Joins("JOIN update_policies ON update_policies.id = image_policy_children.policy_id").Where("update_policies.environment_id = ? AND update_policies.registration_id = ? AND image_policy_children.status = ?", env, registration, "admitted").Order("image_policy_children.id").Scan(&children).Error
 	if err != nil {
 		return nil, err
 	}
 	for _, child := range children {
 		target, unknown := s.reconcileImagePolicyChild(ctx, p, env, child.TargetID, child.Child)
 		if unknown {
+			target = qualifyUpdateTarget(env, child.TargetKind, child.TargetID, target)
 			return &target, nil
 		}
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Update("status", "settled").Error; err != nil {
+		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Updates(map[string]any{"status": "settled", "settled_at": policyNow()}).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -331,9 +278,10 @@ func (s *UpdaterService) ReconcileImagePolicyHost(ctx context.Context, env strin
 			continue
 		}
 		target, _ := s.reconcileImagePolicyChild(ctx, p, env, one.TargetID, child)
+		target = qualifyUpdateTarget(env, one.TargetKind, one.TargetID, target)
 		replaced := false
 		for i := range out.Targets {
-			if out.Targets[i].ID == target.ID {
+			if out.Targets[i].ID == target.ID || out.Targets[i].EnvironmentID == "" && out.Targets[i].ID == one.TargetID {
 				out.Targets[i] = target
 				replaced = true
 			}
@@ -373,15 +321,9 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 			version = parsed.String()
 		}
 		c := dto.UpdateCandidate{Service: service, ImageRef: reference.TagNameOnly(named).String(), Version: version, Digest: candidateDigest.String(), Platform: platform.String()}
-		c, err = p.store.RecordCandidate(ctx, one, c, one.Mode == "notify")
+		c, err = p.store.RecordCandidate(ctx, one, c, s.deps.Settings.GetBoolSetting(ctx, "updateNotify", false))
 		if err != nil {
 			return nil, err
-		}
-		if c.EntryID != "" && one.Mode == "notify" {
-			c, err = s.deliverImagePolicyEntry(ctx, p, c)
-			if err != nil {
-				return nil, err
-			}
 		}
 		candidates = append(candidates, c)
 	}
@@ -389,12 +331,30 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 	if err != nil {
 		return nil, err
 	}
-	changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(map[string]any{"candidates": string(payload)})
+	changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND registration_id = ? AND revision = ?", one.ID, one.RegistrationID, one.Revision).Updates(map[string]any{"candidates": string(payload)})
 	if changed.Error != nil {
 		return nil, changed.Error
 	}
 	if changed.RowsAffected != 1 {
 		return nil, imageDTO.Failure("update.policy-changed", 409)
+	}
+	if s.deps.Settings.GetBoolSetting(ctx, "updateNotify", false) {
+		for i, c := range candidates {
+			if c.EntryID != "" {
+				c, err = s.deliverImagePolicyEntry(ctx, p, c)
+				if err != nil {
+					return nil, err
+				}
+				candidates[i] = c
+			}
+		}
+		payload, err = json.Marshal(candidates)
+		if err != nil {
+			return nil, err
+		}
+		if err = p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND registration_id = ? AND revision = ?", one.ID, one.RegistrationID, one.Revision).Update("candidates", string(payload)).Error; err != nil {
+			return nil, err
+		}
 	}
 	return candidates, nil
 }
@@ -448,55 +408,61 @@ func (s *UpdaterService) CheckPolicyProject(ctx context.Context, env, target str
 	if err != nil {
 		return nil, err
 	}
+	one, fenceErr := s.manualPolicyFence(ctx, p, env, target)
 	check, err := p.ports.check(ctx, env, target)
 	if err != nil {
 		return nil, err
 	}
-	if check == nil || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
+	if check == nil || check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
 		return check, imageDTO.Failure("update.check-unavailable", 503)
 	}
 	result := *check
 	result.PolicyCode = ""
-	if err := s.bookkeepManualPolicyCheck(ctx, p, env, target, check); err != nil {
-		result.PolicyCode = policyCode(err, "update.persistence-failed")
+	if fenceErr == nil {
+		fenceErr = s.bookkeepManualPolicyRow(ctx, p, one, check)
+	}
+	if fenceErr != nil {
+		result.PolicyCode = policyCode(fenceErr, "update.persistence-failed")
 	}
 	return &result, nil
 }
 
-func (s *UpdaterService) bookkeepManualPolicyCheck(ctx context.Context, p *imagePolicyService, env, target string, check *projectDTO.UpdateInfo) (err error) {
+func (s *UpdaterService) manualPolicyFence(ctx context.Context, p *imagePolicyService, env, target string) (policy.Policy, error) {
 	reg, err := p.ports.host(ctx, env)
 	if err != nil {
-		return err
+		return policy.Policy{}, err
 	}
 	one, err := p.store.Policy(ctx, env, reg, target)
 	if err != nil {
+		return one, err
+	}
+	if one.Revision == 0 {
+		if baseline, e := p.ports.baseline(ctx, env, target); e == nil {
+			one.TargetIdentity = baseline.TargetIdentity
+		}
+		return p.store.EnsureObservedPolicy(ctx, one)
+	}
+	return one, nil
+}
+func (s *UpdaterService) bookkeepManualPolicyCheck(ctx context.Context, p *imagePolicyService, env, target string, check *projectDTO.UpdateInfo) error {
+	one, err := s.manualPolicyFence(ctx, p, env, target)
+	if err != nil {
 		return err
 	}
-	if one.Mode == "off" {
-		return nil
-	}
+	return s.bookkeepManualPolicyRow(ctx, p, one, check)
+}
+func (s *UpdaterService) bookkeepManualPolicyRow(ctx context.Context, p *imagePolicyService, one policy.Policy, check *projectDTO.UpdateInfo) (err error) {
 	defer func() {
 		code := ""
 		if err != nil {
 			code = policyCode(err, "update.persistence-failed")
 		}
 		// The observation succeeded independently of optional candidate bookkeeping.
-		changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(map[string]any{"checked_at": policyNow(), "code": "", "bookkeeping_code": code, "bookkeeping_at": policyNow()})
+		changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND registration_id = ? AND revision = ?", one.ID, one.RegistrationID, one.Revision).Updates(map[string]any{"checked_at": policyNow(), "code": "", "bookkeeping_code": code, "bookkeeping_at": policyNow()})
 		if changed.Error != nil {
 			err = imageDTO.Failure("update.persistence-failed", 500)
 		}
 	}()
-	actorCtx, err := p.ports.actor(ctx, env, one.ActorID, one.ActorKeyID, false)
-	if err != nil {
-		return err
-	}
-	baseline, err := p.ports.baseline(actorCtx, env, target)
-	if err != nil {
-		return err
-	}
-	if baseline.TargetIdentity != one.TargetIdentity {
-		return imageDTO.Failure("update.target-changed", 409)
-	}
-	_, err = s.observeImagePolicy(actorCtx, p, one, check)
+	_, err = s.observeImagePolicy(ctx, p, one, check)
 	return err
 }

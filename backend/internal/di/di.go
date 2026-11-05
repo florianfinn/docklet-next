@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences; hub service widget module.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences; hub service widget module; M18 live scheduling, policy and contract foundation.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -103,7 +103,7 @@ var ServiceOptions = fx.Options(
 		upload.NewUploadService,
 		auth.NewAuthService,
 		settings.NewSettingsSearchService,
-		fx.Annotate(settings.NewSettingsService, fx.OnStop(func(ctx context.Context, service *settings.SettingsService) error { return service.Stop(ctx) })),
+		fx.Annotate(provideSettingsServiceInternal, fx.OnStop(func(ctx context.Context, service *settings.SettingsService) error { return service.Stop(ctx) })),
 		fx.Annotate(volume.NewVolumeService, fx.OnStop(func(ctx context.Context, service *volume.VolumeService) { service.CleanupHelperContainers(ctx) })),
 		fx.Annotate(webhook.NewWebhookService,
 			fx.OnStart(func(ctx context.Context, service *webhook.WebhookService) error { return service.LoadTokenHashes(ctx) }),
@@ -158,8 +158,6 @@ var ServiceOptions = fx.Options(
 // remain bootstrap concerns because their ordering is application-specific.
 var JobOptions = fx.Options(
 	fx.Provide(
-		scheduler.NewAutoUpdateJob,
-		scheduler.NewImageUpdateWatcher,
 		scheduler.NewDockerClientRefreshJob,
 		scheduler.NewEventCleanupJob,
 		scheduler.NewPruningVolumeHelperJob,

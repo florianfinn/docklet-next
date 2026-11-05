@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package scheduler
 
@@ -283,8 +283,8 @@ func TestJobScheduler_StartScheduler_SchedulesNonConditionalJobs(t *testing.T) {
 	}
 	require.NoError(t, js.RegisterBusWatcher(watcher, true))
 	nextPolling := time.Now().UTC().Add(time.Hour)
-	require.NoError(t, js.coordinator.Checkpoint(t.Context(), watcher.Name(), "0 0 * * * *", nextPolling))
-	require.NoError(t, js.coordinator.Checkpoint(t.Context(), "removed-job", "0 0 * * * *", nextPolling))
+	require.NoError(t, js.coordinator.Checkpoint(t.Context(), watcher.Name(), "0 0 * * * *", "UTC", nextPolling))
+	require.NoError(t, js.coordinator.Checkpoint(t.Context(), "removed-job", "0 0 * * * *", "UTC", nextPolling))
 	executed := make(chan struct{}, 1)
 
 	job := &testSchedulerJob{

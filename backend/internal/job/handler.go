@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package job
 
@@ -203,14 +203,8 @@ func (h *JobSchedulesHandler) AcknowledgeRun(ctx context.Context, input *jobsche
 // RestartWorker requests a continuous watcher's restart on the owning runtime,
 // forwarding remote requests to the agent. It does not enqueue a scheduled run.
 func (h *JobSchedulesHandler) RestartWorker(ctx context.Context, input *jobschedule.JobInput) (*RunJobOutput, error) {
-	if _, owned, err := h.jobService.imagePolicyJob(input.ID, input.JobID); owned {
-		if err != nil {
-			return nil, jobHTTPErrorInternal(err)
-		}
-		if err = h.jobService.imagePolicies.RefreshImagePolicySchedules(ctx); err != nil {
-			return nil, jobHTTPErrorInternal(err)
-		}
-		return &RunJobOutput{Body: jobschedule.JobRunResponse{Success: true, Message: "Hub schedule refreshed"}}, nil
+	if err := retiredUpdateControl(input.JobID); err != nil {
+		return nil, err
 	}
 	if input.ID != "0" {
 		result, err := h.proxyRemoteJSON.JSON[jobschedule.JobRunResponse](ctx, input.ID, http.MethodPost, "/api/environments/0/jobs/"+input.JobID+"/restart", nil)
@@ -258,4 +252,14 @@ func (h *JobSchedulesHandler) ResolveRun(ctx context.Context, input *jobschedule
 		return nil, jobHTTPErrorInternal(err)
 	}
 	return &jobschedule.RunOutput{Body: projectImagePolicyRun(run)}, nil
+}
+
+func (h *JobSchedulesHandler) CheckAllUpdates(ctx context.Context, in *struct {
+	RequestID string                      `header:"X-Request-ID"`
+	Body      *jobschedule.SubmitRunInput `required:"false"`
+}) (*RunJobOutput, error) {
+	if h.jobService.cfg.AgentMode || h.jobService.cfg.EdgeAgent {
+		return nil, huma.Error409Conflict("Update checks are hub-owned")
+	}
+	return h.RunJob(ctx, &RunJobInput{ID: "0", JobID: "update-check", RequestID: in.RequestID, Body: in.Body})
 }

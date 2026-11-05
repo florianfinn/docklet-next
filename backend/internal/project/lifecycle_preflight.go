@@ -74,6 +74,7 @@ func uniqueLifecycleReferences(snapshot *life.Snapshot) error {
 	return nil
 }
 func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registration string, request dto.LifecycleRequest) (*dto.LifecycleIntent, error) {
+	request = request.Clone()
 	_, current, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil {
 		return nil, err

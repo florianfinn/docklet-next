@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package imageupdate
 
@@ -24,7 +24,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/moby/moby/client"
-	"github.com/samber/mo"
 
 	"go.getarcane.app/updater/refs"
 	"golang.org/x/sync/errgroup"
@@ -147,9 +146,6 @@ func (s *ImageUpdateService) CheckMultipleImages(ctx context.Context, imageRefs 
 		"errorCount", errorCount,
 		"duration", time.Since(startBatch))
 
-	// A failed flush is already logged; the records stay pending for the next one.
-	_ = s.SendBatchUpdateNotifications(ctx)
-
 	return results, nil
 }
 
@@ -157,86 +153,7 @@ func (s *ImageUpdateService) CheckMultipleImages(ctx context.Context, imageRefs 
 // returns an error only when the pending set could not be determined, so a
 // caller about to consume the records can stop before their notifications
 // are lost; delivery failures leave the records unnotified for the next flush.
-func (s *ImageUpdateService) SendBatchUpdateNotifications(ctx context.Context) error {
-	if s.notificationService == nil {
-		return nil
-	}
-
-	// Serialize the query→send→mark sequence so the poll-end flush and the
-	// updater consumption-path flush can't both read the same unnotified set
-	// and double-send.
-	s.notifyMu.Lock()
-	defer s.notifyMu.Unlock()
-
-	// completeImageUpdateActivityInternal cancels the activity-tracked ctx before
-	// we reach here, so detach from that cancellation — otherwise the
-	// unnotified-updates query dies with "context canceled" and no notification is
-	// ever dispatched. Deliberately not utils.ActivityRuntimeContext: that helper
-	// short-circuits (returns ctx unchanged) for app-lifecycle-marked contexts, and
-	// every request/scheduler ctx carries that marker via the server BaseContext,
-	// making the detach a no-op in production. WithoutCancel keeps all values and
-	// the WithTimeout below keeps the flush bounded.
-	ctx = context.WithoutCancel(ctx)
-
-	notifCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	unnotifiedUpdates, err := s.GetUnnotifiedUpdates(notifCtx)
-	if err == nil && len(unnotifiedUpdates) > 0 {
-		// Records for resources that opted out of monitoring since the check, or
-		// whose container is gone, stay unnotified: they resurface if monitoring
-		// is re-enabled and are otherwise removed by orphan cleanup.
-		err = s.filterUnnotifiedByMonitoringInternal(notifCtx, unnotifiedUpdates)
-	}
-	switch {
-	case err != nil:
-		slog.WarnContext(ctx, "Failed to get unnotified updates", "error", imageDTO.Neutral(err, "update.check-unavailable", 503).Error())
-		return fmt.Errorf("flush pending update notifications: %w", err)
-	case len(unnotifiedUpdates) > 0:
-		updatesToNotify := make(map[string]*imageupdate.Response)
-		imageIDsToMark := make([]string, 0, len(unnotifiedUpdates))
-
-		for imageID, record := range unnotifiedUpdates {
-			imageRef := containerUpdateNotificationKeyInternal(record)
-			updatesToNotify[imageRef] = &imageupdate.Response{
-				HasUpdate:      record.HasUpdate,
-				UpdateType:     record.UpdateType,
-				CurrentVersion: record.CurrentVersion,
-				LatestVersion:  mo.PointerToOption(record.LatestVersion).OrEmpty(),
-				CurrentDigest:  mo.PointerToOption(record.CurrentDigest).OrEmpty(),
-				LatestDigest:   mo.PointerToOption(record.LatestDigest).OrEmpty(),
-				CheckTime:      record.CheckTime,
-				ResponseTimeMs: record.ResponseTimeMs,
-				Error:          mo.PointerToOption(record.LastError).OrEmpty(),
-				AuthMethod:     mo.PointerToOption(record.AuthMethod).OrEmpty(),
-				AuthUsername:   mo.PointerToOption(record.AuthUsername).OrEmpty(),
-				AuthRegistry:   mo.PointerToOption(record.AuthRegistry).OrEmpty(),
-				UsedCredential: record.UsedCredential,
-			}
-			imageIDsToMark = append(imageIDsToMark, imageID)
-		}
-
-		slog.InfoContext(ctx, "Sending notifications for unnotified updates", "count", len(updatesToNotify))
-
-		delivered, notifErr := s.notificationService.SendBatchImageUpdateNotification(notifCtx, updatesToNotify)
-		if notifErr != nil {
-			slog.WarnContext(ctx, "Failed to send batch update notification", "error", notifErr.Error())
-		}
-		// Mark notified when at least one provider delivered — a partial provider
-		// failure must not make every healthy provider re-send the same updates on
-		// the next poll. Failures remain visible in the delivery history.
-		if delivered == 0 {
-			slog.DebugContext(ctx, "No providers delivered image update notifications; leaving records unnotified", "count", len(imageIDsToMark))
-			return nil
-		}
-		if markErr := s.MarkUpdatesAsNotified(notifCtx, imageIDsToMark); markErr != nil {
-			slog.WarnContext(ctx, "Failed to mark updates as notified", "error", markErr.Error())
-		}
-	default:
-		slog.DebugContext(ctx, "No new updates to notify")
-	}
-	return nil
-}
+func (s *ImageUpdateService) SendBatchUpdateNotifications(ctx context.Context) error { return nil }
 
 func (s *ImageUpdateService) CheckAllImages(ctx context.Context, limit int, externalCreds []containerregistry.Credential) (map[string]*imageupdate.Response, error) {
 	imageRefs, err := s.getAllImageRefsInternal(ctx, limit)

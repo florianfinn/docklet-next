@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
 
 package imageupdate
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"go.getarcane.app/updater/labels"
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -35,7 +35,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
 
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 )
@@ -96,19 +96,7 @@ func TestImageUpdateService_MarkUpdatesAsNotified_EmptyList(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestImageUpdateService_SendBatchNotifications_DetachesCanceledContext guards the
-// regression where completeImageUpdateActivityInternal cancels the activity-tracked
-// ctx before the batch notification step runs, killing the unnotified-updates query
-// with "context canceled" so notifications were never dispatched (issue #2920).
-// newImageUpdateNotificationDockerServiceInternal stubs the container listing
-// the notification flush uses to resolve current update-check eligibility.
-func newImageUpdateNotificationDockerServiceInternal(t *testing.T, containers []container.Summary) *docker.DockerClientService {
-	t.Helper()
-	server := newImageUpdateDiscoveryServerInternal(t, nil, containers)
-	t.Cleanup(server.Close)
-	return &docker.DockerClientService{Client: newImageUpdateTestDockerClientInternal(t, server)}
-}
-
+// Executor checks leave notification delivery and dedup to the hub policy outbox.
 func newImageUpdateGenericWebhookProviderInternal(t *testing.T, db *database.DB) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
@@ -125,228 +113,27 @@ func newImageUpdateGenericWebhookProviderInternal(t *testing.T, db *database.DB)
 	return &calls
 }
 
-// TestImageUpdateService_SendBatchNotifications_FiltersByUpdateCheckEligibility
-// covers issue #3532: containers excluded from automatic installation keep
-// receiving notifications, while the update-check label, stale container
-// records, and images used only by opted-out containers are held back.
-func TestImageUpdateService_SendBatchNotifications_FiltersByUpdateCheckEligibility(t *testing.T) {
-	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
-	calls := newImageUpdateGenericWebhookProviderInternal(t, db)
-
-	containers := []container.Summary{
-		{ID: "install-excluded", ImageID: "sha256:install-excluded", Image: "test/install-excluded:latest", Labels: map[string]string{labels.LabelUpdater: "false"}},
-		{ID: "unmonitored", ImageID: "sha256:unmonitored", Image: "test/unmonitored:latest", Labels: map[string]string{imageref.UpdateCheckLabel: "false"}},
-		{ID: "shared-unmonitored", ImageID: "sha256:shared", Image: "test/shared:latest", Labels: map[string]string{imageref.UpdateCheckLabel: "false"}},
-		{ID: "shared-monitored", ImageID: "sha256:shared", Image: "test/shared:latest", Labels: map[string]string{labels.LabelUpdater: "false"}},
-		{ID: "ref-only-unmonitored", ImageID: "sha256:rebuilt", Image: "test/ref-only:2.0", Labels: map[string]string{imageref.UpdateCheckLabel: "false"}},
+func TestExecutorLegacyBatchNeverDeliversOrMarksRecords(t *testing.T) {
+	for _, cancelled := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancelled), func(t *testing.T) {
+			db := setupImageUpdateTestDB(t)
+			require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
+			calls := newImageUpdateGenericWebhookProviderInternal(t, db)
+			service := NewImageUpdateService(db, nil, nil, nil, nil, notification.NewNotificationService(db, nil, nil, nil), nil)
+			require.NoError(t, db.Create(&ImageUpdateRecord{ID: "sha256:example", Repository: "test/repo", Tag: "1.0.0", HasUpdate: true}).Error)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if cancelled {
+				cancel()
+			}
+			require.NoError(t, service.SendBatchUpdateNotifications(ctx))
+			require.NoError(t, service.SendBatchUpdateNotifications(ctx))
+			require.Zero(t, calls.Load())
+			var row ImageUpdateRecord
+			require.NoError(t, db.First(&row, "id = ?", "sha256:example").Error)
+			require.False(t, row.NotificationSent)
+		})
 	}
-	notif := notification.NewNotificationService(db, nil, nil, nil)
-	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, containers), nil, notif, nil)
-
-	records := []ImageUpdateRecord{
-		{ID: "sha256:install-excluded", Repository: "docker.io/test/install-excluded", Tag: "latest", HasUpdate: true},
-		{ID: "sha256:unmonitored", Repository: "docker.io/test/unmonitored", Tag: "latest", HasUpdate: true},
-		{ID: "sha256:shared", Repository: "docker.io/test/shared", Tag: "latest", HasUpdate: true},
-		{ID: "sha256:pruned", Repository: "docker.io/test/ref-only", Tag: "2.0", HasUpdate: true},
-		{ID: "sha256:unused", Repository: "docker.io/test/unused", Tag: "latest", HasUpdate: true},
-		{
-			ID:          "container::install-excluded",
-			ContainerID: "install-excluded",
-			ImageID:     "sha256:install-excluded",
-			Repository:  "docker.io/test/install-excluded",
-			Tag:         "latest",
-			HasUpdate:   true,
-			UpdateType:  UpdateTypeTag,
-		},
-		{
-			ID:          "container::unmonitored",
-			ContainerID: "unmonitored",
-			ImageID:     "sha256:unmonitored",
-			Repository:  "docker.io/test/unmonitored",
-			Tag:         "latest",
-			HasUpdate:   true,
-			UpdateType:  UpdateTypeTag,
-		},
-		{ID: "container::gone", ContainerID: "gone", ImageID: "sha256:gone", Repository: "docker.io/test/gone", Tag: "latest", HasUpdate: true, UpdateType: UpdateTypeTag},
-	}
-	require.NoError(t, db.Create(&records).Error)
-
-	require.NoError(t, svc.SendBatchUpdateNotifications(t.Context()))
-
-	require.EqualValues(t, 1, calls.Load(), "eligible records are delivered in one batch")
-	notified := map[string]bool{}
-	var reloaded []ImageUpdateRecord
-	require.NoError(t, db.Find(&reloaded).Error)
-	for _, record := range reloaded {
-		notified[record.ID] = record.NotificationSent
-	}
-	assert.True(t, notified["sha256:install-excluded"], "updater=false still notifies")
-	assert.True(t, notified["sha256:shared"], "one monitored consumer keeps the image notified")
-	assert.True(t, notified["sha256:unused"], "unused images stay monitored")
-	assert.True(t, notified["container::install-excluded"], "check-only containers notify")
-	assert.False(t, notified["sha256:unmonitored"], "image used only by an opted-out container")
-	assert.False(t, notified["sha256:pruned"], "reference used only by an opted-out container")
-	assert.False(t, notified["container::unmonitored"], "opted-out container record")
-	assert.False(t, notified["container::gone"], "stale container record")
-
-	// Re-enabling monitoring lets the held-back records notify on the next flush.
-	containers[1].Labels = nil
-	svc.dockerService = newImageUpdateNotificationDockerServiceInternal(t, containers)
-	require.NoError(t, svc.SendBatchUpdateNotifications(t.Context()))
-	require.EqualValues(t, 2, calls.Load())
-	var resumed ImageUpdateRecord
-	require.NoError(t, db.First(&resumed, "id = ?", "container::unmonitored").Error)
-	assert.True(t, resumed.NotificationSent)
-}
-
-func TestImageUpdateService_SendBatchNotifications_UnresolvedEligibilityLeavesUnnotified(t *testing.T) {
-	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
-	calls := newImageUpdateGenericWebhookProviderInternal(t, db)
-
-	notif := notification.NewNotificationService(db, nil, nil, nil)
-	svc := NewImageUpdateService(db, nil, nil, nil, nil, notif, nil)
-	require.NoError(t, db.Create(&ImageUpdateRecord{ID: "sha256:img", Repository: "test/repo", Tag: "latest", HasUpdate: true}).Error)
-
-	require.ErrorContains(t, svc.SendBatchUpdateNotifications(t.Context()), "resolve update-check eligibility: docker service unavailable")
-
-	require.Zero(t, calls.Load(), "nothing is sent when eligibility cannot be resolved")
-	var reloaded ImageUpdateRecord
-	require.NoError(t, db.First(&reloaded, "id = ?", "sha256:img").Error)
-	assert.False(t, reloaded.NotificationSent)
-}
-
-func TestImageUpdateService_SendBatchNotifications_DetachesCanceledContext(t *testing.T) {
-	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
-
-	// A provider that actually delivers (returns 200), so the record is only marked
-	// notified when the send genuinely reaches it.
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-	require.NoError(t, db.Create(&notification.NotificationSettings{
-		Provider: notifications.NotificationProviderGeneric,
-		Enabled:  true,
-		Config: database.JSON{
-			"webhookUrl":  server.URL,
-			"method":      "POST",
-			"contentType": "application/json",
-		},
-	}).Error)
-
-	notif := notification.NewNotificationService(db, nil, nil, nil)
-	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
-
-	rec := ImageUpdateRecord{
-		ID:               "sha256:img1",
-		Repository:       "test/repo",
-		Tag:              "latest",
-		HasUpdate:        true,
-		NotificationSent: false,
-	}
-	require.NoError(t, db.Create(&rec).Error)
-
-	// Simulate the post-activity-completion state: the tracked ctx is already
-	// canceled. Derive it from a lifecycle-marked parent to mirror production,
-	// where every request/scheduler ctx inherits the marker via the server
-	// BaseContext — the detach must work even then.
-	ctx, cancel := context.WithCancel(utils.WithAppLifecycleContext(t.Context()))
-	cancel()
-
-	require.NoError(t, svc.SendBatchUpdateNotifications(ctx))
-
-	// The provider being reached, and the record being marked notified, both prove
-	// GetUnnotifiedUpdates + the send + MarkUpdatesAsNotified ran despite the canceled
-	// parent ctx (issue #2920).
-	require.EqualValues(t, 1, calls.Load())
-	var reloaded ImageUpdateRecord
-	require.NoError(t, db.First(&reloaded, "id = ?", "sha256:img1").Error)
-	assert.True(t, reloaded.NotificationSent)
-}
-
-// TestImageUpdateService_SendBatchNotifications_NoEligibleProviders_LeavesUnnotified
-// is the regression guard for issue #3079: a background check that finds an update
-// while no provider has the image-update event enabled must NOT mark the record
-// notified — otherwise, once the user later configures a provider, the still-pending
-// update is permanently suppressed (it only re-surfaces on a future digest change).
-func TestImageUpdateService_SendBatchNotifications_NoEligibleProviders_LeavesUnnotified(t *testing.T) {
-	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
-
-	notif := notification.NewNotificationService(db, nil, nil, nil)
-	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
-
-	rec := ImageUpdateRecord{
-		ID:               "sha256:img-no-provider",
-		Repository:       "test/repo",
-		Tag:              "latest",
-		HasUpdate:        true,
-		NotificationSent: false,
-	}
-	require.NoError(t, db.Create(&rec).Error)
-
-	require.NoError(t, svc.SendBatchUpdateNotifications(t.Context()))
-
-	var reloaded ImageUpdateRecord
-	require.NoError(t, db.First(&reloaded, "id = ?", "sha256:img-no-provider").Error)
-	assert.False(t, reloaded.NotificationSent)
-
-	unnotified, err := svc.GetUnnotifiedUpdates(t.Context())
-	require.NoError(t, err)
-	require.Contains(t, unnotified, "sha256:img-no-provider")
-}
-
-// TestImageUpdateService_SendBatchNotifications_PartialFailureStillMarksNotified
-// guards the duplicate-notification bug: when one provider delivers and another
-// fails, the record must still be marked notified — otherwise the healthy provider
-// re-sends the same update on every poll until the broken provider is fixed.
-func TestImageUpdateService_SendBatchNotifications_PartialFailureStillMarksNotified(t *testing.T) {
-	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
-
-	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer healthy.Close()
-	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer broken.Close()
-
-	for _, serverURL := range []string{healthy.URL, broken.URL} {
-		require.NoError(t, db.Create(&notification.NotificationSettings{
-			Provider: notifications.NotificationProviderGeneric,
-			Enabled:  true,
-			Config: database.JSON{
-				"webhookUrl":  serverURL,
-				"method":      "POST",
-				"contentType": "application/json",
-			},
-		}).Error)
-	}
-
-	notif := notification.NewNotificationService(db, nil, nil, nil)
-	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
-
-	rec := ImageUpdateRecord{
-		ID:               "sha256:img-partial",
-		Repository:       "test/repo",
-		Tag:              "latest",
-		HasUpdate:        true,
-		NotificationSent: false,
-	}
-	require.NoError(t, db.Create(&rec).Error)
-
-	require.NoError(t, svc.SendBatchUpdateNotifications(t.Context()))
-
-	var reloaded ImageUpdateRecord
-	require.NoError(t, db.First(&reloaded, "id = ?", "sha256:img-partial").Error)
-	assert.True(t, reloaded.NotificationSent)
 }
 
 func TestImageUpdateService_GetUpdateSummaryForImageIDs_FiltersToLiveImages(t *testing.T) {
