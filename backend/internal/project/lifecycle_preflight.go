@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission.
+// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection.
 
 package project
 
@@ -79,6 +79,9 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 	if err != nil {
 		return nil, err
 	}
+	if err = lifecycleValidateServiceScope(current, request.Services); err != nil {
+		return nil, err
+	}
 	if _, err = lifecycleOrderedModel(current); err != nil {
 		return nil, err
 	}
@@ -142,6 +145,9 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 	}
 	skipped := false
 	for _, key := range slices.Sorted(maps.Keys(current.Model.Services)) {
+		if !lifecycleServiceSelected(request.Services, key) {
+			continue
+		}
 		img := current.Services[key]
 		row, ok := checked.ServiceUpdates[key]
 		if !ok || row.UpdateInfo == nil {
