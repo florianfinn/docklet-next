@@ -76,9 +76,9 @@ describe.each(["en-US", "de"] as const)("coverage marker in %s", (locale) => {
     renderWithApp(<><ContainerScanCoverage c={c} /><Settled /></>, adapter);
     await screen.findByText("security-settled");
     if (key === "containerNotCovered") expect((await screen.findByText(text.containerNotCovered.replace("{platform}", "linux/arm64").replace("{scanned}", "linux/amd64"))) !== null).toBe(true);
-    else if (key === "containerUnknown") expect((await screen.findByText(text.containerUnknown)) !== null).toBe(true);
+    else if (key === "containerUnknown") expect((await screen.findByText(text.containerUnknown.replaceAll("''", "'"))) !== null).toBe(true);
     else {
-      expect(document.body.textContent?.includes(text.containerNotCovered.slice(0, 12)) || document.body.textContent?.includes(text.containerUnknown)).toBe(false);
+      expect(document.body.textContent?.includes(text.containerNotCovered.slice(0, 12)) || document.body.textContent?.includes(text.containerUnknown.replaceAll("''", "'"))).toBe(false);
     }
   });
 });
