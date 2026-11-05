@@ -63,6 +63,7 @@ import { createNotificationSettings, NOTIFICATION_SETTINGS_OPERATIONS } from "./
 import { createVolumeReads } from "./volumes";
 import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
+import { createStackTerminals } from "./stack-terminals";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
@@ -450,6 +451,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
+  const stackTerminals = createStackTerminals(() => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks"])); });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
     retained: () => [...runtime.retained(), ...restarts.retained()],
@@ -511,7 +513,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     detail: async (hostId, id, signal) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!,
     publish: (runs, health) => {
       healthListeners.forEach((listener) => listener(health));
-      if (runs) actionListeners.forEach((listener) => listener(runs));
+      if (runs) { stackTerminals(runs); actionListeners.forEach((listener) => listener(runs)); }
     },
   });
 
