@@ -9,11 +9,13 @@ package updater
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/Masterminds/semver/v3"
 	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
@@ -21,6 +23,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	digest "github.com/opencontainers/go-digest"
 	"gorm.io/gorm"
+	"log/slog"
 	"sort"
 )
 
@@ -410,6 +413,11 @@ func (s *UpdaterService) CheckPolicyProject(ctx context.Context, env, target str
 	}
 	one, fenceErr := s.manualPolicyFence(ctx, p, env, target)
 	check, err := p.ports.check(ctx, env, target)
+	var transport *remenv.TransportError
+	if errors.As(err, &transport) {
+		slog.WarnContext(ctx, "Update check could not reach the environment", "environment", env, "project", target, "error", err)
+		return nil, imageDTO.Failure("update.check-unavailable", 503)
+	}
 	if err != nil {
 		return nil, err
 	}
