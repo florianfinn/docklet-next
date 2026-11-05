@@ -66,7 +66,8 @@ function CompactFilters<T, K extends string>({ columns, filters, values, onChang
 export function SecurityTable<T, K extends string>({ label, fitKey, columns, condensed, rows, filters, values, setValues, sort, onSort, summary, empty }: Props<T, K>) {
   const t = useTranslations("security");
   const tf = useTranslations("common.columnFilters");
-  const { view, ref } = useFitView<HTMLElement>(JSON.stringify([fitKey, columns, values]));
+  // Filter values only remeasure: a reset would unmount the compact filter being typed into.
+  const { view, ref } = useFitView<HTMLElement>(JSON.stringify([fitKey, columns]), undefined, JSON.stringify(values));
   const groups = securityColumnGroups(view, columns.map((c) => c.id), condensed);
   const onChange = (id: string, value: string) => setValues((cur) => ({ ...cur, [id]: value }));
   const labelled = (row: SecurityRow<K>, ids: readonly K[]) => <dl className="grid min-w-0 gap-2">{ids.map((id) => <div key={id} className="min-w-0" data-field={id}>

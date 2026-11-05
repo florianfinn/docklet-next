@@ -148,6 +148,8 @@ const worst = (i: ScannedImage) => SEVERITIES.find((s) => (i.counts[s.key] ?? 0)
 
 export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings" | "hosts"> & { highlight: string | null }) {
   const t = useTranslations("security");
+  // Serialised once per data change, not per keystroke; cell text widths decide the measured view.
+  const findingsKey = useMemo(() => JSON.stringify([findings, [...hosts.values()].map((h) => h.name)]), [findings, hosts]);
   const tf = useTranslations("common.columnFilters");
   const [values, setValues] = useState<FilterValues>({});
   const [sort, onSort] = useTableSort<FindingKey>({ key: "risk", dir: "desc" }, ["cvss", "severity", "risk", "epss"]);
@@ -172,7 +174,7 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
   return (
     <SecurityTable
       label={t("tabs.findings")}
-      fitKey={JSON.stringify([findings, [...hosts.values()].map((h) => h.name)])}
+      fitKey={findingsKey}
       condensed={FINDING_GROUPS}
       rows={rows.map((f, index) => {
         const sev = SEVERITIES.find((s) => s.key === f.severity);
@@ -206,8 +208,11 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
   );
 }
 
-export function ImagesTab({ images, stacks, hosts, containers = [] }: Pick<Data, "images" | "stacks" | "hosts"> & { containers?: readonly ContainerInfo[] }) {
+const NO_CONTAINERS: readonly ContainerInfo[] = [];
+
+export function ImagesTab({ images, stacks, hosts, containers = NO_CONTAINERS }: Pick<Data, "images" | "stacks" | "hosts"> & { containers?: readonly ContainerInfo[] }) {
   const t = useTranslations("security");
+  const imagesKey = useMemo(() => JSON.stringify([images, stacks.map((s) => s.name), [...hosts.values()].map((h) => h.name), containers.map((c) => [c.name, c.imagePlatform])]), [images, stacks, hosts, containers]);
   const tf = useTranslations("common.columnFilters");
   const [values, setValues] = useState<FilterValues>({});
   const [sort, onSort] = useTableSort<ImageKey>({ key: "critical", dir: "desc" }, ["critical", "high", "medium", "low", "scanned"]);
@@ -242,7 +247,7 @@ export function ImagesTab({ images, stacks, hosts, containers = [] }: Pick<Data,
   return (
     <SecurityTable
       label={t("tabs.images")}
-      fitKey={JSON.stringify([images, stacks.map((s) => s.name), [...hosts.values()].map((h) => h.name), containers.map((c) => [c.name, c.imagePlatform])])}
+      fitKey={imagesKey}
       condensed={IMAGE_GROUPS}
       rows={rows.map((im) => {
         const stack = stacks.find((s) => s.id === im.stackId);

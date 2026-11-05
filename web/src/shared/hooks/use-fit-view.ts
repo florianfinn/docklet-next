@@ -8,9 +8,10 @@ import { INITIAL_FIT, nextFit, type FitState, type FitView } from "@/shared/lib/
  * block inside the block grid); its parent's content box is the available
  * width and is observed with ResizeObserver. Runs in a layout effect, so an overflowing
  * view never reaches the screen. A new `resetKey` (mode, rows, …) starts
- * again from the widest view.
+ * again from the widest view. A new `remeasureKey` (for example filter values) only
+ * measures again from the current view, so controls rendered for that view stay mounted.
  */
-export function useFitView<E extends HTMLElement>(resetKey: string, views?: readonly FitView[]) {
+export function useFitView<E extends HTMLElement>(resetKey: string, views?: readonly FitView[], remeasureKey?: string) {
   const ref = useRef<E>(null);
   const [state, setState] = useState<FitState>(INITIAL_FIT);
   const [key, setKey] = useState(resetKey);
@@ -43,7 +44,7 @@ export function useFitView<E extends HTMLElement>(resetKey: string, views?: read
     const ro = new ResizeObserver(check);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [state.view, resetKey, views]);
+  }, [state.view, resetKey, views, remeasureKey]);
 
   return { view: state.view, ref };
 }
