@@ -17,11 +17,13 @@ export function scanSchedule(v: unknown): ScanSchedule {
   let raw: unknown;
   try { raw = typeof v === "string" ? JSON.parse(v) : v; } catch { invalid(); }
   const o = object(raw), mode = choice(o.mode, ["manual", "daily", "weekly"]);
-  if (mode === "manual") { if (Object.keys(o).some((k) => k !== "mode")) invalid(); return { mode }; }
+  // The hub stores empty or null day/time keys as written (vulnerability_schedule.go); they carry no value.
+  const blank = (k: string) => o[k] === undefined || o[k] === null || o[k] === "";
+  if (mode === "manual") { if (Object.keys(o).some((k) => k !== "mode" && !(["day", "time"].includes(k) && blank(k)))) invalid(); return { mode }; }
   const time = string(o.time, 5);
   if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(time) || Object.keys(o).some((k) => !["mode", "time", "day"].includes(k))) invalid();
   if (mode === "weekly") return { mode, time, day: choice(o.day, ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]) };
-  if (o.day !== undefined && o.day !== "") invalid();
+  if (!blank("day")) invalid();
   return { mode, time };
 }
 export function settingsValues(v: unknown): Record<string, string> {

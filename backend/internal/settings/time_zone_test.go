@@ -24,7 +24,7 @@ func TestHubTimeZoneLiveSaveAndRestart(t *testing.T) {
 	cfg := &config.Config{Timezone: "Europe/Berlin"}
 	s.BindZoneProvider(cfg)
 	h := &SettingsHandler{settingsService: s, cfg: cfg}
-	for _, zone := range []string{"UTC", "Asia/Tokyo", "Local", ""} {
+	for _, zone := range []string{"UTC", "Asia/Tokyo", ""} {
 		_, err = h.UpdateSettings(t.Context(), &UpdateSettingsInput{EnvironmentID: "0", Body: dto.Update{TimeZone: new(zone)}})
 		require.NoError(t, err)
 		want := zone
@@ -38,11 +38,13 @@ func TestHubTimeZoneLiveSaveAndRestart(t *testing.T) {
 		require.Equal(t, zone, s.GetSettingsConfig().TimeZone.Value)
 		require.Equal(t, want, runtimeSettingKeysInternal(h.appendRuntimeSettingsInternal(nil, true))["effectiveTimeZone"])
 	}
-	_, err = h.UpdateSettings(t.Context(), &UpdateSettingsInput{EnvironmentID: "0", Body: dto.Update{TimeZone: new("Mars/Base")}})
-	var problem *imageDTO.OperationError
-	require.ErrorAs(t, err, &problem)
-	require.Equal(t, 400, problem.GetStatus())
-	require.Equal(t, "settings.invalid-time-zone", problem.Problem.Code)
+	for _, zone := range []string{"Mars/Base", "Local", "Factory"} {
+		_, err = h.UpdateSettings(t.Context(), &UpdateSettingsInput{EnvironmentID: "0", Body: dto.Update{TimeZone: new(zone)}})
+		var problem *imageDTO.OperationError
+		require.ErrorAs(t, err, &problem, zone)
+		require.Equal(t, 400, problem.GetStatus())
+		require.Equal(t, "settings.invalid-time-zone", problem.Problem.Code)
+	}
 	require.Equal(t, "Europe/Berlin", cfg.Location().String())
 	_, err = s.UpdateSettings(t.Context(), dto.Update{TimeZone: new("Asia/Tokyo")})
 	require.NoError(t, err)

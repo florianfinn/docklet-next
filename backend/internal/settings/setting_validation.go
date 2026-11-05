@@ -27,7 +27,8 @@ func validateSettingValueInternal(key, value string) error {
 		return common.Classify(common.ErrValidation, errors.New("updateNotify must be true or false"))
 	}
 	if key == "timeZone" && value != "" {
-		if _, err := time.LoadLocation(value); err != nil {
+		// Local and Factory load but name no IANA zone that clients can format with.
+		if _, err := time.LoadLocation(value); err != nil || value == "Local" || value == "Factory" {
 			return imageDTO.Failure("settings.invalid-time-zone", 400)
 		}
 	}

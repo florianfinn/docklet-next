@@ -15,7 +15,7 @@ import type { ScannedImage } from "@/domain/model";
 import { renderWithApp } from "@/test/render";
 import { ContainerScanCoverage } from "@/features/containers/ContainerScanCoverage";
 import { ImagesTab } from "./SecurityTabs";
-import { imageCoverage, platformCoverage } from "./platform-coverage";
+import { imageCoverage, normalizePlatform, platformCoverage } from "./platform-coverage";
 
 const observation = { stale: false } as Parameters<typeof mapContainer>[3];
 // One multi-platform index on one host: a native, a non-native and an unreported container.
@@ -36,6 +36,12 @@ describe("platform coverage rule", () => {
     expect(platformCoverage("unknown", "linux/amd64")).toBe("unknown");
     expect(platformCoverage(undefined, "linux/amd64")).toBe("unknown");
     expect(platformCoverage("linux/arm64", undefined)).toBe(undefined);
+  });
+  it("implies default variants like the scan side", () => {
+    expect(platformCoverage("linux/arm", "linux/arm/v7")).toBe("covered");
+    expect(platformCoverage("linux/amd64/v1", "linux/amd64")).toBe("covered");
+    expect(platformCoverage("linux/arm/v6", "linux/arm/v7")).toBe("not-covered");
+    expect(normalizePlatform("linux/aarch64")).toBe("linux/arm64");
   });
   it("maps the wire platform and an older agent without it to unknown", () => {
     expect(containers.map((c) => c.imagePlatform)).toEqual(["linux/amd64", "linux/arm64", "unknown", "unknown"]);
