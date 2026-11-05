@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery.
+// Deviations: Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery; register ACK publication ordering for #347.
 
 package edge
 
@@ -226,6 +226,8 @@ type AgentTunnel struct {
 	mu            sync.RWMutex
 	done          chan struct{}
 	closeOnce     sync.Once
+
+	registerPending atomic.Bool
 }
 
 // TunnelRegistry manages active edge agent tunnel connections

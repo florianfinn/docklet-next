@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None; notification and Auto Heal contracts and delivery for #296.
+// Deviations: None; notification and Auto Heal contracts and delivery for #296; register ACK publication ordering for #347.
 
 package edge
 
@@ -631,7 +631,7 @@ func (f *registerResponseOrderConn) IsClosed() bool { return false }
 
 func (f *registerResponseOrderConn) Transport() string { return EdgeTransportGRPC }
 
-func TestTunnelServer_ManageConnectedTunnel_RegistersBeforeSendingGRPCRegisterResponse(t *testing.T) {
+func TestTunnelServer_ManageConnectedTunnel_ReservesBeforeACKWithoutPublishing(t *testing.T) {
 	server := NewTunnelServerWithRegistry(GetRegistry(), nil, nil)
 	envID := "env-grpc-register-order"
 	server.registry.Unregister(envID)
@@ -640,8 +640,10 @@ func TestTunnelServer_ManageConnectedTunnel_RegistersBeforeSendingGRPCRegisterRe
 	conn := &registerResponseOrderConn{recvErr: io.EOF}
 	conn.sendHook = func(msg *TunnelMessage) error {
 		require.Equal(t, MessageTypeRegisterResponse, msg.Type)
-		_, ok := server.registry.Get(envID).Get()
-		assert.True(t, ok, "gRPC tunnel should already be registered when the register response is sent")
+		_, reserved := server.registry.tunnels.Get(envID)
+		assert.True(t, reserved, "duplicate admission must reserve the session before its ACK")
+		_, visible := server.registry.Get(envID).Get()
+		assert.False(t, visible, "request senders must wait until the register ACK is written")
 		return nil
 	}
 
@@ -650,6 +652,22 @@ func TestTunnelServer_ManageConnectedTunnel_RegistersBeforeSendingGRPCRegisterRe
 
 	_, ok := server.registry.Get(envID).Get()
 	assert.False(t, ok)
+}
+
+func TestTunnelServer_ManageConnectedTunnel_FailedACKNeverPublishes(t *testing.T) {
+	registry := NewTunnelRegistry()
+	online := false
+	server := NewTunnelServerWithRegistry(registry, nil, func(_ context.Context, _ string, connected bool) { online = online || connected })
+	conn := &registerResponseOrderConn{sendHook: func(*TunnelMessage) error {
+		_, visible := registry.Get("failed-ack").Get()
+		require.False(t, visible)
+		return errors.New("synthetic ACK write failure")
+	}}
+	tunnel := NewAgentTunnelWithConn("failed-ack", conn)
+	server.manageConnectedTunnel(t.Context(), t.Context(), tunnel)
+	_, reserved := registry.tunnels.Get("failed-ack")
+	require.False(t, reserved)
+	require.False(t, online)
 }
 
 func TestTunnelServer_ManageConnectedTunnel_UnregistersAfterConnectionContextCancellationInternal(t *testing.T) {

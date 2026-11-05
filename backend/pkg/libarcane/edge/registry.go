@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; current-session heartbeat cleanup.
+// Deviations: Local module namespace; current-session heartbeat cleanup; register ACK publication ordering for #347.
 
 package edge
 
@@ -127,6 +127,11 @@ func NewTunnelRegistry() *TunnelRegistry {
 // Get retrieves a tunnel by environment ID
 func (r *TunnelRegistry) Get(envID string) mo.Option[*AgentTunnel] {
 	tunnel, ok := r.tunnels.Get(envID)
+	// Duplicate admission reserves the session before its ACK is sent. Request
+	// senders must not publish application traffic ahead of that first frame.
+	if ok && tunnel.registerPending.Load() {
+		return mo.None[*AgentTunnel]()
+	}
 	return mo.TupleToOption(tunnel, ok)
 }
 
