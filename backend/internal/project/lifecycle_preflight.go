@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection.
+// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection; a partial rebuild of a shared reference is refused.
 
 package project
 
@@ -178,6 +178,13 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 				return nil, err
 			}
 			kind = "version"
+		}
+		// A rebuild moves the shared tag; an unselected service on the same
+		// reference would run an image its reference no longer names.
+		for other, peer := range current.Services {
+			if kind == "rebuild" && other != key && peer.Reference == img.Reference && !lifecycleServiceSelected(request.Services, other) {
+				return nil, lifecycleFailure("update.service-coupled")
+			}
 		}
 		if err = guard.ValidateReference(selected); err != nil {
 			return nil, err

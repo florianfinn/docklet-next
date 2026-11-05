@@ -28,9 +28,10 @@ import (
 )
 
 // Only a tag-policy version rewrites the literal; a newer version label on the
-// same reference is a rebuild that keeps it.
+// same reference is a rebuild that keeps it. A rebuild cannot move a tag that an
+// unselected service also runs.
 func TestServiceScopeNativeCandidateAndLiteralRewrite(t *testing.T) {
-	for _, mode := range []string{"tag-policy", "rebuild"} {
+	for _, mode := range []string{"tag-policy", "rebuild", "rebuild-shared"} {
 		t.Run(mode, func(t *testing.T) { serviceScopeNativeCandidate(t, mode) })
 	}
 }
@@ -47,7 +48,11 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 	require.NoError(t, err)
 	require.NoError(t, remote.Write(tag, image, remote.WithContext(t.Context())))
 	labels := "    labels:\n      com.getarcaneapp.arcane.updater.strategy: tag\n"
+	sideRef := oldRef
 	if mode == "rebuild" {
+		sideRef = host + "/side:1.0.0"
+	}
+	if mode != "tag-policy" {
 		labels = ""
 		tag, err = name.NewTag(oldRef, name.Insecure)
 		require.NoError(t, err)
@@ -55,15 +60,16 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 		newRef = oldRef
 	}
 	require.NoError(t, f.db.Create(&registryService.ContainerRegistry{URL: server.URL, Enabled: true, Insecure: true, RegistryType: "generic"}).Error)
-	source := "services:\n  app:\n    image: " + oldRef + "\n" + labels + "  side:\n    image: " + oldRef + " # separate literal, stays unchanged\n"
+	source := "services:\n  app:\n    image: " + oldRef + "\n" + labels + "  side:\n    image: " + sideRef + " # separate literal, stays unchanged\n"
 	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(source), 0600))
-	f.tags[oldRef] = lifecycleOldID
+	f.tags[oldRef], f.tags[sideRef] = lifecycleOldID, lifecycleOldID
 	app := f.workloads["app"]
 	app.Reference = oldRef
 	f.workloads["app"] = app
 	side := app
 	side.ID = strings.Repeat("1", 64)
 	side.Service = "side"
+	side.Reference = sideRef
 	f.workloads["side"] = side
 	current := f.establishBaseline()
 	f.service.SetLifecycleChecker(func(context.Context, string) (*projectDTO.UpdateInfo, error) {
@@ -73,6 +79,11 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 		}}, nil
 	})
 	intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: current.SavedRevision, Services: []string{"app"}})
+	if mode == "rebuild-shared" {
+		lifecycleCode(t, err, "update.service-coupled")
+		assertNoServiceAdmission(t, f)
+		return
+	}
 	require.NoError(t, err)
 	require.Len(t, intent.Selections, 1)
 	require.Equal(t, "app", intent.Selections[0].Service)
@@ -87,6 +98,6 @@ func serviceScopeNativeCandidate(t *testing.T, mode string) {
 			require.Equal(t, strings.Replace(source, oldRef, newRef, 1), string(file.Content))
 		}
 	}
-	require.Equal(t, oldRef, desired.Model.Services["side"].Image)
+	require.Equal(t, sideRef, desired.Model.Services["side"].Image)
 	assertNoServiceAdmission(t, f)
 }

@@ -119,6 +119,10 @@ lifecycle in [images and updates](images-updates.md).
    `network_mode: service:`, `ipc`/`pid: service:` or `volumes_from` (either direction), the single
    service update is refused before admission with `update.service-coupled`; the dialog suggests
    the whole-stack update.
+   A rebuild candidate (same reference) is refused the same way when an unselected service uses
+   that reference: pulling it moves the shared tag, and the unselected service would keep running
+   an image its reference no longer names. A version candidate writes a new literal and stays
+   allowed.
 6. **Verification** checks image IDs of the selected services; the baseline is saved for the whole
    stack after success (fresh observation of all services, existing code).
 7. **Gestures.** Services card, update radar and the update dialog offer per-service update;
