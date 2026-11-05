@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery.
 
 package edge
 
@@ -507,9 +507,9 @@ func (s *TunnelServer) handleTunnelMessage(ctx context.Context, tunnel *AgentTun
 	case MessageTypeHeartbeat:
 		s.handleHeartbeat(ctx, tunnel, msg)
 	case MessageTypeResponse:
-		s.deliverResponse(ctx, tunnel, msg)
+		s.deliverResponse(ctx, tunnel, msg, deliveryTimer)
 	case MessageTypeCommandAck, MessageTypeCommandOutput, MessageTypeCommandComplete, MessageTypeFileChunk:
-		s.deliverResponse(ctx, tunnel, msg)
+		s.deliverResponse(ctx, tunnel, msg, deliveryTimer)
 	case MessageTypeEvent:
 		s.handleEvent(ctx, tunnel, msg)
 	case MessageTypeStreamData, MessageTypeStreamEnd, MessageTypeWebSocketData, MessageTypeWebSocketClose, MessageTypeStreamClose:
@@ -538,19 +538,25 @@ func (s *TunnelServer) handleHeartbeat(ctx context.Context, tunnel *AgentTunnel,
 	}
 }
 
-func (s *TunnelServer) deliverResponse(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
+// A burst of response chunks can outrun the consumer for a moment; like stream
+// data, delivery waits up to streamDeliveryTimeout before failing the request.
+func (s *TunnelServer) deliverResponse(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage, deliveryTimer *time.Timer) {
 	if req, ok := tunnel.Pending.Load(msg.ID); ok {
 		pending, isPending := req.(*PendingRequest)
 		if !isPending {
 			return
 		}
+		deliveryTimer.Stop()
+		deliveryTimer.Reset(streamDeliveryTimeout)
+		defer deliveryTimer.Stop()
 		select {
 		case pending.ResponseCh <- msg:
-		default:
-			err := fmt.Errorf("response delivery failed because pending request %s is not consuming messages", msg.ID)
+		case <-ctx.Done():
+		case <-deliveryTimer.C:
+			err := fmt.Errorf("response delivery timed out for pending request %s", msg.ID)
 			tunnel.Pending.Delete(msg.ID)
 			pending.failureCh <- err
-			slog.WarnContext(ctx, "Failed pending request with full response channel", "id", msg.ID)
+			slog.WarnContext(ctx, "Failed slow pending response consumer", "id", msg.ID, "timeout", streamDeliveryTimeout)
 		}
 		return
 	}
