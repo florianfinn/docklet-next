@@ -37,3 +37,23 @@ it.each([
 it("keeps the name of a job without a catalogued kind", () => {
   expect(renderRun(mapActivityDetail(job("example-job", "Example job")), "de").target).toBe("Example job");
 });
+
+// A settled job without an outcome message carries "<job name>: <state>" as error and latest message.
+const settled = (state: string, message = `Update check: ${state}`) => {
+  const detail = job("update-check", "Update check") as unknown as { activity: Record<string, unknown> };
+  Object.assign(detail.activity, { status: "failed", endedAt: "2026-11-05T12:01:00Z", messageCode: `job.${state}`, latestMessage: message, error: message });
+  return detail as unknown as Detail;
+};
+
+it.each([
+  ["partial", "Teilweise abgeschlossen"],
+  ["failed", "Fehlgeschlagen"],
+  ["needs_attention", "Braucht Aufmerksamkeit"],
+])("localises the %s summary of a settled hub update check", (state, text) => {
+  const run = renderRun(mapActivityDetail(settled(state)), "de");
+  expect([run.error, run.log]).toEqual([text, [text]]);
+});
+
+it("keeps a real job outcome message", () => {
+  expect(renderRun(mapActivityDetail(settled("failed", "Registry example.com refused the request")), "de").error).toBe("Registry example.com refused the request");
+});
