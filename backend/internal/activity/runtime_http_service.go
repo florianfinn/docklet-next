@@ -118,8 +118,11 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	// tuple is used only by the pure validator and never persisted or dispatched.
 	command := RuntimeCommand{Store: RuntimeStoreBinding{EnvironmentID: environmentID, StoreGeneration: "validation", ExecutorGeneration: "validation", ManagerID: "validation", RegistrationID: "validation"},
 		Key: key, Actor: *actor, Operation: operation, Target: target, Options: options}
+	// A policy-owned run is admitted under its child ID; the policy waits on it.
 	if options.Lifecycle != nil && options.Lifecycle.Policy != nil {
 		command.ProposedRunID = options.Lifecycle.Policy.ChildID
+	} else if options.ContainerImage != nil && options.ContainerImage.Policy != nil {
+		command.ProposedRunID = options.ContainerImage.Policy.ChildID
 	}
 	var err error
 	if runtimeImageOperation(operation) {
