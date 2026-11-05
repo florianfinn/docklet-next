@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; update joins match equivalent image reference spellings.
 
 // Package details derives project runtime state: service status from Compose
 // and containers, include files, logs and image update checks.
@@ -282,17 +282,23 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 	result := make(map[string]*imagetypes.UpdateInfo, len(base))
 	maps.Copy(result, base)
 	// Shared image results are dropped for references used only by services
-	// that opted out of update checks.
+	// that opted out of update checks; spellings are compared normalized.
 	monitored := make(map[string]bool)
 	for _, service := range services {
 		imageRef := strings.TrimSpace(service.Image)
 		if imageRef == "" {
 			continue
 		}
-		monitored[imageRef] = monitored[imageRef] || !imageref.IsUpdateCheckDisabled(service.ContainerLabels)
+		if _, ok := result[imageRef]; !ok {
+			if info := UpdateInfoForRef(base, imageRef); info != nil {
+				result[imageRef] = info
+			}
+		}
+		key := NormalizedImageRef(imageRef)
+		monitored[key] = monitored[key] || !imageref.IsUpdateCheckDisabled(service.ContainerLabels)
 	}
-	for imageRef, isMonitored := range monitored {
-		if !isMonitored {
+	for imageRef := range result {
+		if isMonitored, ok := monitored[NormalizedImageRef(imageRef)]; ok && !isMonitored {
 			delete(result, imageRef)
 		}
 	}

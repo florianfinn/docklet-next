@@ -738,7 +738,7 @@ func BuildConfiguredUpdateInfo(
 		if record != nil && record.PolicyKey == imageref.UpdatePolicyKey(imageRef, service.Labels) {
 			info = record.UpdateInfo()
 		} else if policyErr == nil && policy.Strategy == "digest" && !imageref.IsUpdateCheckDisabled(service.Labels) {
-			info = byRef[imageRef]
+			info = projectdetails.UpdateInfoForRef(byRef, imageRef)
 		}
 
 		if len(runtimeUpdates) > 0 && runtimeUpdates[0][service.Name] != nil {
@@ -746,7 +746,7 @@ func BuildConfiguredUpdateInfo(
 			// digest checks must match the configured reference to count.
 			runtime := runtimeUpdates[0][service.Name]
 			attributed := policyErr == nil && policy.Strategy != "digest"
-			if stored := byRef[imageRef]; policyErr == nil && !attributed && stored != nil && !stored.HasUpdate && stored.Error == "" && stored.CheckTime.Equal(runtime.CheckTime) {
+			if stored := projectdetails.UpdateInfoForRef(byRef, imageRef); policyErr == nil && !attributed && stored != nil && !stored.HasUpdate && stored.Error == "" && stored.CheckTime.Equal(runtime.CheckTime) {
 				attributed = stored.CurrentDigest == runtime.CurrentDigest && stored.LatestDigest == runtime.LatestDigest
 			}
 			if attributed && info != nil && info.HasUpdate && !runtime.HasUpdate && runtime.Error == "" && !runtime.CheckTime.Before(info.CheckTime) {
