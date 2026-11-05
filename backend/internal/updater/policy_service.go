@@ -219,11 +219,11 @@ func (s *UpdaterService) SaveImagePolicy(ctx context.Context, env, target string
 	if err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
-	// Disabling a known policy needs no executor observation, including offline
-	// hosts. Enabling/rebinding still proves the current target identity afresh.
+	// Disabling a known policy needs no executor observation, including offline or
+	// since origin-locked targets. Enabling/rebinding still proves the target afresh.
 	if row.TargetKind == "container" {
 		live, e := p.findContainerTarget(ctx, env, target)
-		if e != nil && (policyCode(e, "") == "container.origin-locked" || in.Mode != "check" || row.Revision == 0) {
+		if e != nil && (in.Mode != "check" || row.Revision == 0) {
 			return dto.AutoUpdatePolicy{}, e
 		}
 		if e == nil {

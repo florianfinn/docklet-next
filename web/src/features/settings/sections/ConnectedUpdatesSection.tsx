@@ -18,6 +18,7 @@ import { useUpdateAction } from "@/shared/components/updates/use-update-action";
 import { HostChip } from "@/shared/components/host-chip";
 import { OverviewTable, OverviewRowView } from "@/shared/components/overview/overview-table";
 import { QueryError } from "@/shared/components/page";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Switch } from "@/shared/ui/switch";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
@@ -40,14 +41,16 @@ function HostPolicies({ host, timeZone }: { host: Host; timeZone: string }) {
 function UpdateForm({ value, refresh }: { value: UpdateSettings & { timeZone: string; nextRun?: string; projectionUnavailable?: boolean }; refresh: () => Promise<unknown> }) {
   const adapter = useAdapter(), t = useTranslations("settings.updates"), common = useTranslations("common.stackUpdates"), locale = useLocale();
   const draft = useSectionDraft<UpdateSettings>({ interval: value.interval, notify: value.notify }), d = draft.draft!;
-  const cap = useCapability("checkAllUpdates"), action = useUpdateAction(), hosts = useHosts();
+  // Interval and notify are settings writes; only "Check all now" needs the check job grant.
+  const cap = useCapability("saveSettings"), check = useCapability("checkAllUpdates"), action = useUpdateAction(), hosts = useHosts();
   return <SettingsForm title={t("title")} dirty={draft.dirty} valid={cap.available} onDiscard={draft.reset} onSave={async () => { await adapter.saveSettings("updates", d); draft.commit(d); await refresh(); }}>
     <FieldGroup><div id={UPDATE_CHECK_ANCHOR} tabIndex={-1} className="scroll-mt-24 rounded-xl border bg-muted/20 p-4">
       <Field><FieldLabel htmlFor="update-interval">{t("interval")}</FieldLabel><Select value={d.interval} disabled={!cap.available} onValueChange={(interval) => draft.patch({ interval: interval as UpdateSettings["interval"] })}><SelectTrigger id="update-interval" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["6h", "12h", "24h"] as const).map((v) => <SelectItem value={v} key={v}>{t(`intervals.${v}`)}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldDescription>{t("defaultMode")}</FieldDescription></Field>
       <p className="my-3 text-xs">{common("next")}: {value.projectionUnavailable ? common("unavailable") : value.nextRun ? new Intl.DateTimeFormat(locale, { timeZone: value.timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value.nextRun)) : common("unknown")} · {value.timeZone}</p>
-      <Button type="button" variant="outline" disabled={!cap.available || action.busy} onClick={() => void action.run(() => adapter.checkAllUpdates!(), () => { void refresh(); })}>{t("checkNow")}</Button>
+      <Button type="button" variant="outline" disabled={!check.available || action.busy} title={check.reason} onClick={() => void action.run(() => adapter.checkAllUpdates!(), () => { void refresh(); })}>{t("checkNow")}</Button>
       {action.error && <p role="alert">{action.error}</p>}
     </div>
+    <Alert><AlertDescription>{t("noRollback")}</AlertDescription></Alert>
     <Field orientation="horizontal"><Switch id="update-notify" checked={d.notify} disabled={!cap.available} onCheckedChange={(notify) => draft.patch({ notify })} /><div><FieldLabel htmlFor="update-notify">{t("notify")}</FieldLabel><FieldDescription>{t("notifyHint")}</FieldDescription></div></Field>
     <section id={UPDATE_POLICIES_ANCHOR} tabIndex={-1} className="flex min-w-0 scroll-mt-24 flex-col gap-4"><h3 className="text-sm font-semibold">{t("table")}</h3>{hosts.isError && <QueryError error={hosts.error} onRetry={() => void hosts.refetch()} />}{hosts.data?.map((h) => <HostPolicies key={h.id} host={h} timeZone={value.timeZone} />)}<p className="text-xs text-muted-foreground">{t("excluded")}</p></section>
     <NotificationsPointer />

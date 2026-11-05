@@ -10,10 +10,9 @@ import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { identityLifetime } from "@/data/identity-lifetime";
-import { isSystemWorkload } from "@/domain/system";
 import type { ContainerInfo } from "@/domain/model";
 import { formatDateTime } from "@/domain/format";
-import { hasUpdate } from "@/domain/updates";
+import { containerUpdatesManaged, hasUpdate } from "@/domain/updates";
 import { inventoryId } from "@/data/http/inventory-mapping";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { PolicyControl } from "@/shared/components/updates/policy-control";
@@ -54,6 +53,6 @@ function StandaloneUpdates({ c, select }: { c: ContainerInfo; select: (restore: 
 }
 export function ContainerUpdates({ c, select }: { c: ContainerInfo; select: (restore: boolean) => void }) {
   const adapter = useAdapter();
-  if (adapter.kind !== "http" || c.origin !== "standalone" || isSystemWorkload(c) || c.redeployDisabled) return null;
+  if (adapter.kind !== "http" || !containerUpdatesManaged(c)) return null;
   return <StandaloneUpdates key={`${c.id}:${c.name}`} c={c} select={select} />;
 }

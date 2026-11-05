@@ -31,6 +31,7 @@ export const deSettings: typeof enSettings = {
     },
     settings: {
       "key-managed": "Das zugehörige Einstellungsformular verwenden",
+      "invalid-time-zone": "Wähle eine gültige Zeitzone.",
     },
     "delivery-unreachable": "Ziel nicht erreichbar",
     "delivery-rejected": "Ziel hat die Nachricht abgelehnt",
@@ -43,7 +44,7 @@ export const deSettings: typeof enSettings = {
     enabled: "Schwachstellenscans aktivieren",
     schedule: "Zeitplan",
     time: "Uhrzeit",
-    unscheduled: "Täglichen oder wöchentlichen Zeitplan wählen.",
+    unscheduled: "Scans laufen nur, wenn du „Jetzt scannen“ wählst.",
     zone: "Zeiten gelten in der Hub-Zeitzone ({zone}). Zeiten in Frühlingslücken werden um die Lücke verschoben; doppelte Herbstzeiten laufen einmal.",
     nextUnavailable: "Nächste Ausführung nicht verfügbar.",
     next: "Nächste Ausführung: {at}",

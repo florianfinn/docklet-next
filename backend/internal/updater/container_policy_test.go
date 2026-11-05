@@ -46,6 +46,25 @@ func TestContainerPolicyFollowsNameAndProjectsMissingTarget(t *testing.T) {
 	require.True(t, list[1].TargetMissing)
 }
 
+// A scheduled policy whose container later became origin-locked can still be
+// switched back to check; it can never be re-enabled.
+func TestLockedContainerPolicyCanOnlyBeDisabled(t *testing.T) {
+	f := newPolicyFixture(t)
+	eligible := true
+	f.p.ports.targets = func(context.Context, string) ([]updateTarget, error) {
+		return []updateTarget{{Kind: "container", ID: "app", Name: "app", ContainerID: "example-id", Eligible: eligible}}, nil
+	}
+	window := &dto.UpdateWindow{Kind: "daily", Time: "04:00"}
+	saved, e := f.s.SaveImagePolicy(t.Context(), "0", "app", dto.UpdatePolicyInput{Mode: "scheduled", Window: window}, "example-actor", "", "container")
+	require.NoError(t, e)
+	eligible = false
+	_, e = f.s.SaveImagePolicy(t.Context(), "0", "app", dto.UpdatePolicyInput{Mode: "scheduled", Window: window, ExpectedRevision: saved.Revision}, "example-actor", "", "container")
+	require.Equal(t, "container.origin-locked", policyCode(e, ""))
+	disabled, e := f.s.SaveImagePolicy(t.Context(), "0", "app", dto.UpdatePolicyInput{Mode: "check", ExpectedRevision: saved.Revision}, "example-actor", "", "container")
+	require.NoError(t, e)
+	require.Equal(t, "check", disabled.Mode)
+}
+
 func TestContainerPolicyRevisionIsFrozenAtAdmission(t *testing.T) {
 	f := newPolicyFixture(t)
 	row, e := f.p.store.Policy(t.Context(), "0", "example-registration", "app", "container")

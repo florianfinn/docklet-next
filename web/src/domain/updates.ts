@@ -1,4 +1,5 @@
-import type { ImageVersion, Service, Tone, UpdateInfo, UpdateLevel } from "./model";
+import type { ContainerInfo, ImageVersion, Service, Tone, UpdateInfo, UpdateLevel } from "./model";
+import { isSystemWorkload } from "./system";
 
 export type UpdateVisual = "current" | "major" | "minor" | "patch" | "rebuild" | "error" | "local" | "unknown" | "unchecked";
 
@@ -91,4 +92,12 @@ export function levelFromVersions(current: string, latest: string): UpdateLevel 
 
 export function imageRef(image: ImageVersion): string {
   return `${image.repository}:${image.tag}`;
+}
+
+/**
+ * Mirrors the hub's update eligibility (updater/policy_targets.go): only a confirmed
+ * standalone container outside the system workload accepts update, restore and policy gestures.
+ */
+export function containerUpdatesManaged(c: Pick<ContainerInfo, "origin" | "originSource" | "redeployDisabled" | "dockerLabels">): boolean {
+  return c.origin === "standalone" && c.originSource !== "unconfirmed" && !c.redeployDisabled && !isSystemWorkload(c);
 }

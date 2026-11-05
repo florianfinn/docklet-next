@@ -44,9 +44,9 @@ it.each(["en-US", "de"] as const)("goal 1: approved connected settings controls 
   expect(screen.queryByRole("textbox", { name: /cron/i }) === null).toBe(true);
 });
 
-it.each(["unraid", "unknown", "compose", "self", "protected"] as const)("goal 1/5: %s container shows no update or policy", async (origin) => {
+it.each(["unraid", "unknown", "compose", "self", "protected", "unconfirmed"] as const)("goal 1/5: %s container shows no update or policy", async (origin) => {
   const f = updateFixture(); await f.adapter.getCurrentUser();
-  const locked = { ...container, ...(origin === "protected" ? { redeployDisabled: true } : origin === "self" ? { dockerLabels: { "io.docklet.system": "agent" } } : { origin }) } as ContainerInfo;
+  const locked = { ...container, ...(origin === "protected" ? { redeployDisabled: true } : origin === "unconfirmed" ? { originSource: "unconfirmed" } : origin === "self" ? { dockerLabels: { "io.docklet.system": "agent" } } : { origin }) } as ContainerInfo;
   const select = vi.fn(); renderWithApp(<ContainerUpdates c={locked} select={select} />, f.adapter);
   await act(async () => { await Promise.resolve(); });
   expect(screen.queryByRole("combobox") === null).toBe(true);

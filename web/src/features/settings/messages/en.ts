@@ -30,6 +30,7 @@ export const enSettings = {
     },
     settings: {
       "key-managed": "Use the dedicated settings form",
+      "invalid-time-zone": "Choose a valid time zone.",
     },
     "delivery-unreachable": "Target unreachable",
     "delivery-rejected": "Target rejected the message",

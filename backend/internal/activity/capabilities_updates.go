@@ -31,7 +31,7 @@ var updateCapabilityRules = map[string]updateCapabilityRule{
 	"deleteHostRestorePoint": {host: true, admin: true, grants: []string{authz.PermImageUpdatesRead}},
 	"getAutoUpdatePolicy":    {container: true, grants: updateReadGrants}, "setAutoUpdate": {container: true, grants: updateNotifyGrants},
 	"setAutoUpdateApply":     {admin: true, container: true, grants: updateApplyGrants},
-	"installContainerUpdate": {container: true, grants: []string{authz.PermContainersRedeploy, authz.PermActivitiesRead}},
+	"installContainerUpdate": {admin: true, container: true, grants: []string{authz.PermContainersRedeploy, authz.PermActivitiesRead}},
 	"setContainerAutoUpdate": {admin: true, container: true, grants: updateApplyGrants},
 	"checkAllUpdates":        {admin: true, host: true, grants: []string{authz.PermJobsManage}},
 	// Both routes are Admin-only; the descriptors say so instead of failing on click.

@@ -9,6 +9,7 @@ import { useCallback } from "react";
 import { useTranslations } from "use-intl";
 import { isWidgetErrorCode } from "@/domain/service-widgets";
 import { AdapterOutcomeError } from "./capability";
+import { SettingsProblemError, settingsErrorMessage } from "./settings-error";
 
 /** Exception messages and unknown server codes have no UI translation contract. */
 export function useCommandError() {
@@ -16,7 +17,10 @@ export function useCommandError() {
   const t = useTranslations("common.commandErrors");
   const capability = useTranslations("activity.capability");
   const widget = useTranslations("dashboard.services.errors");
+  const all = useTranslations();
   return useCallback((error: unknown): string => {
+    // Typed settings refusals (for example an invalid time zone) carry their own catalogue keys.
+    if (error instanceof SettingsProblemError) return settingsErrorMessage(error, all);
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
       const key = operationReasonKey(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code);
@@ -34,5 +38,5 @@ export function useCommandError() {
       }
     }
     return t("failed");
-  }, [t, capability, operation, widget]);
+  }, [t, capability, operation, widget, all]);
 }
