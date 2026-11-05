@@ -96,10 +96,10 @@ func TestAgentM10ControlsNeverReachForwarderOrCoordinator(t *testing.T) {
 	require.Zero(t, calls)
 }
 func TestPolicyRunProjectionUsesLogicalHostAndChildActivity(t *testing.T) {
-	run := projectImagePolicyRun(st.Run{JobID: "image-policy:example-remote:auto-update", EnvironmentID: "0", ActivityID: "example-activity", Outcome: st.Outcome{Targets: []st.TargetOutcome{{ID: "stack", ActivityID: "example-child", Code: "update.config-drift", Status: st.Skipped}}}})
-	require.Equal(t, "example-remote", run.EnvironmentID)
-	require.Equal(t, "example-remote", run.ActivityEnvironmentID)
-	require.Equal(t, "auto-update", run.JobID)
+	run := projectImagePolicyRun(st.Run{JobID: "update-window:example-remote:stack:stack", EnvironmentID: "0", ActivityID: "example-activity", Outcome: st.Outcome{Targets: []st.TargetOutcome{{ID: "stack", ActivityID: "example-child", Code: "update.config-drift", Status: st.Skipped}}}})
+	require.Equal(t, "0", run.EnvironmentID)
+	require.Empty(t, run.ActivityEnvironmentID)
+	require.Equal(t, "update-window:example-remote:stack:stack", run.JobID)
 	require.Equal(t, "example-child", run.Outcome.Targets[0].ActivityID)
 	require.Equal(t, "update.config-drift", run.Outcome.Targets[0].Code)
 }

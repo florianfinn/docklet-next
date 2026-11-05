@@ -281,6 +281,8 @@ export interface ActionRun {
   outputTruncated?: boolean;
   /** Restore point created before this run; offered manually after failures. */
   restorePointId?: string;
+  pointCode?: string;
+  sourceOperation?: string;
 }
 
 export type RuntimeActionRun = ActionRun & RuntimeKnowledge;
@@ -306,9 +308,13 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  /** Executor projection for the protected self container. */
+  redeployDisabled?: boolean;
   /** Hub condition of this container, merged from runtime conditions. */
   condition?: RuntimeCondition;
   imageId?: string;
+  /** Manifest platform the daemon reports for this container's image; "unknown" when it reports none. */
+  imagePlatform?: string;
   inventory?: InventoryObservation;
   restrictions?: { recreate: boolean; reason: string };
   id: string;

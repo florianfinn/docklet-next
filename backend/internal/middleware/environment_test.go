@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; M18 live scheduling, policy and contract foundation.
 
 package middleware
 
@@ -331,7 +331,7 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 		userName       string
 		wantInitiator  string
 	}{
-		{name: "forwards the caller's preference", catalog: new("dashboard-icons"), wantHeader: "dashboard-icons", userID: "user-1", userName: "operator", wantInitiator: "user-1"},
+		{name: "forwards the caller's preference", catalog: new("dashboard-icons"), wantHeader: "dashboard-icons", userID: "user-1", userName: "operator", wantInitiator: ""},
 		{name: "strips a client-supplied header when the caller has no preference", clientSupplied: "dashboard-icons", wantHeader: ""},
 	}
 
@@ -369,11 +369,11 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 
 			router := echo.New()
 			api := attachMiddleware(router, mw)
-			api.POST("/environments/:id/containers/:containerId/update", func(c *echo.Context) error {
+			api.POST("/environments/:id/containers/:containerId/commit", func(c *echo.Context) error {
 				return c.JSON(http.StatusOK, map[string]any{"success": true})
 			})
 
-			req := httptest.NewRequest(http.MethodPost, "/api/environments/env-remote/containers/container-1/update", http.NoBody)
+			req := httptest.NewRequest(http.MethodPost, "/api/environments/env-remote/containers/container-1/commit", http.NoBody)
 			req.Header.Set(HeaderUpdateInitiatorID, "spoofed")
 			req.Header.Set(HeaderUpdateInitiatorName, "spoofed")
 			if tt.clientSupplied != "" {
@@ -385,7 +385,7 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 			require.Equal(t, http.StatusOK, recorder.Code)
 			assert.Equal(t, tt.wantHeader, forwarded)
 			assert.Equal(t, tt.wantInitiator, forwardedInitiator)
-			assert.Equal(t, tt.userName, forwardedName)
+			assert.Empty(t, forwardedName)
 		})
 	}
 }

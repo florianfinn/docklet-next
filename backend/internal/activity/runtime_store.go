@@ -2,7 +2,7 @@
 // Revision: c641dc24b3f364ac5e4ec03bc9c5dfe2a10d5f61a6bcba825785f9dc351a9e50
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Transaction-taking compact storage primitives.
+// Deviations: Transaction-taking compact storage primitives. M18 deploy/redeploy durable evidence and image-run settlement.
 
 package activity
 
@@ -238,6 +238,7 @@ func runtimeActivityTypeInternal(operation, target string) (activitytypes.Type, 
 			"redeploy-project": activitytypes.TypeProjectRedeploy, "update-project": activitytypes.TypeProjectUpdate, "restore-project": activitytypes.TypeProjectRestore}[operation]
 	} else if target == "container" {
 		kind = map[string]activitytypes.Type{"start-container": activitytypes.TypeContainerStart,
+			"update-container": activitytypes.TypeContainerRedeploy, "restore-container-image": activitytypes.TypeContainerRedeploy,
 			"recreate-container": activitytypes.TypeContainerEdit, "redeploy-container": activitytypes.TypeContainerRedeploy, "stop-container": activitytypes.TypeContainerStop, "restart-container": activitytypes.TypeContainerRestart}[operation]
 	}
 	return kind, kind != ""
@@ -291,6 +292,9 @@ func runtimeQueryTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityIntern
 	}
 	row, err := runtimeReadTxInternal(tx, id)
 	if err == nil {
+		if err := runtimeDeployEvidenceTx(tx, row); err != nil {
+			return nil, err
+		}
 		return row, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -427,7 +431,10 @@ func runtimeUpdateTxInternal(tx *gorm.DB, now time.Time, row *RuntimeReceipt, up
 	if err := tx.First(row, "run_id = ?", row.RunID).Error; err != nil {
 		return err
 	}
-	if row.OperationID != nil && runtimeImageOperation(RuntimeOperation(*row.OperationID)) && row.SettledAt != nil {
+	if err := runtimeDeployEvidenceTx(tx, row); err != nil {
+		return err
+	}
+	if row.OperationID != nil && (runtimeImageOperation(RuntimeOperation(*row.OperationID)) || runtimeDeployOperation(*row.OperationID)) && row.SettledAt != nil {
 		return tx.Table("image_lifecycle_runs").Where("id = ?", row.RunID).Update("settled", true).Error
 	}
 	return nil

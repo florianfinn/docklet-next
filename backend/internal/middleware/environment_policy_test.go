@@ -16,7 +16,7 @@ import (
 )
 
 func TestImagePolicyRoutesBypassGenericAgentForwarding(t *testing.T) {
-	for _, path := range []string{"/updater/schedules", "/updater/policies/project/example-stack", "/updater/system-image-hints", "/updater/projects/example-stack/check"} {
+	for _, path := range []string{"/updater/policies", "/updater/policies/stack/example-stack", "/updater/system-image-hints", "/updater/projects/example-stack/check"} {
 		mw := newTestEnvironmentMiddleware()
 		calls := 0
 		mw.resolver = func(context.Context, string) (string, *string, bool, error) {

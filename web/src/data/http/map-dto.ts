@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs.
 
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
@@ -35,6 +35,15 @@ const KINDS: Record<string, ActionKind> = {
   container_auto_heal: "auto-heal",
   load_sustained: "load-alert",
 };
+
+// Hub-owned scheduler jobs carry an English job name and raw scheduler states as
+// step names; their runs show catalogued labels instead.
+const JOB_STEPS = new Set(["queued", "running", "waiting", "retrying", "succeeded", "failed", "partial", "needs_attention", "canceled", "skipped"]);
+function jobKind(run: Activity): ActionKind | undefined {
+  if (run.type !== "job_run" || run.resourceType !== "job") return undefined;
+  if (run.resourceId === "update-check") return "check-updates";
+  return run.resourceId?.startsWith("update-window:") ? "update" : undefined;
+}
 
 function required(value: unknown, field: string): asserts value {
   if (value === undefined || value === null || value === "") throw new Error(`dto.invalid-${field}`);
@@ -241,7 +250,13 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       ((run.outcomeState !== "known" && run.outcomeState !== "unknown") || typeof run.cancelRequested !== "boolean")) throw new Error("dto.invalid-runtime-knowledge");
   const action = typeof run.metadata?.action === "string" ? run.metadata.action : "";
   const backup = /volume_backup/.test(action) || run.resourceType === "backup_target" || run.resourceType === "volume_backup_download";
-  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? "activity";
+  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? jobKind(run) ?? "activity";
+  const job = run.type === "job_run";
+  // The hub's fallback job summary is "<job name>: <scheduler state>"; a real outcome message stays.
+  const jobSummary = (text: string | undefined, code = run.messageCode): MessageCode | undefined => {
+    const state = code?.slice("job.".length) ?? "";
+    return job && code?.startsWith("job.") && JOB_STEPS.has(state) && text === `${run.resourceName ?? run.resourceId}: ${state}` ? { code: `activity.jobStep.${state}`, params: {} } : undefined;
+  };
   const lifecycle = run.imageLifecycle;
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
   if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
@@ -276,10 +291,10 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   });
   return Object.assign({
     id: run.id,
-    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId } : {}),
-    kind,
+    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
+    kind, sourceOperation: run.type,
     title: { code: `activity.runKind.${kind}`, params: {} },
-    target: { code: "runMessages.value", params: { value: target } },
+    target: jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: target } },
     hostId: run.environmentId,
     ...((run.resourceType === "project" || run.resourceType === "stack") && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),
     ...(run.resourceType === "container" && run.resourceId ? { containerId: inventoryId(run.environmentId, run.resourceId) } : {}),
@@ -292,7 +307,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     finishedAt: run.endedAt,
     // Known backup codes are translated even when older job rows carry no backup context.
     error: run.error
-      ? (backup ? coded(run.error, "", "error") : knownBackupError(run.error) ?? vulnerabilityError(run.error))
+      ? jobSummary(run.error) ?? (backup ? coded(run.error, "", "error") : knownBackupError(run.error) ?? vulnerabilityError(run.error))
         ?? coded(
           lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") || run.messageCode?.startsWith("container.recreate-") ? run.messageCode : undefined),
           run.error,
@@ -301,10 +316,11 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), state: stepState(step.status),
-      label: Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name } : coded(step.code, step.name),
+      label: Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name }
+        : job && JOB_STEPS.has(step.name) ? { code: `activity.jobStep.${step.name}`, params: {} } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
-    log: detail.messages?.length ? detail.messages.map((item) => coded(item.code, item.message)) : run.latestMessage ? [coded(run.messageCode, run.latestMessage)] : [],
+    log: detail.messages?.length ? detail.messages.map((item) => jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });

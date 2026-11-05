@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite actor storage; pending sync and idempotency receipts survive retention; duplicated run IDs are repaired.
+// Deviations: Local module namespace; SQLite actor storage; pending sync and idempotency receipts survive retention; duplicated run IDs are repaired; M18 live scheduling, policy and contract foundation.
 
 package runs
 
@@ -329,7 +329,14 @@ func New(service *actor.Service, location *time.Location) *Coordinator {
 	if location == nil {
 		location = time.UTC
 	}
-	return &Coordinator{service: service, location: location, owner: uuid.New().String(), checkpointed: make(map[string]bool), wake: make(chan struct{}, 1), done: make(chan struct{})}
+	return &Coordinator{service: service, owner: uuid.New().String(), checkpointed: make(map[string]bool), wake: make(chan struct{}, 1), done: make(chan struct{})}
+}
+
+func (q *Coordinator) clock() time.Time {
+	if q.now != nil {
+		return q.now()
+	}
+	return time.Now()
 }
 
 func (q *Coordinator) SetExecutor(execute, reconcile func(context.Context, st.Run) (st.Outcome, error)) {

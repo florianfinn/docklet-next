@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package updater
 
@@ -548,15 +548,6 @@ func (s *UpdaterService) PendingImageUpdates(ctx context.Context) ([]updater.Ima
 		return nil, fmt.Errorf("query pending image updates: %w", err)
 	}
 
-	// Flush pending "Updates Available" notifications before the engine
-	// consumes and clears these records, otherwise the notification for an
-	// update applied here is silently lost (#3132). A flush that cannot
-	// determine what to send aborts the run so the records survive for retry.
-	if s.deps.ImageUpdates != nil {
-		if err := s.deps.ImageUpdates.SendBatchUpdateNotifications(ctx); err != nil {
-			return nil, err
-		}
-	}
 	s.appendAutoUpdateActivityMessageInternal(
 		ctx,
 		activityIDFromContextInternal(ctx),

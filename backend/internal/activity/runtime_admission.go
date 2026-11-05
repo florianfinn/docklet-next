@@ -50,7 +50,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	if err := ctx.Err(); err != nil {
 		return RuntimeAdmissionResult{}, err
 	}
-	if string(command.Operation) == "recreate-container" || string(command.Operation) == "redeploy-container" {
+	if runtimeRecreateOperation(command.Operation) || runtimeContainerImageOperation(command.Operation) {
 		h := s.activity.runtimeHTTP
 		if h == nil || h.ports.GuardContainer == nil {
 			return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "container.origin-locked"}
@@ -116,6 +116,15 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 			} else if !fresh {
 				return nil
 			} else {
+				if c.command.Options.ContainerImage != nil && c.command.Options.ContainerImage.Policy != nil {
+					if c.command.Target.Name == nil {
+						return errRuntimeInvalidInternal
+					}
+					name := *c.command.Target.Name
+					if err := policies.ValidateAdmission(tx, c.command.Options.ContainerImage.Policy, c.command.Store.EnvironmentID, c.command.Store.RegistrationID, name, name, c.command.Actor.ID, "container"); err != nil {
+						return err
+					}
+				}
 				if c.command.Options.Lifecycle != nil {
 					if err := policies.ValidateAdmission(tx, c.command.Options.Lifecycle.Policy, c.command.Store.EnvironmentID, c.command.Store.RegistrationID, c.command.Target.ID, c.command.Options.Lifecycle.TargetIdentity, c.command.Actor.ID); err != nil {
 						return err
@@ -142,6 +151,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				}
 				if c.command.Options.Lifecycle != nil {
 					if err := policies.AdmitChild(tx, c.command.Options.Lifecycle.Policy, row.RunID); err != nil {
+						return err
+					}
+				}
+				if c.command.Options.ContainerImage != nil {
+					if err := policies.AdmitChild(tx, c.command.Options.ContainerImage.Policy, row.RunID); err != nil {
 						return err
 					}
 				}

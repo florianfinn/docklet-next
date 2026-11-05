@@ -241,6 +241,7 @@ export const enVolumes = {
     offline: "Host not connected – files unavailable.",
   },
   backups: {
+    hostZoneHint: "Backups use this host’s zone ({host}); the hub uses {hub}.",
     restoreSafety: "Restore safety snapshot",
     deploymentHint: "Restore points contain images and configuration. Back up and restore volume data separately.",
     customSchedule: "Custom schedule",

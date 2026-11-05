@@ -16,7 +16,9 @@ const operations = [
 ] as const;
 it.each(["0", "direct", "edge"].flatMap((host) => operations.map(([kind, command, suffix]) => ({ host, kind, command, suffix }))))("$host $kind $command uses existing async route and stable canonical identity", async ({ host, kind, command, suffix }) => {
   const f = runtimeFixture(); f.state.run = snapshot(host, { resourceType: kind === "stack" ? "project" : "container", type: kind === "stack" ? "project_deploy" : "container_start" });
-  const id = kind === "stack" ? await f.adapter.runStackCommand(`${host}~target /?#%`, command) : await f.adapter.runContainerCommand(`${host}~target /?#%`, command as "start");
+  const admission = kind === "stack" ? f.adapter.runStackCommand(`${host}~target /?#%`, command) : f.adapter.runContainerCommand(`${host}~target /?#%`, command as "start");
+  await expect(admission).resolves.toBe(RUN_ID);
+  const id = await admission;
   expect(id).toBe(RUN_ID); expect(f.commands()).toHaveLength(1);
   const request = f.commands()[0]!;
   expect(request.url.pathname).toBe(`/api/environments/${host}/${kind === "stack" ? "projects" : "containers"}/target%20%2F%3F%23%25/${suffix}`);

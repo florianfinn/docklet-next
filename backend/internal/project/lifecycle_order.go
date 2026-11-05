@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Validate updater dependencies and preserve stop signals in the ephemeral deployment model.
+// Deviations: Validate updater dependencies and preserve stop signals in the ephemeral deployment model; M18 service coupling and stop scope.
 
 package project
 
@@ -93,7 +93,7 @@ func lifecycleOrderedModel(snap *life.Snapshot) (*compose.Project, error) {
 	return model, nil
 }
 
-func (s *ProjectService) lifecycleStopSignals(ctx context.Context, source *life.Snapshot) error {
+func (s *ProjectService) lifecycleStopSignals(ctx context.Context, source *life.Snapshot, services ...string) error {
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
 		return lifecycleFailure("update.target-changed")
@@ -120,6 +120,9 @@ func (s *ProjectService) lifecycleStopSignals(ctx context.Context, source *life.
 	}
 	slices.Reverse(ordered)
 	for _, key := range ordered {
+		if !lifecycleServiceSelected(services, key) {
+			continue
+		}
 		signal := labels.StopSignal(model.Services[key].Labels)
 		if signal == "" {
 			continue
@@ -161,4 +164,57 @@ func lifecycleSourceStopSignal(source *life.Snapshot, key string) string {
 		return signal
 	}
 	return service.StopSignal
+}
+
+// An empty selection retains whole-stack behavior. Namespace and volume links
+// crossing an explicit selection require a whole-stack update, in either direction.
+func lifecycleServiceSelected(services []string, key string) bool {
+	return len(services) == 0 || slices.Contains(services, key)
+}
+
+func lifecycleValidateServiceScope(snap *life.Snapshot, services []string) error {
+	for _, key := range services {
+		if _, ok := snap.Model.Services[key]; !ok {
+			return lifecycleFailure("update.invalid-target")
+		}
+	}
+	if len(services) == 0 {
+		return nil
+	}
+	for key, svc := range snap.Model.Services {
+		links := []string{}
+		for _, mode := range []string{svc.NetworkMode, svc.Ipc, svc.Pid} {
+			if target, ok := strings.CutPrefix(mode, "service:"); ok {
+				links = append(links, target)
+			}
+		}
+		for _, volume := range svc.VolumesFrom {
+			if !strings.HasPrefix(volume, "container:") {
+				target, _, _ := strings.Cut(volume, ":")
+				links = append(links, target)
+			}
+		}
+		for _, target := range links {
+			if lifecycleServiceSelected(services, key) != lifecycleServiceSelected(services, target) {
+				return lifecycleFailure("update.service-coupled")
+			}
+		}
+	}
+	return lifecycleSharedImageSource(snap, services)
+}
+
+// The scoped view owns its image map; the complete snapshot remains the source
+// for the whole-stack recovery point and baseline.
+func lifecycleImageScope(snap *life.Snapshot, services []string) *life.Snapshot {
+	if len(services) == 0 {
+		return snap
+	}
+	scoped := *snap
+	scoped.Services = map[string]life.ServiceImage{}
+	for key, img := range snap.Services {
+		if lifecycleServiceSelected(services, key) {
+			scoped.Services[key] = img
+		}
+	}
+	return &scoped
 }

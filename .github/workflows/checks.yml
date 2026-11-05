@@ -118,6 +118,13 @@ jobs:
           test ! -S /var/run/docker.sock
           test ! -S /run/docker.sock
       - run: pnpm run ${{ matrix.stage }}
+      - name: Report the shared schedule rule tests by name
+        # Acceptance reads these names from the exact-head log (S1: SR1-SR3, SR11).
+        if: matrix.stage == 'test'
+        run: |
+          (cd backend && go test -count=1 -v -run 'TestSharedScheduleRuleVectors|TestOneScheduleParseEntryPoint|TestParserBoundaryRecognizesAliases' ./pkg/scheduler/schedule/)
+          (cd backend && go test -count=1 -v -run 'TestAlarmUsesRecordZoneAndWallRule|TestZoneCheckpointFencesOldAlarmWithoutCatchup' ./pkg/scheduler/runs/)
+          pnpm --dir web exec vitest run --reporter=verbose src/domain/schedule-rule-vectors.test.ts
   package-image:
     needs: scope
     if: needs.scope.outputs.value != 'text'

@@ -24,14 +24,14 @@ import (
 var adapterOperationIDs = []string{
 	"listContainerRegistries", "getContainerRegistry", "createContainerRegistry", "updateContainerRegistry",
 	"clearContainerRegistryCredential", "testContainerRegistry", "deleteContainerRegistry",
-	"getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply", "saveUpdateSchedule",
-	"checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
+	"getUpdateBaseline", "listRestorePoints", "listUpdatePolicies", "restoreContainerImage", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply",
+	"checkAllUpdates", "checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
 	"getScanSettings", "saveScanSettings", "cancelScan",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
 	"openContainerShell", "getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
-	"listHosts", "listImages", "listSchedule", "listStacks", "listSystemComponents",
+	"listHosts", "listImages", "listStacks", "listSystemComponents",
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
 	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
@@ -101,7 +101,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
-		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents":
+		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "installContainerUpdate", "setContainerAutoUpdate", "checkAllUpdates", "listSystemComponents", "listUpdatePolicies", "restoreContainerImage":
 			descriptors[i].Available = updateCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""

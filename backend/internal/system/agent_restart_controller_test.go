@@ -314,7 +314,8 @@ func TestRestartReservationRaceWithOrdinaryAndPolicyRuntime(t *testing.T) {
 					store := policy.Store{DB: f.db.DB}
 					one, err := store.Policy(t.Context(), "example-host", "example-host", "example-stack")
 					require.NoError(t, err)
-					one.Mode = "apply"
+					one.Mode = "scheduled"
+					one.SetWindow(&updaterDTO.UpdateWindow{Kind: "daily", Time: "04:00"})
 					one.ActorID = "example-owner"
 					one.TargetIdentity = strings.Repeat("a", 64)
 					require.NoError(t, store.SavePolicy(t.Context(), one, 0))

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 // Package job owns background-job schedule configuration and its HTTP surface.
 package job
@@ -43,7 +43,6 @@ func (m *Module) RegisterRoutes(api huma.API) {
 }
 
 func RegisterJobSchedules(api huma.API, jobSvc *JobService, envSvc *environment.EnvironmentService) {
-	registerImagePolicyScheduleRoutes(api, jobSvc)
 	h := &JobSchedulesHandler{
 		jobService:      jobSvc,
 		proxyRemoteJSON: envSvc.ProxyJSONRequest,
@@ -89,6 +88,7 @@ func RegisterJobSchedules(api huma.API, jobSvc *JobService, envSvc *environment.
 		Tags:          []string{"JobSchedules"},
 		Security:      handlerutil.DefaultOperationSecurity(),
 	}, authz.PermJobsManage, h.RunJob)
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "check-all-updates", Method: http.MethodPost, Path: "/updater/check-all", DefaultStatus: http.StatusAccepted, Tags: []string{"Updater"}, Summary: "Check every enabled host now", Security: handlerutil.DefaultOperationSecurity()}, authz.PermJobsManage, h.CheckAllUpdates)
 	h.registerRunRoutesInternal(api)
 }
 

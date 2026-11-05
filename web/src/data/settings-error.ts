@@ -10,7 +10,7 @@ import { AdapterOutcomeError } from "./capability";
 /** Producer codes the settings UI translates; anything else stays generic. */
 export const SETTINGS_PROBLEM_CODES = [
   "notification.config-invalid", "notification.hub-only", "notification.test-busy",
-  "autoheal.settings-invalid", "autoheal.settings-env-managed", "settings.key-managed", "settings.ui-configuration-disabled",
+  "autoheal.settings-invalid", "autoheal.settings-env-managed", "settings.key-managed", "settings.ui-configuration-disabled", "settings.invalid-time-zone",
 ] as const;
 const ACCESS_CODES = ["agent.unavailable", "agent.invalid-token", "agent.update-required", "agent.ui-configuration-disabled"] as const;
 export type SettingsProblemCode = (typeof SETTINGS_PROBLEM_CODES)[number] | (typeof ACCESS_CODES)[number];
@@ -45,6 +45,7 @@ const KEYS: Record<SettingsProblemCode, string> = {
   "settings.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
   "agent.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
   "settings.key-managed": "settings.codes.settings.key-managed",
+  "settings.invalid-time-zone": "settings.codes.settings.invalid-time-zone",
   "agent.unavailable": "common.commandErrors.unreachable",
   "agent.invalid-token": "common.commandErrors.credentialRejected",
   "agent.update-required": "common.commandErrors.updateRequired",

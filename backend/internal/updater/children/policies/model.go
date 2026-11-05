@@ -10,11 +10,15 @@ import "time"
 
 type Policy struct {
 	ID              string `gorm:"primaryKey;not null"`
-	EnvironmentID   string `gorm:"not null;index"`
+	EnvironmentID   string `gorm:"not null;index;uniqueIndex:idx_update_policy_target,priority:1"`
 	RegistrationID  string `gorm:"not null"`
-	TargetID        string `gorm:"not null"`
+	TargetKind      string `gorm:"not null;default:stack;uniqueIndex:idx_update_policy_target,priority:2"`
+	TargetID        string `gorm:"not null;uniqueIndex:idx_update_policy_target,priority:3"`
 	TargetIdentity  string `gorm:"not null"`
-	Mode            string `gorm:"not null;check:chk_stack_policy_mode,mode IN ('off','notify','apply')"`
+	Mode            string `gorm:"not null"`
+	WindowKind      *string
+	WindowDay       *int
+	WindowTime      *string
 	Revision        uint64 `gorm:"not null;check:revision > 0"`
 	ActorID         string `gorm:"not null"`
 	ActorKeyID      string `gorm:"not null"`
@@ -25,24 +29,10 @@ type Policy struct {
 	BookkeepingAt   *time.Time
 	BookkeepingCode string `gorm:"not null"`
 	Candidates      string `gorm:"not null"`
+	MissingSince    *time.Time
 }
 
-func (Policy) TableName() string { return "stack_update_policies" }
-
-type HostSchedule struct {
-	ID                 string `gorm:"primaryKey;not null"`
-	EnvironmentID      string `gorm:"not null;uniqueIndex"`
-	RegistrationID     string `gorm:"not null"`
-	Revision           uint64 `gorm:"not null;check:revision > 0"`
-	PollingInterval    string `gorm:"not null"`
-	AutoUpdateInterval string `gorm:"not null"`
-	PollingEnabled     bool   `gorm:"not null;check:polling_enabled IN (0,1)"`
-	AutoUpdateEnabled  bool   `gorm:"not null;check:auto_update_enabled IN (0,1)"`
-	ActorID            string `gorm:"not null"`
-	ActorKeyID         string `gorm:"not null"`
-}
-
-func (HostSchedule) TableName() string { return "image_update_schedules" }
+func (Policy) TableName() string { return "update_policies" }
 
 // Child is committed before preflight/admission. Runtime admission changes it to
 // admitted in the receipt transaction; restart can therefore only query, not resend.
@@ -54,6 +44,7 @@ type Child struct {
 	Status    string `gorm:"not null;check:status IN ('prepared','admitted','refused','settled')"`
 	Code      string `gorm:"not null"`
 	RuntimeID string `gorm:"not null"`
+	SettledAt *time.Time
 }
 
 func (Child) TableName() string { return "image_policy_children" }

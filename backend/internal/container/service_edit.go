@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M18 standalone image update and restore safety.
 
 package container
 
@@ -456,6 +456,11 @@ func (s *ContainerService) GetContainerDetails(ctx context.Context, id string) (
 	updates := s.lookupContainerUpdateInfoInternal(ctx, []container.Summary{{ID: details.ID, Image: details.Image, ImageID: details.ImageID, Labels: details.Labels}})
 	details.UpdateInfo = updates[details.ID]
 	s.applyContainerDetailsIconInternal(ctx, &details)
+	// The restore offer is optional: a failed slot read hides it, never the details.
+	if err := s.projectPreviousImage(ctx, &details); err != nil {
+		details.PreviousImage = nil
+		slog.WarnContext(ctx, "Previous image slot read failed; restore offer hidden", "container", details.ID, "error", err)
+	}
 
 	return details, nil
 }

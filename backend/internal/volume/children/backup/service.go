@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package backup
 
@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -67,6 +68,7 @@ type Dependencies struct {
 	AcquireHelper    func(ctx context.Context, volumeName string) (string, func(), error)
 	Exec             func(ctx context.Context, containerID, execUser string, cmd []string) (string, string, error)
 	BackupVolumeName string
+	ZoneProvider     scheduleutil.ZoneProvider
 	Location         *time.Location
 	EncryptionKey    string
 }
@@ -110,16 +112,7 @@ func NewService(deps Dependencies) *Service {
 	s := &Service{deps: deps, writerFences: map[string]bool{}}
 	s.targetStore = &backuptarget.Store{DB: deps.DB}
 	s.targets = backuptarget.NewService(backuptarget.Dependencies{Store: s.targetStore})
-	s.policies = policies.NewService(policies.Dependencies{
-		DB:             deps.DB,
-		ValidateTarget: s.validatePolicyTarget,
-		Location:       deps.Location,
-		Activity:       deps.Activity,
-		AlreadyRunning: deps.AlreadyRunning,
-		LatestRun:      s.latestRunInternal,
-		CreateBackup:   s.scheduledBackupInternal,
-		Reconcile:      s.ReconcileBackup,
-	})
+	s.policies = s.newPolicies(deps)
 	s.browser = browser.NewService(browser.Dependencies{
 		Docker:       deps.Docker,
 		Engine:       deps.Engine,

@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images.
+// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification.
 
 package project
 
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
@@ -55,6 +56,18 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	if intent == nil || current.TargetIdentity != intent.TargetIdentity || current.SavedRevision != intent.SavedRevision || lifecycleObserved(current) != intent.ObservedRevision {
 		return result, lifecycleFailure("update.target-changed")
+	}
+	services := intent.Request.Services
+	if intent.Request.PointID != "" {
+		services = nil // Restore points always describe the complete stack.
+	}
+	if err = lifecycleValidateServiceScope(current, services); err != nil {
+		return result, err
+	}
+	for _, selection := range intent.Selections {
+		if !lifecycleServiceSelected(services, selection.Service) {
+			return result, lifecycleFailure("update.invalid-target")
+		}
 	}
 	selections, err := lifecycleExecutableSelections(current, intent.Selections, intent.Request.PointID != "")
 	if err != nil {
@@ -114,6 +127,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		// Apply the active configuration even if an init service has exited or
 		// its container was removed. The pre-point retains actual source state.
 		for key, img := range desired.Services {
+			if !lifecycleServiceSelected(services, key) {
+				continue
+			}
 			img.Present = true
 			desired.Services[key] = img
 		}
@@ -160,8 +176,12 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	rollbackSource, rollbackDesired = current, desired
 	selectedImages = true
-	if err = s.lifecycleSelectImages(ctx, run, desired, intent.Selections, current.SavedRevision, intent.ObservedRevision); err != nil {
+	imageScope := lifecycleImageScope(desired, services)
+	if err = s.lifecycleSelectImages(ctx, run, imageScope, intent.Selections, current.SavedRevision, intent.ObservedRevision); err != nil {
 		return result, err
+	}
+	for key, img := range imageScope.Services {
+		desired.Services[key] = img
 	}
 	release()
 	leased = false
@@ -183,7 +203,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	// Deploy from actual freshly loaded files, with complete frozen service IDs.
 	desired.Model = fresh.Model
 	desired.SavedRevision = fresh.SavedRevision
-	if err = s.verifyLifecycleReferences(ctx, desired); err != nil {
+	if err = s.verifyLifecycleReferences(ctx, desired, services...); err != nil {
 		return result, err
 	}
 	if err = store.Invalidate(ctx, id); err != nil {
@@ -192,7 +212,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	if err = store.Effect(ctx, run); err != nil {
 		return result, err
 	}
-	if err = s.deployLifecycle(ctx, desired, intent.Request.PointID != "", current); err != nil {
+	if err = s.deployLifecycle(ctx, desired, intent.Request.PointID != "", current, services...); err != nil {
 		var problem *imageDTO.OperationError
 		if errors.As(err, &problem) {
 			return result, problem
@@ -208,6 +228,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		return result, lifecycleFailure("restore.image-mismatch")
 	}
 	for key, expected := range desired.Services {
+		if !lifecycleServiceSelected(services, key) {
+			continue
+		}
 		actual := observed.Services[key]
 		if expected.Present && actual.Present && !lifecycleMatchesExpected(actual, expected) {
 			code := "update.target-changed"
@@ -219,7 +242,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	for _, actual := range observed.Containers {
 		expected, modeled := desired.Services[actual.Service]
-		if !modeled || !expected.Present || actual.OneOff {
+		if !modeled || !expected.Present || actual.OneOff || !lifecycleServiceSelected(services, actual.Service) {
 			continue
 		}
 		if !lifecycleMatchesExpected(actual, expected) {
@@ -261,13 +284,13 @@ func (s *ProjectService) preflightLifecycleWrites(ctx context.Context, p *Projec
 	}
 	return nil
 }
-func (s *ProjectService) verifyLifecycleReferences(ctx context.Context, snap *life.Snapshot) error {
+func (s *ProjectService) verifyLifecycleReferences(ctx context.Context, snap *life.Snapshot, services ...string) error {
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
 		return lifecycleFailure("update.target-changed")
 	}
-	for _, img := range snap.Services {
-		if !img.Present {
+	for key, img := range snap.Services {
+		if !img.Present || !lifecycleServiceSelected(services, key) {
 			continue
 		}
 		found, e := c.ImageInspect(ctx, img.Reference)
@@ -277,11 +300,19 @@ func (s *ProjectService) verifyLifecycleReferences(ctx context.Context, snap *li
 	}
 	return ctx.Err()
 }
-func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapshot, restore bool, source *life.Snapshot) error {
+func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapshot, restore bool, source *life.Snapshot, services ...string) error {
 	// This model is ephemeral: actual files remain the sole source on later deploy.
 	model, orderErr := lifecycleOrderedModel(snap)
 	if orderErr != nil {
 		return orderErr
+	}
+	if len(services) > 0 {
+		for key := range model.Services {
+			if !lifecycleServiceSelected(services, key) {
+				delete(model.Services, key)
+			}
+		}
+		ctx = projects.WithComposeOrphansPreserved(ctx)
 	}
 	present := []string{}
 	stopped := []string{}
@@ -298,7 +329,7 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 		svc.PullPolicy = "never"
 		svc.Build = nil
 		for dependency := range svc.DependsOn {
-			if !snap.Services[dependency].Present {
+			if _, selected := model.Services[dependency]; !selected || !snap.Services[dependency].Present {
 				delete(svc.DependsOn, dependency)
 			}
 		}
@@ -311,7 +342,7 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 	slices.Sort(present)
 	if len(present) > 0 {
 		_, err := s.composeCoordinator.Deploy(ctx, projectDTO.ComposeDeployment{ProjectID: snap.TargetID, ProjectPath: model.WorkingDir, Options: &projectDTO.DeployOptions{PullPolicy: "never", ForceRecreate: true}, WaitTimeout: time.Minute, Load: func(context.Context) (*compose.Project, error) {
-			if err := s.verifyLifecycleReferences(ctx, snap); err != nil {
+			if err := s.verifyLifecycleReferences(ctx, snap, services...); err != nil {
 				return nil, err
 			}
 			return model, nil
@@ -328,10 +359,10 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 			if err = s.lifecycleObserve(ctx, &observedSource); err != nil || lifecycleObserved(&observedSource) != lifecycleObserved(source) {
 				return lifecycleFailure("update.target-changed")
 			}
-			if err = s.verifyLifecycleReferences(ctx, snap); err != nil {
+			if err = s.verifyLifecycleReferences(ctx, snap, services...); err != nil {
 				return err
 			}
-			return s.lifecycleStopSignals(ctx, source)
+			return s.lifecycleStopSignals(ctx, source, services...)
 		}, ResolveImages: func(context.Context) (projectDTO.ComposeImageOperations, error) {
 			return projectDTO.ComposeImageOperations{Exists: func(ctx context.Context, ref string) (bool, error) {
 				c, e := s.dockerService.GetClient(ctx)

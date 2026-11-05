@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -69,6 +69,9 @@ func (s SettingVariable) AsDurationSeconds() time.Duration {
 
 //nolint:lll // Reflection metadata must remain in single struct-tag literals.
 type Settings struct {
+	UpdateCheckInterval SettingVariable `key:"updateCheckInterval,authrequired" meta:"label=Update check interval;type=select;category=updates;description=Check all eligible targets every 6, 12 or 24 hours"`
+	UpdateNotify        SettingVariable `key:"updateNotify,authrequired" meta:"label=Update notifications;type=boolean;category=updates;description=Notify once for each update candidate"`
+	TimeZone            SettingVariable `key:"timeZone,authrequired" meta:"label=Time zone;type=text;category=general;description=Hub schedule zone; empty uses TZ"`
 	// General category
 	ProjectsDirectory           SettingVariable `key:"projectsDirectory,envOverride" meta:"label=Projects Directory;type=text;keywords=projects,directory,path,folder,location,storage,files,compose,docker-compose;category=internal;description=Configure where project files are stored"`
 	FollowProjectSymlinks       SettingVariable `key:"followProjectSymlinks,envOverride" meta:"label=Follow Project Symlinks;type=boolean;keywords=projects,symlink,symlinks,symbolic links,compose,directory,discovery;category=general;description=Treat symlinked child directories inside the projects directory as Docker Compose projects"`
@@ -97,11 +100,7 @@ type Settings struct {
 	EnvironmentHealthInterval   SettingVariable `key:"environmentHealthInterval" meta:"label=Environment Health Check Interval;type=cron;keywords=environment,health,check,interval,frequency,heartbeat,status,monitoring,uptime,jobs,schedule;description=How often to check environment connectivity (cron expression)" catmeta:"id=jobschedule;title=Automations;icon=jobs;url=/settings/jobs;description=Configure how often Arcane background jobs run"`
 
 	// Docker category
-	AutoUpdate                     SettingVariable `key:"autoUpdate" meta:"label=Auto Update;type=boolean;keywords=auto,update,automatic,upgrade,refresh,restart,deploy;category=internal;description=Automatically update containers when new images are available"`
-	AutoUpdateInterval             SettingVariable `key:"autoUpdateInterval" meta:"label=Auto Update Interval;type=cron;keywords=auto,update,interval,frequency,schedule,automatic,timing;category=internal;description=How often to check for automatic updates (cron expression)"`
 	AutoUpdateExcludedContainers   SettingVariable `key:"autoUpdateExcludedContainers" meta:"label=Excluded Containers;type=text;keywords=exclude,containers,ignore,skip;category=internal;description=Comma-separated list of containers to exclude from auto-update"`
-	PollingEnabled                 SettingVariable `key:"pollingEnabled" meta:"label=Enable Polling;type=boolean;keywords=polling,check,monitor,watch,scan,detection,automatic;category=internal;description=Enable automatic checking for image updates"`
-	PollingInterval                SettingVariable `key:"pollingInterval" meta:"label=Polling Interval;type=cron;keywords=interval,frequency,schedule,time,minutes,period,delay;category=internal;description=How often to check for image updates (cron expression)"`
 	ImageEventWatcherEnabled       SettingVariable `key:"imageEventWatcherEnabled" meta:"label=Enable Event-Driven Image Checks;type=boolean;keywords=image,updates,event,watcher,registry,rate,limit;category=internal;description=Check image registries immediately after Docker image events; registry rate limits may apply"`
 	DockerClientRefreshInterval    SettingVariable `key:"dockerClientRefreshInterval" meta:"label=Docker Client Refresh Interval;type=cron;keywords=docker,client,refresh,daemon,api,version,reconnect,renegotiate,schedule;category=internal;description=How often to refresh the cached Docker client API version (cron expression)"`
 	EventCleanupInterval           SettingVariable `key:"eventCleanupInterval" meta:"label=Event Cleanup Interval;type=cron;keywords=events,cleanup,retention,interval,frequency,schedule,history,logs,jobs;description=How often to trim event and activity history to its count limits (cron expression)"`
@@ -145,7 +144,6 @@ type Settings struct {
 	AuthSessionTimeout                    SettingVariable `key:"authSessionTimeout" meta:"label=Session Timeout;type=number;keywords=session,timeout,expire,duration,lifetime,minutes,logout;category=authentication;description=How long user sessions remain active"`
 	AuthPasswordPolicy                    SettingVariable `key:"authPasswordPolicy" meta:"label=Password Policy;type=select;keywords=password,policy,strength,complexity,requirements,security,rules;category=authentication;description=Set password strength requirements"`
 	FeatureVulnerabilityManagementEnabled SettingVariable `key:"featureVulnerabilityManagementEnabled,public,envOverride" meta:"label=Vulnerability management;type=boolean;keywords=features,vulnerability,security,scan,enable,disable;category=general;description=Enable vulnerability management for this environment. Disabling retains reports and configuration and leaves standalone image patching available"`
-	VulnerabilityScanEnabled              SettingVariable `key:"vulnerabilityScanEnabled" meta:"label=Scheduled Vulnerability Scan;type=boolean;keywords=vulnerability,scan,security,trivy,schedule,automatic,cve;category=security;description=Enable scheduled vulnerability scanning of all Docker images" catmeta:"id=security;title=Security;icon=shield;url=/settings/security;description=Configure vulnerability scanning and runtime security settings"`
 	VulnerabilityScanSchedule             SettingVariable `key:"vulnerabilityScanSchedule" meta:"label=Scan schedule;type=text;category=security;description=Daily or weekly scan dispatch in the hub time zone"`
 	VulnerabilityNotifyCritical           SettingVariable `key:"vulnerabilityNotifyCritical" meta:"label=New critical findings;type=boolean;category=security"`
 	VulnerabilityNotifyHigh               SettingVariable `key:"vulnerabilityNotifyHigh" meta:"label=New high findings;type=boolean;category=security"`

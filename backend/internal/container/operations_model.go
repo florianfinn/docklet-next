@@ -13,19 +13,33 @@ import (
 
 // RecreateJournal records intent and observed identity around every Docker effect.
 type RecreateJournal struct {
-	RunID      string    `gorm:"primaryKey;not null"`
-	OldID      string    `gorm:"not null"`
-	OldName    string    `gorm:"not null"`
-	BackupName string    `gorm:"not null"`
-	NewID      string    `gorm:"not null"`
-	NewName    string    `gorm:"not null"`
-	WasRunning bool      `gorm:"not null"`
-	AutoRemove bool      `gorm:"not null"`
-	Phase      string    `gorm:"not null"`
-	UpdatedAt  time.Time `gorm:"not null"`
+	RunID           string    `gorm:"primaryKey;not null"`
+	OldID           string    `gorm:"not null"`
+	OldName         string    `gorm:"not null"`
+	BackupName      string    `gorm:"not null"`
+	NewID           string    `gorm:"not null"`
+	NewName         string    `gorm:"not null"`
+	WasRunning      bool      `gorm:"not null"`
+	AutoRemove      bool      `gorm:"not null"`
+	Phase           string    `gorm:"not null"`
+	UpdatedAt       time.Time `gorm:"not null"`
+	ExpectedImageID *string
 }
 
 func (RecreateJournal) TableName() string { return "container_recreate_journal" }
 
 // OriginOverride is shared with hub projection without a module dependency cycle.
 type OriginOverride = origin.Override
+
+// PreviousImage is executor-local recovery evidence. Name lookup is stable;
+// owner identity proves which container instance is entitled to use the slot.
+type PreviousImage struct {
+	ContainerName    string    `gorm:"primaryKey;not null"`
+	ImageID          string    `gorm:"not null"`
+	ImageRef         string    `gorm:"not null"`
+	RunID            string    `gorm:"not null"`
+	CreatedAt        time.Time `gorm:"not null"`
+	OwnerContainerID string    `gorm:"not null"`
+}
+
+func (PreviousImage) TableName() string { return "container_previous_images" }

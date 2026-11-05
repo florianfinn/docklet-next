@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
 
 package updater
 
@@ -599,9 +599,7 @@ func newEmptyContainerListDockerServiceInternal(t *testing.T) *docker.DockerClie
 	return &docker.DockerClientService{Client: newTestDockerClientInternal(t, server)}
 }
 
-// PendingImageUpdates must not hand records to the engine when the flush could
-// not determine what to send (#3532): consuming them would lose the pending
-// notification for good instead of retrying once Docker is reachable again.
+// Executor observation records can be consumed independently of hub notification delivery.
 func TestUpdaterService_PendingImageUpdatesAbortsWhenNotificationEligibilityUnresolvedInternal(t *testing.T) {
 	db := setupProjectTestDBInternal(t)
 	require.NoError(t, db.AutoMigrate(&imageupdate.ImageUpdateRecord{}, &notification.NotificationSettings{}))
@@ -612,17 +610,15 @@ func TestUpdaterService_PendingImageUpdatesAbortsWhenNotificationEligibilityUnre
 	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{ID: "sha256:pending", Repository: "test/repo", Tag: "latest", HasUpdate: true}).Error)
 
 	records, err := svc.PendingImageUpdates(t.Context())
-	require.ErrorContains(t, err, "flush pending update notifications")
-	require.Nil(t, records)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
 	var reloaded imageupdate.ImageUpdateRecord
 	require.NoError(t, db.First(&reloaded, "id = ?", "sha256:pending").Error)
 	require.True(t, reloaded.HasUpdate)
 	require.False(t, reloaded.NotificationSent)
 }
 
-// issue #3132: the updater consumes and clears has_update records without checking
-// notification_sent, so an "Updates Available" notification pending at consumption
-// time was silently lost. PendingImageUpdates must flush it before the engine runs.
+// A configured executor provider must receive no update notification during consumption.
 func TestUpdaterService_PendingImageUpdatesFlushesPendingNotificationsInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupProjectTestDBInternal(t)
@@ -661,10 +657,10 @@ func TestUpdaterService_PendingImageUpdatesFlushesPendingNotificationsInternal(t
 
 	require.NoError(t, err)
 	require.Len(t, records, 1)
-	require.EqualValues(t, 1, calls.Load())
+	require.Zero(t, calls.Load())
 	var reloaded imageupdate.ImageUpdateRecord
 	require.NoError(t, db.First(&reloaded, "id = ?", "sha256:pending-unnotified").Error)
-	assert.True(t, reloaded.NotificationSent)
+	assert.False(t, reloaded.NotificationSent)
 }
 
 // With no providers configured, PendingImageUpdates still returns the records and

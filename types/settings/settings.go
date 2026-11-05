@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -37,6 +37,7 @@ type SettingDto struct {
 
 // Update is used to update application settings.
 type Update struct {
+	TimeZone                    *string `json:"timeZone,omitzero" doc:"Hub IANA schedule zone; empty uses TZ"`
 	LoadAlertsEnabled           *string `json:"loadAlertsEnabled,omitzero"`
 	LoadAlertCpuPercent         *string `json:"loadAlertCpuPercent,omitzero"`
 	LoadAlertMemoryPercent      *string `json:"loadAlertMemoryPercent,omitzero"`
@@ -72,25 +73,8 @@ type Update struct {
 	// Required: false
 	DiskUsagePath *string `json:"diskUsagePath,omitzero"`
 
-	// AutoUpdate indicates if automatic updates are enabled.
-	//
-	// Required: false
-	AutoUpdate *string `json:"autoUpdate,omitzero"`
-
-	// AutoUpdateInterval is the interval for checking automatic updates.
-	//
-	// Required: false
-	AutoUpdateInterval *string `json:"autoUpdateInterval,omitzero"`
-
-	// PollingEnabled indicates if polling is enabled.
-	//
-	// Required: false
-	PollingEnabled *string `json:"pollingEnabled,omitzero"`
-
-	// PollingInterval is the interval for polling operations.
-	//
-	// Required: false
-	PollingInterval *string `json:"pollingInterval,omitzero"`
+	UpdateCheckInterval *string `json:"updateCheckInterval,omitzero" enum:"6h,12h,24h"`
+	UpdateNotify        *string `json:"updateNotify,omitzero" enum:"true,false"`
 
 	// ImageEventWatcherEnabled indicates if Docker image events trigger image checks.
 	//
@@ -203,12 +187,7 @@ type Update struct {
 	// FeatureVulnerabilityManagementEnabled controls vulnerability management for this environment.
 	FeatureVulnerabilityManagementEnabled *string `json:"featureVulnerabilityManagementEnabled,omitzero" enum:"true,false"`
 
-	// VulnerabilityScanEnabled indicates if scheduled vulnerability scanning is enabled.
-	//
-	// Required: false
-	VulnerabilityScanEnabled *string `json:"vulnerabilityScanEnabled,omitzero"`
-
-	VulnerabilityScanSchedule   *string `json:"vulnerabilityScanSchedule,omitzero" doc:"JSON daily/weekly wall-clock schedule in the hub time zone"`
+	VulnerabilityScanSchedule   *string `json:"vulnerabilityScanSchedule,omitzero" doc:"JSON manual/daily/weekly wall-clock schedule in the hub time zone"`
 	VulnerabilityNotifyCritical *string `json:"vulnerabilityNotifyCritical,omitzero" enum:"true,false"`
 	VulnerabilityNotifyHigh     *string `json:"vulnerabilityNotifyHigh,omitzero" enum:"true,false"`
 	VulnerabilityNotifyFailed   *string `json:"vulnerabilityNotifyFailed,omitzero" enum:"true,false"`

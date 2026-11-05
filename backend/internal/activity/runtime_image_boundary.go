@@ -16,7 +16,7 @@ import (
 )
 
 func checkedLifecycleResult(result dto.LifecycleResult) dto.LifecycleResult {
-	valid := imageDTO.ValidateReason(result.Code) == nil && imageDTO.ValidateReason(result.BaselineCode) == nil
+	valid := imageDTO.ValidateReason(result.Code) == nil && imageDTO.ValidateReason(result.BaselineCode) == nil && imageDTO.ValidateReason(result.PointCode) == nil
 	if result.Code != "" {
 		valid = valid && result.HTTPStatus >= 400 && result.HTTPStatus <= 599 && result.HTTPStatus != 401 && result.HTTPStatus != 403
 	} else {

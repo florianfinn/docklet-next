@@ -23,6 +23,7 @@ type Ref uint8
 const (
 	ProjectPath Ref = iota
 	ContainerPath
+	PolicyPath
 )
 
 type Level string
@@ -139,7 +140,7 @@ var Rules = map[string]Rule{
 	"get-all-notification-settings":                Rule{Kind: Admin},
 	"get-api-key":                                  Rule{Kind: Admin},
 	"get-auto-heal-settings":                       Rule{Kind: Admin},
-	"get-auto-update-policy":                       Rule{Kind: Admin},
+	"get-auto-update-policy":                       Rule{Kind: App, Ref: PolicyPath, Level: Full},
 	"get-backup-target":                            Rule{Kind: Admin},
 	"get-backup-target-recovery-key":               Rule{Kind: Admin},
 	"get-capabilities":                             Rule{Kind: Self},
@@ -191,7 +192,6 @@ var Rules = map[string]Rule{
 	"get-system-image-hints":                       Rule{Kind: Admin},
 	"get-update-baseline":                          Rule{Kind: App, Ref: ProjectPath, Level: Full},
 	"get-update-info-by-refs":                      Rule{Kind: Admin},
-	"get-update-schedules":                         Rule{Kind: Admin},
 	"get-update-summary":                           Rule{Kind: Admin},
 	"get-updater-history":                          Rule{Kind: Admin},
 	"get-updater-status":                           Rule{Kind: Admin},
@@ -308,9 +308,11 @@ var Rules = map[string]Rule{
 	"search-customize":                             Rule{Kind: Admin},
 	"search-images":                                Rule{Kind: Admin},
 	"search-settings":                              Rule{Kind: Admin},
-	"set-auto-update-policy":                       Rule{Kind: Admin},
+	"set-auto-update-policy":                       Rule{Kind: App, Ref: PolicyPath, Level: Full},
+	"list-update-policies":                         Rule{Kind: Admin},
+	"check-all-updates":                            Rule{Kind: Admin},
+	"restore-container-image":                      Rule{Kind: Admin},
 	"set-container-auto-update":                    Rule{Kind: Admin},
-	"set-update-schedules":                         Rule{Kind: Admin},
 	"set-user-admin":                               Rule{Kind: Admin},
 	"set-user-app-assignments":                     Rule{Kind: Admin},
 	"set-user-role-assignments":                    Rule{Kind: Admin},

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture; image update counts follow the reference a record was checked for.
 
 package dashboard
 
@@ -172,11 +172,11 @@ func TestDashboardService_GetSnapshot_ReturnsDashboardSnapshot(t *testing.T) {
 		Tag:        "latest",
 		HasUpdate:  true,
 	})
-	// Recorded under another local tag of the running container's image.
+	// Recorded for the running container's own reference.
 	createDashboardTestImageUpdateRecord(t, db, imageupdate.ImageUpdateRecord{
 		ID:         "sha256:image-a",
 		Repository: "docker.io/repo/app",
-		Tag:        "edge",
+		Tag:        "stable",
 		HasUpdate:  true,
 		UpdateType: "digest",
 	})
@@ -456,8 +456,8 @@ func TestPendingContainerCountUsesScopedTagRecords(t *testing.T) {
 	db, _ := setupDashboardServiceTestDB(t)
 	tagLabels := map[string]string{labels.LabelUpdateStrategy: "auto"}
 	records := []imageupdate.ImageUpdateRecord{
-		// A digest record recorded under another local tag of the shared image.
-		{ID: "shared", Repository: "docker.io/library/app", Tag: "stable", HasUpdate: true, UpdateType: "digest"},
+		// A digest record of the shared image, checked for app:latest.
+		{ID: "shared", Repository: "docker.io/library/app", Tag: "latest", HasUpdate: true, UpdateType: "digest"},
 		{ID: "container::first", PolicyKey: imageref.UpdatePolicyKey("app:1.2.3", tagLabels), ContainerID: "first", ImageID: "shared", HasUpdate: true, UpdateType: "tag"},
 		{
 			ID: "container::other-project",

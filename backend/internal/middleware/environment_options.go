@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split retained hub proxy wiring options from environment.go; add the shared shell registry.
+// Deviations: Split retained hub proxy wiring options from environment.go; add the shared shell registry; M18 live scheduling, policy and contract foundation.
 
 package middleware
 
@@ -21,6 +21,7 @@ type EnvironmentProxySecurity struct {
 	VulnerabilityIgnoreUnfixed func() bool
 	PointHolds                 PointHoldReader
 	PointAccess                PointAccessReader
+	PolicyCleanup              func(context.Context, string, string) error
 	OriginOverlay              func(context.Context, string, []byte) ([]byte, error)
 	Snapshots                  *hoststate.Store
 	InventoryPending           func(context.Context, string) (bool, error)

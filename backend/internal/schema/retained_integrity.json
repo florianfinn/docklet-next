@@ -82,8 +82,8 @@
     {"table":"vulnerability_scan_runs","column":"new_critical","notNull":true,"default":"0"},
     {"table":"vulnerability_scan_runs","column":"new_high","notNull":true,"default":"0"},
     {"table":"vulnerability_scan_runs","column":"new_findings","notNull":true,"default":"'[]'"},
-    {"table":"stack_update_policies","column":"apply_code","notNull":true},
-    {"table":"stack_update_policies","column":"bookkeeping_code","notNull":true},
+    {"table":"update_policies","column":"apply_code","notNull":true},
+    {"table":"update_policies","column":"bookkeeping_code","notNull":true},
     {"table":"image_lifecycle_runs","column":"settled","notNull":true},
     {"table":"deployment_baselines","column":"target_id","notNull":true},
     {"table":"deployment_baselines","column":"target_identity","notNull":true},
@@ -338,272 +338,46 @@
     {"table":"environments","column":"color","check":"CHECK (color IS NULL OR (length(color) = 7 AND substr(color,1,1) = '#' AND substr(color,2) NOT GLOB '*[^0-9a-f]*'))"}
   ],
   "constraints": {
-    "user_app_assignments": [
-      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
-      "CHECK (level IN ('restricted', 'full'))",
-      "UNIQUE (user_id, environment_id, project_id)"
-    ],
-    "notification_outbox": [
-      "CHECK (event IN ('deploy_failed','backup_failed','host_offline','auto_heal','sustained_load'))",
-      "CHECK (status IN ('pending','sending','sent','failed','unconfigured','expired'))",
-      "CHECK (attempts >= 0)",
-      "CHECK ((status='sending') = (lease_until IS NOT NULL))"
-    ],
-    "auto_heal_restarts": [
-      "CHECK (baseline_restart_count >= 0)",
-      "CHECK (outcome IN ('attempting','restarted','restart-failed','interrupted','limit-reached'))",
-      "CHECK ((outcome='attempting') = (settled_at IS NULL))"
-    ],
-    "volume_restore_runs": [
-      "CHECK (kind IN ('full','files','upload'))",
-      "CHECK (phase IN ('preparing','writing','done'))",
-      "CHECK (status IN ('running','succeeded','failed','partial'))",
-      "CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))",
-      "CHECK (mode IN ('replace','new'))"
-    ],
-    "volume_backups": [
-      "CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))"
-    ],
-    "backup_targets": [
-      "CHECK (kind IN ('local','mount','smb','nfs'))",
-      "CHECK ((kind IN ('smb','nfs')) = (host_id IS NULL))"
-    ],
-    "vulnerability_scan_notifications": [
-      "CHECK (status IN ('pending','sending','sent','failed','expired','unconfigured'))",
-      "CHECK (attempts >= 0)",
-      "CHECK ((status = 'sending') = (lease_until IS NOT NULL))"
-    ],
-    "vulnerability_scan_runs": [
-      "CHECK (origin IN ('manual','scheduled'))",
-      "CHECK (scope IN ('in-use','all'))",
-      "CHECK (status IN ('running','completed','partial','cancelled','failed','interrupted'))",
-      "CHECK (targets>=0)",
-      "CHECK (scanned>=0)",
-      "CHECK (failed>=0)",
-      "CHECK (skipped>=0)",
-      "CHECK (critical>=0)",
-      "CHECK (high>=0)",
-      "CHECK (medium>=0)",
-      "CHECK (low>=0)",
-      "CHECK (unknown>=0)",
-      "CHECK (new_critical>=0)",
-      "CHECK (new_high>=0)"
-    ],
-    "stack_update_policies": [
-      "CHECK (mode IN ('off','notify','apply'))",
-      "CHECK (revision > 0)"
-    ],
-    "image_update_schedules": [
-      "CHECK (revision > 0)",
-      "CHECK (polling_enabled IN (0,1))",
-      "CHECK (auto_update_enabled IN (0,1))"
-    ],
-    "image_policy_children": [
-      "CHECK (revision > 0)",
-      "CHECK (status IN ('prepared','admitted','refused','settled'))"
-    ],
-    "image_update_notifications": [
-      "CHECK (status IN ('pending','sending','sent','unconfigured','failed'))",
-      "CHECK (delivered >= 0)"
-    ],
-    "deployment_baselines": [
-      "CHECK (available IN (0,1))"
-    ],
-    "restore_points": [
-      "CHECK (available IN (0,1))",
-      "CHECK (source_state IN ('settled','partial-source'))",
-      "CHECK (failed_attempt IN (0,1))"
-    ],
-    "image_lifecycle_runs": [
-      "CHECK (had_effect IN (0,1))",
-      "CHECK (settled IN (0,1))"
-    ],
+    "user_app_assignments": ["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE","CHECK (level IN ('restricted', 'full'))","UNIQUE (user_id, environment_id, project_id)"],
+    "notification_outbox": ["CHECK (event IN ('deploy_failed','backup_failed','host_offline','auto_heal','sustained_load'))","CHECK (status IN ('pending','sending','sent','failed','unconfigured','expired'))","CHECK (attempts >= 0)","CHECK ((status='sending') = (lease_until IS NOT NULL))"],
+    "auto_heal_restarts": ["CHECK (baseline_restart_count >= 0)","CHECK (outcome IN ('attempting','restarted','restart-failed','interrupted','limit-reached'))","CHECK ((outcome='attempting') = (settled_at IS NULL))"],
+    "volume_restore_runs": ["CHECK (kind IN ('full','files','upload'))","CHECK (phase IN ('preparing','writing','done'))","CHECK (status IN ('running','succeeded','failed','partial'))","CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))","CHECK (mode IN ('replace','new'))"],
+    "volume_backups": ["CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))"],
+    "backup_targets": ["CHECK (kind IN ('local','mount','smb','nfs'))","CHECK ((kind IN ('smb','nfs')) = (host_id IS NULL))"],
+    "vulnerability_scan_notifications": ["CHECK (status IN ('pending','sending','sent','failed','expired','unconfigured'))","CHECK (attempts >= 0)","CHECK ((status = 'sending') = (lease_until IS NOT NULL))"],
+    "vulnerability_scan_runs": ["CHECK (origin IN ('manual','scheduled'))","CHECK (scope IN ('in-use','all'))","CHECK (status IN ('running','completed','partial','cancelled','failed','interrupted'))","CHECK (targets>=0)","CHECK (scanned>=0)","CHECK (failed>=0)","CHECK (skipped>=0)","CHECK (critical>=0)","CHECK (high>=0)","CHECK (medium>=0)","CHECK (low>=0)","CHECK (unknown>=0)","CHECK (new_critical>=0)","CHECK (new_high>=0)"],
+    "image_policy_children": ["CHECK (revision > 0)","CHECK (status IN ('prepared','admitted','refused','settled'))"],
+    "image_update_notifications": ["CHECK (status IN ('pending','sending','sent','unconfigured','failed'))","CHECK (delivered >= 0)"],
+    "deployment_baselines": ["CHECK (available IN (0,1))"],
+    "restore_points": ["CHECK (available IN (0,1))","CHECK (source_state IN ('settled','partial-source'))","CHECK (failed_attempt IN (0,1))"],
+    "image_lifecycle_runs": ["CHECK (had_effect IN (0,1))","CHECK (settled IN (0,1))"],
     "runtime_image_intents": [],
-    "image_protections": [
-      "CHECK (reason IN ('system', 'restore-point', 'active-update'))",
-      "CHECK (length(image_id) > 0)",
-      "CHECK (length(owner_id) > 0)"
-    ],
-    "runtime_executor_binding": [
-      "CHECK (id = 1)",
-      "CHECK (length(manager_id) > 0)",
-      "CHECK (length(registration_id) > 0)"
-    ],
-    "runtime_receipts": [
-      "CHECK (length(run_id) > 0 AND length(store_generation) > 0 AND length(manager_id) > 0 AND length(registration_id) > 0 AND length(environment_id) > 0 AND length(executor_generation) > 0 AND length(request_digest) > 0)",
-      "CHECK (kind IN ('receipt','not_received'))",
-      "CHECK (cancel_requested IN (0,1) AND (cancel_requested = 1) = (cancel_requested_at IS NOT NULL))",
-      "CHECK ((kind = 'receipt' AND caller_id IS NOT NULL AND length(caller_id) > 0 AND operation_id IS NOT NULL AND target_kind IS NOT NULL AND target_id IS NOT NULL AND length(target_id) > 0 AND gate_scope IS NOT NULL AND length(gate_scope) > 0 AND gate_key IS NOT NULL AND length(gate_key) > 0 AND admitted_at IS NOT NULL AND dispatch_state IS NOT NULL AND executor_state IS NOT NULL) OR (kind = 'not_received' AND caller_id IS NULL AND caller_name IS NULL AND operation_id IS NULL AND target_kind IS NULL AND target_id IS NULL AND target_name IS NULL AND parent_project_id IS NULL AND gate_scope IS NULL AND gate_key IS NULL AND admitted_at IS NULL AND dispatch_state IS NULL AND dispatched_at IS NULL AND executor_state IS NULL AND unknown_reason IS NULL AND executor_result_code IS NULL AND executor_error IS NULL AND executor_started_at IS NULL AND executor_settled_at IS NULL AND cancel_requested = 0 AND last_reconciled_at IS NULL AND hub_disposition IS NULL AND settled_at IS NOT NULL))",
-      "CHECK (operation_id IS NULL OR (target_kind = 'stack' AND operation_id IN ('deploy-project','down-project','restart-project','redeploy-project','update-project','restore-project','stop-project')) OR (target_kind = 'container' AND operation_id IN ('start-container','stop-container','restart-container','recreate-container','redeploy-container')))",
-      "CHECK (parent_project_id IS NULL OR (target_kind = 'container' AND length(parent_project_id) > 0))",
-      "CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending','dispatching','accepted'))",
-      "CHECK ((dispatch_state IS NOT NULL AND dispatch_state IN ('dispatching','accepted')) = (dispatched_at IS NOT NULL))",
-      "CHECK (executor_state IS NULL OR executor_state IN ('pending','accepted','executing','unknown','success','failed','cancelled'))",
-      "CHECK ((executor_state IS NOT NULL AND executor_state = 'unknown') = (unknown_reason IS NOT NULL) AND (unknown_reason IS NULL OR length(unknown_reason) > 0))",
-      "CHECK ((executor_state IS NOT NULL AND executor_state IN ('success','failed','cancelled')) = (executor_settled_at IS NOT NULL))",
-      "CHECK ((executor_result_code IS NULL AND executor_error IS NULL) OR executor_settled_at IS NOT NULL)",
-      "CHECK (hub_disposition IS NULL OR hub_disposition IN ('cancelled','interrupted','released','refused','not_received'))",
-      "CHECK ((hub_disposition IS NULL AND hub_disposition_by IS NULL AND hub_disposition_reason IS NULL AND hub_disposition_at IS NULL) OR (hub_disposition IS NOT NULL AND hub_disposition_by IS NOT NULL AND length(hub_disposition_by) > 0 AND hub_disposition_reason IS NOT NULL AND length(hub_disposition_reason) > 0 AND hub_disposition_at IS NOT NULL))",
-      "CHECK (release_acknowledged IN (0,1) AND (release_acknowledged = 1) = (hub_disposition IS NOT NULL AND hub_disposition = 'released'))",
-      "CHECK ((settled_at IS NOT NULL) = (kind = 'not_received' OR executor_settled_at IS NOT NULL OR hub_disposition IS NOT NULL))"
-    ],
-    "runtime_key_bindings": [
-      "CHECK (length(environment_id) > 0 AND length(idempotency_key) > 0 AND length(run_id) > 0 AND length(caller_id) > 0 AND length(request_digest) > 0)",
-      "FOREIGN KEY (environment_id,run_id) REFERENCES runtime_receipts(environment_id,run_id) ON DELETE RESTRICT"
-    ],
-    "runtime_store_generation": [
-      "CHECK (id = 1)",
-      "CHECK (length(generation) > 0)"
-    ],
-    "activity_messages": [
-      "FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE"
-    ],
-    "api_key_permissions": [
-      "FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE",
-      "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE"
-    ],
-    "api_keys": [
-      "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE",
-      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-    ],
-    "environments": [
-      "FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL"
-    ],
-    "project_tags": [
-      "CHECK ((color IN ('gray', 'purple', 'blue', 'green', 'yellow', 'orange', 'red', 'pink')))",
-      "CHECK ((source IN ('ui', 'compose')))",
-      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
-    ],
-    "projects": [
-      "UNIQUE (dir_name)"
-    ],
-    "roles": [
-      "UNIQUE (name)"
-    ],
-    "user_avatars": [
-      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-    ],
-    "user_role_assignments": [
-      "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE",
-      "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE",
-      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-    ],
-    "user_sessions": [
-      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
-      "UNIQUE (refresh_token_hash)"
-    ],
-    "users": [
-      "CHECK ((time_format IN ('auto', '12h', '24h')))",
-      "UNIQUE (username)"
-    ],
-    "vulnerability_scan_items": [
-      "FOREIGN KEY (image_id) REFERENCES vulnerability_scans(id) ON DELETE CASCADE",
-      "CHECK (details IS NULL OR json_valid(details))"
-    ],
-    "webhooks": [
-      "UNIQUE (token_hash)"
-    ],
-    "activities": [
-      "CHECK (status IN ('queued','running','success','failed','cancelled'))",
-      "CHECK ((COALESCE(gate_scope, '') = '') = (COALESCE(gate_key, '') = ''))"
-    ],
-    "vulnerability_reports": [
-      "CHECK (data IS NULL OR json_valid(data))"
-    ],
-    "system_backup_runs": [
-      "CHECK (size BETWEEN 0 AND 2147483648)",
-      "CHECK (archive_name IS NULL OR (length(archive_name) BETWEEN 5 AND 132 AND archive_name NOT GLOB '*[^A-Za-z0-9_.-]*' AND substr(archive_name,-4) = '.tar'))",
-      "CHECK (archive_version IS NULL OR archive_version = 1)",
-      "CHECK (migration_version IS NULL OR migration_version >= 1)",
-      "CHECK (copy_state IN ('none','pending','succeeded','failed'))"
-    ],
-    "system_backup_policies": [
-      "CHECK (retention_count >= 1)"
-    ],
-    "container_recreate_journal": [
-      "CHECK (was_running IN (0,1))",
-      "CHECK (auto_remove IN (0,1))",
-      "CHECK (phase IN ('intent-rename','renamed','intent-create','created','intent-start','started','intent-remove-old','done','rolled-back','ambiguous','comp-remove-new','comp-rename-old','comp-start-old'))"
-    ],
-    "container_origin_overrides": [
-      "CHECK (origin IN ('unraid','standalone'))"
-    ],
-    "agent_restart_requests": [
-      "CHECK (state IN ('reserved','sent','awaiting','connected','failed','unknown'))",
-      "CHECK ((state IN ('connected','failed','unknown')) = (settled_at IS NOT NULL))",
-      "CHECK ((state IN ('failed','unknown')) = (code IS NOT NULL))",
-      "CHECK (state <> 'unknown' OR code = 'agent.restart-unconfirmed')",
-      "CHECK (state <> 'failed' OR code IN ('agent.restart-superseded','agent.restart-timeout','agent.restart-unsupported','agent.restart-interrupted','host.unreachable'))",
-      "CHECK (acknowledged_at IS NULL OR sent_at IS NOT NULL)"
-    ]
+    "image_protections": ["CHECK (reason IN ('system', 'restore-point', 'active-update', 'container-previous'))","CHECK (length(image_id) > 0)","CHECK (length(owner_id) > 0)"],
+    "runtime_executor_binding": ["CHECK (id = 1)","CHECK (length(manager_id) > 0)","CHECK (length(registration_id) > 0)"],
+    "runtime_receipts": ["CHECK (length(run_id) > 0 AND length(store_generation) > 0 AND length(manager_id) > 0 AND length(registration_id) > 0 AND length(environment_id) > 0 AND length(executor_generation) > 0 AND length(request_digest) > 0)","CHECK (kind IN ('receipt','not_received'))","CHECK (cancel_requested IN (0,1) AND (cancel_requested = 1) = (cancel_requested_at IS NOT NULL))","CHECK ((kind = 'receipt' AND caller_id IS NOT NULL AND length(caller_id) > 0 AND operation_id IS NOT NULL AND target_kind IS NOT NULL AND target_id IS NOT NULL AND length(target_id) > 0 AND gate_scope IS NOT NULL AND length(gate_scope) > 0 AND gate_key IS NOT NULL AND length(gate_key) > 0 AND admitted_at IS NOT NULL AND dispatch_state IS NOT NULL AND executor_state IS NOT NULL) OR (kind = 'not_received' AND caller_id IS NULL AND caller_name IS NULL AND operation_id IS NULL AND target_kind IS NULL AND target_id IS NULL AND target_name IS NULL AND parent_project_id IS NULL AND gate_scope IS NULL AND gate_key IS NULL AND admitted_at IS NULL AND dispatch_state IS NULL AND dispatched_at IS NULL AND executor_state IS NULL AND unknown_reason IS NULL AND executor_result_code IS NULL AND executor_error IS NULL AND executor_started_at IS NULL AND executor_settled_at IS NULL AND cancel_requested = 0 AND last_reconciled_at IS NULL AND hub_disposition IS NULL AND settled_at IS NOT NULL))","CHECK (operation_id IS NULL OR (target_kind = 'stack' AND operation_id IN ('deploy-project','down-project','restart-project','redeploy-project','update-project','restore-project','stop-project')) OR (target_kind = 'container' AND operation_id IN ('start-container','stop-container','restart-container','recreate-container','redeploy-container','update-container','restore-container-image')))","CHECK (parent_project_id IS NULL OR (target_kind = 'container' AND length(parent_project_id) > 0))","CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending','dispatching','accepted'))","CHECK ((dispatch_state IS NOT NULL AND dispatch_state IN ('dispatching','accepted')) = (dispatched_at IS NOT NULL))","CHECK (executor_state IS NULL OR executor_state IN ('pending','accepted','executing','unknown','success','failed','cancelled'))","CHECK ((executor_state IS NOT NULL AND executor_state = 'unknown') = (unknown_reason IS NOT NULL) AND (unknown_reason IS NULL OR length(unknown_reason) > 0))","CHECK ((executor_state IS NOT NULL AND executor_state IN ('success','failed','cancelled')) = (executor_settled_at IS NOT NULL))","CHECK ((executor_result_code IS NULL AND executor_error IS NULL) OR executor_settled_at IS NOT NULL)","CHECK (hub_disposition IS NULL OR hub_disposition IN ('cancelled','interrupted','released','refused','not_received'))","CHECK ((hub_disposition IS NULL AND hub_disposition_by IS NULL AND hub_disposition_reason IS NULL AND hub_disposition_at IS NULL) OR (hub_disposition IS NOT NULL AND hub_disposition_by IS NOT NULL AND length(hub_disposition_by) > 0 AND hub_disposition_reason IS NOT NULL AND length(hub_disposition_reason) > 0 AND hub_disposition_at IS NOT NULL))","CHECK (release_acknowledged IN (0,1) AND (release_acknowledged = 1) = (hub_disposition IS NOT NULL AND hub_disposition = 'released'))","CHECK ((settled_at IS NOT NULL) = (kind = 'not_received' OR executor_settled_at IS NOT NULL OR hub_disposition IS NOT NULL))"],
+    "runtime_key_bindings": ["CHECK (length(environment_id) > 0 AND length(idempotency_key) > 0 AND length(run_id) > 0 AND length(caller_id) > 0 AND length(request_digest) > 0)","FOREIGN KEY (environment_id,run_id) REFERENCES runtime_receipts(environment_id,run_id) ON DELETE RESTRICT"],
+    "runtime_store_generation": ["CHECK (id = 1)","CHECK (length(generation) > 0)"],
+    "activity_messages": ["FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE"],
+    "api_key_permissions": ["FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE","FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE"],
+    "api_keys": ["FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE","FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"],
+    "environments": ["FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL"],
+    "project_tags": ["CHECK ((color IN ('gray', 'purple', 'blue', 'green', 'yellow', 'orange', 'red', 'pink')))","CHECK ((source IN ('ui', 'compose')))","FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"],
+    "projects": ["UNIQUE (dir_name)"],
+    "roles": ["UNIQUE (name)"],
+    "user_avatars": ["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"],
+    "user_role_assignments": ["FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE","FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE","FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"],
+    "user_sessions": ["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE","UNIQUE (refresh_token_hash)"],
+    "users": ["CHECK ((time_format IN ('auto', '12h', '24h')))","UNIQUE (username)"],
+    "vulnerability_scan_items": ["FOREIGN KEY (image_id) REFERENCES vulnerability_scans(id) ON DELETE CASCADE","CHECK (details IS NULL OR json_valid(details))"],
+    "webhooks": ["UNIQUE (token_hash)"],
+    "activities": ["CHECK (status IN ('queued','running','success','failed','cancelled'))","CHECK ((COALESCE(gate_scope, '') = '') = (COALESCE(gate_key, '') = ''))"],
+    "vulnerability_reports": ["CHECK (data IS NULL OR json_valid(data))"],
+    "system_backup_runs": ["CHECK (size BETWEEN 0 AND 2147483648)","CHECK (archive_name IS NULL OR (length(archive_name) BETWEEN 5 AND 132 AND archive_name NOT GLOB '*[^A-Za-z0-9_.-]*' AND substr(archive_name,-4) = '.tar'))","CHECK (archive_version IS NULL OR archive_version = 1)","CHECK (migration_version IS NULL OR migration_version >= 1)","CHECK (copy_state IN ('none','pending','succeeded','failed'))"],
+    "system_backup_policies": ["CHECK (retention_count >= 1)"],
+    "container_recreate_journal": ["CHECK (was_running IN (0,1))","CHECK (auto_remove IN (0,1))","CHECK (phase IN ('intent-rename','renamed','intent-create','created','intent-start','started','intent-remove-old','done','rolled-back','ambiguous','comp-remove-new','comp-rename-old','comp-start-old'))"],
+    "container_origin_overrides": ["CHECK (origin IN ('unraid','standalone'))"],
+    "agent_restart_requests": ["CHECK (state IN ('reserved','sent','awaiting','connected','failed','unknown'))","CHECK ((state IN ('connected','failed','unknown')) = (settled_at IS NOT NULL))","CHECK ((state IN ('failed','unknown')) = (code IS NOT NULL))","CHECK (state <> 'unknown' OR code = 'agent.restart-unconfirmed')","CHECK (state <> 'failed' OR code IN ('agent.restart-superseded','agent.restart-timeout','agent.restart-unsupported','agent.restart-interrupted','host.unreachable'))","CHECK (acknowledged_at IS NULL OR sent_at IS NOT NULL)"],
+    "update_policies": ["CHECK (target_kind IN ('stack','container'))","CHECK (mode IN ('check','scheduled'))","CHECK (revision > 0)","CHECK ((mode = 'check' AND window_kind IS NULL AND window_day IS NULL AND window_time IS NULL) OR (mode = 'scheduled' AND window_kind IS NOT NULL AND window_kind IN ('daily','weekly') AND window_time IS NOT NULL AND window_time GLOB '[0-2][0-9]:[0-5][0-9]' AND substr(window_time,1,2) <= '23' AND ((window_kind = 'daily' AND window_day IS NULL) OR (window_kind = 'weekly' AND window_day IS NOT NULL AND window_day IN (0,1,2,3,4,5,6)))))"]
   },
-  "indexes": [
-    "CREATE INDEX user_app_assignments_environment ON user_app_assignments(environment_id);",
-    "CREATE INDEX idx_notification_outbox_delivery ON notification_outbox (status,created_at);",
-    "CREATE UNIQUE INDEX idx_volume_backup_policies_single_volume ON volume_backup_policies (volume_name)",
-    "CREATE UNIQUE INDEX idx_backup_targets_active_name ON backup_targets (name) WHERE retired_at IS NULL",
-    "CREATE INDEX idx_vulnerability_scan_notifications_status ON vulnerability_scan_notifications (status,created_at);",
-    "CREATE INDEX idx_vulnerability_scan_runs_environment_id ON vulnerability_scan_runs (environment_id,started_at);",
-    "CREATE INDEX idx_restore_points_target_created ON restore_points (target_id, created_at);",
-    "CREATE UNIQUE INDEX idx_runtime_receipts_environment_run ON runtime_receipts (environment_id,run_id);",
-    "CREATE UNIQUE INDEX idx_runtime_receipts_active_scope ON runtime_receipts (environment_id,gate_scope) WHERE kind = 'receipt' AND settled_at IS NULL;",
-    "CREATE INDEX idx_runtime_receipts_active_parent ON runtime_receipts (environment_id,parent_project_id) WHERE kind = 'receipt' AND settled_at IS NULL AND parent_project_id IS NOT NULL;",
-    "CREATE INDEX idx_runtime_receipts_retention ON runtime_receipts (final_write_at,run_id) WHERE settled_at IS NOT NULL;",
-    "CREATE INDEX idx_runtime_key_bindings_run ON runtime_key_bindings (run_id);",
-    "CREATE INDEX idx_activities_environment_batch ON activities (environment_id, batch_id);",
-    "CREATE INDEX idx_activities_environment_started ON activities (environment_id, started_at);",
-    "CREATE INDEX idx_activities_environment_status_updated ON activities (environment_id, status, updated_at);",
-    "CREATE INDEX idx_activities_resource ON activities (resource_type, resource_id);",
-    "CREATE INDEX idx_activity_messages_activity_created ON activity_messages (activity_id, created_at);",
-    "CREATE UNIQUE INDEX idx_akp_uniq ON api_key_permissions (api_key_id, permission, COALESCE(environment_id, ''));",
-    "CREATE INDEX idx_api_keys_expires_at_not_null ON api_keys (expires_at) WHERE (expires_at IS NOT NULL);",
-    "CREATE INDEX idx_api_keys_key_hash ON api_keys (key_hash);",
-    "CREATE INDEX idx_api_keys_key_prefix ON api_keys (key_prefix);",
-    "CREATE INDEX idx_api_keys_user_managed_by_created_at ON api_keys (user_id, managed_by, created_at, id);",
-    "CREATE INDEX idx_auto_update_resource_id ON auto_update_records (resource_id);",
-    "CREATE INDEX idx_auto_update_start_time ON auto_update_records (start_time);",
-    "CREATE INDEX idx_container_registries_enabled ON container_registries (enabled);",
-    "CREATE INDEX idx_environment_update_jobs_status ON environment_update_jobs (status);",
-    "CREATE INDEX idx_environments_access_token_not_null ON environments (access_token) WHERE (access_token IS NOT NULL);",
-    "CREATE INDEX idx_environments_api_url ON environments (api_url);",
-    "CREATE INDEX idx_environments_enabled ON environments (enabled);",
-    "CREATE INDEX idx_environments_enabled_true ON environments (id, name) WHERE (enabled = true);",
-    "CREATE INDEX idx_environments_last_seen ON environments (last_seen);",
-    "CREATE INDEX idx_environments_name ON environments (name);",
-    "CREATE INDEX idx_environments_status ON environments (status);",
-    "CREATE INDEX idx_events_environment_timestamp ON events (environment_id, \"timestamp\");",
-    "CREATE INDEX idx_events_resource_id ON events (resource_id);",
-    "CREATE INDEX idx_events_resource_type ON events (resource_type);",
-    "CREATE INDEX idx_events_severity ON events (severity);",
-    "CREATE INDEX idx_events_timestamp ON events (\"timestamp\");",
-    "CREATE INDEX idx_events_type ON events (type);",
-    "CREATE INDEX idx_events_user_id ON events (user_id);",
-    "CREATE INDEX idx_image_patches_created_at ON image_patches (created_at);",
-    "CREATE INDEX idx_image_updates_check_time ON image_updates (check_time);",
-    "CREATE INDEX idx_image_updates_has_update ON image_updates (has_update);",
-    "CREATE INDEX idx_image_updates_has_update_notification ON image_updates (has_update, notification_sent);",
-    "CREATE INDEX idx_image_updates_notification_sent ON image_updates (notification_sent);",
-    "CREATE INDEX idx_image_updates_repository_tag ON image_updates (repository, tag);",
-    "CREATE INDEX idx_notification_settings_enabled ON notification_settings (enabled);",
-    "CREATE INDEX idx_project_tags_name ON project_tags (name);",
-    "CREATE INDEX idx_projects_dir_name_not_null ON projects (dir_name) WHERE (dir_name IS NOT NULL);",
-    "CREATE INDEX idx_projects_status ON projects (status);",
-    "CREATE UNIQUE INDEX idx_ura_uniq ON user_role_assignments (user_id, role_id, COALESCE(environment_id, ''));",
-    "CREATE INDEX idx_users_email ON users (email);",
-    "CREATE INDEX idx_users_username ON users (username);",
-    "CREATE INDEX idx_volume_backups_volume_name_created_at ON volume_backups (volume_name, created_at);",
-    "CREATE INDEX idx_vulnerability_ignores_composite ON vulnerability_ignores (environment_id, image_id, vulnerability_id, pkg_name, installed_version);",
-    "CREATE INDEX idx_vulnerability_ignores_env_created_at ON vulnerability_ignores (environment_id, created_at);",
-    "CREATE INDEX idx_vulnerability_ignores_env_vulnerability_id ON vulnerability_ignores (environment_id, vulnerability_id);",
-    "CREATE INDEX idx_vulnerability_scan_items_severity_rank_id ON vulnerability_scan_items (severity_rank, id);",
-    "CREATE INDEX idx_vulnerability_scans_scan_time ON vulnerability_scans (scan_time);",
-    "CREATE INDEX idx_vulnerability_scans_status_total_count ON vulnerability_scans (status, total_count);",
-    "CREATE INDEX idx_vulnerability_threat_intel_known_exploited ON vulnerability_threat_intel (known_exploited);",
-    "CREATE INDEX idx_webhooks_environment_id ON webhooks (environment_id);",
-    "CREATE INDEX idx_webhooks_token_prefix ON webhooks (token_prefix);",
-    "CREATE UNIQUE INDEX idx_activities_active_scope ON activities(environment_id,gate_scope) WHERE gate_scope <> '' AND status IN ('queued','running');",
-    "CREATE UNIQUE INDEX idx_system_backup_runs_archive_name ON system_backup_runs (archive_name) WHERE archive_name IS NOT NULL;",
-    "CREATE INDEX idx_system_backup_runs_activity_id ON system_backup_runs (activity_id) WHERE activity_id IS NOT NULL;",
-    "CREATE UNIQUE INDEX idx_agent_restart_requests_active ON agent_restart_requests (environment_id) WHERE settled_at IS NULL;"
-  ]
+  "indexes": ["CREATE INDEX user_app_assignments_environment ON user_app_assignments(environment_id);","CREATE INDEX idx_notification_outbox_delivery ON notification_outbox (status,created_at);","CREATE UNIQUE INDEX idx_volume_backup_policies_single_volume ON volume_backup_policies (volume_name)","CREATE UNIQUE INDEX idx_backup_targets_active_name ON backup_targets (name) WHERE retired_at IS NULL","CREATE INDEX idx_vulnerability_scan_notifications_status ON vulnerability_scan_notifications (status,created_at);","CREATE INDEX idx_vulnerability_scan_runs_environment_id ON vulnerability_scan_runs (environment_id,started_at);","CREATE INDEX idx_restore_points_target_created ON restore_points (target_id, created_at);","CREATE UNIQUE INDEX idx_runtime_receipts_environment_run ON runtime_receipts (environment_id,run_id);","CREATE UNIQUE INDEX idx_runtime_receipts_active_scope ON runtime_receipts (environment_id,gate_scope) WHERE kind = 'receipt' AND settled_at IS NULL;","CREATE INDEX idx_runtime_receipts_active_parent ON runtime_receipts (environment_id,parent_project_id) WHERE kind = 'receipt' AND settled_at IS NULL AND parent_project_id IS NOT NULL;","CREATE INDEX idx_runtime_receipts_retention ON runtime_receipts (final_write_at,run_id) WHERE settled_at IS NOT NULL;","CREATE INDEX idx_runtime_key_bindings_run ON runtime_key_bindings (run_id);","CREATE INDEX idx_activities_environment_batch ON activities (environment_id, batch_id);","CREATE INDEX idx_activities_environment_started ON activities (environment_id, started_at);","CREATE INDEX idx_activities_environment_status_updated ON activities (environment_id, status, updated_at);","CREATE INDEX idx_activities_resource ON activities (resource_type, resource_id);","CREATE INDEX idx_activity_messages_activity_created ON activity_messages (activity_id, created_at);","CREATE UNIQUE INDEX idx_akp_uniq ON api_key_permissions (api_key_id, permission, COALESCE(environment_id, ''));","CREATE INDEX idx_api_keys_expires_at_not_null ON api_keys (expires_at) WHERE (expires_at IS NOT NULL);","CREATE INDEX idx_api_keys_key_hash ON api_keys (key_hash);","CREATE INDEX idx_api_keys_key_prefix ON api_keys (key_prefix);","CREATE INDEX idx_api_keys_user_managed_by_created_at ON api_keys (user_id, managed_by, created_at, id);","CREATE INDEX idx_auto_update_resource_id ON auto_update_records (resource_id);","CREATE INDEX idx_auto_update_start_time ON auto_update_records (start_time);","CREATE INDEX idx_container_registries_enabled ON container_registries (enabled);","CREATE INDEX idx_environment_update_jobs_status ON environment_update_jobs (status);","CREATE INDEX idx_environments_access_token_not_null ON environments (access_token) WHERE (access_token IS NOT NULL);","CREATE INDEX idx_environments_api_url ON environments (api_url);","CREATE INDEX idx_environments_enabled ON environments (enabled);","CREATE INDEX idx_environments_enabled_true ON environments (id, name) WHERE (enabled = true);","CREATE INDEX idx_environments_last_seen ON environments (last_seen);","CREATE INDEX idx_environments_name ON environments (name);","CREATE INDEX idx_environments_status ON environments (status);","CREATE INDEX idx_events_environment_timestamp ON events (environment_id, \"timestamp\");","CREATE INDEX idx_events_resource_id ON events (resource_id);","CREATE INDEX idx_events_resource_type ON events (resource_type);","CREATE INDEX idx_events_severity ON events (severity);","CREATE INDEX idx_events_timestamp ON events (\"timestamp\");","CREATE INDEX idx_events_type ON events (type);","CREATE INDEX idx_events_user_id ON events (user_id);","CREATE INDEX idx_image_patches_created_at ON image_patches (created_at);","CREATE INDEX idx_image_updates_check_time ON image_updates (check_time);","CREATE INDEX idx_image_updates_has_update ON image_updates (has_update);","CREATE INDEX idx_image_updates_has_update_notification ON image_updates (has_update, notification_sent);","CREATE INDEX idx_image_updates_notification_sent ON image_updates (notification_sent);","CREATE INDEX idx_image_updates_repository_tag ON image_updates (repository, tag);","CREATE INDEX idx_notification_settings_enabled ON notification_settings (enabled);","CREATE INDEX idx_project_tags_name ON project_tags (name);","CREATE INDEX idx_projects_dir_name_not_null ON projects (dir_name) WHERE (dir_name IS NOT NULL);","CREATE INDEX idx_projects_status ON projects (status);","CREATE UNIQUE INDEX idx_ura_uniq ON user_role_assignments (user_id, role_id, COALESCE(environment_id, ''));","CREATE INDEX idx_users_email ON users (email);","CREATE INDEX idx_users_username ON users (username);","CREATE INDEX idx_volume_backups_volume_name_created_at ON volume_backups (volume_name, created_at);","CREATE INDEX idx_vulnerability_ignores_composite ON vulnerability_ignores (environment_id, image_id, vulnerability_id, pkg_name, installed_version);","CREATE INDEX idx_vulnerability_ignores_env_created_at ON vulnerability_ignores (environment_id, created_at);","CREATE INDEX idx_vulnerability_ignores_env_vulnerability_id ON vulnerability_ignores (environment_id, vulnerability_id);","CREATE INDEX idx_vulnerability_scan_items_severity_rank_id ON vulnerability_scan_items (severity_rank, id);","CREATE INDEX idx_vulnerability_scans_scan_time ON vulnerability_scans (scan_time);","CREATE INDEX idx_vulnerability_scans_status_total_count ON vulnerability_scans (status, total_count);","CREATE INDEX idx_vulnerability_threat_intel_known_exploited ON vulnerability_threat_intel (known_exploited);","CREATE INDEX idx_webhooks_environment_id ON webhooks (environment_id);","CREATE INDEX idx_webhooks_token_prefix ON webhooks (token_prefix);","CREATE UNIQUE INDEX idx_activities_active_scope ON activities(environment_id,gate_scope) WHERE gate_scope <> '' AND status IN ('queued','running');","CREATE UNIQUE INDEX idx_system_backup_runs_archive_name ON system_backup_runs (archive_name) WHERE archive_name IS NOT NULL;","CREATE INDEX idx_system_backup_runs_activity_id ON system_backup_runs (activity_id) WHERE activity_id IS NOT NULL;","CREATE UNIQUE INDEX idx_agent_restart_requests_active ON agent_restart_requests (environment_id) WHERE settled_at IS NULL;"]
 }

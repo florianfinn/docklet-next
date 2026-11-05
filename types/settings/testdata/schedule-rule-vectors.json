@@ -1,0 +1,19 @@
+[
+  {"name":"berlin-gap", "expression":"0 30 2 * * *", "zone":"Europe/Berlin", "after":"2027-03-27T02:30:00+01:00", "next":["2027-03-28T03:30:00+02:00","2027-03-29T02:30:00+02:00"]},
+  {"name":"berlin-inside-gap-shift", "expression":"0 30 2 * * *", "zone":"Europe/Berlin", "after":"2027-03-28T03:10:00+02:00", "next":["2027-03-28T03:30:00+02:00"]},
+  {"name":"berlin-gap-exact-boundary", "expression":"0 30 2 * * *", "zone":"Europe/Berlin", "after":"2027-03-28T03:30:00+02:00", "next":["2027-03-29T02:30:00+02:00"]},
+  {"name":"berlin-gap-multiple-minutes", "expression":"0 15,45 2 * * *", "zone":"Europe/Berlin", "after":"2027-03-28T03:20:00+02:00", "next":["2027-03-28T03:45:00+02:00"]},
+  {"name":"berlin-gap-equal-instant", "expression":"0 30 2,3 * * *", "zone":"Europe/Berlin", "after":"2027-03-28T01:59:00+01:00", "next":["2027-03-28T03:30:00+02:00","2027-03-29T02:30:00+02:00"]},
+  {"name":"lord-howe-earliest-mapped-instant", "expression":"0 15,30 2 * * *", "zone":"Australia/Lord_Howe", "after":"2027-10-03T01:59:00+10:30", "next":["2027-10-03T02:30:00+11:00","2027-10-03T02:45:00+11:00","2027-10-04T02:15:00+11:00"]},
+  {"name":"berlin-fold-once", "expression":"0 30 2 * * *", "zone":"Europe/Berlin", "after":"2026-10-24T02:30:00+02:00", "next":["2026-10-25T02:30:00+02:00","2026-10-26T02:30:00+01:00"]},
+  {"name":"berlin-fold-restart", "expression":"0 30 2 * * *", "zone":"Europe/Berlin", "after":"2026-10-25T02:15:00+01:00", "next":["2026-10-26T02:30:00+01:00"]},
+  {"name":"elapsed-star", "expression":"0 * * * * *", "zone":"Europe/Berlin", "after":"2026-10-25T02:59:00+02:00", "next":["2026-10-25T02:00:00+01:00","2026-10-25T02:01:00+01:00"]},
+  {"name":"elapsed-step-one", "expression":"0 * */1 * * *", "zone":"Europe/Berlin", "after":"2026-10-25T02:59:00+02:00", "next":["2026-10-25T02:00:00+01:00"]},
+  {"name":"elapsed-range", "expression":"0 * 0-23 * * *", "zone":"Europe/Berlin", "after":"2026-10-25T02:59:00+02:00", "next":["2026-10-25T02:00:00+01:00"]},
+  {"name":"elapsed-hourly", "expression":"@hourly", "zone":"Europe/Berlin", "after":"2026-10-25T02:00:00+02:00", "next":["2026-10-25T02:00:00+01:00"]},
+  {"name":"restricted-step-six", "expression":"0 0 */6 * * *", "zone":"Europe/Berlin", "after":"2026-10-25T02:15:00+01:00", "next":["2026-10-25T06:00:00+01:00"]},
+  {"name":"daily-descriptor", "expression":"@daily", "zone":"Europe/Berlin", "after":"2026-10-25T00:00:00+02:00", "next":["2026-10-26T00:00:00+01:00"]},
+  {"name":"constant-delay", "expression":"@every 1h", "zone":"Europe/Berlin", "after":"2026-10-25T02:30:00+02:00", "next":["2026-10-25T02:30:00+01:00"]},
+  {"name":"leap-day-before-parser-exhaustion", "expression":"0 30 2 29 2 *", "zone":"UTC", "after":"2096-02-28T00:00:00Z", "next":["2096-02-29T02:30:00Z"]},
+  {"name":"exhaustion", "expression":"0 30 2 31 2 *", "zone":"Europe/Berlin", "after":"2026-01-01T00:00:00Z", "next":[""]}
+]

@@ -10,6 +10,12 @@ export const enSecurity = {
   riskSort: "Risk",
   hostUnavailable: "Scan data unavailable for {host}. Results from other hosts remain available.",
   scannedPlatform: "Scanned platform: {platform}",
+  coverage: {
+    notCovered: "Not covered: {names}",
+    unknown: "Coverage unknown: {names}",
+    containerNotCovered: "Not covered by the last scan: this container runs {platform}, the scan covered {scanned}.",
+    containerUnknown: "Scan coverage unknown: the daemon does not report this container''s platform.",
+  },
   notCovered: "Only the daemon-default platform is scanned. Containers using another platform are not covered.",
   scanUnavailable: "Scan data unavailable",
   notScanned: "Not scanned",

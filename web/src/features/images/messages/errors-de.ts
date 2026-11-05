@@ -8,6 +8,13 @@ import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "agent_unavailable": deBackend.errors.agent.unavailable,
+  "container_origin-locked": "Docklet verwaltet keine Updates für diesen Container.",
+  "container_recreate-ambiguous": "Der Ersatzcontainer konnte nicht eindeutig ermittelt werden.",
+  "container_recreate-recovered": "Der Ersatzcontainer wurde wiederhergestellt.",
+  "deploy_point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen.",
+  "settings_invalid-time-zone": "Wähle eine gültige Zeitzone.",
+  "update_service-coupled": "Dieser Dienst muss zusammen mit seinem Stack aktualisiert werden.",
   "history_invalid-range": deBackend.errors.history["invalid-range"],
   "history_sample-invalid": deBackend.errors.history["sample-invalid"],
   "history_sample-too-large": deBackend.errors.history["sample-too-large"],
@@ -69,7 +76,7 @@ export const deImageErrors = {
   "image_pull-failed": "Das Image konnte nicht gezogen werden. Referenz und gespeicherte Registry-Konfiguration prüfen.",
   "image_remove-failed": "Das Image konnte nicht entfernt werden.",
   "image_reserved-reference": "Diese Referenz ist für die interne Image-Aufbewahrung reserviert.",
-  "image_restore-point-protected": "Ein Wiederherstellungspunkt schützt dieses Image.",
+  "image_restore-point-protected": "Ein gespeichertes Wiederherstellungsimage schützt dieses Image.",
   "image_system-protected": "Dieses Image ist geschützt, weil Docklet es verwendet.",
   "image_tag-failed": "Der Image-Tag konnte nicht geändert werden.",
   "image_usage-unavailable": "Die Image-Nutzung konnte nicht geprüft werden. Kein Image gilt deshalb als ungenutzt.",

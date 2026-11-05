@@ -54,7 +54,6 @@ export const deImages: typeof enImages = {
     size: "Größe",
     layers: "Layer",
     digest: "Digest",
-    digestHint: "Synthetischer Digest – nur zur Unterscheidung im Detail.",
     consumers: "Verwendet von",
     consumersNone: "Kein Container verwendet dieses Image.",
     stopped: "gestoppt",

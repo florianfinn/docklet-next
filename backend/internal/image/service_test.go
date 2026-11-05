@@ -693,15 +693,15 @@ func TestImageServiceContainerTagUpdatesStayScoped(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, firstTarget, checks["first"].LatestVersion)
 
-	// A digest check recorded under another local tag of the running image
-	// applies to every digest-policy container using that image ID.
+	// A digest check of the running image ID applies to every digest-policy
+	// container using that image under the checked reference.
 	require.NoError(
 		t,
 		db.Create(&imageupdate.ImageUpdateRecord{
 			ID:             "moving-image",
 			Repository:     "docker.io/library/app",
-			Tag:            "stable",
-			CurrentVersion: "stable",
+			Tag:            "latest",
+			CurrentVersion: "latest",
 			HasUpdate:      true,
 			Platform:       new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:" + strings.Repeat("a", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)),
 			UpdateType: "digest",

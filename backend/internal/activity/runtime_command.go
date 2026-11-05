@@ -25,18 +25,20 @@ import (
 type RuntimeOperation = activitytypes.RuntimeOperation
 
 const (
-	RuntimeUpdateProject     = activitytypes.RuntimeUpdateProject
-	RuntimeRestoreProject    = activitytypes.RuntimeRestoreProject
-	RuntimeDeployProject     = activitytypes.RuntimeDeployProject
-	RuntimeDownProject       = activitytypes.RuntimeDownProject
-	RuntimeStopProject       = activitytypes.RuntimeStopProject
-	RuntimeRecreateContainer = activitytypes.RuntimeRecreateContainer
-	RuntimeRedeployContainer = activitytypes.RuntimeRedeployContainer
-	RuntimeRestartProject    = activitytypes.RuntimeRestartProject
-	RuntimeRedeployProject   = activitytypes.RuntimeRedeployProject
-	RuntimeStartContainer    = activitytypes.RuntimeStartContainer
-	RuntimeStopContainer     = activitytypes.RuntimeStopContainer
-	RuntimeRestartContainer  = activitytypes.RuntimeRestartContainer
+	RuntimeUpdateProject         = activitytypes.RuntimeUpdateProject
+	RuntimeRestoreProject        = activitytypes.RuntimeRestoreProject
+	RuntimeDeployProject         = activitytypes.RuntimeDeployProject
+	RuntimeDownProject           = activitytypes.RuntimeDownProject
+	RuntimeStopProject           = activitytypes.RuntimeStopProject
+	RuntimeRecreateContainer     = activitytypes.RuntimeRecreateContainer
+	RuntimeRedeployContainer     = activitytypes.RuntimeRedeployContainer
+	RuntimeUpdateContainer       = activitytypes.RuntimeUpdateContainer
+	RuntimeRestoreContainerImage = activitytypes.RuntimeRestoreContainerImage
+	RuntimeRestartProject        = activitytypes.RuntimeRestartProject
+	RuntimeRedeployProject       = activitytypes.RuntimeRedeployProject
+	RuntimeStartContainer        = activitytypes.RuntimeStartContainer
+	RuntimeStopContainer         = activitytypes.RuntimeStopContainer
+	RuntimeRestartContainer      = activitytypes.RuntimeRestartContainer
 )
 
 type RuntimeTarget = activitytypes.RuntimeTarget
@@ -139,10 +141,29 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	if command.Options.Recreate != nil && command.Operation != RuntimeRecreateContainer {
 		return invalid()
 	}
+	if command.Options.ContainerImage != nil && !runtimeContainerImageOperation(command.Operation) {
+		return invalid()
+	}
 	if command.Operation != RuntimeUpdateProject && command.Operation != RuntimeRestoreProject && command.Options.Lifecycle != nil {
 		return invalid()
 	}
 	switch command.Operation {
+	case RuntimeUpdateContainer, RuntimeRestoreContainerImage:
+		if command.Options.Deploy != nil || command.Options.RestartServices != nil || command.Options.Lifecycle != nil || command.Options.Recreate != nil {
+			return invalid()
+		}
+		owned := updaterDTO.ContainerImageRequest{}
+		if command.Options.ContainerImage != nil && command.Options.ContainerImage.Policy != nil {
+			binding := *command.Options.ContainerImage.Policy
+			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+				return invalid()
+			}
+			if _, err := runtimeUUIDInternal(binding.ChildID); err != nil {
+				return invalid()
+			}
+			owned.Policy = &binding
+		}
+		command.Options = RuntimeOptions{ContainerImage: &owned}
 	case RuntimeRecreateContainer:
 		if command.Options.Recreate == nil || command.Options.Deploy != nil || command.Options.RestartServices != nil {
 			return invalid()
@@ -165,6 +186,15 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		var owned = *command.Options.Lifecycle
+		if len(owned.Request.Services) > updaterDTO.MaxLifecycleServices {
+			return invalid()
+		}
+		for _, name := range owned.Request.Services {
+			if !runtimeTextInternal(name, 256) {
+				return invalid()
+			}
+		}
+		owned.Request = owned.Request.Clone()
 		if owned.Policy != nil {
 			binding := *owned.Policy
 			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
@@ -263,6 +293,8 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	var options any = [0]string{}
 	if command.Options.Recreate != nil {
 		options = runtimeRecreateSemantic(*command.Options.Recreate)
+	} else if command.Options.ContainerImage != nil {
+		options = command.Options.ContainerImage
 	} else if command.Options.Lifecycle != nil {
 		options = command.Options.Lifecycle
 	} else if deploy := command.Options.Deploy; deploy != nil {

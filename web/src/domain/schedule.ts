@@ -76,22 +76,24 @@ export function zonedParts(instant: Date, timeZone: string): { date: string; tim
   return { date: toIsoDate(y, m, d), time: `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`, y, m, d, h, mi, s };
 }
 
-/**
- * Instant of a wall clock time in a time zone. Two correction passes cover
- * the zone offset and a DST change between guess and result. A time inside a
- * spring-forward gap moves on by the skipped length (02:30 runs at 03:30).
- */
+/** A fold maps to its earlier instant; a gap uses the offset before the transition. */
 export function zonedTimeToInstant(date: string, time: string, timeZone: string): Date {
   const p = parseDate(date)!;
   const [h, mi] = time.split(":").map(Number) as [number, number];
   const target = Date.UTC(p.y, p.m - 1, p.d, h, mi);
-  let guess = target;
-  for (let i = 0; i < 2; i++) {
-    const z = zonedParts(new Date(guess), timeZone);
-    const wall = Date.UTC(z.y, z.m - 1, z.d, z.h, z.mi, z.s);
-    guess += target - wall;
+  const offsets = new Set<number>();
+  for (const delta of [-36, -12, 0, 12, 36]) {
+    const at = target + delta * 3_600_000, z = zonedParts(new Date(at), timeZone);
+    offsets.add(Date.UTC(z.y, z.m - 1, z.d, z.h, z.mi, z.s) - at);
   }
-  return new Date(guess);
+  const candidates = [...offsets].map((offset) => {
+    const at = target - offset, z = zonedParts(new Date(at), timeZone);
+    return { at, shift: Date.UTC(z.y, z.m - 1, z.d, z.h, z.mi, z.s) - target };
+  });
+  const exact = candidates.filter((c) => c.shift === 0).sort((a, b) => a.at - b.at);
+  if (exact.length) return new Date(exact[0]!.at);
+  const forward = candidates.filter((c) => c.shift > 0).sort((a, b) => a.shift - b.shift || a.at - b.at);
+  return new Date(forward[0]!.at);
 }
 
 /** Next run strictly after `now`; undefined for a one-time schedule in the past or invalid input. */

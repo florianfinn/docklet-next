@@ -20,7 +20,7 @@ import { ServiceWidgetsSection } from "./sections/ServiceWidgetsSection";
 import { SecuritySection } from "./sections/SecuritySection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { ActivitySection, HostDefaultsSection, ConnectedHostDefaultsSection } from "./sections/SimpleSections";
-import { LiveUpdatesSection } from "./sections/LiveUpdatesSection";
+import { ConnectedUpdatesSection as LiveUpdatesSection } from "./sections/ConnectedUpdatesSection";
 import { UpdatesSection } from "./sections/UpdatesSection";
 
 const GROUPS = [

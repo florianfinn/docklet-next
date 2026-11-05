@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight.
+// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety.
 
 package activity
 
@@ -119,6 +119,20 @@ func runtimeFullContainerID(id string) bool {
 // scope cannot be silently executed; Docker/Compose changes after this read
 // remain outside the application's atomic control.
 func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command RuntimeCommand, output io.Writer) error {
+	if runtimeContainerImageOperation(command.Operation) {
+		ctx = updaterDTO.WithExecutionIdentity(ctx, updaterDTO.ExecutionIdentity{RunID: command.ProposedRunID, RegistrationID: command.Store.RegistrationID})
+		ctx = context.WithValue(ctx, dockertypes.ProgressWriterKey{}, output)
+		port, ok := a.containers.(interface {
+			ExecuteContainerImage(context.Context, string, string, bool, usertypes.Actor) error
+		})
+		if !ok {
+			return unavailableContainerImage(ctx, command)
+		}
+		if command.Target.Name == nil {
+			return &RuntimeTargetError{Code: "update.target-changed"}
+		}
+		return port.ExecuteContainerImage(ctx, command.Target.ID, *command.Target.Name, command.Operation == RuntimeRestoreContainerImage, command.Actor)
+	}
 	resolved, err := a.ResolveRuntimeTarget(ctx, command.Target)
 	if err != nil {
 		return &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
@@ -150,6 +164,7 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 		_, err := port.ExecuteImageLifecycle(ctx, command.Target.ID, command.ProposedRunID, command.Store.RegistrationID, command.Options.Lifecycle, command.Actor)
 		return err
 	case RuntimeDeployProject:
+		ctx = a.prepareDeployPoint(ctx, command)
 		return a.projects.DeployProject(ctx, command.Target.ID, command.Actor, command.Options.Deploy)
 	case RuntimeStopProject:
 		port, ok := a.projects.(interface {
@@ -164,6 +179,7 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 	case RuntimeRestartProject:
 		return a.projects.RestartProject(ctx, command.Target.ID, command.Options.RestartServices, command.Actor)
 	case RuntimeRedeployProject:
+		ctx = a.prepareDeployPoint(ctx, command)
 		return a.projects.RedeployProject(ctx, command.Target.ID, command.Actor, command.Options.Deploy)
 	case RuntimeRecreateContainer, RuntimeRedeployContainer:
 		port, ok := a.containers.(runtimeContainerRecreatePort)
@@ -214,4 +230,26 @@ type runtimeContainerRecreatePort interface {
 	RedeployContainer(context.Context, string, usertypes.Actor) (string, error)
 	RecoverRecreates(context.Context) ([]containerDTO.RecreateRecovery, error)
 	PruneRecreateJournals(context.Context) error
+}
+
+// Optional for legacy runtime-port doubles; the production project service
+// always prepares its point before either deploy or redeploy can begin.
+func (a *RuntimeServiceAdapter) prepareDeployPoint(ctx context.Context, command RuntimeCommand) context.Context {
+	var point updaterDTO.LifecycleResult
+	merged := updaterDTO.WithResultSink(ctx, func(result updaterDTO.LifecycleResult) {
+		if result.RestorePointID == "" && result.PointCode == "" {
+			result.RestorePointID = point.RestorePointID
+		}
+		if result.PointCode == "" {
+			result.PointCode = point.PointCode
+		}
+		point = result
+		updaterDTO.RecordLifecycleResult(ctx, result)
+	})
+	if port, ok := a.projects.(interface {
+		PrepareDeployPoint(context.Context, string, string, string)
+	}); ok {
+		port.PrepareDeployPoint(merged, command.Target.ID, command.ProposedRunID, command.Store.RegistrationID)
+	}
+	return merged
 }

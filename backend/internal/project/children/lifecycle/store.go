@@ -62,6 +62,7 @@ type Run struct {
 	SelectedPointID string `gorm:"not null"`
 	HadEffect       bool   `gorm:"not null"`
 	Settled         bool   `gorm:"not null"`
+	PointCode       *string
 }
 
 func (Run) TableName() string { return "image_lifecycle_runs" }

@@ -227,12 +227,12 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 	session.checked = false
 
 	var info version.Info
-	if err := s.ProxyJSONRequest(checkCtx, id, http.MethodGet, "/api/app-version", nil, &info); err != nil {
+	if err := s.agentProbeInternal(checkCtx, id, http.MethodGet, "/api/app-version", &info); err != nil {
 		return nil, nil, s.agentCompatibilityFailure(checkCtx, env, session, err)
 	}
 	if !env.IsEdge {
 		// The public version route proves compatibility, not possession of the current token.
-		if err := s.ProxyJSONRequest(checkCtx, id, http.MethodHead, "/api/environments/0/system/health", nil, nil); err != nil {
+		if err := s.agentProbeInternal(checkCtx, id, http.MethodHead, "/api/environments/0/system/health", nil); err != nil {
 			return nil, nil, s.agentCompatibilityFailure(checkCtx, env, session, err)
 		}
 	}
@@ -271,6 +271,17 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 }
 
 // Credential rejection belongs only to the session that made the probe.
+// agentProbeInternal keeps each compatibility probe within the shared HTTP
+// client timeout; proxied agent work runs on the longer proxy deadline.
+func (s *EnvironmentService) agentProbeInternal(ctx context.Context, id, method, path string, out any) error {
+	if s.httpClient != nil && s.httpClient.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.httpClient.Timeout)
+		defer cancel()
+	}
+	return s.ProxyJSONRequest(ctx, id, method, path, nil, out)
+}
+
 func (s *EnvironmentService) agentCompatibilityFailure(ctx context.Context, env *Environment, session *agentSession, err error) error {
 	var status *remenv.StatusError
 	if env.IsEdge || !errors.As(err, &status) || (status.StatusCode != http.StatusUnauthorized && status.StatusCode != http.StatusForbidden) {

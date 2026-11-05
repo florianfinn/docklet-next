@@ -28,7 +28,7 @@ func retireSystemVolumeJobs(ctx context.Context, coordinator *runs.Coordinator) 
 		}
 		// Centralized volume policies only scheduled on this host (environment 0).
 		if record.EnvironmentID == "0" {
-			if err := coordinator.Checkpoint(ctx, record.JobID, "", time.Time{}); err != nil {
+			if err := coordinator.Checkpoint(ctx, record.JobID, "", "UTC", time.Time{}); err != nil {
 				return err
 			}
 		}

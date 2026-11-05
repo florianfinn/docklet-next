@@ -41,6 +41,7 @@ func (p Principal) ProjectIDs(env string) []string {
 
 type Params struct {
 	ProjectID, ContainerID, RunID string
+	PolicyKind, PolicyTarget      string
 	Body                          []byte
 }
 type Container struct {
@@ -61,11 +62,12 @@ func WithController(ctx context.Context, c *Controller) context.Context {
 type Decision string
 
 const (
-	Allow         Decision = ""
-	NotFound      Decision = "access.not-found"
-	AdminRequired Decision = "access.admin-required"
-	FullRequired  Decision = "access.full-required"
-	Unavailable   Decision = "access.unavailable"
+	Allow                  Decision = ""
+	NotFound               Decision = "access.not-found"
+	AdminRequired          Decision = "access.admin-required"
+	FullRequired           Decision = "access.full-required"
+	Unavailable            Decision = "access.unavailable"
+	UpdatePermissionDenied Decision = "update.permission-denied"
 )
 
 func (d Decision) Status() int {
@@ -90,6 +92,20 @@ func Decide(ctx context.Context, p Principal, operation, env string, params Para
 	r, ok := Rules[operation]
 	if !ok {
 		return AdminRequired
+	}
+	if operation == "set-auto-update-policy" {
+		var body struct {
+			Mode string `json:"mode"`
+		}
+		if json.Unmarshal(params.Body, &body) == nil && body.Mode == "scheduled" {
+			return UpdatePermissionDenied
+		}
+	}
+	if r.Ref == PolicyPath {
+		if params.PolicyKind != "stack" {
+			return AdminRequired
+		}
+		r.Ref, params.ProjectID = ProjectPath, params.PolicyTarget
 	}
 	switch r.Kind {
 	case Public, Self, AppList:
@@ -202,6 +218,10 @@ func Match(method, path string) (string, string, Params) {
 					v.ContainerID = parts[i]
 				case "{runId}":
 					v.RunID = parts[i]
+				case "{kind}":
+					v.PolicyKind = parts[i]
+				case "{targetId}":
+					v.PolicyTarget = parts[i]
 				}
 			} else if s != parts[i] {
 				valid = false

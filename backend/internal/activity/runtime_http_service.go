@@ -70,6 +70,8 @@ func runtimePermissionInternal(operation RuntimeOperation) string {
 		return authz.PermContainersEdit
 	case RuntimeRedeployContainer:
 		return authz.PermContainersRedeploy
+	case RuntimeUpdateContainer, RuntimeRestoreContainerImage:
+		return authz.PermContainersRedeploy
 	case RuntimeStartContainer:
 		return authz.PermContainersStart
 	case RuntimeStopContainer:
@@ -116,8 +118,11 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	// tuple is used only by the pure validator and never persisted or dispatched.
 	command := RuntimeCommand{Store: RuntimeStoreBinding{EnvironmentID: environmentID, StoreGeneration: "validation", ExecutorGeneration: "validation", ManagerID: "validation", RegistrationID: "validation"},
 		Key: key, Actor: *actor, Operation: operation, Target: target, Options: options}
+	// A policy-owned run is admitted under its child ID; the policy waits on it.
 	if options.Lifecycle != nil && options.Lifecycle.Policy != nil {
 		command.ProposedRunID = options.Lifecycle.Policy.ChildID
+	} else if options.ContainerImage != nil && options.ContainerImage.Policy != nil {
+		command.ProposedRunID = options.ContainerImage.Policy.ChildID
 	}
 	var err error
 	if runtimeImageOperation(operation) {
@@ -156,7 +161,7 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		if err != nil {
 			return empty, noRef, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
 		}
-		if runtimeRecreateOperation(operation) {
+		if runtimeRecreateOperation(operation) || runtimeContainerImageOperation(operation) {
 			if h.ports.GuardContainer == nil {
 				return empty, noRef, &RuntimeTargetError{Code: "container.origin-locked"}
 			}

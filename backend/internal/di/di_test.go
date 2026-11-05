@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
 
 package di
 
@@ -97,8 +97,6 @@ type graphParams struct {
 	Role              *role.RoleService
 	AuthMiddleware    *auth.AuthMiddleware
 
-	AutoUpdate             *scheduler.AutoUpdateJob
-	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
 	DockerClientRefresh    *scheduler.DockerClientRefreshJob
 	EventCleanup           *scheduler.EventCleanupJob
 	PruningVolumeHelper    *scheduler.PruningVolumeHelperJob

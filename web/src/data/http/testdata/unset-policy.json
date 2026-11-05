@@ -1,12 +1,14 @@
 {
-  "mode": "off",
+  "mode": "check",
   "revision": 0,
   "environmentId": "0",
   "registrationId": "example-registration",
-  "targetKind": "project",
+  "targetKind": "stack",
   "targetId": "example-stack",
   "targetIdentity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "jobId": "auto-update",
+  "jobId": "",
   "stale": true,
-  "candidates": []
+  "candidates": [],
+  "targetName": "example-stack",
+  "targetMissing": false
 }

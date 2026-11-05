@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package middleware
 
@@ -94,6 +94,7 @@ type EnvironmentMiddleware struct {
 	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin                func(*http.Request) bool
 	proxyIdentityHeader        string
+	policyCleanup              func(context.Context, string, string) error
 	originOverlay              func(context.Context, string, []byte) ([]byte, error)
 	snapshots                  *hoststate.Store
 	inventoryPending           func(context.Context, string) (bool, error)
@@ -138,6 +139,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 		m.pointHolds = options[0].PointHolds
 		m.pointAccess = options[0].PointAccess
 		m.originOverlay = options[0].OriginOverlay
+		m.policyCleanup = options[0].PolicyCleanup
 		m.snapshots = options[0].Snapshots
 		m.inventoryPending = options[0].InventoryPending
 		if options[0].HTTPClient != nil {
@@ -700,6 +702,9 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)) {
 		return m.proxyLifecycleResponse(c, tunnel, envID)
 	}
+	if destroyedStack(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)) != "" {
+		return m.proxyStackDestroy(c, tunnel, envID)
+	}
 	return edge.ProxyHTTPRequest(c, tunnel, proxyPath)
 }
 
@@ -710,87 +715,6 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 		return false
 	}
 	return !isManagementPathInternal(c.Request().Method, suffix)
-}
-
-func isManagementPathInternal(method, suffix string) bool {
-	if isHistoryManagementPath(method, suffix) {
-		return true
-	}
-	if method == http.MethodPost && suffix == "/agent/restart" {
-		return true
-	}
-	partsRestart := strings.Split(suffix, "/")
-	if method == http.MethodGet && len(partsRestart) == 4 && partsRestart[0] == "" && partsRestart[1] == "agent" && partsRestart[2] == "restarts" && partsRestart[3] != "" {
-		return true
-	}
-
-	partsOrigin := strings.Split(strings.Trim(suffix, "/"), "/")
-	if len(partsOrigin) == 3 && partsOrigin[0] == "containers" && partsOrigin[2] == "origin" {
-		return true
-	}
-	if suffix == "/updater/schedules" || suffix == "/updater/system-image-hints" || strings.HasPrefix(suffix, "/updater/policies/") {
-		return true
-	}
-	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/projects/") && strings.HasSuffix(suffix, "/check") {
-		return true
-	}
-	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/") && (strings.HasSuffix(suffix, "/update") || strings.HasSuffix(suffix, "/restore")) {
-		return true
-	}
-	if suffix == "/runtime-runs" || strings.HasPrefix(suffix, "/runtime-runs/") || suffix == "/runtime-registration" || suffix == "/runtime-target" {
-		return true
-	}
-	if method == http.MethodPost {
-		parts := strings.Split(strings.Trim(suffix, "/"), "/")
-		if len(parts) == 3 && parts[1] != "" {
-			if parts[0] == "projects" && (parts[2] == "up" || parts[2] == "down" || parts[2] == "stop" || parts[2] == "restart" || parts[2] == "redeploy") {
-				return true
-			}
-			if parts[0] == "containers" && (parts[2] == "start" || parts[2] == "stop" || parts[2] == "restart" || parts[2] == "recreate" || parts[2] == "redeploy") {
-				return true
-			}
-		}
-	}
-
-	if suffix == "/jobs" || strings.HasPrefix(suffix, "/jobs/") {
-		return true
-	}
-	if method == http.MethodPost {
-		parts := strings.Split(strings.Trim(suffix, "/"), "/")
-		if len(parts) == 3 && parts[0] == "volumes" && parts[1] != "" && parts[2] == "backups" {
-			return true
-		}
-	}
-	if isCentralVolumeBackupPolicyPathInternal(method, suffix) {
-		return true
-	}
-	// Only the hub pushes backup target sets; clients never reach an agent's receiver.
-	if (method == http.MethodPut && suffix == "/volumes/backups/targets") || (method == http.MethodPost && suffix == "/volumes/backups/targets/probe") {
-		return true
-	}
-	if suffix == "/activities" || strings.HasPrefix(suffix, "/activities/") {
-		return true
-	}
-
-	if suffix == "/auto-heal" {
-		return true
-	}
-	if strings.HasPrefix(suffix, "/notifications") {
-		return true
-	}
-
-	// Webhooks are managed centrally: rows live in the manager DB (keyed by the
-	// real environment ID) and the public trigger endpoint resolves tokens there.
-	if suffix == "/webhooks" || strings.HasPrefix(suffix, "/webhooks/") {
-		return true
-	}
-
-	if strings.HasPrefix(suffix, "/deployment/mtls/") {
-		return true
-	}
-
-	_, isManagement := managementEndpointSet[suffix]
-	return isManagement
 }
 
 func isCentralVolumeBackupPolicyPathInternal(method, suffix string) bool {
@@ -966,5 +890,6 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))) {
 		return m.writeLifecycleResponse(c, resp.StatusCode, resp.Header, resp.Body)
 	}
+	m.cleanupStack(c, resp.StatusCode)
 	return m.writeProxyResponse(c, resp)
 }

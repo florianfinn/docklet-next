@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347.
 
 package edge
 
@@ -397,6 +397,7 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 		_ = tunnel.closeForMaintenance()
 		return
 	}
+	tunnel.registerPending.Store(true)
 	accepted, drainPrevious, rejectReason, err := s.registry.RegisterSession(callbackCtx, tunnel, TunnelStaleTimeout)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to register edge agent session",
@@ -456,6 +457,7 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 		return
 	}
 
+	tunnel.registerPending.Store(false)
 	s.updateConnectionStatusInternal(callbackCtx, tunnel, true)
 
 	defer func() {

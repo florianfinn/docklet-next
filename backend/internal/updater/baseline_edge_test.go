@@ -38,7 +38,7 @@ func TestEdgeBaselineConfiguredEnvelope(t *testing.T) {
 			f := newPolicyFixture(t)
 			proxy := &baselineProxyStub{t: t, success: success}
 			f.p.ports.baseline = f.s.imagePolicyBaseline(proxy)
-			_, err := f.s.GetImagePolicy(t.Context(), "edge-example", "example-stack")
+			_, err := f.p.ports.baseline(t.Context(), "edge-example", "example-stack")
 			if success {
 				require.NoError(t, err)
 			} else {

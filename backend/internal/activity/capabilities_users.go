@@ -25,13 +25,14 @@ var userCapabilityOperations = map[string]string{
 	"openContainerShell":     "GET /api/environments/:id/ws/containers/:containerId/terminal",
 	"saveStackFiles":         "update-project-workspace", "setStackLabels": "update-project-tag", "getProjectWorkspace": "get-project-workspace",
 	"readProjectFile": "get-project-workspace-file", "downloadProjectFile": "download-project-workspace-file", "updateProjectWorkspace": "update-project-workspace",
+	"getAutoUpdatePolicy": "get-auto-update-policy", "setAutoUpdate": "set-auto-update-policy",
 	"checkUpdates": "check-project-updates", "installStackUpdates": "update-project-images", "getUpdateBaseline": "get-update-baseline",
 }
 
 func userCapabilities(ctx context.Context, in *GetCapabilitiesInput, ps *authz.PermissionSet) (*handlerutil.Out[[]capability.Descriptor], error) {
 	p := access.FromPermissions(ps)
 	env, raw, _ := strings.Cut(in.ID, "~")
-	params := access.Params{ProjectID: raw, ContainerID: raw}
+	params := access.Params{ProjectID: raw, ContainerID: raw, PolicyKind: "stack", PolicyTarget: raw}
 	if in.Kind == "stack" || in.Kind == "container" {
 		op := "get-project"
 		if in.Kind == "container" {

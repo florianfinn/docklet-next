@@ -7,8 +7,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -18,6 +20,7 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -115,4 +118,28 @@ func TestImageRuntimeHostProblemSurvivesFinalAPIPass(t *testing.T) {
 			require.NotContains(t, rec.Body.String(), "update.invalid-target")
 		})
 	}
+}
+
+// An unexpected updater failure keeps a neutral public body while the server log names its cause.
+func TestUnexpectedUpdaterFailureLogsCause(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	router := echo.New()
+	cfg := huma.DefaultConfig("test", "test")
+	cfg.Transformers = append(cfg.Transformers, imageErrorTransformer)
+	api := humaecho.NewWithGroup(router, router.Group("/api"), cfg)
+	huma.Register(api, huma.Operation{OperationID: "project-check", Method: "POST", Path: "/environments/{id}/updater/projects/{projectId}/check"}, func(context.Context, *struct {
+		ID        string `path:"id"`
+		ProjectID string `path:"projectId"`
+	}) (*struct{ Body any }, error) {
+		return nil, errors.New("save project update checks: example cause")
+	})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/environments/0/updater/projects/example/check", nil))
+	require.Equal(t, 500, rec.Code)
+	require.NotContains(t, rec.Body.String(), "example cause")
+	require.Contains(t, logs.String(), "example cause")
+	require.Contains(t, logs.String(), "/api/environments/0/updater/projects/example/check")
 }

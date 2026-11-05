@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M17 runtime history and personal preferences.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 standalone image update and restore safety.
 
 package container
 
@@ -46,6 +46,7 @@ import (
 
 type ContainerService struct {
 	operations      *containerOperations
+	containerImages containerImagePort
 	dockerService   *dockerInternal.DockerClientService
 	eventService    *event.EventService
 	imageService    *image.ImageService
@@ -75,8 +76,13 @@ func NewContainerService(
 	settingsService *settings.SettingsService,
 	projectService *project.ProjectService,
 ) *ContainerService {
+	var images containerImagePort
+	if imageService != nil {
+		images = imageService
+	}
 	return &ContainerService{
 		eventService:    eventService,
+		containerImages: images,
 		dockerService:   dockerService,
 		imageService:    imageService,
 		settingsService: settingsService,

@@ -44,10 +44,10 @@ export function agentFixture(spec, fixture) {
     };
     const envelope = schema("RuntimeExecutionEnvelope")[1];
     const operations = envelope.properties.operation.enum;
-    if (!operations?.includes("update-project") || !operations.includes("restore-project"))
+    if (!operations?.includes("update-project") || !operations.includes("restore-project") || !operations.includes("update-container") || !operations.includes("restore-container-image"))
       throw new Error("missing lifecycle execution producer");
     manifest.lifecycleOperations = operations;
-    const schemaNames = ["LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
+    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
     const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
     const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
       .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))
@@ -55,7 +55,7 @@ export function agentFixture(spec, fixture) {
     manifest.imageLifecycle = {
       targetKinds: ["project"],
       routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point"].includes(op?.operationId))
+        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point", "update-container", "restore-container-image"].includes(op?.operationId))
         .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
       schemas: Object.fromEntries(schemaNames.map((name) => {
         const [key, value] = schema(name);
@@ -63,7 +63,7 @@ export function agentFixture(spec, fixture) {
       })),
       edgeRoutes,
       retiredRoutes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-        .filter(([, op]) => ["update-project-services", "update-container", "run-updater"].includes(op?.operationId))
+        .filter(([, op]) => ["update-project-services", "run-updater"].includes(op?.operationId))
         .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
       runtimePreflightSha256: createHash("sha256").update(JSON.stringify(document.paths["/environments/0/runtime-target"].post)).digest("hex"),
       retainedPoints: 5,
@@ -82,22 +82,22 @@ export function agentFixture(spec, fixture) {
     };
     manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));
     manifest.imageSafety.capabilities = [...new Set([...manifest.imageSafety.capabilities, "stack-update", "restore"])];
-    if (document.paths["/environments/{id}/updater/schedules"]) {
+    if (document.paths["/environments/{id}/updater/policies"]) {
       manifest.imagePolicies = {
-        targetKinds: ["project"], defaultMode: "off", modes: ["off", "notify", "apply"],
-        owner: "hub", jobs: ["image-polling", "auto-update"], timeZone: "hub IANA zone",
+        targetKinds: ["stack", "container"], defaultMode: "check", modes: ["check", "scheduled"],
+        owner: "hub", jobs: ["update-check", "update-window:<env>:<kind>:<target>"], timeZone: "hub IANA zone",
         routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-          .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "get-update-schedules", "set-update-schedules", "get-system-image-hints"].includes(op?.operationId))
+          .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "list-update-policies", "check-all-updates", "get-system-image-hints"].includes(op?.operationId))
           .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
-        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateScheduleConfig", "UpdateScheduleInput", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
+        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateWindow", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
           const [key, value] = schema(name);
           return [key, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }];
         })),
         admission: "current actor/key, registration, baseline and revision; freeze revision in runtime receipt transaction",
-        execution: "existing update-project runtime; serial children per host; retry/restart queries original receipts only",
-        agentLocalCode: "update.agent-local-job-disabled", legacyScheduleWriteCode: "update.schedule-hub-owned",
-        legacyScheduleFields: "autoUpdateInterval and pollingInterval omitted from reads/schema; any write including null or mixed fields refuses before forwarding",
-        notificationIdentity: ["host", "registration", "stack identity", "repository", "platform", "normalized version/tag", "immutable digest"],
+        execution: "update-project or update-container runtime; serial children per host; retry/restart queries original receipts only",
+        retiredSettings: ["autoUpdate", "autoUpdateInterval", "pollingEnabled", "pollingInterval", "vulnerabilityScanEnabled"],
+        agentLocalJobs: [],
+        notificationIdentity: ["host", "registration", "target kind", "target ID", "target identity", "repository", "platform", "normalized version/tag", "immutable digest"],
         notificationCommit: "candidate dedup row and linked durable notification entry in one hub transaction",
         notificationRecovery: "reuse entry across checks, restart and policy toggles; failed/unknown delivery never creates another entry",
       };
@@ -224,6 +224,7 @@ export function agentFixture(spec, fixture) {
       return [key, schemas[key]];
     })),
     runtimeOperations: schemas.ActivityRuntimeExecutionEnvelope.properties.operation.enum,
+    imagePlatform: schemas.ContainerSummary.properties.imagePlatform,
     origin: schemas.ContainerSummary.properties.origin,
     originSource: schemas.ContainerSummary.properties.originSource,
     stackServiceState: schemas.ProjectRuntimeService.properties.status, stackHint: schemas.ProjectDetails.properties.definitionHint,

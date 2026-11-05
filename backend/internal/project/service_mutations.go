@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package project
 
@@ -21,6 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/tags"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/workspace"
 	"github.com/florianfinn/docklet-next/backend/internal/runtimeintent"
+	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
@@ -271,6 +272,9 @@ func (s *ProjectService) DestroyProject(ctx context.Context, projectID string, r
 	}
 
 	if transactionErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := policy.DeleteStack(tx, "0", projectID); err != nil {
+			return err
+		}
 		return deleteProjectWithTags(tx, projectID)
 	}); transactionErr != nil {
 		return fmt.Errorf("failed to delete project from database: %w", transactionErr)
@@ -734,7 +738,7 @@ func BuildConfiguredUpdateInfo(
 		if record != nil && record.PolicyKey == imageref.UpdatePolicyKey(imageRef, service.Labels) {
 			info = record.UpdateInfo()
 		} else if policyErr == nil && policy.Strategy == "digest" && !imageref.IsUpdateCheckDisabled(service.Labels) {
-			info = byRef[imageRef]
+			info = projectdetails.UpdateInfoForRef(byRef, imageRef)
 		}
 
 		if len(runtimeUpdates) > 0 && runtimeUpdates[0][service.Name] != nil {
@@ -742,7 +746,7 @@ func BuildConfiguredUpdateInfo(
 			// digest checks must match the configured reference to count.
 			runtime := runtimeUpdates[0][service.Name]
 			attributed := policyErr == nil && policy.Strategy != "digest"
-			if stored := byRef[imageRef]; policyErr == nil && !attributed && stored != nil && !stored.HasUpdate && stored.Error == "" && stored.CheckTime.Equal(runtime.CheckTime) {
+			if stored := projectdetails.UpdateInfoForRef(byRef, imageRef); policyErr == nil && !attributed && stored != nil && !stored.HasUpdate && stored.Error == "" && stored.CheckTime.Equal(runtime.CheckTime) {
 				attributed = stored.CurrentDigest == runtime.CurrentDigest && stored.LatestDigest == runtime.LatestDigest
 			}
 			if attributed && info != nil && info.HasUpdate && !runtime.HasUpdate && runtime.Error == "" && !runtime.CheckTime.Before(info.CheckTime) {

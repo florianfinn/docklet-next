@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation.
 
 package job
 
@@ -95,7 +95,7 @@ func TestJobService_GetJobSchedules_DefaultDockerClientRefreshInterval(t *testin
 	cfg := jobSvc.GetJobSchedules(ctx)
 
 	require.Equal(t, "0 */5 * * * *", cfg.DockerClientRefreshInterval)
-	require.Equal(t, "0 0 * * * *", cfg.PollingInterval)
+	require.Empty(t, cfg.PollingInterval)
 }
 
 func TestJobService_ListJobs_IncludesDisabledAutoHealJob(t *testing.T) {

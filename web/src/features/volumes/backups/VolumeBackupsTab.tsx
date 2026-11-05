@@ -49,7 +49,8 @@ function ConnectedTab({ volume, hostOnline, historyOnly }: { volume: VolumeDetai
   if (overview.isError) return <QueryError error={overview.error} onRetry={() => void overview.refetch()} />;
   if (!overview.data) return <p role="status">{t("following")}</p>;
   const observed = overview.data.volumes.find((v) => v.id === volume.id);
-  const current = { ...volume, ...observed, backups: volume.backups, consumers: volume.consumers };
+  // The host zone belongs to the overview, also for a bind that has no plan or history row yet.
+  const current = { ...volume, ...observed, timeZone: observed?.timeZone ?? overview.data.timeZone, backups: volume.backups, consumers: volume.consumers };
   const running = observed?.running?.activityId;
   // Oldest first: its safety snapshot predates every failed write that is still pending.
   const pending = [...(observed?.pendingRestores ?? [])].reverse();

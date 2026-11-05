@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Complete bounded Compose input capture and admitted revision-checked writes.
+// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M18 shared-image selection guard.
 
 package project
 
@@ -270,3 +270,75 @@ func lifecycleFilesEqual(a, b *life.Snapshot) bool {
 	return bytes.Equal(mustLifecycleJSON(a.Files), mustLifecycleJSON(b.Files))
 }
 func mustLifecycleJSON(v any) []byte { b, _ := json.Marshal(v); return b }
+
+// Resolve only image source identity here. The existing literal-field writer
+// remains responsible for proving that a selected field can be rewritten.
+func lifecycleSharedImageSource(snapshot *life.Snapshot, services []string) error {
+	if len(services) == 0 {
+		return nil
+	}
+	primary := filepath.Base(snapshot.Model.ComposeFiles[0])
+	for _, file := range snapshot.Files {
+		if file.Path != primary {
+			continue
+		}
+		var document yaml.Node
+		if yaml.Unmarshal(file.Content, &document) != nil || len(document.Content) != 1 {
+			return lifecycleFailure("update.image-binding-unsupported")
+		}
+		serviceMap := lifecycleYAMLField(document.Content[0], "services", 0)
+		if serviceMap == nil || serviceMap.Kind != yaml.MappingNode {
+			return lifecycleFailure("update.image-binding-unsupported")
+		}
+		images := map[string]*yaml.Node{}
+		for i := 0; i+1 < len(serviceMap.Content); i += 2 {
+			image := lifecycleYAMLField(serviceMap.Content[i+1], "image", 0)
+			if image != nil && image.Kind == yaml.AliasNode {
+				image = image.Alias
+			}
+			images[serviceMap.Content[i].Value] = image
+		}
+		for key, image := range images {
+			if image == nil || !lifecycleServiceSelected(services, key) {
+				continue
+			}
+			for other, candidate := range images {
+				if other != key && image == candidate {
+					return lifecycleFailure("update.image-binding-unsupported")
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func lifecycleYAMLField(node *yaml.Node, key string, depth int) *yaml.Node {
+	if node == nil || depth > 32 {
+		return nil
+	}
+	if node.Kind == yaml.AliasNode {
+		return lifecycleYAMLField(node.Alias, key, depth+1)
+	}
+	if node.Kind == yaml.SequenceNode {
+		for _, child := range node.Content {
+			if value := lifecycleYAMLField(child, key, depth+1); value != nil {
+				return value
+			}
+		}
+	}
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == key {
+				return node.Content[i+1]
+			}
+		}
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == "<<" {
+				if value := lifecycleYAMLField(node.Content[i+1], key, depth+1); value != nil {
+					return value
+				}
+			}
+		}
+	}
+	return nil
+}

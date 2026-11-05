@@ -511,7 +511,8 @@ Offline remote hosts can retain editable hub schedules without pretending the
 executor accepted work; failures are explicit at trigger/dispatch time.
 
 At contract v7 agents do **not** register their inherited `AutoUpdateJob` or
-continuous/event-driven `ImageUpdateWatcher`. The hub likewise replaces its old
+continuous/event-driven `ImageUpdateWatcher`. (M18: the agent-local jobs and
+host schedules below are removed; see the [update policy model](update-policy-model.md).) The hub likewise replaces its old
 continuous watcher with the one owned scheduled check source. Agent-mode
 job-schedule writes for auto-update/polling fields refuse with
 `update.schedule-hub-owned`; manual run/retry/restart of either M10 job refuses

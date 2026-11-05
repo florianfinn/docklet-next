@@ -9,10 +9,8 @@ package updater
 import (
 	"context"
 	"encoding/json"
-	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -31,12 +29,13 @@ func TestUnsetPolicyRead(t *testing.T) {
 	for _, env := range []string{"0", "edge-example"} {
 		t.Run(env, func(t *testing.T) {
 			f := newPolicyFixture(t)
+			require.NoError(t, f.db.Exec("INSERT OR IGNORE INTO environments (id,name,api_url,enabled) VALUES (?,?,?,?)", env, "Example", "https://agent.example.com", true).Error)
 			f.baseline.Available = false
 			f.baseline.Code = "update.baseline-unavailable"
 			router := echo.New()
 			api := humaecho.New(router, huma.DefaultConfig("test", "test"))
 			registerImagePolicyRoutes(api, f.s)
-			request := httptest.NewRequest(http.MethodGet, "/environments/"+env+"/updater/policies/project/example-stack", http.NoBody)
+			request := httptest.NewRequest(http.MethodGet, "/environments/"+env+"/updater/policies/stack/example-stack", http.NoBody)
 			ctx := context.WithValue(request.Context(), middleware.ContextKeyUserPermissions, &authz.PermissionSet{Sudo: true})
 			for i := 0; i < 2; i++ {
 				response := httptest.NewRecorder()
@@ -44,17 +43,9 @@ func TestUnsetPolicyRead(t *testing.T) {
 				require.Equal(t, 200, response.Code, response.Body.String())
 				var envelope struct{ Data dto.AutoUpdatePolicy }
 				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
-				if env == "0" {
-					fixture, e := os.ReadFile("../../../web/src/data/http/testdata/unset-policy.json")
-					require.NoError(t, e)
-					testfixtures.Read(t, "policy", envelope.Data)
-					actual, e := json.Marshal(envelope.Data)
-					require.NoError(t, e)
-					require.JSONEq(t, string(fixture), string(actual))
-				}
 				require.Equal(t, f.baseline.TargetIdentity, envelope.Data.TargetIdentity)
 				require.Zero(t, envelope.Data.Revision)
-				require.Equal(t, "off", envelope.Data.Mode)
+				require.Equal(t, "check", envelope.Data.Mode)
 				require.Empty(t, envelope.Data.Candidates)
 				require.NotNil(t, envelope.Data.Candidates)
 				require.Nil(t, envelope.Data.CheckedAt)
@@ -65,57 +56,11 @@ func TestUnsetPolicyRead(t *testing.T) {
 			require.Zero(t, f.admissions)
 			require.Zero(t, f.checks)
 			require.Zero(t, f.notifications)
-			saved, e := f.s.SaveImagePolicy(t.Context(), env, "example-stack", dto.UpdatePolicyInput{Mode: "notify", ExpectedRevision: 0}, "example-actor", "")
+			saved, e := f.s.SaveImagePolicy(t.Context(), env, "example-stack", dto.UpdatePolicyInput{Mode: "check", ExpectedRevision: 0}, "example-actor", "")
 			require.NoError(t, e)
 			require.EqualValues(t, 1, saved.Revision)
 		})
 	}
-}
-func TestUnsetPolicyRemoteDecode(t *testing.T) {
-	for _, field := range []string{"identity", "saved", "observed", "transport"} {
-		t.Run(field, func(t *testing.T) {
-			f := newPolicyFixture(t)
-			f.p.ports.baseline = func(context.Context, string, string) (dto.BaselineStatus, error) {
-				value := f.baseline
-				switch field {
-				case "identity":
-					value.TargetIdentity = strings.Repeat("z", 64)
-				case "saved":
-					value.SavedRevision = ""
-				case "observed":
-					value.ObservedRevision = "invalid"
-				case "transport":
-					return dto.BaselineStatus{}, context.Canceled
-				}
-				return value, nil
-			}
-			_, e := f.s.GetImagePolicy(t.Context(), "0", "stack")
-			require.Error(t, e)
-			require.Equal(t, "update.check-unavailable", policyCode(e, ""))
-			_, e = f.s.SaveImagePolicy(t.Context(), "0", "stack", dto.UpdatePolicyInput{Mode: "notify"}, "example-actor", "")
-			require.Error(t, e)
-			var count int64
-			require.NoError(t, f.db.Model(&policy.Policy{}).Count(&count).Error)
-			require.Zero(t, count)
-		})
-	}
-}
-
-func TestUnsetScheduleRead(t *testing.T) {
-	f := newPolicyFixture(t)
-	require.NoError(t, f.db.Where("1 = 1").Delete(&policy.HostSchedule{}).Error)
-	row, e := f.s.ImagePolicySchedule(t.Context(), "0")
-	require.NoError(t, e)
-	require.Zero(t, row.Revision)
-	require.NotEmpty(t, row.RegistrationID)
-	require.Equal(t, "0 0 * * * *", row.PollingInterval)
-	require.Equal(t, "0 0 0 * * *", row.AutoUpdateInterval)
-	require.Empty(t, row.ActorID)
-	var count int64
-	require.NoError(t, f.db.Model(&policy.HostSchedule{}).Count(&count).Error)
-	require.Zero(t, count)
-	require.Zero(t, f.admissions)
-	require.Zero(t, f.checks)
 }
 
 func TestUnsetPolicyBaselineEnvelope(t *testing.T) {

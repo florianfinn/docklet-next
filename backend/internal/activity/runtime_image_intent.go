@@ -42,7 +42,7 @@ func (s *RuntimeService) retainedImageIntent(ctx context.Context, run string, c 
 		return c, &RuntimeStoreError{Cause: err}
 	}
 	var intent updater.LifecycleIntent
-	if json.Unmarshal([]byte(row.Payload), &intent) != nil || c.Options.Lifecycle == nil || c.Options.Lifecycle.Request != intent.Request {
+	if json.Unmarshal([]byte(row.Payload), &intent) != nil || c.Options.Lifecycle == nil || !c.Options.Lifecycle.Request.Equal(intent.Request) {
 		return c, &runtimeConflictInternal{}
 	}
 	c.Options = RuntimeOptions{Lifecycle: &intent}

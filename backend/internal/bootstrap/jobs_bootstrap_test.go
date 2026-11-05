@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package bootstrap
 
@@ -25,7 +25,7 @@ import (
 
 type settingsSubscriptionStubInternal struct {
 	featureCallbacks []func([]libarcane.SettingUpdate)
-	pollingCallback  func([]libarcane.SettingUpdate)
+	checkCallback    func([]libarcane.SettingUpdate)
 	timeoutCallback  func([]libarcane.SettingUpdate)
 }
 
@@ -33,8 +33,8 @@ func (s *settingsSubscriptionStubInternal) SubscribeSettingsChanges(keys []strin
 	if slices.Contains(keys, features.VulnerabilityManagementSettingKey) {
 		s.featureCallbacks = append(s.featureCallbacks, callback)
 	}
-	if slices.Contains(keys, "pollingEnabled") {
-		s.pollingCallback = callback
+	if slices.Contains(keys, "updateCheckInterval") {
+		s.checkCallback = callback
 	}
 	if slices.Contains(keys, "dockerApiTimeout") {
 		s.timeoutCallback = callback
@@ -113,7 +113,7 @@ func TestSettingsTimeoutSyncDoesNotBlockOtherEffectsInternal(t *testing.T) {
 		require.FailNow(t, "timeout settings callback remained blocked by remote sync")
 	}
 
-	settings.pollingCallback([]libarcane.SettingUpdate{{Key: "pollingEnabled", Value: "true"}})
+	settings.checkCallback([]libarcane.SettingUpdate{{Key: "updateCheckInterval", Value: "6h"}})
 	select {
 	case <-localScheduler.rescheduled:
 	case <-time.After(time.Second):

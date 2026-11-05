@@ -29,6 +29,7 @@ func newStoreFixture(t *testing.T) *storeFixture {
 	var err error
 	f.db, err = database.InitializeHub(t.Context(), f.url, database.MigrationOptions{})
 	require.NoError(t, err)
+	require.NoError(t, f.db.Exec("INSERT INTO environments(id,name,api_url,enabled) VALUES('0','Local','',1)").Error)
 	f.Store = Store{DB: f.db.DB}
 	t.Cleanup(func() { require.NoError(t, f.db.Close()) })
 	return f
@@ -46,6 +47,11 @@ func (f *storeFixture) policy(t *testing.T, mode string) Policy {
 	p, err := f.Policy(t.Context(), "0", "example-registration", "example-stack")
 	require.NoError(t, err)
 	p.Mode = mode
+	if mode == "scheduled" {
+		p.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
+	} else {
+		p.SetWindow(nil)
+	}
 	p.ActorID = "example-actor"
 	p.TargetIdentity = strings.Repeat("a", 64)
 	require.NoError(t, f.SavePolicy(t.Context(), p, p.Revision))
@@ -56,25 +62,26 @@ func TestPolicyDefaultsAndRevisionCAS(t *testing.T) {
 	f := newStoreFixture(t)
 	p, err := f.Policy(t.Context(), "0", "registration", "stack")
 	require.NoError(t, err)
-	require.Equal(t, "off", p.Mode)
+	require.Equal(t, "check", p.Mode)
 	require.Zero(t, p.Revision)
-	p.Mode = "notify"
+	p.Mode = "check"
 	p.ActorID = "actor"
 	p.TargetIdentity = strings.Repeat("a", 64)
 	require.NoError(t, f.SavePolicy(t.Context(), p, 0))
-	p.Mode = "apply"
+	p.Mode = "scheduled"
+	p.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
 	err = f.SavePolicy(t.Context(), p, 0)
 	require.Equal(t, "update.policy-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	got, err := f.Policy(t.Context(), "0", "registration", "stack")
 	require.NoError(t, err)
-	require.Equal(t, "notify", got.Mode)
+	require.Equal(t, "check", got.Mode)
 	require.EqualValues(t, 1, got.Revision)
 	p.Mode = "container"
 	err = f.SavePolicy(t.Context(), p, 1)
 	require.Equal(t, "update.invalid-policy", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	other, err := f.Policy(t.Context(), "0", "replacement-registration", "stack")
 	require.NoError(t, err)
-	require.Equal(t, "off", other.Mode)
+	require.Equal(t, "check", other.Mode)
 	f.reopen(t)
 	got, err = f.Policy(t.Context(), "0", "registration", "stack")
 	require.NoError(t, err)
@@ -82,17 +89,17 @@ func TestPolicyDefaultsAndRevisionCAS(t *testing.T) {
 }
 func TestCandidateEntryDedupPersistsAcrossRestartAndPolicyToggle(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "notify")
+	p := f.policy(t, "check")
 	c := dto.UpdateCandidate{Service: "app", ImageRef: "registry.example.com/app:1", Version: "1.1.0", Digest: "sha256:" + strings.Repeat("b", 64), Platform: "linux/amd64"}
 	first, err := f.RecordCandidate(t.Context(), p, c, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, first.EntryID)
 	require.NoError(t, f.db.Model(&Notice{}).Where("id = ?", first.EntryID).Update("status", "failed").Error)
 	f.reopen(t)
-	p.Mode = "off"
+	p.Mode = "check"
 	require.NoError(t, f.SavePolicy(t.Context(), p, p.Revision))
 	p.Revision++
-	p.Mode = "notify"
+	p.Mode = "check"
 	require.NoError(t, f.SavePolicy(t.Context(), p, p.Revision))
 	p.Revision++
 	for range 3 {
@@ -115,7 +122,7 @@ func TestCandidateEntryDedupPersistsAcrossRestartAndPolicyToggle(t *testing.T) {
 }
 func TestCandidateAndEntryCommitAtomically(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "notify")
+	p := f.policy(t, "check")
 	require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_notice_failure BEFORE INSERT ON image_update_notifications BEGIN SELECT RAISE(ABORT,'synthetic notice failure'); END").Error)
 	_, err := f.RecordCandidate(t.Context(), p, dto.UpdateCandidate{ImageRef: "registry.example.com/app:1", Digest: "sha256:" + strings.Repeat("b", 64), Platform: "linux/amd64"}, true)
 	require.Error(t, err)
@@ -127,9 +134,9 @@ func TestCandidateAndEntryCommitAtomically(t *testing.T) {
 }
 func TestCandidateRejectsPolicyChangedDuringCheck(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "notify")
+	p := f.policy(t, "check")
 	changed := p
-	changed.Mode = "off"
+	changed.Mode = "check"
 	require.NoError(t, f.SavePolicy(t.Context(), changed, p.Revision))
 	_, err := f.RecordCandidate(t.Context(), p, dto.UpdateCandidate{}, true)
 	require.Equal(t, "update.policy-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
@@ -139,7 +146,7 @@ func TestCandidateRejectsPolicyChangedDuringCheck(t *testing.T) {
 }
 func TestChildCheckpointIsIdempotentAndPolicyRevisionIsAdmissionBound(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "apply")
+	p := f.policy(t, "scheduled")
 	first, fresh, err := f.PrepareChild(t.Context(), p, "example-job")
 	require.NoError(t, err)
 	require.True(t, fresh)
@@ -159,7 +166,7 @@ func TestChildCheckpointIsIdempotentAndPolicyRevisionIsAdmissionBound(t *testing
 
 func TestCandidateIdentityUsesRepositoryWithoutSourceTag(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "notify")
+	p := f.policy(t, "check")
 	candidate := dto.UpdateCandidate{ImageRef: "registry.example.com/app:1.0.0", Version: "1.1.0", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"}
 	first, err := f.RecordCandidate(t.Context(), p, candidate, true)
 	require.NoError(t, err)

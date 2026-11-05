@@ -197,8 +197,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">): Promise<string> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
-    const imageOperation = command === "update" || command === "restore";
-    const suffix = imageOperation || command === "recreate" ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
+    const imageOperation = kind === "stack" && (command === "update" || command === "restore");
+    const suffix = imageOperation || command === "recreate" || (kind === "container" && (command === "update" || command === "restore")) ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
     const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : ""}`;
     if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
@@ -206,14 +206,14 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
     const version = generation;
     const task = (async () => {
-      const operation = service ? "restartService" : recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      const operation = service ? "restartService" : recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "container" && command === "update" ? "installContainerUpdate" : kind === "container" && command === "restore" ? "restoreContainerImage" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
       if (imageOperation) {
         if (!lifecycle || !/^[a-f0-9]{64}$/.test(lifecycle.expectedRevision) || (command === "restore" && !lifecycle.pointId)) throw runtimeError("runtime.invalid-target");
         for (const read of command === "restore" ? ["getUpdateBaseline", "listRestorePoints"] : ["getUpdateBaseline"]) { const cap = await capability(read, { kind: "stack", id: target }); check(version); if (!cap.available) throw unavailable(read, cap.resourceRef, cap.disabledReasonCode); }
       }
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
-      const commandSuffix = kind === "stack" && command === "stop" ? (await readStackStopMode(baseUrl, client) === "stop" ? "stop" : "down") : suffix;
+      const commandSuffix = kind === "container" && command === "restore" ? "previous-image/restore" : kind === "stack" && command === "stop" ? (await readStackStopMode(baseUrl, client) === "stop" ? "stop" : "down") : suffix;
       check(version);
       let idempotencyKey: string;
       try { idempotencyKey = recreate?.key ?? uuid();
@@ -264,8 +264,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           check(version);
           if (!response.ok) {
             const error = runtimeResponseError(body, response.status);
-            if (imageOperation && error.outcome.kind === "error" && error.outcome.code === "runtime.outcome-unknown") { ambiguous.add(scope); const runId = object(object(body).data).activityId; if (typeof runId === "string" && runId.trim()) void detail(host, runId).catch(() => undefined); }
-            if (imageOperation && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
+            if ((imageOperation || command === "update" || command === "restore") && error.outcome.kind === "error" && error.outcome.code === "runtime.outcome-unknown") { ambiguous.add(scope); const runId = object(object(body).data).activityId; if (typeof runId === "string" && runId.trim()) void detail(host, runId).catch(() => undefined); }
+            if ((imageOperation || command === "update" || command === "restore") && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (response.status === 401) { unauthorized(); throw error; }
             if (uncertainSend) { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (error.outcome.kind === "conflict" && error.outcome.activeRunId) void detail(host, error.outcome.activeRunId).catch(() => undefined);
@@ -276,6 +276,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
             if (object(body).success !== true || (response.status === 202 ? data.code !== "run.started" : response.status !== 200 || data.code !== "run.joined") || typeof data.activityId !== "string" || !data.activityId.trim()) throw runtimeError("runtime.invalid-response");
             let run = mapRuntime(data.activity, host, data.activityId);
             if (imageOperation && (run.stackId !== target || run.kind !== (command === "restore" ? "restore" : "update"))) throw runtimeError("runtime.invalid-response");
+            if (kind === "container" && (command === "update" || command === "restore") && run.containerId !== target) throw runtimeError("runtime.invalid-response");
             const retained = runs.get(run.id);
             // The admission snapshot can arrive after a newer targeted observation.
             if (retained?.hostId === host && started < (sequences.get(run.id) ?? 0)) run = retained;
@@ -314,6 +315,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     return runs.get(id) ?? run;
   }
   return {
+    installContainerUpdate: (id: string) => command("container", id, "update"),
+    restoreContainerImage: (id: string) => command("container", id, "restore"),
     installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
     restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),
     restartService: (id: string, name: string) => command("stack", id, "restart", undefined, undefined, { restartServices: [name] }),

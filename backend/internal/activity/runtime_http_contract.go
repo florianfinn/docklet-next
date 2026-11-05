@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered compatibility routes advertise their actual response variants.
+// Deviations: Registered compatibility routes advertise their actual response variants; M18 standalone image update and restore safety.
 
 package activity
 
@@ -24,7 +24,7 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 	admission := schema(reflect.TypeFor[base.ApiResponse[activitytypes.RuntimeAdmission]]())
 	success := schema(reflect.TypeFor[base.ApiResponse[base.MessageResponse]]())
 	content := map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{success, admission}}}}
-	if runtimeRecreateOperation(operation) {
+	if runtimeRecreateRequestOperation(operation) {
 		content = map[string]*huma.MediaType{"application/json": {Schema: admission}}
 	}
 	if operation == RuntimeDeployProject || operation == RuntimeRedeployProject {
@@ -35,7 +35,7 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 		"202": {Description: "New admission only; activityId equals activity.id", Content: map[string]*huma.MediaType{"application/json": {Schema: admission}}},
 		"409": {Description: "Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{schema(reflect.TypeFor[activitytypes.RuntimeConflictResponse]()), schema(reflect.TypeFor[activitytypes.RuntimeFailureResponse]())}}}}},
 	}
-	if runtimeRecreateOperation(operation) {
+	if runtimeRecreateRequestOperation(operation) {
 		op.Responses["409"].Content["application/json"].Schema.OneOf = append(op.Responses["409"].Content["application/json"].Schema.OneOf, schema(reflect.TypeFor[containerDTO.Problem]()))
 	}
 	handlerutil.HostProblemResponses(api, op, "409")

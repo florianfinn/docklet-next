@@ -20,6 +20,7 @@ interface SchedulePopoverProps {
   label: string;
   timeZone: string;
   className?: string;
+  modes?: readonly Recurrence[];
 }
 
 /**
@@ -27,7 +28,7 @@ interface SchedulePopoverProps {
  * opens the full schedule editor; changes apply only with "Übernehmen" and
  * only when the schedule is valid.
  */
-export function SchedulePopover({ id, value, onApply, label, timeZone, className }: SchedulePopoverProps) {
+export function SchedulePopover({ id, value, onApply, label, timeZone, className, modes = MODES }: SchedulePopoverProps) {
   const t = useTranslations("common.schedule");
   const text = useScheduleText();
   const [open, setOpen] = useState(false);
@@ -57,7 +58,7 @@ export function SchedulePopover({ id, value, onApply, label, timeZone, className
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(26rem,calc(100vw-2rem))] p-4" aria-label={`${t("edit")}: ${label}`}>
         <div className="flex flex-col gap-4">
-          <ScheduleEditor idPrefix={id} value={draft} onChange={(s) => s.mode !== "manual" && setDraft(s)} modes={MODES} timeZone={timeZone} now={now} />
+          <ScheduleEditor idPrefix={id} value={draft} onChange={(s) => s.mode !== "manual" && setDraft(s)} modes={modes} allowStartDate={modes.includes("once")} timeZone={timeZone} now={now} />
           <div className="flex justify-end gap-2 border-t pt-3">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
               {t("cancel")}

@@ -725,7 +725,7 @@ func TestBuildDiscoveredComposeProjectUpdateRows_FallsBackToImageID(t *testing.T
 
 	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		ID:             "sha256:media-image",
-		Repository:     "registry.example.test/custom/media",
+		Repository:     "docker.io/library/nginx",
 		Tag:            "latest",
 		HasUpdate:      true,
 		UpdateType:     imageupdate.UpdateTypeDigest,
@@ -791,9 +791,9 @@ func TestBuildDiscoveredComposeProjectUpdateRows_FallsBackToImageID(t *testing.T
 	service.enrichProjectUpdateInfo(ctx, &detail)
 	require.True(t, detail.UpdateInfo.HasUpdate)
 	assert.Equal(t, []string{"nginx:latest"}, detail.UpdateInfo.UpdatedImageRefs)
-	detail.RuntimeServices[0].ImageID = ""
+	detail.RuntimeServices[0].Image = "registry.example.test/custom/media:latest"
 	service.enrichProjectUpdateInfo(ctx, &detail)
-	require.False(t, detail.UpdateInfo.HasUpdate, "a missing runtime image ID inherits nothing")
+	require.False(t, detail.UpdateInfo.HasUpdate, "another reference of the same image inherits nothing")
 }
 
 func TestProjectService_ListProjects_FiltersArchivedProjects(t *testing.T) {

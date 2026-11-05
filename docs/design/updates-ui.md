@@ -9,6 +9,9 @@ M2 requires a restore point for every update/restore and a recorded baseline bef
 M1 drift refuses update; M3 exposes existing notification delivery state; M5 limits actions/policies/points to whole stacks. Standalone containers show observations only.
 M6 protects restore-target and healthy-baseline anchors and retains one replaceable failed-attempt slot. Volume/bind data is never saved/restored. Agent/tools hints never replace containers.
 
+The [update policy model](update-policy-model.md) (M18) replaces the stack policy modes,
+host schedules and master gates in the rows below; the remaining rows stay binding.
+
 ## UI to contract map
 
 `E` means `/api/environments/{id}`, `P` the raw project ID and `R` a point ID. Validate successful envelopes and domain mapping; only the adapter splits UI IDs `host~raw-id`.

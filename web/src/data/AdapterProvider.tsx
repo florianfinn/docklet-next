@@ -18,7 +18,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   hosts: [queryKeys.hosts, queryKeys.systemComponents],
   // Images derive their consumers from containers, so container and stack changes refresh them too.
   stacks: [queryKeys.stacks, queryKeys.stackRoot, queryKeys.images],
-  containers: [queryKeys.containers, queryKeys.images],
+  containers: [queryKeys.containers, queryKeys.images, ["container"]],
   security: [queryKeys.security],
   topology: [queryKeys.topology],
   events: [queryKeys.events],

@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Trusted receiver with receipt-consistent sequenced detail.
+// Deviations: Trusted receiver with receipt-consistent sequenced detail; M18 standalone image update and restore safety.
 
 package activity
 
@@ -159,7 +159,11 @@ func (r *RuntimeReceiver) Execute(ctx context.Context, envelope activitytypes.Ru
 		!runtimeEqualInternal(resolved.Target.ParentProjectID, c.command.Target.ParentProjectID) {
 		return RuntimeReceiverResult{}, &runtimeConflictInternal{}
 	}
-	c.command.Target.Name = copyPtrInternal(resolved.Target.Name)
+	// Image operations retain the hub-admitted name for their effect-time
+	// instance proof; a rename cannot silently move an admitted policy intent.
+	if !runtimeContainerImageOperation(c.command.Operation) {
+		c.command.Target.Name = copyPtrInternal(resolved.Target.Name)
+	}
 	result, _, err = r.receivePassInternal(ctx, c, true)
 	return result, err
 }

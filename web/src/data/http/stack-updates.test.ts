@@ -9,9 +9,9 @@ import { readFileSync } from "node:fs";
 import { withRunGate, isRunBusy } from "../run-gate";
 const contract = JSON.parse(readFileSync("../api/openapi.json", "utf8")) as { components: { schemas: { UpdaterAutoUpdatePolicy: { properties: { applyCode: { enum: string[] } } } } } };
 import { createStackUpdates } from "./stack-updates";
-import { baseline, points, policy, schedules, hints, checkResult, compareVersion } from "./update-decoders";
+import { baseline, points, policy, window, hints, checkResult, compareVersion } from "./update-decoders";
 import { reason, updateReasons } from "./update-validation";
-import { updateFixture, base, point, storedPolicy, schedule, systemHints, revision } from "./stack-updates.test-support";
+import { updateFixture, base, point, storedPolicy, systemHints, revision, targetIdentity } from "./stack-updates.test-support";
 import { deferred } from "./activity-reader.test-support";
 import { response } from "./runtime-commands.test-support";
 import { mapActivitySummary } from "./map-dto";
@@ -33,9 +33,9 @@ describe("update decoder boundaries", () => {
   it.each([
     () => baseline({ ...base, available: "false" }), () => baseline({ ...base, savedRevision: "old" }),
     () => points([{ ...point, targetId: "replacement" }], "project"), () => points([{ ...point, volumeDataIncluded: true }], "project"),
-    () => policy({ ...storedPolicy, mode: "scheduled" }, "direct", "project"), () => policy({ ...storedPolicy, environmentId: "other" }, "direct", "project"),
+    () => policy({ ...storedPolicy, mode: "invalid" }, "direct", "project"), () => policy({ ...storedPolicy, environmentId: "other" }, "direct", "project"),
     () => policy({ ...storedPolicy, candidates: [{ ...storedPolicy.candidates[0], notificationState: "delivered" }] }, "direct", "project"),
-    () => schedules({ ...schedule, timeZone: "Invalid/Zone" }, "direct"), () => schedules({ ...schedule, pollingEnabled: 1 }, "direct"),
+    () => window({ kind: "daily", time: "25:00" }), () => window({ kind: "weekly", day: 7, time: "04:00" }),
     () => hints({ ...systemHints, images: [{ ...systemHints.images[0], candidateVersion: "2.1.0" }] }),
     () => hints({ ...systemHints, images: [{ ...systemHints.images[0], candidateVersion: "1.0.0" }] }),
   ])("rejects malformed/foreign data", (decode) => expect(decode).toThrow());
@@ -51,7 +51,7 @@ it.each([false, true])("maps real hub-facing reads equally for Direct/Edge=%s", 
   expect(await f.adapter.getUpdateBaseline!("direct~project")).toEqual(base);
   expect(await f.adapter.listRestorePoints!("direct~project")).toEqual([point]);
   expect(await f.adapter.getAutoUpdatePolicy!("direct~project")).toEqual(storedPolicy);
-  expect(await f.adapter.getUpdateSchedules!("direct")).toEqual(schedule);
+  expect(await f.adapter.listUpdatePolicies!("direct")).toEqual([storedPolicy]);
   expect(await f.adapter.getSystemImageHints!("direct")).toEqual(systemHints);
   expect(f.writes()).toEqual([]);
 });
@@ -60,19 +60,20 @@ it.each(["installStackUpdates", "getUpdateBaseline", "restoreRestorePoint", "lis
   const call = missing.includes("Restore") || missing === "restoreRestorePoint" ? () => f.adapter.restoreRestorePoint("direct~project", point.id, { expectedRevision: revision, replaceConfiguration: true }) : () => f.adapter.installStackUpdates("direct~project", { expectedRevision: revision });
   await expect(call()).rejects.toHaveProperty("outcome.kind", "not-available"); expect(f.writes()).toHaveLength(0);
 });
-it("mode-specific apply capability cannot borrow off/notify authority", async () => {
+it("scheduled capability cannot borrow check authority", async () => {
   const f = updateFixture(); f.state.denied.add("setAutoUpdateApply");
-  await expect(f.adapter.saveAutoUpdatePolicy!("direct~project", "apply", 1)).rejects.toHaveProperty("outcome.kind", "not-available");
-  expect((await f.adapter.saveAutoUpdatePolicy!("direct~project", "off", 1)).mode).toBe("off");
+  await expect(f.adapter.saveAutoUpdatePolicy!("direct~project", "scheduled", 1)).rejects.toHaveProperty("outcome.kind", "not-available");
+  expect((await f.adapter.saveAutoUpdatePolicy!("direct~project", "check", 1)).mode).toBe("check");
   expect(f.writes()).toHaveLength(1);
 });
-it("schedule aggregation preserves healthy hosts and missing next run", async () => {
+it("policy aggregation preserves healthy hosts and missing next run", async () => {
   const f = updateFixture(); f.state.hostFailure = "other";
+  f.state.policy.mode = "scheduled"; f.state.policy.window = { kind: "daily", time: "04:00" };
   const rows = await f.adapter.listSchedule(["direct", "other"]);
-  expect(rows.filter((r) => r.hostId === "direct")).toHaveLength(2);
-  expect(rows.find((r) => r.hostId === "direct")).toMatchObject({ enabled: false, nextRunAt: undefined });
+  expect(rows.filter((r) => r.hostId === "direct")).toHaveLength(1);
+  expect(rows.find((r) => r.hostId === "direct")).toMatchObject({ enabled: true, cadence: "daily" });
   expect(rows.find((r) => r.hostId === "other")).toMatchObject({ unavailable: true });
-  expect(f.calls.filter((c) => c.path.endsWith("/schedules"))).toHaveLength(2);
+  expect(f.calls.filter((c) => c.path.endsWith("/policies"))).toHaveLength(2);
 });
 it("same-ref descriptor reads coalesce and independent dialogs share only that ref", async () => {
   const f = updateFixture();
@@ -126,21 +127,20 @@ it("owner loss during capability read prevents a policy write before dispatch", 
     if (String(input).includes("/capabilities") && hold) { hold = false; const reply = await initial(input, init); started.resolve(); await held.promise; return reply; }
     return initial(input, init);
   });
-  const save = f.adapter.saveAutoUpdatePolicy!("direct~project", "apply", 1); const result = expect(save).rejects.toBeDefined();
+  const save = f.adapter.saveAutoUpdatePolicy!("direct~project", "scheduled", 1); const result = expect(save).rejects.toBeDefined();
   await started.promise; await f.adapter.logout(); held.resolve(response({})); await result; expect(f.writes().filter((write) => write.path.includes("/policies/"))).toHaveLength(0);
 });
 
-it.each(["getAutoUpdatePolicy", "listSchedule"])("write prerequisites include %s read authority", async (missing) => {
-  const f = updateFixture(); f.state.denied.add(missing);
-  const action = missing === "getAutoUpdatePolicy" ? () => f.adapter.saveAutoUpdatePolicy!("direct~project", "off", 1) : () => f.adapter.saveUpdateSchedule!("direct", { expectedRevision: 1, pollingInterval: schedule.pollingInterval, autoUpdateInterval: schedule.autoUpdateInterval, pollingEnabled: true, autoUpdateEnabled: true });
-  await expect(action()).rejects.toHaveProperty("outcome.kind", "not-available"); expect(f.writes()).toHaveLength(0);
+it("policy writes require read authority", async () => {
+  const f = updateFixture(); f.state.denied.add("getAutoUpdatePolicy");
+  await expect(f.adapter.saveAutoUpdatePolicy!("direct~project", "check", 1)).rejects.toHaveProperty("outcome.kind", "not-available"); expect(f.writes()).toHaveLength(0);
 });
 
 it("owner loss during capability read fences the mapper before dispatch", async () => {
   let generation = 0; const held = deferred<void>(), started = deferred<void>();
   const fetcher = vi.fn(async () => response({ success: true, data: storedPolicy }));
   const api = createStackUpdates({ baseUrl: "/api", client: { fetch: fetcher, token: async () => "test" }, generation: () => generation, changed: () => {}, capability: async (operationId, resourceRef) => { started.resolve(); await held.promise; return { operationId, resourceRef, available: true }; } });
-  const save = api.saveAutoUpdatePolicy("direct~project", "apply", 1), assertion = expect(save).rejects.toBeDefined();
+  const save = api.saveAutoUpdatePolicy("direct~project", "scheduled", 1), assertion = expect(save).rejects.toBeDefined();
   await started.promise; ++generation; held.resolve(); await assertion;
   expect(fetcher).toHaveBeenCalledTimes(0);
 });
@@ -179,4 +179,15 @@ it("hints accept build metadata while retaining numeric ordering and the hub cap
   expect(compareVersion("v2.0.0+hub.7", "2.0.0+agent.8")).toBe(0);
   expect(() => hints({ ...value, images: [{ ...value.images[0]!, candidateVersion: "2.0.1+agent.8" }] })).toThrow();
   for (const invalid of ["01.2.3+build", "1.2.3-rc.1+build", "9007199254740992.0.0+build"]) expect(compareVersion(invalid, "2.0.0")).toBeUndefined();
+});
+
+// Producer shapes from updater GetImagePolicy: an unbound stack and an unsaved container send "", a saved container its name.
+it("decodes every policy identity the hub produces and still rejects a malformed stack identity", async () => {
+  const f = updateFixture();
+  const row = (kind: "stack" | "container", target: string, identity: string, revision: number) => ({ ...storedPolicy, candidates: [], targetKind: kind, targetId: target, targetName: target, targetIdentity: identity, revision });
+  f.state.policyList = [row("stack", "project", targetIdentity, 1), row("stack", "unbound", "", 0), row("container", "app", "app", 2), row("container", "fresh", "", 0)];
+  const listed = await f.adapter.listUpdatePolicies!("direct");
+  expect(listed.map((p) => [p.targetKind, p.targetId, p.targetIdentity])).toEqual([["stack", "project", targetIdentity], ["stack", "unbound", ""], ["container", "app", "app"], ["container", "fresh", ""]]);
+  f.state.policyList = [row("stack", "project", "not-a-hash", 1)];
+  await expect(f.adapter.listUpdatePolicies!("direct")).rejects.toBeTruthy();
 });

@@ -21,7 +21,7 @@ import { inventoryId, mapContainer, type ContainerRow, type ProjectRow } from ".
 const at = "2026-10-17T12:00:00Z";
 const later = "2026-10-17T12:05:00Z";
 const project: ProjectRow = { id: "project", name: "app", status: "running", isArchived: false, runningCount: 1, serviceCount: 1, path: "/srv/projects/app", createdAt: at, updatedAt: at, tags: [{ name: "example", color: "blue", sources: ["ui"] }], runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running", containerId: "web" }] };
-const container: ContainerRow = { id: "web", names: ["/web"], image: "example:1.0.0", imageId: "example", command: "serve", created: 0, ports: [{ privatePort: 80, publicPort: 8080, type: "tcp" }], labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, state: "running", status: "Up (healthy)", hostConfig: { restartPolicy: "unless-stopped", memory: 104857600 }, networkSettings: { networks: {} }, mounts: [], autoUpdateEnabled: false, origin: "compose", originSource: "detected" };
+const container: ContainerRow = { id: "web", names: ["/web"], image: "example:1.0.0", imageId: "example", imagePlatform: "unknown", command: "serve", created: 0, ports: [{ privatePort: 80, publicPort: 8080, type: "tcp" }], labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, state: "running", status: "Up (healthy)", hostConfig: { restartPolicy: "unless-stopped", memory: 104857600 }, networkSettings: { networks: {} }, mounts: [], autoUpdateEnabled: false, origin: "compose", originSource: "detected" };
 
 function fixture() {
   const state = { reason: "", observedAt: at, rows: [container], projects: [project], hostStatus: "online", malformed: false };

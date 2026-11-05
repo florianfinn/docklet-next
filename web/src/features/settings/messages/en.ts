@@ -2,7 +2,7 @@
 // Revision: 747254e2620528ca922ef71c066f3d796fa7b856268644e2517f16edf5b0f4c5
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
 
 import { usersEn, keysEn } from "./users-en";
 // American English texts of hub settings and the profile page.
@@ -30,6 +30,7 @@ export const enSettings = {
     },
     settings: {
       "key-managed": "Use the dedicated settings form",
+      "invalid-time-zone": "Choose a valid time zone.",
     },
     "delivery-unreachable": "Target unreachable",
     "delivery-rejected": "Target rejected the message",
@@ -40,11 +41,10 @@ export const enSettings = {
   liveScans: {
     title: "Scans",
     enabled: "Enable vulnerability scanning",
-    automatic: "Automatic scans",
     schedule: "Schedule",
     time: "Time",
-    unscheduled: "Choose a daily or weekly schedule.",
-    zone: "Times use the hub time zone ({zone}). Spring gaps are skipped; autumn folds run twice.",
+    unscheduled: "Scans run only when you choose Scan now.",
+    zone: "Times use the hub time zone ({zone}). Spring gap times move forward by the gap; autumn fold times run once.",
     nextUnavailable: "Next run unavailable.",
     next: "Next run: {at}",
     noNext: "No next run is scheduled.",
@@ -101,7 +101,9 @@ export const enSettings = {
     linkPreview: "Links point to {url} ({source, select, domain {domain} other {internal address – only reachable on the LAN or VPN}}).",
     linkNoDomain: "Without a domain, links use the internal address.",
     timeZone: "Time zone",
-    timeZoneHint: "Set by the TZ variable. Used for schedules and date display; restart the hub after changing it.",
+    useTZ: "Use TZ ({zone})",
+    systemTZ: "system default",
+    timeZoneHint: "Schedules use the effective hub zone. Changes apply without a restart.",
     language: "Language",
     languageValue: "German (more languages later)",
   },
@@ -202,6 +204,9 @@ export const enSettings = {
     noChown: "Docklet does not change ownership on hosts.",
   },
   updates: {
+    title: "Updates",
+    missing: "Target missing",
+    remove: "Remove schedule",
     interval: "Check interval",
     intervals: { "6h": "Every 6 hours", "12h": "Every 12 hours", "24h": "Daily" },
     notify: "Notify about new updates",
@@ -423,7 +428,7 @@ export const enSettings = {
     schedule: "Schedule",
     schedules: { manual: "Manual only", daily: "Daily", weekly: "Weekly" },
     scheduleHint: "Time and weekday apply in the hub''s time zone ({zone}), not your browser''s.",
-    scheduleZoneEdit: "View the process time zone under General",
+    scheduleZoneEdit: "Change the hub time zone under General",
     scheduleOff: "The schedule only takes effect once scans are enabled.",
     scheduleManual: "Scans only run when you choose “Scan now” under Security.",
   },

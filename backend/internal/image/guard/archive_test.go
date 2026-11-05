@@ -10,6 +10,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -59,4 +60,42 @@ func TestArchiveBoundAndValidatedReplay(t *testing.T) {
 	require.Equal(t, body, replay.Bytes())
 	_, _, err = ValidateArchive(bytes.NewReader(body), 100)
 	require.Error(t, err)
+}
+
+// Each unsafe member is refused on its own with the typed archive code.
+func TestArchiveRefusesUnsafeMembers(t *testing.T) {
+	manifest, err := json.Marshal([]map[string]any{{"Config": "config.json", "RepoTags": []string{"registry.example.com/app:1.0.0"}, "Layers": []string{}}})
+	require.NoError(t, err)
+	for _, tc := range []string{"dot-dot", "char-device", "block-device", "fifo", "too-many-entries", "valid"} {
+		t.Run(tc, func(t *testing.T) {
+			var b bytes.Buffer
+			w := tar.NewWriter(&b)
+			require.NoError(t, w.WriteHeader(&tar.Header{Name: "manifest.json", Mode: 0600, Size: int64(len(manifest))}))
+			_, err := w.Write(manifest)
+			require.NoError(t, err)
+			require.NoError(t, w.WriteHeader(&tar.Header{Name: "layer/", Mode: 0700, Typeflag: tar.TypeDir}))
+			switch tc {
+			case "dot-dot":
+				require.NoError(t, w.WriteHeader(&tar.Header{Name: "..", Mode: 0700, Typeflag: tar.TypeDir}))
+			case "char-device":
+				require.NoError(t, w.WriteHeader(&tar.Header{Name: "layer/null", Mode: 0600, Typeflag: tar.TypeChar}))
+			case "block-device":
+				require.NoError(t, w.WriteHeader(&tar.Header{Name: "layer/disk", Mode: 0600, Typeflag: tar.TypeBlock}))
+			case "fifo":
+				require.NoError(t, w.WriteHeader(&tar.Header{Name: "layer/pipe", Mode: 0600, Typeflag: tar.TypeFifo}))
+			case "too-many-entries":
+				for i := 0; i < maxArchiveEntries; i++ {
+					require.NoError(t, w.WriteHeader(&tar.Header{Name: fmt.Sprintf("layer/%d", i), Mode: 0600, Typeflag: tar.TypeReg}))
+				}
+			}
+			require.NoError(t, w.Close())
+			_, cleanup, err := ValidateArchive(bytes.NewReader(b.Bytes()), 64<<20)
+			if tc == "valid" {
+				require.NoError(t, err)
+				cleanup()
+				return
+			}
+			require.Equal(t, "image.invalid-archive", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+		})
+	}
 }

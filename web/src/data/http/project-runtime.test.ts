@@ -19,7 +19,7 @@ const inventory = { stale: false } as InventoryObservation;
 const labels = { "com.docker.compose.project": "manual_p", "com.docker.compose.service": "app", "com.docker.compose.project.working_dir": project.path };
 const container: ContainerRow = { autoUpdateEnabled: false, origin: "compose", originSource: "detected", command: "serve", created: 0, ports: [{ privatePort: 8080, publicPort: 8080, type: "tcp" }], hostConfig: {},
   mounts: [{ type: "volume", name: "manual_p_data", destination: "/data", rw: true }], networkSettings: { networks: { manual_p_default: {} } },
-  id: "c-fallback", names: ["/manual_p-app-1"], state: "running", status: "Up", image: "registry.example.com/app:1", imageId: "sha256:example", labels };
+  id: "c-fallback", names: ["/manual_p-app-1"], state: "running", status: "Up", image: "registry.example.com/app:1", imageId: "sha256:example", imagePlatform: "unknown", labels };
 const volume: components["schemas"]["VolumeVolume"] = { id: "manual_p_data", name: "manual_p_data", driver: "local", containers: [], inUse: false, options: {}, scope: "local", mountpoint: "/srv/data", size: 0, createdAt: "", labels: { ...labels, "com.docker.compose.volume": "data" } };
 const network: components["schemas"]["NetworkInspect"] = { scope: "local", created: "", configFrom: { Network: "" }, options: {}, containersList: [], attachable: false, ingress: false, configOnly: false,
   id: "n-fallback", name: "manual_p_default", driver: "bridge", internal: false, enableIPv4: true, enableIPv6: false, ipam: { driver: "default", options: {}, config: [] }, labels, containers: {} };

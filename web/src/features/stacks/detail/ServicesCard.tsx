@@ -2,7 +2,7 @@
 // Revision: f8eda509ac4ee01f09962b84a53fabbcfd8954381a94036c10f10ce141f3b6ad
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
 
 import { useIsUser } from "@/data/use-principal";
 import { useCapability } from "@/data/use-capability";
@@ -27,6 +27,7 @@ import { requestServiceRestart } from "@/shared/components/service-restart-store
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
 export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host | undefined }) {
+  const serviceText = useTranslations("common.stackUpdates");
   const t = useTranslations("stacks.overview");
   const stopText = useTranslations("stacks.stopMode");
   const ts = useTranslations("common.status");
@@ -61,7 +62,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           <UpdateIndicator
             name={svc.name}
             update={svc.update}
-            actions={{ resourceRef: user ? { kind: "stack", id: stack.id } : undefined, updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
+            actions={{ resourceRef: user ? { kind: "stack", id: stack.id } : undefined, updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: serviceText("service", { name: svc.name }), busy: !!stack.busyActionId }}
           />
         </TableCell>
         <TableCell className="text-right">

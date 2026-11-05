@@ -1,5 +1,7 @@
+import { nextOccurrence } from "@/domain/schedule";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
+import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
@@ -7,7 +9,7 @@ import { createRegistryCommands } from "./registry-commands";
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
@@ -61,6 +63,7 @@ import { createNotificationSettings, NOTIFICATION_SETTINGS_OPERATIONS } from "./
 import { createVolumeReads } from "./volumes";
 import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
+import { createStackTerminals } from "./stack-terminals";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
@@ -86,8 +89,15 @@ const IMPLEMENTED = new Set<string>([
   "saveAutoUpdatePolicy",
   "setAutoUpdate",
   "setAutoUpdateApply",
-  "getUpdateSchedules",
-  "saveUpdateSchedule",
+  "listUpdatePolicies",
+  "getContainerUpdatePolicy",
+  "saveContainerUpdatePolicy",
+  "installContainerUpdate",
+  "restoreContainerImage",
+  "getContainerPreviousImage",
+  "checkAllUpdates",
+  "getUpdateSettings",
+
   "listSchedule",
   "getSystemImageHints",
   "listSystemComponents",
@@ -441,6 +451,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
+  const stackTerminals = createStackTerminals(() => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks"])); });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
     retained: () => [...runtime.retained(), ...restarts.retained()],
@@ -502,7 +513,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     detail: async (hostId, id, signal) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!,
     publish: (runs, health) => {
       healthListeners.forEach((listener) => listener(health));
-      if (runs) actionListeners.forEach((listener) => listener(runs));
+      if (runs) { stackTerminals(runs); actionListeners.forEach((listener) => listener(runs)); }
     },
   });
 
@@ -560,6 +571,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       if (notification.type !== "message"
         && notification.activity?.metadata?.action
         && /backup|restore/.test(String(notification.activity.metadata.action))) backupChanged();
+      if (notification.activity?.status && !["queued", "running", "waiting", "retrying"].includes(notification.activity.status)
+        && notification.activity.type.startsWith("project_")) {
+        changeListeners.forEach((listener) => listener(["stacks"]));
+      }
       const host = notification.environmentId ?? notification.activity?.environmentId;
       if (notification.type === "snapshot" || notification.type === "error") {
         if (host) {
@@ -750,6 +765,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listSystemComponents: createSystemComponents({ baseUrl, client, hosts: listHosts, capability: getCapability, generation: () => identityGeneration }),
     restartAgent: restarts.restartAgent,
     installStackUpdates: runtime.installStackUpdates,
+    installContainerUpdate: runtime.installContainerUpdate,
+    restoreContainerImage: runtime.restoreContainerImage,
     restoreRestorePoint: runtime.restoreRestorePoint,
     runStackCommand: runtime.runStackCommand,
     runContainerCommand: runtime.runContainerCommand,
@@ -761,6 +778,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...authoring,
     ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
     ...createSettingsCore(baseUrl, client),
+    ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory, admit),
     ...createHttpHistory(baseUrl, client),
@@ -834,8 +852,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       }))).flat();
       return [...backupRows, ...(await Promise.all(selected.map(async (hostId) => {
         try {
-          const config = await adapter.getUpdateSchedules!(hostId);
-          return config.jobs.filter((j) => j.kind === "auto-update" || j.kind === "update-check").map((j) => ({ id: `${hostId}~${j.id}`, hostId, kind: j.kind as "auto-update" | "update-check", title: "", cadence: j.schedule, nextRunAt: j.nextRun, enabled: j.enabled, code: j.code }));
+          const config = await adapter.listUpdatePolicies!(hostId);
+          const timeZone = (await adapter.getUpdateSettings!()).timeZone;
+          return config.filter((p) => p.mode === "scheduled" && p.window).map((p) => {
+            const window = p.window!;
+            const schedule = window.kind === "daily" ? { mode: "daily" as const, time: window.time } : { mode: "weekly" as const, day: (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[window.day!]!, time: window.time };
+            return { id: `${hostId}~${p.targetKind}-${p.targetId}`, hostId, kind: "auto-update" as const, title: p.targetName, cadence: window.kind, nextRunAt: nextOccurrence(schedule, new Date(), timeZone)?.toISOString(), enabled: true, code: p.applyCode };
+          });
         } catch (error) {
           if (isCancelledError(error)) throw error;
           return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];

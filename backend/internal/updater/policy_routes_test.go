@@ -32,11 +32,11 @@ func TestPolicyHTTPStackOnlyAndGrantConjunction(t *testing.T) {
 		grants *authz.PermissionSet
 		status int
 	}{
-		{"container", &authz.PermissionSet{Sudo: true}, 400},
-		{"project", &authz.PermissionSet{Global: map[string]struct{}{authz.PermJobsManage: {}}}, 403},
-		{"project", &authz.PermissionSet{Sudo: true}, 200},
+		{"container", &authz.PermissionSet{Sudo: true}, 404},
+		{"stack", &authz.PermissionSet{Global: map[string]struct{}{authz.PermJobsManage: {}}}, 403},
+		{"stack", &authz.PermissionSet{Sudo: true}, 200},
 	} {
-		req := httptest.NewRequest(http.MethodPut, "/environments/0/updater/policies/"+test.kind+"/example-stack", strings.NewReader(`{"mode":"apply","expectedRevision":0}`))
+		req := httptest.NewRequest(http.MethodPut, "/environments/0/updater/policies/"+test.kind+"/example-stack", strings.NewReader(`{"mode":"scheduled","window":{"kind":"daily","time":"04:00"},"expectedRevision":0}`))
 		req.Header.Set("Content-Type", "application/json")
 		ctx := context.WithValue(req.Context(), middleware.ContextKeyUserPermissions, test.grants)
 		ctx = context.WithValue(ctx, middleware.ContextKeyUserID, "example-actor")
@@ -78,21 +78,21 @@ func TestSystemImageHintHTTPUsesApprovedPathAndReadGrant(t *testing.T) {
 }
 
 func TestPolicyHTTPNotifyOffNeedOnlyReadAndCheck(t *testing.T) {
-	for _, mode := range []string{"off", "notify", "apply"} {
+	for _, mode := range []string{"check", "scheduled"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newPolicyFixture(t)
 			router := echo.New()
 			api := humaecho.New(router, huma.DefaultConfig("test", "test"))
 			registerImagePolicyRoutes(api, f.s)
 			grants := &authz.PermissionSet{Global: map[string]struct{}{authz.PermProjectsRead: {}, authz.PermImageUpdatesRead: {}, authz.PermImageUpdatesCheck: {}}}
-			req := httptest.NewRequest(http.MethodPut, "/environments/0/updater/policies/project/stack", strings.NewReader(`{"mode":"`+mode+`","expectedRevision":0}`))
+			req := httptest.NewRequest(http.MethodPut, "/environments/0/updater/policies/stack/stack", strings.NewReader(`{"mode":"`+mode+`","expectedRevision":0}`))
 			req.Header.Set("Content-Type", "application/json")
 			ctx := context.WithValue(req.Context(), middleware.ContextKeyUserPermissions, grants)
 			ctx = context.WithValue(ctx, middleware.ContextKeyUserID, "example-actor")
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, req.WithContext(ctx))
 			expected := 200
-			if mode == "apply" {
+			if mode == "scheduled" {
 				expected = 403
 			}
 			require.Equal(t, expected, response.Code, response.Body.String())

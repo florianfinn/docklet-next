@@ -238,3 +238,11 @@ it("starts a new plan with the hub default retention and saves the default withi
   await userEvent.click(save);
   await waitFor(() => expect(saved).toEqual([0]));
 });
+it("shows the owning host zone on a fresh bind plan that the overview does not list yet", async () => {
+  const f = setup(); const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  const { timeZone: _stored, backup: _plan, ...unlisted } = volume;
+  const fresh = { ...unlisted, id: `${volume.id}-fresh`, name: "/srv/example", source: "/srv/example", kind: "bind" as const, bind: { kind: "directory" as const, eligible: true }, backups: [] };
+  renderWithApp(<VolumeBackupsTab volume={fresh} hostOnline />, f.adapter);
+  await screen.findByRole("button", { name: "Plan speichern" });
+  expect(screen.getByTestId("backup-next").textContent).toContain("Europe/Berlin");
+});

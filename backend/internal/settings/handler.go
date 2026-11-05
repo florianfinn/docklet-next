@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"net/http"
 	"os"
 	"strconv"
@@ -297,8 +298,8 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 	if input.Body.BackupDefaultRetentionCount != nil && (input.EnvironmentID != "0" || h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent)) {
 		return nil, huma.Error400BadRequest("backupDefaultRetentionCount is a hub-only setting")
 	}
-	if input.Body.StackStopMode != nil && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
-		return nil, huma.Error400BadRequest("stackStopMode is a hub-only setting")
+	if (input.Body.TimeZone != nil || input.Body.UpdateCheckInterval != nil || input.Body.UpdateNotify != nil || input.Body.StackStopMode != nil) && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
+		return nil, huma.Error400BadRequest("This setting is hub-only")
 	}
 	if err := h.validateSettingsUpdateInput(ctx, input.Body); err != nil {
 		return nil, err
@@ -386,6 +387,10 @@ func (h *SettingsHandler) updateSettingsForLocalEnvironment(ctx context.Context,
 
 	updatedSettings, err := h.settingsService.UpdateSettings(ctx, input)
 	if err != nil {
+		var problem *imageDTO.OperationError
+		if errors.As(err, &problem) {
+			return nil, problem
+		}
 		apiErr := common.ToAPIError(err)
 		if apiErr.HTTPStatus() == http.StatusInternalServerError {
 			return nil, huma.Error500InternalServerError("Failed to update settings")
@@ -437,7 +442,7 @@ func (h *SettingsHandler) GetCategories(ctx context.Context, input *struct{}) (*
 func withoutStackStopMode(values []settings.PublicSetting) []settings.PublicSetting {
 	out := make([]settings.PublicSetting, 0, len(values))
 	for _, setting := range values {
-		if setting.Key != "stackStopMode" && setting.Key != "backupDefaultRetentionCount" {
+		if setting.Key != "timeZone" && setting.Key != "updateCheckInterval" && setting.Key != "updateNotify" && setting.Key != "stackStopMode" && setting.Key != "backupDefaultRetentionCount" {
 			out = append(out, setting)
 		}
 	}

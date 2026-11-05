@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered legacy/async lifecycle boundary with preflush admission.
+// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety.
 
 package activity
 
@@ -49,7 +49,7 @@ type runtimeContainerHTTPInput struct {
 // The original permission metadata remains the proxy/API authority source.
 func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation RuntimeOperation, op huma.Operation) {
 	op.MaxBodyBytes = activitytypes.RuntimeMaxBodyBytes
-	if runtimeRecreateOperation(operation) {
+	if runtimeRecreateRequestOperation(operation) {
 		op.MaxBodyBytes = 64 << 10
 	}
 	op.BodyReadTimeout = RuntimeAdmissionLimit
@@ -81,7 +81,7 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 	} else {
 		middleware.RegisterWithPermission(api, op, runtimePermissionInternal(operation), func(ctx context.Context, input *runtimeContainerHTTPInput) (*huma.StreamResponse, error) {
 			options := RuntimeOptions{}
-			if runtimeRecreateOperation(operation) {
+			if runtimeRecreateRequestOperation(operation) || runtimeContainerImageOperation(operation) {
 				if input.Key == "" || !runtimeWantsAsync(input.Prefer) {
 					if operation == RuntimeRedeployContainer {
 						return nil, &containerDTO.Problem{Code: "update.path-retired", Status: 409}
@@ -137,14 +137,19 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		var gate *GateConflict
 		var mismatch *runtimeConflictInternal
 		var targetErr *RuntimeTargetError
+		var containerErr *containerDTO.Problem
 		switch {
 		case errors.As(err, &imageErr):
 			return runtimeJSONResponse(imageErr.Status, imageErr), nil
+		// Image routes answer the image error envelope, so a container refusal
+		// keeps its exact code instead of the route's generic fallback.
+		case runtimeContainerImageOperation(operation) && errors.As(err, &containerErr):
+			return runtimeJSONResponse(containerErr.Status, imageDTO.Failure(containerErr.Code, containerErr.Status)), nil
 		case errors.As(err, &gate):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(gate.Code), ActiveRunID: gate.RunID}}), nil
 		case errors.As(err, &mismatch):
 			code := activitytypes.CodeRunRequestMismatch
-			if runtimeRecreateOperation(operation) {
+			if runtimeRecreateRequestOperation(operation) {
 				code = "runtime.idempotency-mismatch"
 			}
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: code}}), nil

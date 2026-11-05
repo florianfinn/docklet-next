@@ -9,6 +9,7 @@ package backup
 import (
 	"context"
 	"encoding/json"
+	policyModels "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -76,7 +77,7 @@ func TestBackupRoutesDropHeldDirectAndEdgeResponsesOnHostRotation(t *testing.T) 
 					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 					defer cancel()
 					f := newRuntimePlan(t)
-					require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}, &access.Assignment{}, &historyDeletionFixture{}))
+					require.NoError(t, f.service.deps.DB.AutoMigrate(&policyModels.Policy{}, &policyModels.Child{}, &policyModels.Candidate{}, &policyModels.Notice{}, &environment.Environment{}, &backuptarget.Target{}, &access.Assignment{}, &historyDeletionFixture{}))
 					entered := make(chan struct{}, 1)
 					release := make(chan struct{})
 					info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})

@@ -18,6 +18,9 @@ import (
 	"strings"
 )
 
+// maxArchiveEntries bounds the member count; real image archives stay far below it.
+const maxArchiveEntries = 10000
+
 // ValidateArchive spools bounded input before Docker can interpret any tag.
 // Docker-save manifests and the combined OCI layout emitted by current Engines
 // are understood. Only importer reference carriers assign names; provenance
@@ -68,13 +71,15 @@ func ValidateArchive(input io.Reader, limit int64) (*os.File, func(), error) {
 			return nil, nil, fail()
 		}
 		name := strings.TrimPrefix(h.Name, "./")
-		if _, duplicate := entriesByName[name]; duplicate {
+		if _, duplicate := entriesByName[name]; duplicate || len(entriesByName) >= maxArchiveEntries {
 			cleanup()
 			return nil, nil, fail()
 		}
 		offset, _ := f.Seek(0, io.SeekCurrent)
 		entriesByName[name] = archiveEntry{offset, h.Size}
-		if strings.HasPrefix(name, "/") || path.Clean(name) != strings.TrimSuffix(name, "/") || strings.HasPrefix(name, "../") || h.Typeflag == tar.TypeSymlink || h.Typeflag == tar.TypeLink {
+		// Only regular files and directories; links, devices and FIFOs never belong in an image archive.
+		regular := h.Typeflag == tar.TypeReg || h.Typeflag == tar.TypeDir
+		if strings.HasPrefix(name, "/") || path.Clean(name) != strings.TrimSuffix(name, "/") || name == ".." || strings.HasPrefix(name, "../") || !regular {
 			cleanup()
 			return nil, nil, fail()
 		}

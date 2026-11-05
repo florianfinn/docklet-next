@@ -19,6 +19,7 @@ interface ScheduleEditorProps {
   timeZone: string;
   now: Date;
   className?: string;
+  allowStartDate?: boolean;
 }
 
 /**
@@ -27,7 +28,7 @@ interface ScheduleEditorProps {
  * offers the first date in the calendar; a one-time run needs a date in the
  * future. Shows the next run with its relative time and the hub time zone.
  */
-export function ScheduleEditor({ idPrefix, value, onChange, modes, timeZone, now, className }: ScheduleEditorProps) {
+export function ScheduleEditor({ idPrefix, value, onChange, modes, timeZone, now, className, allowStartDate = true }: ScheduleEditorProps) {
   const t = useTranslations("common.schedule");
   const text = useScheduleText();
   const nextId = useId();
@@ -69,7 +70,7 @@ export function ScheduleEditor({ idPrefix, value, onChange, modes, timeZone, now
             </Field>
           )}
           <div className="flex flex-wrap items-end gap-3">
-            {(value.mode === "once" || value.mode === "weekly") && (
+            {(value.mode === "once" || (value.mode === "weekly" && allowStartDate)) && (
               <Field className="w-auto">
                 <FieldLabel htmlFor={`${idPrefix}-date`}>{value.mode === "once" ? t("date") : t("firstDate")}</FieldLabel>
                 <DatePicker

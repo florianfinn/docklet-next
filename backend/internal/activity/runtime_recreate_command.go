@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original bounded owned edit and canonical semantic encoding.
+// Deviations: Original bounded owned edit and canonical semantic encoding; M18 standalone image update and restore safety.
 
 package activity
 
@@ -16,7 +16,7 @@ import (
 )
 
 func runtimeRecreateOperation(operation RuntimeOperation) bool {
-	return operation == RuntimeRecreateContainer || operation == RuntimeRedeployContainer
+	return runtimeRecreateRequestOperation(operation) || runtimeContainerImageOperation(operation)
 }
 func runtimeOwnedEdit(edit *dto.Edit) (*dto.Edit, error) {
 	var buffer bytes.Buffer
@@ -122,4 +122,9 @@ func runtimeRecreateWireBound(body []byte) bool {
 		} `json:"options"`
 	}
 	return json.Unmarshal(body, &raw) == nil && len(raw.Options.Recreate) <= 64<<10
+}
+
+// Request/response compatibility remains specific to the original recreate routes.
+func runtimeRecreateRequestOperation(operation RuntimeOperation) bool {
+	return operation == RuntimeRecreateContainer || operation == RuntimeRedeployContainer
 }

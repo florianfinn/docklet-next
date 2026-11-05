@@ -21,15 +21,7 @@ func registryProbeError(err error, anonymous bool) *imageDTO.OperationError {
 	if errors.As(err, &typed) {
 		return typed
 	}
-	status := 0
-	var remoteErr *transport.Error
-	if errors.As(err, &remoteErr) {
-		status = remoteErr.StatusCode
-	}
-	var httpErr interface{ HTTPStatusCode() int }
-	if errors.As(err, &httpErr) {
-		status = httpErr.HTTPStatusCode()
-	}
+	status := registryStatusInternal(err)
 	var apiErr interface{ ErrorCode() string }
 	apiCode := ""
 	if errors.As(err, &apiErr) {
@@ -46,4 +38,18 @@ func registryProbeError(err error, anonymous bool) *imageDTO.OperationError {
 		return imageDTO.Failure("registry.authentication-failed", 502)
 	}
 	return imageDTO.Failure("registry.unavailable", 503)
+}
+
+// registryStatusInternal returns the upstream HTTP status of a registry error, or 0.
+func registryStatusInternal(err error) int {
+	status := 0
+	var remoteErr *transport.Error
+	if errors.As(err, &remoteErr) {
+		status = remoteErr.StatusCode
+	}
+	var httpErr interface{ HTTPStatusCode() int }
+	if errors.As(err, &httpErr) {
+		status = httpErr.HTTPStatusCode()
+	}
+	return status
 }

@@ -117,7 +117,6 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                         <span title={image.digest}>{shortDigest(image.digest)}…</span>
                         <CopyButton text={image.digest} className="h-6 px-2 text-[11px]" />
                       </span>
-                      <span className="mt-0.5 block font-sans text-[11px] text-muted-foreground">{td("digestHint")}</span>
                     </Row>
                   </dl>
                 </Section>

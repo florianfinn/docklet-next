@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation.
+// Deviations: Original host registration implementation; request visibility after the register ACK for #347.
 
 package edge
 
@@ -75,8 +75,9 @@ func TestEdgeRegistrationInProcessTokenLifecycle(t *testing.T) {
 			})
 			stream := &memoryRegistrationStream{ctx: metadata.NewIncomingContext(ctx, metadata.Pairs(HeaderAgentToken, token)), token: token}
 			stream.onRegister = func() {
-				tunnel, ok := registry.Get("example-host").Get()
+				tunnel, ok := registry.tunnels.Get("example-host")
 				require.True(t, ok)
+				require.False(t, registry.Get("example-host").IsPresent())
 				require.Equal(t, "example-key", tunnel.APIKeyID)
 				require.Equal(t, AgentTokenHash(token), tunnel.TokenHash)
 			}
