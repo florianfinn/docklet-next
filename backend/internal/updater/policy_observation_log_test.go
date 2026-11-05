@@ -29,5 +29,5 @@ func TestFailedNativeObservationLogsCause(t *testing.T) {
 	require.Contains(t, logs.String(), "Native update observation failed")
 	require.Contains(t, logs.String(), "image=registry.example.com/app:1.0.0")
 	require.Contains(t, logs.String(), "service=web")
-	require.Contains(t, logs.String(), "error=")
+	require.Contains(t, logs.String(), "code=update.check-unavailable")
 }

@@ -18,7 +18,9 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"log/slog"
 	"strings"
+	"sync"
 )
 
 type PlatformObservation struct{ Digest, ConfigDigest, Version, AuthState string }
@@ -75,20 +77,24 @@ func (s *ContainerRegistryService) PlatformImage(ctx context.Context, raw string
 		}
 		break
 	}
+	// A HEAD request does not count against registry pull allowances; an
+	// unchanged top-level digest reuses the earlier platform observation.
+	head, err := remote.Head(parsed, opts...)
+	if err == nil {
+		if cached, ok := platformObservations.get(platformCacheKeyInternal(parsed, head.Digest.String(), platform)); ok {
+			cached.AuthState = out.AuthState
+			return cached, nil
+		}
+	} else if registryProbeError(err, out.AuthState == "anonymous").Problem.Code == "registry.rate-limited" {
+		return out, s.platformFailureInternal(ctx, raw, parsed, err, &out)
+	}
 	desc, err := remote.Get(parsed, opts...)
 	var img v1.Image
 	if err == nil {
 		img, err = platformImageInternal(desc, platform)
 	}
 	if err != nil {
-		problem := registryProbeError(err, out.AuthState == "anonymous")
-		if problem.Problem.Code == "registry.authentication-required" {
-			out.AuthState = "authentication-required"
-		}
-		if problem.Problem.Code == "registry.authentication-failed" {
-			out.AuthState = "authentication-failed"
-		}
-		return out, problem
+		return out, s.platformFailureInternal(ctx, raw, parsed, err, &out)
 	}
 	digest, err := img.Digest()
 	if err != nil {
@@ -105,7 +111,51 @@ func (s *ContainerRegistryService) PlatformImage(ctx context.Context, raw string
 	out.Digest = digest.String()
 	out.ConfigDigest = configDigest.String()
 	out.Version = strings.TrimSpace(cfg.Config.Labels["org.opencontainers.image.version"])
+	platformObservations.put(platformCacheKeyInternal(parsed, desc.Digest.String(), platform), out)
 	return out, nil
+}
+
+// platformFailureInternal classifies a registry failure and logs the cause the
+// neutral public code no longer carries.
+func (s *ContainerRegistryService) platformFailureInternal(ctx context.Context, raw string, parsed name.Reference, err error, out *PlatformObservation) error {
+	problem := registryProbeError(err, out.AuthState == "anonymous")
+	if problem.Problem.Code == "registry.authentication-required" {
+		out.AuthState = "authentication-required"
+	}
+	if problem.Problem.Code == "registry.authentication-failed" {
+		out.AuthState = "authentication-failed"
+	}
+	slog.WarnContext(ctx, "Registry platform lookup failed", "reference", raw, "registry", parsed.Context().RegistryStr(), "code", problem.Problem.Code, "status", registryStatusInternal(err))
+	return problem
+}
+
+// Top-level digests are content addresses, so a cached platform observation
+// for one never goes stale. The bound only limits memory.
+const platformCacheLimit = 4096
+
+type platformCacheInternal struct {
+	mu      sync.Mutex
+	entries map[string]PlatformObservation
+}
+
+var platformObservations = &platformCacheInternal{entries: map[string]PlatformObservation{}}
+
+func platformCacheKeyInternal(parsed name.Reference, digest string, platform v1.Platform) string {
+	return parsed.Context().Name() + "@" + digest + "|" + platform.String()
+}
+func (c *platformCacheInternal) get(key string) (PlatformObservation, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out, ok := c.entries[key]
+	return out, ok
+}
+func (c *platformCacheInternal) put(key string, out PlatformObservation) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.entries) >= platformCacheLimit {
+		clear(c.entries)
+	}
+	c.entries[key] = out
 }
 
 // Registry libraries compare index variants literally. Select candidates with
