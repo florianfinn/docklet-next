@@ -50,6 +50,9 @@ type updateDaemon struct {
 	pullRef, pullPlatform string
 	createSlot            func()
 	beforeRefInspect      func()
+	// containerd maps an image ID (the index) to its platform manifest; set,
+	// inspects answer in the containerd image store's shape.
+	containerd map[string]string
 }
 
 func newUpdateDaemon() *updateDaemon {
@@ -95,6 +98,14 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 		id := d.tag
 		if strings.HasPrefix(ref, "sha256:") {
 			id = ref
+		}
+		if manifest, ok := d.containerd[id]; ok {
+			descriptor := map[string]any{"mediaType": "application/vnd.oci.image.index.v1+json", "digest": id, "size": 1}
+			if r.URL.Query().Has("platform") {
+				id, descriptor = manifest, map[string]any{"mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": manifest, "size": 1}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"Id": id, "Descriptor": descriptor, "Os": "linux", "Architecture": "amd64", "Config": map[string]any{}})
+			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": id, "Os": "linux", "Architecture": "amd64", "Config": map[string]any{}})
 	case p == "/images/json":
@@ -206,13 +217,17 @@ func (p *updateImagePort) PullOptionsWithAuth(context.Context, string, []contain
 
 func updateFixture(t *testing.T) (*ContainerService, *updateDaemon, *updateImagePort, *database.DB) {
 	t.Helper()
+	return updateFixtureAPI(t, "1.41")
+}
+func updateFixtureAPI(t *testing.T, api string) (*ContainerService, *updateDaemon, *updateImagePort, *database.DB) {
+	t.Helper()
 	db, err := database.InitializeHub(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "update.db")), database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	d := newUpdateDaemon()
 	server := httptest.NewServer(http.HandlerFunc(d.serve))
 	t.Cleanup(server.Close)
-	c, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.41"))
+	c, err := client.New(client.WithHost(server.URL), client.WithAPIVersion(api))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	f := francistest.New(t)

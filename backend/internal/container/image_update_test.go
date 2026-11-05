@@ -333,3 +333,15 @@ func TestContainerDetailsSurviveSlotReadFailure(t *testing.T) {
 	require.Equal(t, updateOldID, details.ID)
 	require.Nil(t, details.PreviousImage)
 }
+
+// Under the containerd store the pulled image ID names the index; the
+// candidate names the platform manifest, and the container runs the index ID.
+func TestContainerImageUpdateComparesNativeKeyOnContainerdStore(t *testing.T) {
+	s, d, p, _ := updateFixtureAPI(t, "1.49")
+	manifest := "sha256:" + strings.Repeat("9", 64)
+	d.containerd = map[string]string{updateNewImage: manifest}
+	p.expected, p.checked.LatestDigest = manifest, manifest
+	require.NoError(t, s.ExecuteContainerImage(updateContext(t), updateOldID, "app", false, user.Actor{}))
+	require.Equal(t, updateNewImage, d.containers[updateNewID].Image)
+	require.Equal(t, 1, d.counts["create"])
+}

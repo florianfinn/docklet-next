@@ -168,9 +168,14 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			return err
 		}
 		pulled, err := c.ImageInspect(ctx, ref)
-		if err != nil || pulled.ID != expected {
+		if err != nil {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
+		// The candidate names a native key; the recreated container runs the local ID.
+		if key, e := identity.PulledNativeKey(ctx, c, pulled.InspectResponse, platform); e != nil || key != expected {
+			return imageDTO.Failure("update.target-changed", 409)
+		}
+		expected = pulled.ID
 		if _, err := s.imageUpdateInstance(ctx, c, id, name); err != nil {
 			return err
 		}

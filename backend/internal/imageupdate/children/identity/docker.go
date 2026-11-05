@@ -179,3 +179,14 @@ func ResolveContainer(ctx context.Context, c *client.Client, img image.InspectRe
 func manifestDescriptor(d *ocispec.Descriptor) bool {
 	return d != nil && digestPattern.MatchString(d.Digest.String()) && (d.MediaType == ocispec.MediaTypeImageManifest || d.MediaType == "application/vnd.docker.distribution.manifest.v2+json")
 }
+
+// PulledNativeKey is the pulled image's store-native key at the requested
+// platform: the config digest under classic, the platform manifest under
+// containerd, where the image ID names the index instead.
+func PulledNativeKey(ctx context.Context, c *client.Client, img image.InspectResponse, platform string) (string, error) {
+	local, err := Resolve(ctx, c, img, platform, nil)
+	if err != nil {
+		return "", err
+	}
+	return local.Key.value, nil
+}
