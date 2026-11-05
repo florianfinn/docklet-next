@@ -137,9 +137,14 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		var gate *GateConflict
 		var mismatch *runtimeConflictInternal
 		var targetErr *RuntimeTargetError
+		var containerErr *containerDTO.Problem
 		switch {
 		case errors.As(err, &imageErr):
 			return runtimeJSONResponse(imageErr.Status, imageErr), nil
+		// Image routes answer the image error envelope, so a container refusal
+		// keeps its exact code instead of the route's generic fallback.
+		case runtimeContainerImageOperation(operation) && errors.As(err, &containerErr):
+			return runtimeJSONResponse(containerErr.Status, imageDTO.Failure(containerErr.Code, containerErr.Status)), nil
 		case errors.As(err, &gate):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(gate.Code), ActiveRunID: gate.RunID}}), nil
 		case errors.As(err, &mismatch):
