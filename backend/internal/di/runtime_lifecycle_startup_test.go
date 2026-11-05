@@ -27,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
@@ -47,6 +48,7 @@ import (
 type startupLifecycleServices struct {
 	db           *database.DB
 	settings     *settings.SettingsService
+	images       *image.ImageService
 	projects     *project.ProjectService
 	containers   *container.ContainerService
 	environments *environment.EnvironmentService
@@ -66,10 +68,15 @@ func startupLifecycleOpen(t *testing.T, path, root string, cfg *config.Config, d
 	settingsService, err := settings.NewSettingsService(t.Context(), db)
 	require.NoError(t, err)
 	require.NoError(t, settingsService.SetStringSetting(t.Context(), "projectsDirectory", root))
-	cli, err := client.New(client.WithHost(daemonURL), client.WithAPIVersion("1.48"))
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, cli.Close()) })
-	daemon := &docker.DockerClientService{Client: cli}
+	// An empty daemon URL leaves the client unconnected, so GetClient negotiates
+	// with cfg.DockerHost like a production start.
+	daemon := docker.NewDockerClientService(t.Context(), db, cfg, settingsService)
+	if daemonURL != "" {
+		cli, err := client.New(client.WithHost(daemonURL), client.WithAPIVersion("1.48"))
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, cli.Close()) })
+		daemon = &docker.DockerClientService{Client: cli}
+	}
 	events := event.NewEventService(db, cfg, nil)
 	activities := activity.NewActivityService(db, settingsService)
 	images := image.NewImageService(db, daemon, nil, nil, nil, events, settingsService, activities)
@@ -82,7 +89,7 @@ func startupLifecycleOpen(t *testing.T, path, root string, cfg *config.Config, d
 	projects := project.NewProjectService(db, settingsService, events, images, daemon, nil, registries, cfg, nil, nil)
 	containers := container.NewContainerService(events, daemon, images, settingsService, projects)
 	environments := environment.NewEnvironmentService(db, nil, daemon, events, settingsService, nil)
-	return startupLifecycleServices{db, settingsService, projects, containers, environments, activities}
+	return startupLifecycleServices{db, settingsService, images, projects, containers, environments, activities}
 }
 func (s startupLifecycleServices) close(t *testing.T) {
 	t.Helper()
@@ -185,7 +192,45 @@ func TestRuntimeStartupReconcilesDeployPointsOnHubAndAgent(t *testing.T) {
 				require.Equal(t, activityDTO.StatusFailed, out.Status)
 				require.Equal(t, "runtime.interrupted", out.MessageCode)
 				require.NotNil(t, out.ImageLifecycle)
-				require.Equal(t, run.PointID, out.ImageLifecycle.RestorePointID)
+				// Evidence never names a point that reconcile removed for lack of an effect.
+				require.Equal(t, map[bool]string{false: "", true: run.PointID}[hadEffect], out.ImageLifecycle.RestorePointID)
+			})
+		}
+	}
+}
+
+// A failing startup reconcile is retried after later settlements, so it never
+// keeps an executor from becoming ready.
+func TestRuntimeStartupReconcileFailureStillBecomesReady(t *testing.T) {
+	for _, mode := range []string{"hub", "agent"} {
+		for _, cause := range []string{"unreachable-daemon", "held-lease"} {
+			t.Run(mode+"/"+cause, func(t *testing.T) {
+				crypto.InitEncryption(&crypto.Config{Environment: "test", EncryptionKey: "synthetic-lifecycle-encryption-key-32bytes"})
+				root := t.TempDir()
+				// Loopback port 1 refuses connections, so Docker negotiation fails fast.
+				cfg := &config.Config{AgentMode: mode != "hub", ProjectsDirectory: root, Environment: config.AppEnvironmentTest, DockerHost: "tcp://127.0.0.1:1"}
+				s := startupLifecycleOpen(t, filepath.Join(t.TempDir(), "executor.db"), root, cfg, "")
+				defer s.close(t)
+				// An orphaned pin makes reconcile reach for the daemon.
+				require.NoError(t, s.db.Create(&guard.Protection{ImageID: "sha256:" + strings.Repeat("c", 64), Reason: "restore-point", OwnerID: uuid.NewString()}).Error)
+				if cause == "held-lease" {
+					release, err := s.images.ImageGuard().Acquire(t.Context())
+					require.NoError(t, err)
+					defer release()
+				}
+				lifecycle := fxtest.NewLifecycle(t)
+				_, err := provideRuntimeInternal(t.Context(), lifecycle, s.activity, s.projects, s.containers, s.environments, s.settings, cfg, http.DefaultClient, edge.NewTunnelRegistry(), s.db)
+				require.NoError(t, err)
+				// OnStart sets readiness last, so a successful start means the executor is ready.
+				require.NoError(t, lifecycle.Start(t.Context()), "executor must become ready despite a failed reconcile")
+				defer func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					require.NoError(t, lifecycle.Stop(ctx))
+				}()
+				var pins int64
+				require.NoError(t, s.db.Model(&guard.Protection{}).Count(&pins).Error)
+				require.Equal(t, int64(1), pins, "the failed reconcile keeps the pin for a later retry")
 			})
 		}
 	}

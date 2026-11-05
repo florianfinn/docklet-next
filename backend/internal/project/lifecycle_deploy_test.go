@@ -12,8 +12,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -179,7 +181,8 @@ func TestDeployPointSuccessHoldsAndDurableEvidence(t *testing.T) {
 			held, err := f.service.lifecycleStore().Held(t.Context(), pointID)
 			require.NoError(t, err)
 			require.False(t, held)
-			// An unprimed later read is a distinct source, after reconciliation ran.
+			// The later read after reconciliation still names the point; the unprimed
+			// per-path proof is TestRuntimeDeployEvidenceDirectEdgeRestartAndLaterQuery.
 			require.NoError(t, f.service.ReconcileImageLifecycle(t.Context()))
 			later, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.binding, RunID: out.ID})
 			require.NoError(t, err)
@@ -353,4 +356,62 @@ func TestDeployPointMissingSourcePreservesOlderRecoveryPresence(t *testing.T) {
 	f.mu.Unlock()
 	require.Equal(t, lifecycleOldID, workload.ImageID)
 	require.True(t, workload.Running)
+}
+
+// A deploy waits a bounded time for the host image lease: a short holder costs
+// no point, a holder past the bound yields image.busy while the deploy proceeds.
+func TestDeployPointWaitsForImageLease(t *testing.T) {
+	for _, name := range []string{"released", "held"} {
+		t.Run(name, func(t *testing.T) {
+			wait := deployPointLeaseWait
+			deployPointLeaseWait = 600 * time.Millisecond
+			t.Cleanup(func() { deployPointLeaseWait = wait })
+			f := newLifecycleFixture(t)
+			f.establishBaseline()
+			release, err := f.service.imageService.ImageGuard().Acquire(t.Context())
+			require.NoError(t, err)
+			var once sync.Once
+			t.Cleanup(func() { once.Do(release) })
+			if name == "released" {
+				time.AfterFunc(300*time.Millisecond, func() { once.Do(release) })
+			}
+			out := runDeployPoint(t, f, activity.RuntimeDeployProject)
+			require.Equal(t, activityDTO.StatusSuccess, out.Status)
+			require.NotNil(t, out.ImageLifecycle)
+			f.mu.Lock()
+			count := f.deploys
+			f.mu.Unlock()
+			require.Equal(t, 1, count, "deploy must actually occur")
+			if name == "released" {
+				require.Empty(t, out.ImageLifecycle.PointCode)
+				require.NotEmpty(t, out.ImageLifecycle.RestorePointID)
+				require.Len(t, lifecyclePoints(t, f), 1)
+				return
+			}
+			require.Equal(t, "image.busy", out.ImageLifecycle.PointCode)
+			require.Empty(t, out.ImageLifecycle.RestorePointID)
+			require.Empty(t, lifecyclePoints(t, f))
+		})
+	}
+}
+
+// A deploy that fails before its effect marker loses the point at reconcile, so
+// neither its normal evidence nor a later read may still name that point.
+func TestDeployPointFailureBeforeEffectNamesNoPoint(t *testing.T) {
+	f := newLifecycleFixture(t)
+	f.establishBaseline()
+	require.NoError(t, f.db.Exec("CREATE TRIGGER deploy_status_fault BEFORE UPDATE OF status ON projects WHEN NEW.status = 'deploying' BEGIN SELECT RAISE(ABORT, 'synthetic status failure'); END").Error)
+	out := runDeployPoint(t, f, activity.RuntimeDeployProject)
+	require.Equal(t, activityDTO.StatusFailed, out.Status)
+	require.NotNil(t, out.ImageLifecycle)
+	require.Empty(t, out.ImageLifecycle.RestorePointID)
+	f.mu.Lock()
+	count := f.deploys
+	f.mu.Unlock()
+	require.Zero(t, count, "the failure precedes the compose deploy")
+	require.Empty(t, lifecyclePoints(t, f), "post-settlement reconcile removes the no-effect point")
+	later, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.binding, RunID: out.ID})
+	require.NoError(t, err)
+	require.NotNil(t, later.ImageLifecycle)
+	require.Empty(t, later.ImageLifecycle.RestorePointID)
 }

@@ -98,6 +98,10 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		if err := runtimeImageResultTx(tx, row.RunID, result.imageLifecycle); err != nil {
 			return empty, nil, err
 		}
+		// The durable run row stays the last writer of deploy point evidence.
+		if err := runtimeDeployEvidenceTx(tx, row); err != nil {
+			return empty, nil, err
+		}
 	}
 	if wasTerminal {
 		snapshot, err := runtimeSnapshotTxInternal(tx, row)

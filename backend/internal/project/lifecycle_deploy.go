@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"time"
 
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
@@ -17,6 +18,31 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// deployPointLeaseWait bounds how long a deploy waits for the host image lease
+// before it proceeds without a point.
+var deployPointLeaseWait = 10 * time.Second
+
+// acquireDeployPointLease retries the host image try-lease, so short holders
+// such as another prepare or a post-settlement reconcile do not cost the point.
+func (s *ProjectService) acquireDeployPointLease(ctx context.Context) (func(), bool) {
+	images := s.imageService.ImageGuard()
+	deadline := time.Now().Add(deployPointLeaseWait)
+	for {
+		if release, err := images.Acquire(ctx); err == nil {
+			return release, true
+		}
+		// Without admission the guard can never grant the lease; waiting is pointless.
+		if images == nil || images.Admission == nil || !time.Now().Before(deadline) {
+			return nil, false
+		}
+		select {
+		case <-ctx.Done():
+			return nil, false
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
 
 // PrepareDeployPoint never refuses a deploy. The baseline payload, including
 // workload presence, is historical evidence; current files only check support.
@@ -30,9 +56,9 @@ func (s *ProjectService) PrepareDeployPoint(ctx context.Context, id, run, regist
 			result.PointCode = "update.persistence-failed"
 		}
 	}
-	release, err := s.imageService.ImageGuard().Acquire(ctx)
-	if err != nil {
-		unavailable("update.persistence-failed")
+	release, ok := s.acquireDeployPointLease(ctx)
+	if !ok {
+		unavailable("image.busy")
 		return
 	}
 	defer release()

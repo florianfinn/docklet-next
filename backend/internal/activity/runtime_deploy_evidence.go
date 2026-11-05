@@ -25,6 +25,7 @@ func runtimeDeployEvidenceTx(tx *gorm.DB, row *RuntimeReceipt) error {
 	var run struct {
 		PointID   string
 		PointCode *string
+		HadEffect bool
 	}
 	err := tx.Table("image_lifecycle_runs").Where("id = ?", row.RunID).Take(&run).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -41,7 +42,12 @@ func runtimeDeployEvidenceTx(tx *gorm.DB, row *RuntimeReceipt) error {
 	if result == nil {
 		result = &dto.LifecycleResult{RunID: row.RunID}
 	}
-	result.RestorePointID, result.PointCode = run.PointID, ""
+	// A run that ended before its effect marker loses its point at reconcile, so the
+	// evidence names a point only once the deploy effect started.
+	result.RestorePointID, result.PointCode = "", ""
+	if run.HadEffect {
+		result.RestorePointID = run.PointID
+	}
 	if run.PointCode != nil {
 		result.PointCode = *run.PointCode
 	}

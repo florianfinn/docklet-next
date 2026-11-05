@@ -9,6 +9,7 @@ package di
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -155,8 +156,10 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 		if err := runtime.InitializeLocalStartup(start, runtime.LocalStore()); err != nil {
 			return err
 		}
+		// Reconcile runs again after every settlement, so a failure here (busy
+		// lease, unreachable daemon) is logged and never blocks readiness.
 		if err := projects.ReconcileImageLifecycle(start); err != nil {
-			return err
+			slog.WarnContext(start, "Startup image lifecycle reconcile failed; retrying after the next settlement", "error", err)
 		}
 		if err := remote.Startup(start); err != nil {
 			return err
