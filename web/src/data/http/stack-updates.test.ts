@@ -11,7 +11,7 @@ const contract = JSON.parse(readFileSync("../api/openapi.json", "utf8")) as { co
 import { createStackUpdates } from "./stack-updates";
 import { baseline, points, policy, window, hints, checkResult, compareVersion } from "./update-decoders";
 import { reason, updateReasons } from "./update-validation";
-import { updateFixture, base, point, storedPolicy, systemHints, revision } from "./stack-updates.test-support";
+import { updateFixture, base, point, storedPolicy, systemHints, revision, targetIdentity } from "./stack-updates.test-support";
 import { deferred } from "./activity-reader.test-support";
 import { response } from "./runtime-commands.test-support";
 import { mapActivitySummary } from "./map-dto";
@@ -179,4 +179,15 @@ it("hints accept build metadata while retaining numeric ordering and the hub cap
   expect(compareVersion("v2.0.0+hub.7", "2.0.0+agent.8")).toBe(0);
   expect(() => hints({ ...value, images: [{ ...value.images[0]!, candidateVersion: "2.0.1+agent.8" }] })).toThrow();
   for (const invalid of ["01.2.3+build", "1.2.3-rc.1+build", "9007199254740992.0.0+build"]) expect(compareVersion(invalid, "2.0.0")).toBeUndefined();
+});
+
+// Producer shapes from updater GetImagePolicy: an unbound stack and an unsaved container send "", a saved container its name.
+it("decodes every policy identity the hub produces and still rejects a malformed stack identity", async () => {
+  const f = updateFixture();
+  const row = (kind: "stack" | "container", target: string, identity: string, revision: number) => ({ ...storedPolicy, candidates: [], targetKind: kind, targetId: target, targetName: target, targetIdentity: identity, revision });
+  f.state.policyList = [row("stack", "project", targetIdentity, 1), row("stack", "unbound", "", 0), row("container", "app", "app", 2), row("container", "fresh", "", 0)];
+  const listed = await f.adapter.listUpdatePolicies!("direct");
+  expect(listed.map((p) => [p.targetKind, p.targetId, p.targetIdentity])).toEqual([["stack", "project", targetIdentity], ["stack", "unbound", ""], ["container", "app", "app"], ["container", "fresh", ""]]);
+  f.state.policyList = [row("stack", "project", "not-a-hash", 1)];
+  await expect(f.adapter.listUpdatePolicies!("direct")).rejects.toBeTruthy();
 });

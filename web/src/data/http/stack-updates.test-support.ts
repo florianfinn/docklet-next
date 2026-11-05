@@ -18,7 +18,7 @@ export const updateJob = { id: "update-check", enabled: true, schedule: "0 0 */1
 export const systemHints: SystemHints = { hubVersion: "2.0.0", images: [{ kind: "agent", reference: "example:1.9.0", currentVersion: "1.9.0", candidateVersion: "2.0.0", state: "available", requiresHubUpdate: true, manualOnly: true }, { kind: "tools", reference: "example:4.0.0", currentVersion: "4.0.0", state: "pinned", requiresHubUpdate: false, manualOnly: true }] };
 export const updateOperations = ["deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "listUpdatePolicies", "getUpdateSettings", "saveSettings", "checkAllUpdates", "installContainerUpdate", "restoreContainerImage", "recreateContainer", "listSystemComponents", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "listHosts", "listActions"];
 export function updateFixture() {
-  const state = { isEdge: false, denied: new Set<string>(), baseline: structuredClone(base), policy: structuredClone(storedPolicy), points: [structuredClone(point)], job: structuredClone(updateJob), hints: structuredClone(systemHints), code: "", status: 409, malformed: false, hold: undefined as undefined | ((path: string, init: RequestInit) => Promise<Response> | undefined), hostFailure: "", user: "operator" };
+  const state = { isEdge: false, denied: new Set<string>(), baseline: structuredClone(base), policy: structuredClone(storedPolicy), points: [structuredClone(point)], job: structuredClone(updateJob), hints: structuredClone(systemHints), code: "", status: 409, malformed: false, hold: undefined as undefined | ((path: string, init: RequestInit) => Promise<Response> | undefined), hostFailure: "", user: "operator", policyList: undefined as unknown[] | undefined };
   const calls: { path: string; init: RequestInit }[] = [];
   const run = snapshot("direct", { type: "project_update", resourceType: "stack", resourceId: "project", outcomeState: "known" });
   const source = new ActivitySource();
@@ -46,7 +46,7 @@ export function updateFixture() {
     if (path.endsWith("/check")) return state.code ? response({ success: false, error: { code: state.code, message: "raw diagnostic" } }, state.status) : envelope({ status: "has_update", hasUpdate: true, imageCount: 1, checkedImageCount: 1, imagesWithUpdates: 1, imagesNotPulled: 0, errorCount: 0, serviceUpdates: { app: { imageRef: "example:1.0.0", updateInfo: observation("version") } } });
     if (path.endsWith("/restore")) run.type = "project_restore";
     if (path.endsWith("/update") || path.endsWith("/restore")) return state.code ? response({ success: false, error: { code: state.code, message: "raw diagnostic" } }, state.status) : envelope({ activityId: run.id, code: "run.started", activity: run }, 202);
-    if (path.endsWith("/policies")) return envelope([state.policy]);
+    if (path.endsWith("/policies")) return envelope(state.policyList ?? [state.policy]);
     if (path.includes("/policies/")) { if (init.method === "PUT") { if (state.code) return response({ success: false, error: { code: state.code, message: "raw diagnostic" } }, state.status); const input = JSON.parse(String(init.body)); state.policy = { ...state.policy, mode: input.mode, window: input.mode === "scheduled" ? input.window : undefined, revision: state.policy.revision + 1 }; } return envelope(state.policy); }
     if (path.endsWith("/system-image-hints")) return envelope(state.hints);
     return response({}, 404);

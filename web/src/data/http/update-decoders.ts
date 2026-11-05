@@ -24,9 +24,11 @@ export function points(value: unknown, target?: string): UpdatePoint[] {
 export function policy(value: unknown, host: string, target: string, kind: "stack" | "container" = "stack"): StackUpdatePolicy {
   const o = record(value);
   if ((o.mode === "scheduled") !== (o.window !== undefined)) throw invalidUpdate();
-  if (!/^[a-f0-9]{64}$/.test(text(o.targetIdentity))) throw invalidUpdate();
+  // The producer sends a stack's baseline hash, a container's name, or "" before a target was bound (updater GetImagePolicy).
+  const identity = text(o.targetIdentity);
+  if (kind === "stack" && identity !== "" && !/^[a-f0-9]{64}$/.test(identity)) throw invalidUpdate();
   if (o.environmentId !== host || o.targetId !== target || o.targetKind !== kind) throw invalidUpdate();
-  return { mode: choice(o.mode, ["check", "scheduled"]), revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), targetKind: kind, targetName: text(o.targetName), targetMissing: bool(o.targetMissing), window: o.window === undefined ? undefined : window(o.window), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), jobId: text(o.jobId), stale: bool(o.stale),
+  return { mode: choice(o.mode, ["check", "scheduled"]), revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), targetKind: kind, targetName: text(o.targetName), targetMissing: bool(o.targetMissing), window: o.window === undefined ? undefined : window(o.window), targetId: id(o.targetId), targetIdentity: identity, jobId: text(o.jobId), stale: bool(o.stale),
     checkedAt: optionalDate(o.checkedAt), code: reason(o.code), applyCheckedAt: optionalDate(o.applyCheckedAt), applyCode: reason(o.applyCode), bookkeepingAt: optionalDate(o.bookkeepingAt), bookkeepingCode: reason(o.bookkeepingCode),
     candidates: list(o.candidates).map((v) => { const c = record(v); return { service: id(c.service), imageRef: id(c.imageRef), version: text(c.version), digest: id(c.digest), platform: id(c.platform), ...(c.entryId === undefined ? {} : { entryId: id(c.entryId) }), notificationState: choice(c.notificationState, ["pending", "sending", "sent", "unconfigured", "failed", "not-requested"]) }; }) };
 }
