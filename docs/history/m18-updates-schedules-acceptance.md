@@ -109,9 +109,11 @@ that run could affect, and reused the other cells' candidate evidence.
 
 On `ba0cf2ae` no browser request received a 5xx, and the hub logged no
 response-delivery warning. Two first update-check attempts failed their
-allowance assertion. On H, a newly published Alpine version was correctly
-fetched once. On E, the shared allowance refilled during the measurement. Both
-second attempts passed. The first login after replacing the hub reached it
+allowance assertion. During H's first measurement the allowance fell by three
+while three new Alpine candidate identities appeared across H and E, consistent
+with initial cache misses; the download attribution is inferred, not traced.
+During E's first measurement the allowance rose, consistent with a refill. Both
+second attempts, with an unchanged allowance, passed. The first login after replacing the hub reached it
 before it was ready and answered 502; the retry passed.
 
 ## Limits
@@ -122,7 +124,9 @@ before it was ready and answered 502; the retry passed.
   items are tracked in #411.
 - Live DST transitions cannot be produced in the sandbox; the schedule rule is
   covered by shared test vectors and the CI run of the exact package.
-- Notification delivery was checked against the sandbox test channels only.
+- Notification entry creation and deduplication passed across repeated checks
+  and a restart. The recorded delivery to the sandbox test channel failed;
+  successful recipient delivery was not established.
 - Direct and Edge agents ran on separate Docker daemons on one shared kernel.
   Containers for a foreign platform could be created but not run.
 - Server-only 5xx completions without a browser-visible error remain in the
