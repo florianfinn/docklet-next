@@ -31,6 +31,7 @@ export const deActivity: typeof enActivity = {
   status: { queued: "Wartet", running: "Läuft", succeeded: "Erfolgreich", failed: "Fehlgeschlagen", cancelled: "Abgebrochen" },
   capability: { unavailable: "Diese Aktion ist nicht verfügbar, weil ihre Fähigkeit nicht gelesen werden konnte.", mappingUnavailable: "Diese Aktion ist in der aktuellen Hub-Version nicht verfügbar." },
   step: { pending: "Ausstehend", running: "Läuft", done: "Erledigt", error: "Fehler", skipped: "Übersprungen" },
+  jobStep: { queued: "In Warteschlange", running: "Läuft", waiting: "Wartet", retrying: "Neuer Versuch", succeeded: "Erfolgreich", failed: "Fehlgeschlagen", partial: "Teilweise abgeschlossen", "needs_attention": "Braucht Aufmerksamkeit", canceled: "Abgebrochen", skipped: "Übersprungen" },
   phase: "Schritt {current} von {total}: {label}",
   done: "Abgeschlossen nach {seconds} s",
   failedAt: "Fehler bei {label}",

@@ -30,6 +30,7 @@ export const enActivity = {
   status: { queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" },
   capability: { unavailable: "This action is unavailable because its capability could not be read.", mappingUnavailable: "This action is not available in the current hub version." },
   step: { pending: "Pending", running: "Running", done: "Done", error: "Error", skipped: "Skipped" },
+  jobStep: { queued: "Queued", running: "Running", waiting: "Waiting", retrying: "Retrying", succeeded: "Succeeded", failed: "Failed", partial: "Partially completed", "needs_attention": "Needs attention", canceled: "Cancelled", skipped: "Skipped" },
   phase: "Step {current} of {total}: {label}",
   done: "Completed after {seconds} s",
   failedAt: "Error at {label}",
