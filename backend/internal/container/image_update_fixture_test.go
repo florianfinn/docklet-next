@@ -49,6 +49,7 @@ type updateDaemon struct {
 	moved                 bool
 	pullRef, pullPlatform string
 	createSlot            func()
+	beforeRefInspect      func()
 }
 
 func newUpdateDaemon() *updateDaemon {
@@ -86,6 +87,11 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(201)
 	case strings.HasPrefix(p, "/images/") && strings.HasSuffix(p, "/json") && p != "/images/json":
 		ref := strings.TrimSuffix(strings.TrimPrefix(p, "/images/"), "/json")
+		if d.beforeRefInspect != nil && !strings.HasPrefix(ref, "sha256:") {
+			callback := d.beforeRefInspect
+			d.beforeRefInspect = nil
+			callback()
+		}
 		id := d.tag
 		if strings.HasPrefix(ref, "sha256:") {
 			id = ref

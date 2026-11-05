@@ -188,8 +188,7 @@ func TestContainerImageInstanceChangesDuringCheck(t *testing.T) {
 	}
 	err := s.ExecuteContainerImage(updateContext(t), updateOldID, "app", false, user.Actor{})
 	require.Equal(t, "update.target-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
-	require.Zero(t, d.counts["create"])
-	require.Zero(t, d.counts["rename"])
+	require.Empty(t, d.counts, "identity changes during a slow check must precede image effects")
 }
 func TestContainerImageMovedTagAfterPullLeavesReplacementAndStaleOwner(t *testing.T) {
 	s, d, _, _ := updateFixture(t)
@@ -294,4 +293,18 @@ func TestContainerPreviousImageAfterUnrelatedDockletRecreate(t *testing.T) {
 	err = s.ExecuteContainerImage(updateContext(t), replacement, "app", true, user.Actor{})
 	require.Equal(t, "update.target-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	require.Equal(t, before, d.counts)
+}
+
+func TestContainerImageRestoreIdentityChangesDuringInspect(t *testing.T) {
+	s, d, _, _ := updateFixture(t)
+	require.NoError(t, s.replacePreviousImage(t.Context(), "app", updateOtherImage, updateRef, updateOldID, "previous-run"))
+	d.beforeRefInspect = func() {
+		old := d.containers[updateOldID]
+		old.ID = updateNewID
+		d.containers[updateNewID] = old
+		delete(d.containers, updateOldID)
+	}
+	err := s.ExecuteContainerImage(updateContext(t), updateOldID, "app", true, user.Actor{})
+	require.Equal(t, "update.target-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Empty(t, d.counts, "identity changes during a slow inspect must precede retag")
 }

@@ -93,6 +93,9 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			return imageDTO.Failure("image.usage-unavailable", 503)
 		}
 		if e != nil || inspected.ID != expected {
+			if _, err := s.imageUpdateInstance(ctx, c, id, name); err != nil {
+				return err
+			}
 			if _, err := c.ImageTag(ctx, client.ImageTagOptions{Source: expected, Target: ref}); err != nil {
 				return imageDTO.Neutral(err, "image.tag-failed", 502)
 			}
@@ -145,6 +148,11 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		}
 		pullCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
+		// Registry/tag reads may outlive the admitted instance. Prove it again
+		// immediately before the first image mutation, then before recreate.
+		if _, err := s.imageUpdateInstance(pullCtx, c, id, name); err != nil {
+			return err
+		}
 		reader, err := c.ImagePull(pullCtx, ref, options)
 		if err != nil {
 			return imageDTO.Neutral(err, "image.pull-failed", 502)
