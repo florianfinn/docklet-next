@@ -570,7 +570,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         && notification.activity?.metadata?.action
         && /backup|restore/.test(String(notification.activity.metadata.action))) backupChanged();
       if (notification.activity?.status && !["queued", "running", "waiting", "retrying"].includes(notification.activity.status)
-        && ["project_update", "project_restore", "project_deploy", "project_redeploy"].includes(notification.activity.type)) {
+        && notification.activity.type.startsWith("project_")) {
         changeListeners.forEach((listener) => listener(["stacks"]));
       }
       const host = notification.environmentId ?? notification.activity?.environmentId;
