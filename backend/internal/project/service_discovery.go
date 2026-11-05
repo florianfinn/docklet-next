@@ -14,6 +14,7 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
+	projectdetails "github.com/florianfinn/docklet-next/backend/internal/project/children/details"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/listing"
 	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/tags"
@@ -61,7 +62,8 @@ func buildUpdateInfoSummary(
 	var latestCheckTime *time.Time
 
 	for _, imageRef := range imageRefs {
-		info := updateInfoByRef[imageRef]
+		// Persisted refs and runtime spellings may differ; equivalent spellings join.
+		info := projectdetails.UpdateInfoForRef(updateInfoByRef, imageRef)
 		if info == nil {
 			continue
 		}

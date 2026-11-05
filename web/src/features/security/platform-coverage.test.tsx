@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { catalogs } from "@/app/i18n/catalog";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { useSecurity } from "@/data/queries";
 import { mapContainer, type ContainerRow } from "@/data/http/inventory-mapping";
 import type { ScannedImage } from "@/domain/model";
 import { renderWithApp } from "@/test/render";
@@ -21,6 +22,11 @@ const observation = { stale: false } as Parameters<typeof mapContainer>[3];
 const row = (name: string, imagePlatform: string | undefined) => ({ id: `${name}-id`, names: [`/${name}`], state: "running", status: "Up", image: "registry.example.com/app:1", imageId: "sha256:index", labels: {}, origin: "standalone", originSource: "detected", ...(imagePlatform === undefined ? {} : { imagePlatform }) }) as unknown as ContainerRow;
 const containers = [row("native", "linux/amd64"), row("foreign", "linux/arm64"), row("silent", "unknown"), row("old-agent", undefined)].map((r) => mapContainer(r, "example", [], observation));
 const scanned: ScannedImage = { id: containers[0]!.imageId, ref: "registry.example.com/app:1", hostId: "example", usage: "running", status: "completed", counts: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 }, scannedAt: "2026-11-05T03:00:00Z", platform: "linux/amd64" } as ScannedImage;
+
+// Renders once the same security query the hint reads has data, so a missing hint is a settled result.
+function Settled() {
+  return useSecurity().data ? <span>security-settled</span> : null;
+}
 
 describe("platform coverage rule", () => {
   it("compares with the completed scan and never treats an unreported platform as covered", () => {
@@ -61,12 +67,11 @@ describe.each(["en-US", "de"] as const)("coverage marker in %s", (locale) => {
     const real = await adapter.getSecurity();
     adapter.getSecurity = async () => ({ ...real, images: [scanned] });
     const c = containers.find((item) => item.name === name)!;
-    renderWithApp(<ContainerScanCoverage c={c} />, adapter);
+    renderWithApp(<><ContainerScanCoverage c={c} /><Settled /></>, adapter);
+    await screen.findByText("security-settled");
     if (key === "containerNotCovered") expect((await screen.findByText(text.containerNotCovered.replace("{platform}", "linux/arm64").replace("{scanned}", "linux/amd64"))) !== null).toBe(true);
     else if (key === "containerUnknown") expect((await screen.findByText(text.containerUnknown)) !== null).toBe(true);
     else {
-      await screen.findByText((_, el) => el?.tagName === "BODY");
-      await new Promise((r) => setTimeout(r, 50));
       expect(document.body.textContent?.includes(text.containerNotCovered.slice(0, 12)) || document.body.textContent?.includes(text.containerUnknown)).toBe(false);
     }
   });

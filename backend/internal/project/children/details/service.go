@@ -302,7 +302,9 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 			delete(result, imageRef)
 		}
 	}
-	seen := make(map[string]bool)
+	// A scoped result replaces every equivalent spelling, so no stale shared
+	// result under another spelling can win a later normalized lookup.
+	seen := make(map[string]string)
 	for _, service := range services {
 		info := scoped[service.ContainerID]
 		if info == nil {
@@ -312,8 +314,10 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 		if imageRef == "" {
 			continue
 		}
+		key := NormalizedImageRef(imageRef)
 		merged := *info
-		if seen[imageRef] {
+		if written, ok := seen[key]; ok {
+			imageRef = written
 			previous := result[imageRef]
 			merged.HasUpdate = merged.HasUpdate || previous.HasUpdate
 			if previous.CheckTime.After(merged.CheckTime) {
@@ -325,9 +329,15 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 			if merged.Error == "" {
 				merged.Error = previous.Error
 			}
+		} else {
+			for existing := range result {
+				if existing != imageRef && NormalizedImageRef(existing) == key {
+					delete(result, existing)
+				}
+			}
 		}
 		result[imageRef] = &merged
-		seen[imageRef] = true
+		seen[key] = imageRef
 	}
 	return result
 }
