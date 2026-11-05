@@ -71,9 +71,17 @@ func TestPlatformImageLogsRateLimitCause(t *testing.T) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
+	var heads, gets atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v2/" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == http.MethodHead {
+			heads.Add(1)
+		} else {
+			gets.Add(1)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"errors":[{"code":"TOOMANYREQUESTS","message":"synthetic limit"}]}`))
@@ -88,4 +96,6 @@ func TestPlatformImageLogsRateLimitCause(t *testing.T) {
 	require.Contains(t, logs.String(), "code=registry.rate-limited")
 	require.Contains(t, logs.String(), "status=429")
 	require.NotContains(t, logs.String(), "synthetic limit")
+	require.Equal(t, int32(1), heads.Load(), "a rate-limited HEAD is tried once")
+	require.Zero(t, gets.Load(), "a rate-limited HEAD spends no manifest download")
 }

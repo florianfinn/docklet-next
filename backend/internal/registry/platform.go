@@ -78,8 +78,9 @@ func (s *ContainerRegistryService) PlatformImage(ctx context.Context, raw string
 		break
 	}
 	// A HEAD request does not count against registry pull allowances; an
-	// unchanged top-level digest reuses the earlier platform observation.
-	head, err := remote.Head(parsed, opts...)
+	// unchanged top-level digest reuses the earlier platform observation. It is
+	// tried once, so a rate limit answers at once instead of after retries.
+	head, err := remote.Head(parsed, append(opts[:len(opts):len(opts)], remote.WithRetryBackoff(remote.Backoff{Steps: 1}))...)
 	if err == nil {
 		if cached, ok := platformObservations.get(platformCacheKeyInternal(parsed, head.Digest.String(), platform)); ok {
 			cached.AuthState = out.AuthState
