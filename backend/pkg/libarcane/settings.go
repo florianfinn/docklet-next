@@ -7,6 +7,7 @@
 package libarcane
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -77,6 +78,10 @@ func IsCronSettingKey(key string) bool {
 func ValidateCronSetting(key, value string) error {
 	if value == "" || !IsCronSettingKey(key) {
 		return nil
+	}
+	// Cron settings take six explicit fields; descriptors such as @daily stay refused.
+	if strings.HasPrefix(strings.TrimSpace(value), "@") {
+		return fmt.Errorf("cron descriptor %q is not a six-field expression", value)
 	}
 	_, err := schedule.Parse(value, nil)
 	return err

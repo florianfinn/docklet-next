@@ -9,6 +9,7 @@ package policies
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	dto "github.com/florianfinn/docklet-next/types/updater"
@@ -114,10 +115,15 @@ func (s Store) PruneHistory(ctx context.Context, now time.Time) error {
 			return err
 		}
 		current := map[string]bool{}
+		unreadable := false
 		for _, row := range rows {
 			var candidates []dto.UpdateCandidate
 			if json.Unmarshal([]byte(row.Candidates), &candidates) != nil {
-				return nil
+				// Without every current candidate a pruned notice could re-notify; keep
+				// all notices this pass and still prune settled children.
+				slog.WarnContext(ctx, "Update policy candidates unreadable; notification pruning skipped", "policyId", row.ID)
+				unreadable = true
+				continue
 			}
 			for _, candidate := range candidates {
 				if candidate.EntryID != "" {
@@ -127,6 +133,9 @@ func (s Store) PruneHistory(ctx context.Context, now time.Time) error {
 		}
 		var notices []Notice
 		cutoff := now.Add(-30 * 24 * time.Hour)
+		if unreadable {
+			return tx.Where("status IN ? AND settled_at < ? AND code <> ?", []string{"settled", "refused"}, cutoff, "runtime.outcome-unknown").Delete(&Child{}).Error
+		}
 		if err := tx.Where("created_at < ? AND status IN ?", cutoff, []string{"sent", "failed", "unconfigured"}).Find(&notices).Error; err != nil {
 			return err
 		}

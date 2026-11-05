@@ -143,7 +143,7 @@ func TestUpdatePolicyForwardMigrationFrom017(t *testing.T) {
 }
 
 func TestManualScanForwardMigrationFrom017(t *testing.T) {
-	for _, enabled := range []string{"true", "false"} {
+	for _, enabled := range []string{"true", "TRUE", "1", "false", "0"} {
 		for _, schedule := range []string{"", `{"mode":"daily","time":"02:30"}`, `{"mode":"weekly","day":"sun","time":"04:00"}`, `{"mode":"daily","time":"25:00"}`, `broken`} {
 			t.Run(enabled+schedule, func(t *testing.T) {
 				url := sqlitestore.URL(filepath.Join(t.TempDir(), "scan.db"))
@@ -159,7 +159,7 @@ func TestManualScanForwardMigrationFrom017(t *testing.T) {
 				defer db.Close()
 				var got string
 				require.NoError(t, db.Raw("SELECT value FROM settings WHERE key='vulnerabilityScanSchedule'").Scan(&got).Error)
-				if enabled == "true" && (schedule == `{"mode":"daily","time":"02:30"}` || schedule == `{"mode":"weekly","day":"sun","time":"04:00"}`) {
+				if (enabled == "true" || enabled == "TRUE" || enabled == "1") && (schedule == `{"mode":"daily","time":"02:30"}` || schedule == `{"mode":"weekly","day":"sun","time":"04:00"}`) {
 					require.JSONEq(t, schedule, got)
 				} else {
 					require.JSONEq(t, `{"mode":"manual"}`, got)

@@ -12,11 +12,18 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	"strings"
+	"sync"
 )
+
+// refreshWindows serialises refresh passes so a pass that read older rows cannot
+// remove a window job that a concurrent policy save just installed.
+var refreshWindows sync.Mutex
 
 // RefreshUpdateWindows installs one observation job and the current scheduled
 // policy windows. Every window re-reads its policy before admitting an effect.
 func RefreshUpdateWindows(ctx context.Context, controller st.JobScheduler, owner *updater.UpdaterService) error {
+	refreshWindows.Lock()
+	defer refreshWindows.Unlock()
 	rows, err := owner.ScheduledUpdatePolicies(ctx)
 	if err != nil {
 		return err

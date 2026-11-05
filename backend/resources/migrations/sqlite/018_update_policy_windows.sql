@@ -55,7 +55,7 @@ SELECT 'updateNotify', CASE WHEN EXISTS (
 ON CONFLICT(key) DO UPDATE SET value=excluded.value;
 
 INSERT INTO settings (key,value)
-SELECT 'vulnerabilityScanSchedule', CASE WHEN coalesce((SELECT value FROM settings WHERE key='vulnerabilityScanEnabled'),'false')='true'
+SELECT 'vulnerabilityScanSchedule', CASE WHEN lower(coalesce((SELECT value FROM settings WHERE key='vulnerabilityScanEnabled'),'false')) IN ('true','t','1')
   AND json_type(schedule)='object' AND json_extract(schedule,'$.mode') IN ('daily','weekly')
   AND json_extract(schedule,'$.time') GLOB '[0-2][0-9]:[0-5][0-9]' AND substr(json_extract(schedule,'$.time'),1,2)<='23'
   AND NOT EXISTS (SELECT 1 FROM json_each(schedule) WHERE key NOT IN ('mode','day','time'))

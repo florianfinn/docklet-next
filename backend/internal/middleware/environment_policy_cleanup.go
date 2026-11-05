@@ -10,6 +10,7 @@ import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/labstack/echo/v5"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -22,13 +23,17 @@ func destroyedStack(method, suffix string) string {
 	return ""
 }
 
-func (m *EnvironmentMiddleware) cleanupStack(c *echo.Context, status int) error {
+// cleanupStack forgets the hub policy of a stack the agent destroyed. A cleanup
+// failure never turns the agent's success into an error: the row then shows as a
+// missing target and follows the ordinary pruning rule.
+func (m *EnvironmentMiddleware) cleanupStack(c *echo.Context, status int) {
 	env := c.Param(m.paramName)
 	target := destroyedStack(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, env))
 	if target != "" && status >= 200 && status < 300 && m.policyCleanup != nil {
-		return m.policyCleanup(c.Request().Context(), env, target)
+		if err := m.policyCleanup(c.Request().Context(), env, target); err != nil {
+			slog.WarnContext(c.Request().Context(), "Hub update policy cleanup after stack destroy failed", "environmentId", env, "error", err)
+		}
 	}
-	return nil
 }
 
 func (m *EnvironmentMiddleware) proxyStackDestroy(c *echo.Context, tunnel *edge.AgentTunnel, env string) error {
@@ -44,9 +49,7 @@ func (m *EnvironmentMiddleware) proxyStackDestroy(c *echo.Context, tunnel *edge.
 	if err != nil {
 		return m.abortEdgeTunnelUnavailable(c)
 	}
-	if err = m.cleanupStack(c, status); err != nil {
-		return pointFailure(c, "update.persistence-failed", 500)
-	}
+	m.cleanupStack(c, status)
 	for key, value := range reply {
 		c.Response().Header().Set(key, value)
 	}

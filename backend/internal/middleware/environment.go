@@ -890,8 +890,6 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))) {
 		return m.writeLifecycleResponse(c, resp.StatusCode, resp.Header, resp.Body)
 	}
-	if err = m.cleanupStack(c, resp.StatusCode); err != nil {
-		return pointFailure(c, "update.persistence-failed", 500)
-	}
+	m.cleanupStack(c, resp.StatusCode)
 	return m.writeProxyResponse(c, resp)
 }

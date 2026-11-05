@@ -22,3 +22,10 @@ func TestVulnerabilityRetiredKeysNeverSync(t *testing.T) {
 		require.NotContains(t, keys, key)
 	}
 }
+
+func TestCronSettingsKeepSixFieldExpressions(t *testing.T) {
+	require.NoError(t, ValidateCronSetting("eventCleanupInterval", "0 0 3 * * *"))
+	for _, value := range []string{"@daily", " @every 1h", "0 3 * * *"} {
+		require.Error(t, ValidateCronSetting("eventCleanupInterval", value), value)
+	}
+}

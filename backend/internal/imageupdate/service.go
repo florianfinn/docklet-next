@@ -356,8 +356,6 @@ func (s *ImageUpdateService) CheckImageUpdate(ctx context.Context, imageRef stri
 	}
 
 	tags.AttachContainerUpdates(map[string]*imageupdate.Response{imageRef: digestResult}, containerUpdates)
-	if len(containerUpdates) > 0 {
-	}
 
 	finalMessage := kit.Ternary(digestResult.HasUpdate, "Image update available", "Image update check completed")
 	s.completeImageUpdateActivityInternal(ctx, activityID, true, finalMessage)

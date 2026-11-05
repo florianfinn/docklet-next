@@ -149,10 +149,8 @@ func (s *ImageUpdateService) CheckMultipleImages(ctx context.Context, imageRefs 
 	return results, nil
 }
 
-// SendBatchUpdateNotifications delivers pending update notifications. It
-// returns an error only when the pending set could not be determined, so a
-// caller about to consume the records can stop before their notifications
-// are lost; delivery failures leave the records unnotified for the next flush.
+// SendBatchUpdateNotifications never delivers or marks records: the hub owns
+// update notifications for every check source.
 func (s *ImageUpdateService) SendBatchUpdateNotifications(ctx context.Context) error { return nil }
 
 func (s *ImageUpdateService) CheckAllImages(ctx context.Context, limit int, externalCreds []containerregistry.Credential) (map[string]*imageupdate.Response, error) {

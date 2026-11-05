@@ -82,6 +82,7 @@ func NewSettingsService(ctx context.Context, db *database.DB) (*SettingsService,
 		changes:      concurrency.NewSignal[[]libarcane.SettingUpdate](),
 	}
 	svc.envOverrides = resolveSettingsEnvOverridesInternal()
+	warnRetiredSettingVariablesInternal(ctx)
 	if len(svc.envOverrides) > 0 {
 		slog.InfoContext(ctx, "Loaded Environment Settings Overrides", "count", len(svc.envOverrides))
 	}

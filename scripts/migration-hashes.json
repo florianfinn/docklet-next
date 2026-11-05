@@ -16,5 +16,5 @@
   "sqlite/015_simple_users.sql": "b3681f6932e07bb8f3af0331765655f5cba9868ed2e1a45def9dfa0f742f87d2",
   "sqlite/016_runtime_history.sql": "0a6ea63519f1a7cf124fb572b93718f3c7d0d89491e87e18d25e0dab13eda34d",
   "sqlite/017_service_widgets.sql": "a17d03e2fe73b30c8057c3f2a048936287b880ad815babaaf9f46f61c8d2de5c",
-  "sqlite/018_update_policy_windows.sql": "0ac82ef517b0c3c3b234b0d043b75a573b773831f7ed7d3f486ffa2bee675145"
+  "sqlite/018_update_policy_windows.sql": "2b7429be2f2ff9d0ad34cd4a3b9b260bb2f8ade534a6e6278ee7edd219743412"
 }

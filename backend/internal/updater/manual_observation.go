@@ -57,16 +57,12 @@ func (s *UpdaterService) observeManualImages(ctx context.Context, env string) (f
 		if len(batch) == 0 {
 			return nil
 		}
+		// Image responses observe standalone containers only: a single image result cannot
+		// replace a stack's candidate set, and stacks are observed by their own checks.
+		// One failing target never stops the others; the first error is reported at the end.
+		var first error
 		for _, target := range targets {
-			if !target.Eligible {
-				continue
-			}
-			if target.Kind == "stack" {
-				// A single image response cannot replace a stack's complete candidate set.
-				// The ordinary stack check owns its own pre-read revision fence.
-				if _, e := s.CheckPolicyProject(ctx, env, target.ID); e != nil {
-					return e
-				}
+			if !target.Eligible || target.Kind != "container" {
 				continue
 			}
 			for ref, result := range batch {
@@ -74,20 +70,18 @@ func (s *UpdaterService) observeManualImages(ctx context.Context, env string) (f
 					continue
 				}
 				check, e := containerCheckProjection(target, result)
-				if e != nil {
-					return e
+				if e == nil && check.Status != "unknown" {
+					row := rows[target.ID]
+					if _, e = s.observeImagePolicy(ctx, p, row, check); e == nil {
+						s.recordImagePolicyStatus(ctx, p, row, "update-check", policyTarget(target.ID, "succeeded", ""))
+					}
 				}
-				if check.Status == "unknown" {
-					continue
+				if e != nil && first == nil {
+					first = e
 				}
-				row := rows[target.ID]
-				if _, e = s.observeImagePolicy(ctx, p, row, check); e != nil {
-					return e
-				}
-				s.recordImagePolicyStatus(ctx, p, row, "update-check", policyTarget(target.ID, "succeeded", ""))
 				break
 			}
 		}
-		return nil
+		return first
 	}, nil
 }
