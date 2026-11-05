@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M14 container and host operation contracts; split for #265, manifest descriptor platform with explicit unknown; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; M14 container and host operation contracts; split for #265, manifest descriptor platform with explicit unknown; M18 live scheduling, policy and contract foundation; previous-image slot projection.
 
 /*
 BSD 3-Clause License
@@ -227,6 +227,7 @@ type SummaryGroup struct {
 type Details struct {
 	OriginFields
 	ImagePlatform string `json:"imagePlatform" doc:"Image manifest platform or unknown when the daemon does not provide it"`
+	PreviousImage *PreviousImage `json:"previousImage,omitempty" doc:"Previous image offered for restore; absent when no restore is offered"`
 	// ID is the unique identifier of the container.
 	//
 	// Required: true

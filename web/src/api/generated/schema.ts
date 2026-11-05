@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: c94f86545b8644ecfb7711b9afb2c45a994875169de14e0429f167d1bb335486
+// Revision: 106c22aac8d9229410e511de8e2cd2a77177bafea92ef2ae34d083d756d7d022
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -8289,6 +8289,8 @@ export interface components {
             /** @enum {string} */
             originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
+            /** @description Previous image offered for restore; absent when no restore is offered */
+            previousImage?: components["schemas"]["ContainerPreviousImage"];
             redeployDisabled?: boolean;
             state: components["schemas"]["ContainerState"];
             updateInfo?: components["schemas"]["ImageUpdateInfo"];
@@ -8558,6 +8560,17 @@ export interface components {
         ContainerPortBindingCreate: {
             hostIp?: string;
             hostPort?: string;
+        };
+        ContainerPreviousImage: {
+            /**
+             * Format: date-time
+             * @description When the slot was written
+             */
+            createdAt: string;
+            /** @description Local image ID kept for the restore */
+            imageId: string;
+            /** @description Image reference the container ran before the update */
+            imageRef: string;
         };
         ContainerProblem: {
             /** @enum {string} */
