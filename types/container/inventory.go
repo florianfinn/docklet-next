@@ -226,7 +226,7 @@ type SummaryGroup struct {
 // Details represents detailed container information.
 type Details struct {
 	OriginFields
-	ImagePlatform string `json:"imagePlatform" doc:"Image manifest platform or unknown when the daemon does not provide it"`
+	ImagePlatform string         `json:"imagePlatform" doc:"Image manifest platform or unknown when the daemon does not provide it"`
 	PreviousImage *PreviousImage `json:"previousImage,omitempty" doc:"Previous image offered for restore; absent when no restore is offered"`
 	// ID is the unique identifier of the container.
 	//
