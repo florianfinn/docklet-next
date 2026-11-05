@@ -317,18 +317,11 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 		key := NormalizedImageRef(imageRef)
 		merged := *info
 		if written, ok := seen[key]; ok {
+			// Replicas never mix state from one observation with hasUpdate from
+			// another. Replicas that disagree on the candidate keep the update but
+			// choose no version.
 			imageRef = written
-			previous := result[imageRef]
-			merged.HasUpdate = merged.HasUpdate || previous.HasUpdate
-			if previous.CheckTime.After(merged.CheckTime) {
-				merged.CheckTime = previous.CheckTime
-			}
-			if previous.LatestVersion != merged.LatestVersion || previous.LatestDigest != merged.LatestDigest || previous.UpdateType != merged.UpdateType {
-				merged.LatestVersion, merged.LatestDigest, merged.UpdateType = "", "", ""
-			}
-			if merged.Error == "" {
-				merged.Error = previous.Error
-			}
+			merged = mergeReplicaObservation(info, result[imageRef])
 		} else {
 			for existing := range result {
 				if existing != imageRef && NormalizedImageRef(existing) == key {
@@ -340,6 +333,28 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 		seen[key] = imageRef
 	}
 	return result
+}
+
+// mergeReplicaObservation prefers the replica that still needs its update,
+// then the newer check.
+func mergeReplicaObservation(candidate, previous *imagetypes.UpdateInfo) imagetypes.UpdateInfo {
+	if candidate.HasUpdate != previous.HasUpdate {
+		if candidate.HasUpdate {
+			return *candidate
+		}
+		return *previous
+	}
+	merged := *previous
+	if candidate.CheckTime.After(previous.CheckTime) {
+		merged = *candidate
+	}
+	if candidate.HasUpdate && (candidate.LatestVersion != previous.LatestVersion || candidate.LatestDigest != previous.LatestDigest || candidate.UpdateType != previous.UpdateType) {
+		merged.LatestVersion, merged.LatestDigest, merged.UpdateType = "", "", ""
+	}
+	if merged.Error == "" {
+		merged.Error = cmp.Or(candidate.Error, previous.Error)
+	}
+	return merged
 }
 
 // ConfiguredRuntimeServiceUpdateInfo binds runtime checks to the current Compose
