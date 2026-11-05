@@ -19,3 +19,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M15 simple users acceptance](m15-simple-users-acceptance.md) | Merged package, sandbox-found defects, three acceptance fixes, method and limits on 2026-11-01 |
 | [M16 bind mounts and backup completion acceptance](m16-bind-mounts-backups-acceptance.md) | Merged package, sandbox-found defects, two acceptance fixes, method and limits on 2026-11-03 |
 | [M17 dashboard, history and service widgets acceptance](m17-dashboard-history-widgets-acceptance.md) | Merged package, sandbox-found defects, two acceptance fixes, method and limits on 2026-11-04 |
+| [M18 updates and schedules acceptance](m18-updates-schedules-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-05 |
