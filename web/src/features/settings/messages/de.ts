@@ -2,7 +2,7 @@
 // Revision: cb93d80db5b6979f6ae3f3253884563643ea35ba57ac2588a380d7ed63713312
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
 
 import { usersDe, keysDe } from "./users-de";
 // German texts of hub settings and the profile page.
@@ -41,11 +41,10 @@ export const deSettings: typeof enSettings = {
   liveScans: {
     title: "Scans",
     enabled: "Schwachstellenscans aktivieren",
-    automatic: "Automatische Scans",
     schedule: "Zeitplan",
     time: "Uhrzeit",
     unscheduled: "Täglichen oder wöchentlichen Zeitplan wählen.",
-    zone: "Zeiten gelten in der Hub-Zeitzone ({zone}). Zeitlücken im Frühjahr werden übersprungen; doppelte Herbstzeiten laufen zweimal.",
+    zone: "Zeiten gelten in der Hub-Zeitzone ({zone}). Zeiten in Frühlingslücken werden um die Lücke verschoben; doppelte Herbstzeiten laufen einmal.",
     nextUnavailable: "Nächste Ausführung nicht verfügbar.",
     next: "Nächste Ausführung: {at}",
     noNext: "Keine nächste Ausführung geplant.",
@@ -102,7 +101,9 @@ export const deSettings: typeof enSettings = {
     linkPreview: "Links zeigen auf {url} ({source, select, domain {Domain} other {interne Adresse – nur im LAN oder VPN erreichbar}}).",
     linkNoDomain: "Ohne Domain nutzen Links die interne Adresse.",
     timeZone: "Zeitzone",
-    timeZoneHint: "Durch die Variable TZ festgelegt. Gilt für Zeitpläne und Datumsanzeigen; den Hub nach Änderungen neu starten.",
+    useTZ: "TZ verwenden ({zone})",
+    systemTZ: "Systemvorgabe",
+    timeZoneHint: "Zeitpläne verwenden die wirksame Hub-Zeitzone. Änderungen gelten ohne Neustart.",
     language: "Sprache",
     languageValue: "Deutsch (weitere Sprachen später)",
   },
@@ -203,6 +204,9 @@ export const deSettings: typeof enSettings = {
     noChown: "Docklet ändert keine Besitzrechte auf Hosts.",
   },
   updates: {
+    title: "Updates",
+    missing: "Ziel fehlt",
+    remove: "Zeitplan entfernen",
     interval: "Prüfintervall",
     intervals: { "6h": "Alle 6 Stunden", "12h": "Alle 12 Stunden", "24h": "Täglich" },
     notify: "Bei neuen Updates benachrichtigen",
@@ -424,7 +428,7 @@ export const deSettings: typeof enSettings = {
     schedule: "Zeitplan",
     schedules: { manual: "Nur manuell", daily: "Täglich", weekly: "Wöchentlich" },
     scheduleHint: "Uhrzeit und Wochentag gelten in der Zeitzone des Hubs ({zone}), nicht in der deines Browsers.",
-    scheduleZoneEdit: "Prozesszeitzone unter Allgemein ansehen",
+    scheduleZoneEdit: "Hub-Zeitzone unter Allgemein ändern",
     scheduleOff: "Der Zeitplan greift erst, wenn Scans aktiv sind.",
     scheduleManual: "Scans laufen nur, wenn du unter Sicherheit „Jetzt scannen“ wählst.",
   },

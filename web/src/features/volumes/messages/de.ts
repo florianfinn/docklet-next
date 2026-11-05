@@ -242,6 +242,7 @@ export const deVolumes: typeof enVolumes = {
     offline: "Host nicht verbunden – Dateien nicht verfügbar.",
   },
   backups: {
+    hostZoneHint: "Backups verwenden die Host-Zeitzone ({host}); der Hub verwendet {hub}.",
     restoreSafety: "Sicherheitskopie wiederherstellen",
     deploymentHint: "Wiederherstellungspunkte enthalten Images und Konfiguration. Volume-Daten separat sichern und wiederherstellen.",
     customSchedule: "Benutzerdefinierter Zeitplan",

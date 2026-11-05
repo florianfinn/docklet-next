@@ -11,7 +11,6 @@ import type { DockerImage } from "@/domain/images";
 import { catalogs } from "@/app/i18n/catalog";
 import { updateFixture, point } from "@/data/http/stack-updates.test-support";
 import { renderWithApp } from "@/test/render";
-import { HostUpdateSettings } from "@/features/settings/sections/LiveUpdatesSection";
 import { PullDialog } from "@/features/images/ImageDialogs";
 import { LiveRestorePoints, LiveStackUpdates } from "./live-stack-updates";
 import { StackUpdateDialog } from "./stack-update-dialog";
@@ -22,7 +21,7 @@ it.each([false, true])("before any check missing baseline shows guidance and kee
   const f = updateFixture(); f.state.isEdge = edge; await f.adapter.getCurrentUser();
   f.state.baseline.available = false; f.state.baseline.code = "update.baseline-unavailable"; f.state.policy.candidates = [];
   renderWithApp(<><LiveStackUpdates stackId="direct~project" /><LiveRestorePoints stackId="direct~project" /></>, f.adapter);
-  await screen.findByRole("button", { name: t.editPolicy });
+  await screen.findByRole("combobox", { name: /Modus/ });
   await waitFor(() => expect(screen.queryByText(catalogs.de.images.errors["update_baseline-unavailable"]) !== null).toBe(true));
   expect(f.writes()).toHaveLength(0);
   const restore = await screen.findByRole("button", { name: t.restore });
@@ -32,12 +31,10 @@ it.each([false, true])("before any check missing baseline shows guidance and kee
   await userEvent.click(dialog.getByRole("button", { name: t.restore })); await dialog.findByText(t.accepted);
   expect(f.writes()).toHaveLength(1); expect(f.writes()[0]!.path.endsWith("/restore")).toBe(true);
 });
-it.each(["update", "restore", "delete", "policy", "schedule", "pull"] as const)("%s dialog bounds long command values within the viewport", async (kind) => {
+it.each(["update", "restore", "delete", "pull"] as const)("%s dialog bounds long command values within the viewport", async (kind) => {
   const f = updateFixture(); await f.adapter.getCurrentUser();
   if (kind === "update" || kind === "restore") renderWithApp(<StackUpdateDialog stackId="direct~project" point={kind === "restore" ? point : undefined} onClose={() => {}} />, f.adapter);
   else if (kind === "delete") renderWithApp(<DeletePointDialog scope={{ kind: "stack", id: "direct~project" }} point={point} close={() => {}} refresh={async () => [point]} />, f.adapter);
-  else if (kind === "policy") { renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter); await userEvent.click(await screen.findByRole("button", { name: t.editPolicy })); }
-  else if (kind === "schedule") { renderWithApp(<HostUpdateSettings hostId="direct" name="Example" />, f.adapter); await userEvent.click(await screen.findByRole("button", { name: t.editSchedules })); }
   else renderWithApp(<PullDialog open onOpenChange={() => {}} hosts={[]} images={[]} initial={{ hostId: "direct", reference: `registry.example.com/example@sha256:${"a".repeat(64)}` }} />, f.adapter);
   const dialog = await screen.findByRole("dialog");
   for (const name of ["min-w-0", "max-h-[calc(100dvh-2rem)]", "overflow-y-auto", "[overflow-wrap:anywhere]", "[&>*]:min-w-0"]) expect(dialog.classList.contains(name)).toBe(true);

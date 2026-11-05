@@ -8,7 +8,7 @@ export interface UpdateBaseline {
   targetIdentity: string; savedRevision: string; observedRevision: string;
   available: boolean; autoExcluded: boolean; code?: string; sourceRunId?: string;
 }
-export interface LifecycleInput { expectedRevision: string; pointId?: string; replaceConfiguration?: boolean }
+export interface LifecycleInput { expectedRevision: string; pointId?: string; replaceConfiguration?: boolean; services?: string[] }
 export interface UpdatePoint {
   id: string; registrationId: string; targetId: string; targetIdentity: string;
   sourceRunId: string; createdAt: string; sourceState: "settled" | "partial-source";
@@ -17,26 +17,21 @@ export interface UpdatePoint {
   holdState: "none" | "active" | "unknown"; failedAttempt: boolean;
   images: { service: string; reference: string; imageId: string; digest?: string; present: boolean; running: boolean }[];
 }
-export type PolicyMode = "off" | "notify" | "apply";
+export type PolicyMode = "check" | "scheduled";
 export interface StackUpdatePolicy {
   mode: PolicyMode; revision: number; environmentId: string; registrationId: string;
-  targetKind: "project"; targetId: string; targetIdentity: string; jobId: string;
+  targetKind: "stack" | "container"; targetName: string; targetMissing: boolean; window?: UpdateWindow; targetId: string; targetIdentity: string; jobId: string;
   stale: boolean; checkedAt?: string; code?: string; applyCheckedAt?: string; applyCode?: string;
   bookkeepingAt?: string; bookkeepingCode?: string;
   candidates: { service: string; imageRef: string; version: string; digest: string; platform: string; entryId?: string;
     notificationState: "pending" | "sending" | "sent" | "unconfigured" | "failed" | "not-requested" }[];
 }
+export interface UpdateWindow { kind: "daily" | "weekly"; day?: number; time: string }
 export type UpdateRunStatus = "queued" | "waiting" | "running" | "retrying" | "succeeded" | "partial" | "skipped" | "failed" | "needs_attention" | "canceled";
 export interface UpdateJob {
   id: string; kind: string; enabled: boolean; schedule: string; timeZone?: string; nextRun?: string; code?: string;
   currentRun?: { id: string; status: UpdateRunStatus }; lastRun?: { id: string; status: UpdateRunStatus }; lastSuccess?: string;
 }
-export interface UpdateSchedules {
-  revision: number; environmentId: string; registrationId: string;
-  pollingInterval: string; autoUpdateInterval: string; pollingEnabled: boolean; autoUpdateEnabled: boolean;
-  masterPollingEnabled: boolean; masterAutoUpdateEnabled: boolean; timeZone: string; jobs: UpdateJob[];
-}
-export type ScheduleInput = Pick<UpdateSchedules, "pollingInterval" | "autoUpdateInterval" | "pollingEnabled" | "autoUpdateEnabled"> & { expectedRevision: number };
 export interface SystemHints {
   hubVersion: string;
   images: { kind: "agent" | "tools"; reference: string; currentVersion?: string; candidateVersion?: string;
@@ -50,9 +45,14 @@ export interface UpdatesApi {
   deleteRestorePoint?(stackId: string, pointId: string): Promise<void>;
   deleteHostRestorePoint?(hostId: string, pointId: string): Promise<void>;
   getAutoUpdatePolicy?(stackId: string): Promise<StackUpdatePolicy>;
-  saveAutoUpdatePolicy?(stackId: string, mode: PolicyMode, expectedRevision: number): Promise<StackUpdatePolicy>;
-  getUpdateSchedules?(hostId: string): Promise<UpdateSchedules>;
-  saveUpdateSchedule?(hostId: string, input: ScheduleInput): Promise<UpdateSchedules>;
+  saveAutoUpdatePolicy?(stackId: string, mode: PolicyMode, expectedRevision: number, window?: UpdateWindow): Promise<StackUpdatePolicy>;
+  listUpdatePolicies?(hostId: string): Promise<StackUpdatePolicy[]>;
+  getContainerUpdatePolicy?(id: string): Promise<StackUpdatePolicy>;
+  saveContainerUpdatePolicy?(id: string, mode: PolicyMode, expectedRevision: number, window?: UpdateWindow): Promise<StackUpdatePolicy>;
+  getUpdateSettings?(): Promise<import("./settings").UpdateSettings & { timeZone: string; nextRun?: string; projectionUnavailable?: boolean }>;
+  checkAllUpdates?(): Promise<string>;
+  restoreContainerImage?(id: string): Promise<string>;
+  getContainerPreviousImage?(id: string): Promise<{ imageId: string; reference: string; createdAt: string } | undefined>;
   getSystemImageHints?(hostId: string): Promise<SystemHints>;
   checkStackUpdates?(stackId: string): Promise<void>;
 }

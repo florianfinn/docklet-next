@@ -35,9 +35,9 @@ export const deHelp: typeof enHelp = {
       },
       timeZone: {
         title: "Zeitzone des Hubs",
-        short: "Zeitpläne und Datumsanzeigen verwenden die Prozesszeitzone des Hubs.",
-        full: "Die Variable TZ legt die Zeitzone beim Start fest. Allgemein zeigt den effektiven Wert nur lesbar; ändere die Startumgebung und starte den Hub neu.",
-        impact: "Eine Änderung von TZ verändert Zeitpläne und Datumsanzeigen nach dem Neustart.",
+        short: "Zeitpläne und Datumsanzeigen verwenden die wirksame Hub-Zeitzone.",
+        full: "Wähle unter Allgemein eine Zeitzone. Eine leere Auswahl verwendet TZ. Gespeicherte Änderungen verschieben künftige Hub-Zeitpläne ohne Neustart; entfernte Volume-Backups behalten ihre Host-Zeitzone.",
+        impact: "Künftige Läufe verwenden die neue Zone. Eingereihte und laufende Arbeit läuft weiter; verpasste Termine werden nicht nachgeholt.",
       },
     },
     settingsAppearance: {

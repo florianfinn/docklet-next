@@ -2,8 +2,9 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live host schedule and count retention editor; manual mode is the only disabled-plan control (#291).
+// Deviations: Original live host schedule and count retention editor; manual mode is the only disabled-plan control (#291). M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
 
+import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { useState } from "react";
 import { Link } from "react-router";
 import { useLocale, useTranslations } from "use-intl";
@@ -34,6 +35,7 @@ export function BackupPolicyCard({
   hostOnline: boolean;
 }) {
   const locale = useLocale();
+  const hubTimeZone = useHubTimeZone();
   const t = useTranslations("volumes.backups"),
     ts = useTranslations("common.schedule"),
     all = useTranslations();
@@ -77,6 +79,7 @@ export function BackupPolicyCard({
             .format(new Date(volume.backup.nextRunAt))
           : t("nextManual")} · {timeZone}
       </p>
+      {volume.timeZone && timeZone !== hubTimeZone && <p className="text-xs text-muted-foreground">{t("hostZoneHint", { host: timeZone, hub: hubTimeZone })}</p>}
       <Field>
         <FieldLabel htmlFor="bk-target">{t("target")}</FieldLabel>
         <Select value={draft.targetId} onValueChange={(targetId) => patch({ targetId })}>

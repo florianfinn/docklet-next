@@ -1,3 +1,5 @@
+import { Input } from "@/shared/ui/input";
+import { Button } from "@/shared/ui/button";
 import { useCapability } from "@/data/use-capability";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { useTranslations } from "use-intl";
@@ -68,7 +70,9 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", s
         <HelpLabel htmlFor={`${idPrefix}-tz`} topic="settingsGeneral.timeZone">
           {t("timeZone")}
         </HelpLabel>
-        <input id={`${idPrefix}-tz`} className="font-mono text-sm" readOnly value={value.timeZone} />
+        <Input id={`${idPrefix}-tz`} className="font-mono" list={`${idPrefix}-zones`} value={value.configuredTimeZone ?? value.timeZone} placeholder={value.timeZone} onChange={(e) => onChange({ configuredTimeZone: e.target.value })} />
+        <datalist id={`${idPrefix}-zones`}>{[...new Set(["UTC", value.timeZone, ...(value.configuredTimeZone ? [value.configuredTimeZone] : []), ...Intl.supportedValuesOf("timeZone")])].map((zone) => <option key={zone} value={zone} />)}</datalist>
+        <Button type="button" variant="link" className="self-start px-0" onClick={() => onChange({ configuredTimeZone: "" })}>{t("useTZ", { zone: value.configuredTimeZone ? t("systemTZ") : value.timeZone })}</Button>
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
       {showLanguage && <Field>

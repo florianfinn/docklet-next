@@ -8,7 +8,6 @@ import type { ScanSchedule } from "./scan-schedule";
 
 export interface ScanSettingsInput {
   enabled: boolean;
-  automatic: boolean;
   schedule: ScanSchedule;
   ignoreUnfixed: boolean;
   notifyCritical: boolean;

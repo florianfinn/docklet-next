@@ -83,6 +83,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
   },
   runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}` }),
   recreateContainer: ([id, input]) => ({ key: `container:${str(id)}:recreate:${contentHash(JSON.stringify(input ?? null))}`, scope: `container:${str(id)}` }),
+  restoreContainerImage: ([id]) => ({ key: `container:${str(id)}:restore-image`, scope: `container:${str(id)}` }),
   installContainerUpdate: ([id]) => ({ key: `container:${str(id)}:update`, scope: `container:${str(id)}` }),
   restartAgent: ([hostId]) => ({ key: `host:${str(hostId)}:agent-restart`, scope: `host:${str(hostId)}` }),
   connectHost: ([hostId]) => ({ key: `host:${str(hostId)}:connect`, scope: `host:${str(hostId)}` }),
@@ -294,7 +295,7 @@ export class RunGate {
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService") };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "installContainerUpdate" || method === "restoreContainerImage" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {

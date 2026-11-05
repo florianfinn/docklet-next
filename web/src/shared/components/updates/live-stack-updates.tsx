@@ -4,61 +4,48 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
-import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
+import { PolicyControl } from "./policy-control";
+import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { formatDateTime } from "@/domain/format";
 
 import { useUpdateAction } from "./use-update-action";
 
 import { AUTO_UPDATE_ANCHOR } from "@/domain/job-links";
-import { useEffect, useState } from "react";
-import { identityLifetime } from "@/data/identity-lifetime";
+import { useState } from "react";
+
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
-import type { PolicyMode, StackUpdatePolicy, UpdatePoint } from "@/domain/stack-updates";
+import type { UpdatePoint } from "@/domain/stack-updates";
 import { useImageError } from "@/features/images/use-image-error";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+
 import { StackUpdateDialog } from "./stack-update-dialog";
 import { RestorePointState } from "./restore-point-state";
 import { DeletePointDialog } from "./delete-point-dialog";
 import { UpdateUnavailable } from "./live-state";
 
-function PolicyDialog({ stackId, policy, close, saved }: { stackId: string; policy: StackUpdatePolicy; close: () => void; saved: () => void }) {
-  const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), action = useUpdateAction(`${stackId}:${policy.targetIdentity}:${policy.revision}`);
-  const [mode, setMode] = useState<PolicyMode>(policy.mode);
-  useEffect(() => identityLifetime(adapter).listen(close), [adapter, close]);
-  const read = useCapability("getAutoUpdatePolicy", { kind: "stack", id: stackId });
-  const write = useCapability(mode === "apply" ? "setAutoUpdateApply" : "setAutoUpdate", { kind: "stack", id: stackId });
-  return <Dialog open onOpenChange={(v) => { if (!v) { action.reset(); close(); } }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t("policy")}</DialogTitle><DialogDescription>{t("policyHelp")}</DialogDescription></DialogHeader>
-    <Select value={mode} onValueChange={(v) => setMode(v as PolicyMode)}><SelectTrigger aria-label={t("policy")}><SelectValue /></SelectTrigger><SelectContent>{(["off", "notify", "apply"] as const).map((m) => <SelectItem value={m} key={m}>{t(m)}</SelectItem>)}</SelectContent></Select>
-    {(!read.available || !write.available) && <UpdateUnavailable reason={read.reason ?? write.reason} />}{action.error && <p role="alert">{action.error}</p>}
-    <Button disabled={!read.available || !write.available || action.busy} onClick={() => void action.run(() => adapter.saveAutoUpdatePolicy!(stackId, mode, policy.revision), () => { saved(); close(); })}>{t("save")}</Button>
-  </DialogContent></Dialog>;
-}
 export function LiveStackUpdates({ stackId }: { stackId: string }) {
   const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), errorText = useImageError();
   const read = useCapability("getAutoUpdatePolicy", { kind: "stack", id: stackId }), check = useCapability("checkUpdates", { kind: "stack", id: stackId });
   const policy = useQuery({ queryKey: ["stack", stackId, "update-policy"], queryFn: () => adapter.getAutoUpdatePolicy!(stackId), enabled: read.available && !!adapter.getAutoUpdatePolicy });
-  const action = useUpdateAction(), [editing, setEditing] = useState<StackUpdatePolicy>();
+  const action = useUpdateAction(), timeZone = useHubTimeZone();
   const baselineRead = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
   const baseline = useQuery({ queryKey: ["stack", stackId, "update-baseline"], queryFn: () => adapter.getUpdateBaseline!(stackId), enabled: baselineRead.available && !!adapter.getUpdateBaseline });
   const p = policy.data;
   return <section id={AUTO_UPDATE_ANCHOR} className="flex flex-col gap-3 rounded-xl border p-4"><h3>{t("policy")}</h3>
     {!baselineRead.available ? <UpdateUnavailable reason={baselineRead.reason} /> : baseline.isError ? <p role="alert">{errorText(baseline.error)}</p> : baseline.data && !baseline.data.available && <p role="status">{errorText(baseline.data.code ?? "update.baseline-unavailable")}</p>}
     {!read.available ? <UpdateUnavailable reason={read.reason} /> : policy.isError ? <p role="alert">{errorText(policy.error)}</p> : p ? <>
-      <p>{t(p.mode)}{p.stale && ` · ${t("stale")}`}</p>
+      <p>{t(p.mode === "check" ? "checkOnly" : "scheduled")}{p.stale && ` · ${t("stale")}`}</p>
       <p>{t("checked")}: {p.checkedAt ? formatDateTime(p.checkedAt) : t("unknown")} {p.code && errorText(p.code)}</p>
       <p>{t("applied")}: {p.applyCheckedAt ? formatDateTime(p.applyCheckedAt) : t("unknown")} {p.applyCode && errorText(p.applyCode)}</p>
       {p.bookkeepingCode && <p role="status">{errorText(p.bookkeepingCode)}</p>}
       {p.candidates.map((c) => <p key={`${c.service}:${c.digest}`}>{c.service}: {c.version || c.imageRef} · {t(`notification.${c.notificationState}`)}</p>)}
-      <Button variant="outline" onClick={() => setEditing(p)}>{t("editPolicy")}</Button>
+      <PolicyControl policy={p} timeZone={timeZone} saved={() => { void policy.refetch(); }} />
     </> : <p>{t("loading")}</p>}
     <Button disabled={!check.available || action.busy} title={check.reason} onClick={() => void action.run(() => adapter.checkStackUpdates!(stackId), () => { void policy.refetch(); })}>{t("check")}</Button>
     {action.error && <p role="alert">{action.error}</p>}
-    {editing && p && editing.targetIdentity === p.targetIdentity && editing.registrationId === p.registrationId && <PolicyDialog key={`${stackId}:${editing.targetIdentity}:${editing.revision}`} stackId={stackId} policy={editing} close={() => setEditing(undefined)} saved={() => { void policy.refetch(); }} />}
   </section>;
 }
 export function LiveRestorePoints({ stackId }: { stackId: string }) {

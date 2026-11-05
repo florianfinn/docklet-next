@@ -76,7 +76,7 @@ export const deImageErrors = {
   "image_pull-failed": "Das Image konnte nicht gezogen werden. Referenz und gespeicherte Registry-Konfiguration prüfen.",
   "image_remove-failed": "Das Image konnte nicht entfernt werden.",
   "image_reserved-reference": "Diese Referenz ist für die interne Image-Aufbewahrung reserviert.",
-  "image_restore-point-protected": "Ein Wiederherstellungspunkt schützt dieses Image.",
+  "image_restore-point-protected": "Ein gespeichertes Wiederherstellungsimage schützt dieses Image.",
   "image_system-protected": "Dieses Image ist geschützt, weil Docklet es verwendet.",
   "image_tag-failed": "Der Image-Tag konnte nicht geändert werden.",
   "image_usage-unavailable": "Die Image-Nutzung konnte nicht geprüft werden. Kein Image gilt deshalb als ungenutzt.",

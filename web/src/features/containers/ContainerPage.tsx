@@ -33,6 +33,7 @@ import { ContainerTerminalTabs } from "./ContainerTerminalTabs";
 import { ContainerFacts, ContainerProvenance } from "./ContainerFacts";
 import { useContainerRestart } from "./container-restart";
 import { OriginBadge } from "./OriginBadge";
+import { ContainerUpdates, ContainerUpdateDialog } from "./ContainerUpdates";
 import { RecreateDialog } from "./RecreateDialog";
 
 const LEVEL_CLASS = { info: "", debug: "text-muted-foreground", warn: "bg-warning/8 text-warning", error: "bg-destructive/10 text-destructive" } as const;
@@ -125,7 +126,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   );
 }
 
-function Body({ c, host, onEdit }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void }) {
+function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void; onUpdate: (restore: boolean) => void }) {
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
@@ -157,6 +158,7 @@ function Body({ c, host, onEdit }: { c: ContainerInfo; host: Host | undefined; o
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <ContainerProvenance c={c} />
+          <ContainerUpdates c={c} select={onUpdate} />
           <Card className="gap-3 py-4">
             <CardHeader className="flex flex-row items-center justify-between px-4">
               <CardTitle className="text-sm">{ti("resources")}</CardTitle>
@@ -211,8 +213,9 @@ export default function ContainerPage() {
   const c = containers.data?.find((x) => x.id === containerId);
   // The page owns the recreate run at a stable position: the old ID leaves the
   // list before the run settles, and the run must survive that to navigate.
+  const [updating, setUpdating] = useState<{ container: ContainerInfo; restore: boolean }>();
   const [recreating, setRecreating] = useState<ContainerInfo>();
-  return <>{content()}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
+  return <>{content()}{updating && <ContainerUpdateDialog key={updating.container.id} container={updating.container} restore={updating.restore} close={() => setUpdating(undefined)} />}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
 
   function content() {
     if (containers.isPending || hosts.isPending)
@@ -235,6 +238,6 @@ export default function ContainerPage() {
           }
         />
       );
-    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
+    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onUpdate={(restore) => setUpdating({ container: c, restore })} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
   }
 }

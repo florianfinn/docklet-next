@@ -83,15 +83,16 @@ it("reads host-wide terminal history with interrupted runs excluded from numeric
   const data = await f.adapter.getSecurity();
   expect(data.history.map((r) => [r.hostId, r.status, r.sampled])).toEqual([["first", "interrupted", false], ["second", "interrupted", false]]);
 });
-it("saves independent switches and notification choices and uses the backend next run", async () => {
+it("switches daily scans to manual while saving notification choices and server projection", async () => {
   const f = securityFixture(); f.state.settings.vulnerabilityScanSchedule = '{"mode":"daily","time":"03:00"}'; setAppLocale("en-US");
   renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/security"], f.adapter);
-  await screen.findByRole("switch", { name: "Automatic scans" });
+  await screen.findByRole("radio", { name: "Manual" });
   expect(screen.getByText(/Next run:/).textContent).toContain("2026");
-  await userEvent.click(screen.getByRole("switch", { name: "Automatic scans" }));
+  await userEvent.click(screen.getByRole("radio", { name: "Manual" }));
   await userEvent.click(screen.getByRole("checkbox", { name: "New critical findings" }));
   await userEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(f.state.settings.vulnerabilityScanEnabled).toBe("true"));
+  await waitFor(() => expect(JSON.parse(f.state.settings.vulnerabilityScanSchedule!)).toEqual({ mode: "manual" }));
+  await screen.findByText("No next run is scheduled.");
   expect(f.state.settings.vulnerabilityNotifyCritical).toBe("true");
   expect(f.state.settings.featureVulnerabilityManagementEnabled).toBe("true");
 });

@@ -276,8 +276,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   });
   return Object.assign({
     id: run.id,
-    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId } : {}),
-    kind,
+    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
+    kind, sourceOperation: run.type,
     title: { code: `activity.runKind.${kind}`, params: {} },
     target: { code: "runMessages.value", params: { value: target } },
     hostId: run.environmentId,

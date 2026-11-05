@@ -145,7 +145,7 @@ it("connects the production security route and Scans settings to HTTP producers"
   expect(screen.getAllByText("example:1.0.0")).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/synthetic|synthetisch|Befunde sind/);
   await act(() => router.navigate("/settings/security"));
-  await screen.findByRole("switch", { name: "Automatische Scans" });
+  await screen.findByRole("radio", { name: "Manuell" });
   expect(screen.getByText(/Nächste Ausführung:/) !== null).toBe(true);
   expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/environments/0/jobs"))).toBe(true);
 });

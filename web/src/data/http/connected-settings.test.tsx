@@ -70,17 +70,17 @@ function GeneralWithSchedule() {
 afterEach(() => { localStorage.clear(); });
 
 describe("connected hub settings", () => {
-  it.each([["Europe/Berlin", "2026-10-18T07:00:00.000Z", "14:00"], ["UTC", "2026-10-18T09:00:00.000Z", "12:00"], ["America/New_York", "2026-10-17T13:00:00.000Z", "08:00"]])("reads process zone %s for schedules and IntlProvider without writing a time zone", async (zone, instant, time) => {
+  it.each([["Europe/Berlin", "2026-10-18T07:00:00.000Z", "14:00"], ["UTC", "2026-10-18T09:00:00.000Z", "12:00"], ["America/New_York", "2026-10-17T13:00:00.000Z", "08:00"]])("reads process zone %s for schedules and IntlProvider without writing the effective zone", async (zone, instant, time) => {
     const server = connectedServer(zone);
     renderRoutes([{ path: "/", element: <GeneralWithSchedule /> }], ["/"], server.adapter);
     await waitFor(() => expect(screen.getByTestId("schedule-zone").textContent?.includes(zone)).toBe(true));
-    expect((await screen.findByLabelText("Zeitzone") as HTMLInputElement).value).toBe(zone);
-    expect(screen.queryByRole("combobox", { name: "Zeitzone" }) === null).toBe(true);
+    expect((await screen.findByLabelText("Zeitzone") as HTMLInputElement).placeholder).toBe(zone);
+    expect(screen.queryByRole("combobox", { name: "Zeitzone" }) !== null).toBe(true);
     expect((await server.adapter.getConnectedSettings()).general.timeZone).toBe(zone);
-    await server.adapter.saveSettings("general", { ...(await server.adapter.getConnectedSettings()).general, timeZone: "UTC" });
+    await server.adapter.saveSettings("general", { ...(await server.adapter.getConnectedSettings()).general, configuredTimeZone: "UTC" });
     expect(screen.getByTestId("schedule-instant").textContent).toBe(instant);
     expect(screen.getByTestId("formatted-date").textContent).toBe(time);
-    expect(server.writes.at(-1)?.timeZone).toBeUndefined();
+    expect(server.writes.at(-1)?.timeZone).toBe("UTC");
     expect(server.writes.at(-1)?.effectiveTimeZone).toBeUndefined();
   });
 
@@ -132,4 +132,28 @@ describe("connected hub settings", () => {
     await waitFor(() => expect(server.writes).toHaveLength(1));
     expect(server.writes[0]).toMatchObject({ loadAlertsEnabled: "false", loadAlertCpuPercent: "85", loadAlertMemoryPercent: "90", loadAlertMinutes: "45" });
   });
+});
+
+
+it("goal 8: zone picker saves the configured zone and resets to TZ", async () => {
+  const server = connectedServer("America/New_York");
+  renderRoutes([{ path: "/", element: <GeneralWithSchedule /> }], ["/"], server.adapter);
+  const zone = await screen.findByRole("combobox", { name: "Zeitzone" });
+  await userEvent.type(zone, "UTC"); await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+  await waitFor(() => expect(server.writes).toHaveLength(1));
+  expect(server.writes[0]!.timeZone).toBe("UTC");
+  await userEvent.click(screen.getByRole("button", { name: /TZ verwenden/ }));
+  await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+  await waitFor(() => expect(server.writes).toHaveLength(2));
+  expect(server.writes[1]!.timeZone).toBe("");
+  expect(document.querySelector('datalist option[value="UTC"]') !== null).toBe(true);
+  expect(document.querySelector('datalist option[value="America/New_York"]') !== null).toBe(true);
+});
+
+
+it("the shared General picker also persists an explicit zone during first-run setup", async () => {
+  const server = connectedServer();
+  const settings = await server.adapter.getConnectedSettings();
+  await server.adapter.completeSetup({ general: { ...settings.general, configuredTimeZone: "UTC" }, hostDefaults: settings.hostDefaults, auth: { mode: "none", local: { username: "", passwordSet: false }, proxy: { userHeader: "", emailHeader: "", groupsHeader: "", trustedProxies: "", logoutUrl: "" } } });
+  expect(server.writes.at(-1)?.timeZone).toBe("UTC");
 });

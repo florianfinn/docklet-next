@@ -118,6 +118,7 @@ export interface GeneralSettings {
   domainUrl: string;
   linkBase: LinkBase;
   timeZone: string;
+  configuredTimeZone?: string;
 }
 
 export interface HubSettings {

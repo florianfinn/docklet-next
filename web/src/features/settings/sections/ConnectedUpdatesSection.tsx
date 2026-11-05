@@ -1,0 +1,65 @@
+// Source: docklet-next/issues/341
+// Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
+// Retrieved: 2026-11-05
+// License: Apache-2.0
+// Deviations: Original approved connected update settings and policy table.
+
+import { useQuery } from "@tanstack/react-query";
+import { useLocale, useTranslations } from "use-intl";
+import { Box, Layers } from "lucide-react";
+import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
+import { useHosts } from "@/data/queries";
+import type { Host } from "@/domain/model";
+import type { UpdateSettings } from "@/domain/settings";
+import { UPDATE_CHECK_ANCHOR, UPDATE_POLICIES_ANCHOR } from "@/domain/job-links";
+import { PolicyControl } from "@/shared/components/updates/policy-control";
+import { useUpdateAction } from "@/shared/components/updates/use-update-action";
+import { HostChip } from "@/shared/components/host-chip";
+import { OverviewTable, OverviewRowView } from "@/shared/components/overview/overview-table";
+import { QueryError } from "@/shared/components/page";
+import { Button } from "@/shared/ui/button";
+import { Switch } from "@/shared/ui/switch";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Field, FieldLabel, FieldDescription, FieldGroup } from "@/shared/ui/field";
+import { SettingsForm } from "../SettingsForm";
+import { useSectionDraft } from "../use-section-draft";
+import { NotificationsPointer } from "../notifications/NotificationsPointer";
+import { HostUpdateSettings } from "./LiveUpdatesSection";
+
+function HostPolicies({ host, timeZone }: { host: Host; timeZone: string }) {
+  const adapter = useAdapter(), t = useTranslations("settings.updates");
+  const cap = useCapability("listUpdatePolicies", { kind: "host", id: host.id });
+  const query = useQuery({ queryKey: ["stack", "update-policies", host.id], queryFn: () => adapter.listUpdatePolicies!(host.id), enabled: cap.available && !!adapter.listUpdatePolicies });
+  return <section className="min-w-0"><HostChip host={host} />
+    {!cap.available ? <p role="status" className="text-sm">{cap.reason}</p> : query.isError ? <QueryError error={query.error} onRetry={() => void query.refetch()} /> : <OverviewTable fitKey={`update-policies-${host.id}`} columns={() => [{ id: "name", label: t("target"), className: "min-w-40" }, { id: "policy", label: `${t("mode")} · ${t("window")}`, wide: true }]} selecting={false} actionsLabel="" listLabel={t("table")} dense>
+      {(view, columns) => (query.data ?? []).map((p) => <OverviewRowView key={`${p.targetKind}:${p.targetId}`} view={view} columns={columns} pad="py-3" hostColor={host.color} actions={null} cells={{ name: <span className="inline-flex min-w-0 items-center gap-2 break-all font-medium">{p.targetKind === "stack" ? <Layers className="size-4 shrink-0" /> : <Box className="size-4 shrink-0" />}{p.targetName}</span>, policy: <PolicyControl policy={p} timeZone={timeZone} saved={() => { void query.refetch(); }} /> }} />)}
+    </OverviewTable>}
+  </section>;
+}
+function UpdateForm({ value, refresh }: { value: UpdateSettings & { timeZone: string; nextRun?: string; projectionUnavailable?: boolean }; refresh: () => Promise<unknown> }) {
+  const adapter = useAdapter(), t = useTranslations("settings.updates"), common = useTranslations("common.stackUpdates"), locale = useLocale();
+  const draft = useSectionDraft<UpdateSettings>({ interval: value.interval, notify: value.notify }), d = draft.draft!;
+  const cap = useCapability("checkAllUpdates"), action = useUpdateAction(), hosts = useHosts();
+  return <SettingsForm title={t("title")} dirty={draft.dirty} valid={cap.available} onDiscard={draft.reset} onSave={async () => { await adapter.saveSettings("updates", d); draft.commit(d); await refresh(); }}>
+    <FieldGroup><div id={UPDATE_CHECK_ANCHOR} tabIndex={-1} className="scroll-mt-24 rounded-xl border bg-muted/20 p-4">
+      <Field><FieldLabel htmlFor="update-interval">{t("interval")}</FieldLabel><Select value={d.interval} disabled={!cap.available} onValueChange={(interval) => draft.patch({ interval: interval as UpdateSettings["interval"] })}><SelectTrigger id="update-interval" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["6h", "12h", "24h"] as const).map((v) => <SelectItem value={v} key={v}>{t(`intervals.${v}`)}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldDescription>{t("defaultMode")}</FieldDescription></Field>
+      <p className="my-3 text-xs">{common("next")}: {value.projectionUnavailable ? common("unavailable") : value.nextRun ? new Intl.DateTimeFormat(locale, { timeZone: value.timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value.nextRun)) : common("unknown")} · {value.timeZone}</p>
+      <Button type="button" variant="outline" disabled={!cap.available || action.busy} onClick={() => void action.run(() => adapter.checkAllUpdates!(), () => { void refresh(); })}>{t("checkNow")}</Button>
+      {action.error && <p role="alert">{action.error}</p>}
+    </div>
+    <Field orientation="horizontal"><Switch id="update-notify" checked={d.notify} disabled={!cap.available} onCheckedChange={(notify) => draft.patch({ notify })} /><div><FieldLabel htmlFor="update-notify">{t("notify")}</FieldLabel><FieldDescription>{t("notifyHint")}</FieldDescription></div></Field>
+    <section id={UPDATE_POLICIES_ANCHOR} tabIndex={-1} className="flex min-w-0 scroll-mt-24 flex-col gap-4"><h3 className="text-sm font-semibold">{t("table")}</h3>{hosts.isError && <QueryError error={hosts.error} onRetry={() => void hosts.refetch()} />}{hosts.data?.map((h) => <HostPolicies key={h.id} host={h} timeZone={value.timeZone} />)}<p className="text-xs text-muted-foreground">{t("excluded")}</p></section>
+    <NotificationsPointer />
+    {hosts.data?.map((h) => <HostUpdateSettings key={h.id} hostId={h.id} name={h.name} />)}
+    </FieldGroup>
+  </SettingsForm>;
+}
+export function ConnectedUpdatesSection() {
+  const adapter = useAdapter(), cap = useCapability("saveSettings"), t = useTranslations("common.stackUpdates");
+  const query = useQuery({ queryKey: ["settings", "updates"], queryFn: () => adapter.getUpdateSettings!(), enabled: cap.available && !!adapter.getUpdateSettings });
+  if (!cap.available) return <p role="status">{cap.reason}</p>;
+  if (query.isError) return <QueryError error={query.error} onRetry={() => void query.refetch()} />;
+  if (!query.data) return <p aria-busy="true">{t("loading")}</p>;
+  return <UpdateForm value={query.data} refresh={query.refetch} />;
+}

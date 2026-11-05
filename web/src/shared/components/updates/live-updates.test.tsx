@@ -18,7 +18,6 @@ import { UpdateRadarWidget } from "@/features/dashboard/widgets/UpdateRadarWidge
 import type { Stack } from "@/domain/model";
 import { StackUpdateDialog, StackUpdateDialogController } from "./stack-update-dialog";
 import { LiveRestorePoints, LiveStackUpdates } from "./live-stack-updates";
-import { HostUpdateSettings } from "@/features/settings/sections/LiveUpdatesSection";
 import { updateReasons } from "@/data/http/update-validation";
 import { withRunGate } from "@/data/run-gate";
 import { updateFixture, point } from "@/data/http/stack-updates.test-support";
@@ -55,25 +54,12 @@ it("cold policy shows sending and separate stale/check/apply status after remoun
   view.unmount(); renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
   await screen.findByText(/Benachrichtigung läuft oder Ergebnis unbekannt/); expect(f.writes()).toHaveLength(0);
 });
-it("policy mode gesture and revision refusal remain inside open dialog", async () => {
+it("policy mode gesture keeps revision refusal inline", async () => {
   const f = await ready(); f.state.code = "update.policy-changed";
-  renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter); await userEvent.click(await screen.findByRole("button", { name: t.editPolicy }));
-  const dialog = screen.getByRole("dialog"); const trigger = within(dialog).getByRole("combobox"); trigger.focus(); await userEvent.keyboard("{Enter}{ArrowDown}{Enter}");
-  await userEvent.click(within(dialog).getByRole("button", { name: t.save }));
-  await screen.findByText(catalogs.de.images.errors["update_policy-changed"]); expect(screen.queryByRole("dialog") !== null).toBe(true); expect(f.writes()).toHaveLength(1);
-});
-it("schedule current run and master-off survive owner claim; save clears owner-unset", async () => {
-  const f = await ready(); f.state.schedule.revision = 17;
-  renderWithApp(<HostUpdateSettings hostId="direct" name="Example" />, f.adapter);
-  await screen.findByText(catalogs.de.images.errors["update_schedule-owner-unset"]); expect(document.body.textContent).toContain(t.masterOff);
-  await userEvent.click(screen.getByRole("button", { name: t.editSchedules }));
-  const interval = within(screen.getByRole("dialog")).getByRole("textbox", { name: t.polling });
-  await userEvent.clear(interval); await userEvent.type(interval, "0 1 * * * *");
-  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: t.save }));
-  await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true)); await screen.findByText(/0 1 \* \* \* \*/);
-  expect(screen.queryByText(catalogs.de.images.errors["update_schedule-owner-unset"]) === null).toBe(true);
-  expect(document.body.textContent).toContain(t.masterOff); expect(document.body.textContent).toContain("1dd08eac");
-  expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ expectedRevision: 17, pollingInterval: "0 1 * * * *" });
+  renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
+  const trigger = await screen.findByRole("combobox", { name: /Modus/ });
+  await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false)); trigger.focus(); await userEvent.keyboard("{Enter}"); await userEvent.click(await screen.findByRole("option", { name: catalogs.de.settings.updates.scheduled }));
+  await screen.findByText(catalogs.de.images.errors["update_policy-changed"]); expect(f.writes()).toHaveLength(1);
 });
 it("point list exposes confirmed delete with server projection", async () => {
   const f = await ready(); renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
@@ -96,31 +82,28 @@ it("lost permission disables repeat submit and keeps the denial inline", async (
   await userEvent.click(send); await screen.findByRole("alert");
   expect(send.hasAttribute("disabled")).toBe(true); expect(f.writes()).toHaveLength(1);
 });
-it.each(["update.policy-changed", "update.invalid-policy"])("schedule save %s stays inline", async (code) => {
+it.each(["update.policy-changed", "update.invalid-policy"])("policy save %s stays inline", async (code) => {
   const f = await ready(); f.state.code = code;
-  renderWithApp(<HostUpdateSettings hostId="direct" name="Example" />, f.adapter);
-  await userEvent.click(await screen.findByRole("button", { name: t.editSchedules }));
-  const dialog = screen.getByRole("dialog"); await userEvent.click(within(dialog).getByRole("button", { name: t.save }));
+  renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
+  const trigger = await screen.findByRole("combobox", { name: /Modus/ });
+  await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false)); trigger.focus(); await userEvent.keyboard("{Enter}"); await userEvent.click(await screen.findByRole("option", { name: catalogs.de.settings.updates.scheduled }));
   expect((await screen.findByRole("alert")).textContent).toContain((catalogs.de.images.errors as Record<string, string>)[code.replaceAll(".", "_")]);
-  expect(screen.queryByRole("dialog") !== null).toBe(true);
 });
 
 it.each(["pending", "sending", "sent", "unconfigured", "failed", "not-requested"] as const)("notification %s is read from durable candidate state", async (state) => {
   const f = await ready(); f.state.policy.candidates[0]!.notificationState = state;
   renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
-  await screen.findByRole("button", { name: t.editPolicy }); expect(document.body.textContent).toContain(t.notification[state]); expect(f.writes()).toHaveLength(0);
+  await screen.findByRole("combobox", { name: /Modus/ }); expect(document.body.textContent).toContain(t.notification[state]); expect(f.writes()).toHaveLength(0);
 });
 
-it("a late save from a closed dialog cannot close the replacement dialog", async () => {
+it("a late policy save cannot update a different target", async () => {
   const f = await ready(), held = deferred<Response>(), started = deferred<void>();
   f.state.hold = (path, init) => { if (path.includes("/policies/") && init.method === "PUT") { started.resolve(); return held.promise; } };
-  renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
-  await userEvent.click(await screen.findByRole("button", { name: t.editPolicy }));
-  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: t.save })); await started.promise;
-  await userEvent.keyboard("{Escape}"); await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
-  await userEvent.click(screen.getByRole("button", { name: t.editPolicy }));
+  const view = renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
+  const select = await screen.findByRole("combobox", { name: /Modus/ }); await waitFor(() => expect(select.hasAttribute("disabled")).toBe(false)); select.focus(); await userEvent.keyboard("{Enter}"); await userEvent.click(await screen.findByRole("option", { name: catalogs.de.settings.updates.scheduled })); await started.promise;
+  view.unmount();
   await act(async () => { held.resolve(response({ success: true, data: f.state.policy })); });
-  expect(screen.queryByRole("dialog") !== null).toBe(true);
+  expect(screen.queryByRole("alert") === null).toBe(true); expect(f.writes()).toHaveLength(1);
 });
 
 it("100 stack observation panels do not fan out scoped descriptor reads", async () => {
@@ -151,16 +134,16 @@ it("a point from a replaced stack identity cannot be restored", async () => {
   expect(screen.getByRole("button", { name: t.restore }).hasAttribute("disabled")).toBe(true); expect(f.writes()).toHaveLength(0);
 });
 
-it("the radar service observation opens a whole-stack update review", async () => {
+it("the radar service observation opens a service update review", async () => {
   const f = await ready();
   const stack: Stack = { id: "direct~project", hostId: "direct", name: "Example", labels: [], autoUpdate: { mode: "check" }, services: [{ name: "app", image: { repository: "example", tag: "1.0.0" }, state: "running", health: "none", ports: [], networks: [], restartPolicy: "always", memLimitMb: 0, restarts24h: 0, update: { state: "version", current: { repository: "example", tag: "1.0.0" }, latest: { repository: "example", tag: "1.1.0", version: "1.1.0" }, level: "minor", checkedAt: point.createdAt, registry: "docker.io" } }] };
   renderWithApp(<><UpdateRadarWidget stacks={[stack]} hosts={new Map()} /><StackUpdateDialogController /></>, f.adapter);
   await userEvent.click(screen.getByRole("button", { name: /Example \/ app/ }));
-  await userEvent.click(screen.getByRole("button", { name: catalogs.de.common.updates.actionUpdateStack }));
+  await userEvent.click(screen.getByRole("button", { name: t.service.replace("{name}", "app") }));
   const dialog = await screen.findByRole("dialog", { name: t.update });
   const send = within(dialog).getByRole("button", { name: t.update }); await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false)); await userEvent.click(send);
   await within(dialog).findByText(t.accepted);
-  expect(JSON.parse(String(f.writes()[0]!.init.body))).toEqual({ expectedRevision: f.state.baseline.savedRevision });
+  expect(JSON.parse(String(f.writes()[0]!.init.body))).toEqual({ expectedRevision: f.state.baseline.savedRevision, services: ["app"] });
 });
 
 it("a racing restore refusal stays in the acknowledged dialog", async () => {
@@ -181,19 +164,16 @@ it("a conflicting local intent is shown inline without sending a second effect",
   held.resolve(response({ success: true, data: { code: "run.started", activityId: f.run.id, activity: f.run } }, 202)); await first;
 });
 
-it("an uncertain policy save stays inline after a fresh authoritative read", async () => {
+it("an uncertain policy save blocks further inline writes", async () => {
   const f = await ready();
-  f.state.hold = (path, init) => { if (path.includes("/policies/") && init.method === "PUT") { f.state.policy = { ...f.state.policy, mode: "off", revision: 2 }; return Promise.reject(new TypeError("network")); } };
+  f.state.hold = (path, init) => { if (path.includes("/policies/") && init.method === "PUT") { f.state.policy = { ...f.state.policy, mode: "scheduled", window: { kind: "daily", time: "04:00" }, revision: 2 }; return Promise.reject(new TypeError("network")); } };
   renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
-  await userEvent.click(await screen.findByRole("button", { name: t.editPolicy }));
-  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: t.save }));
-  await screen.findByText(`${t.off} · ${t.stale}`);
+  const trigger = await screen.findByRole("combobox", { name: /Modus/ }); await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false)); trigger.focus(); await userEvent.keyboard("{Enter}"); await userEvent.click(await screen.findByRole("option", { name: catalogs.de.settings.updates.scheduled }));
+  await screen.findByText(`${t.scheduled} · ${t.stale}`);
   const alert = screen.queryByRole("alert"); expect(alert !== null).toBe(true);
   expect(alert?.textContent).toContain(catalogs.de.activity.runtime.ambiguous);
-  expect(within(screen.getByRole("dialog")).getByRole("button", { name: t.save }).hasAttribute("disabled")).toBe(true);
-  expect(f.writes()).toHaveLength(1);
+  expect(trigger.hasAttribute("disabled")).toBe(true); expect(f.writes()).toHaveLength(1);
 });
-
 
 it("initial missing baseline shows deploy-once guidance before any submit", async () => {
   const f = await ready(); f.state.baseline.available = false; f.state.baseline.code = "update.baseline-unavailable";
@@ -237,17 +217,13 @@ it("HTTP header check is enabled only by the stack-scoped descriptor", async () 
   await waitFor(() => expect(f.writes().some((write) => write.path === "/api/environments/direct/updater/projects/project/check")).toBe(true));
 });
 
-it("edits and saves the Go producer's never-configured policy at revision zero", async () => {
+it("edits the v14 default policy at revision zero", async () => {
   const initial = (await import("@/data/http/testdata/unset-policy.json")).default;
   const f = await ready();
-  f.state.policy = { ...initial, mode: "off", targetKind: "project", environmentId: "direct", targetId: "project", candidates: [] };
+  f.state.policy = { ...initial, mode: "check", targetKind: "stack", targetName: "project", targetMissing: false, environmentId: "direct", targetId: "project", candidates: [] };
   renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
-  await userEvent.click(await screen.findByRole("button", { name: t.editPolicy }));
-  const dialog = screen.getByRole("dialog"), select = within(dialog).getByRole("combobox");
-  select.focus(); await userEvent.keyboard("{Enter}{ArrowDown}{Enter}");
-  await userEvent.click(within(dialog).getByRole("button", { name: t.save }));
-  await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
-  expect(f.writes()).toHaveLength(1);
-  expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ mode: "notify", expectedRevision: 0 });
+  const select = await screen.findByRole("combobox", { name: /Modus/ }); await waitFor(() => expect(select.hasAttribute("disabled")).toBe(false)); select.focus(); await userEvent.keyboard("{Enter}"); await userEvent.click(await screen.findByRole("option", { name: catalogs.de.settings.updates.scheduled }));
+  await waitFor(() => expect(f.writes()).toHaveLength(1));
+  expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ mode: "scheduled", expectedRevision: 0, window: { kind: "weekly", day: 0, time: "04:00" } });
   expect(f.state.policy.targetIdentity).toBe(initial.targetIdentity);
 });

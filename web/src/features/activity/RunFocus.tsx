@@ -1,3 +1,4 @@
+import { DeployRecovery } from "@/shared/components/updates/deploy-recovery";
 import { useTranslations } from "use-intl";
 
 import { withPercent } from "@/domain/locale";
@@ -84,6 +85,7 @@ export function RunFocusBody({ run, now, fill = false, outputOpen = false, class
       </div>
       <RunFacts run={run} now={now} className="shrink-0 rounded-xl border bg-background/40 p-3" />
       <RunErrorBox run={run} />
+      <DeployRecovery run={run} />
       <RunOutput run={run} defaultOpen={outputOpen} fill={fill} className={cn(fill && "min-h-0")} />
     </div>
   );

@@ -69,6 +69,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     },
     async completeSetup(input: Pick<HubSettings, "general" | "auth" | "hostDefaults">) {
       await write({
+        ...(input.general.configuredTimeZone === undefined ? {} : { timeZone: input.general.configuredTimeZone }),
         hubName: input.general.hubName,
         hubAddress: input.general.hubAddress,
         domainUrl: input.general.domainUrl,
@@ -107,7 +108,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
       if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
       return {
-        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, stackStopMode: stackStopMode(values) },
+        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, configuredTimeZone: values.timeZone ?? "", stackStopMode: stackStopMode(values) },
         hostDefaults,
         activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation, loadAlerts: loadAlerts(values) },
       };
@@ -115,8 +116,12 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
       if (section === "general") {
         const general = value as HubSettings["general"];
-        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, stackStopMode: general.stackStopMode ?? "down" });
+        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, stackStopMode: general.stackStopMode ?? "down", timeZone: general.configuredTimeZone ?? general.timeZone });
         return;
+      }
+      if (section === "updates") {
+        const updates = value as HubSettings["updates"];
+        await write({ updateCheckInterval: updates.interval, updateNotify: String(updates.notify) }); return;
       }
       if (section === "hostDefaults") {
         const host = value as HubSettings["hostDefaults"];

@@ -76,7 +76,7 @@ export const enImageErrors = {
   "image_pull-failed": "The image could not be pulled. Check the reference and saved registry configuration.",
   "image_remove-failed": "The image could not be removed.",
   "image_reserved-reference": "This reference is reserved for internal image retention.",
-  "image_restore-point-protected": "A restore point protects this image.",
+  "image_restore-point-protected": "A saved recovery image protects this image.",
   "image_system-protected": "This image is protected because Docklet uses it.",
   "image_tag-failed": "The image tag could not be changed.",
   "image_usage-unavailable": "Image usage could not be verified. Nothing is assumed unused.",

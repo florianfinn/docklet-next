@@ -5,7 +5,7 @@
 // Deviations: Original phase 2a stack update consumer for issue #231.
 
 import { AdapterOutcomeError } from "../capability";
-import type { UpdateBaseline, UpdatePoint, StackUpdatePolicy, UpdateSchedules, SystemHints } from "@/domain/stack-updates";
+import type { UpdateBaseline, UpdatePoint, StackUpdatePolicy, SystemHints } from "@/domain/stack-updates";
 import { record, text, id, bool, revision, date, optionalDate, list, choice, reason, invalidUpdate } from "./update-validation";
 import { observation } from "./update-validation";
 export function baseline(value: unknown): UpdateBaseline {
@@ -21,21 +21,21 @@ export function points(value: unknown, target?: string): UpdatePoint[] {
     return { id: id(o.id), registrationId: id(o.registrationId), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), sourceRunId: id(o.sourceRunId), createdAt: date(o.createdAt), sourceState: choice(o.sourceState, ["settled", "partial-source"]), available: bool(o.available), orphaned: bool(o.orphaned), volumeDataIncluded: false, code: reason(o.code), protectionReason: o.protectionReason === null ? null : choice(o.protectionReason, ["restore-target", "healthy-baseline"]), holdState: choice(o.holdState, ["none", "active", "unknown"]), failedAttempt: bool(o.failedAttempt), images: list(o.images).map((v) => { const i = record(v); if ((bool(i.present) && !/^sha256:[a-f0-9]{64}$/.test(text(i.imageId))) || (i.digest !== undefined && text(i.digest) !== "" && !/^sha256:[a-f0-9]{64}$/.test(text(i.digest)))) throw invalidUpdate(); return { service: id(i.service), reference: bool(i.present) ? id(i.reference) : text(i.reference), imageId: bool(i.present) ? id(i.imageId) : text(i.imageId), ...(i.digest === undefined ? {} : { digest: text(i.digest) }), present: bool(i.present), running: bool(i.running) }; }) };
   }); } catch { throw new AdapterOutcomeError({ kind: "error", code: "update.check-unavailable" }); }
 }
-export function policy(value: unknown, host: string, target: string): StackUpdatePolicy {
+export function policy(value: unknown, host: string, target: string, kind: "stack" | "container" = "stack"): StackUpdatePolicy {
   const o = record(value);
+  if ((o.mode === "scheduled") !== (o.window !== undefined)) throw invalidUpdate();
   if (!/^[a-f0-9]{64}$/.test(text(o.targetIdentity))) throw invalidUpdate();
-  if (o.environmentId !== host || o.targetId !== target || o.targetKind !== "project") throw invalidUpdate();
-  return { mode: choice(o.mode, ["off", "notify", "apply"]), revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), targetKind: "project", targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), jobId: text(o.jobId), stale: bool(o.stale),
+  if (o.environmentId !== host || o.targetId !== target || o.targetKind !== kind) throw invalidUpdate();
+  return { mode: choice(o.mode, ["check", "scheduled"]), revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), targetKind: kind, targetName: text(o.targetName), targetMissing: bool(o.targetMissing), window: o.window === undefined ? undefined : window(o.window), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), jobId: text(o.jobId), stale: bool(o.stale),
     checkedAt: optionalDate(o.checkedAt), code: reason(o.code), applyCheckedAt: optionalDate(o.applyCheckedAt), applyCode: reason(o.applyCode), bookkeepingAt: optionalDate(o.bookkeepingAt), bookkeepingCode: reason(o.bookkeepingCode),
     candidates: list(o.candidates).map((v) => { const c = record(v); return { service: id(c.service), imageRef: id(c.imageRef), version: text(c.version), digest: id(c.digest), platform: id(c.platform), ...(c.entryId === undefined ? {} : { entryId: id(c.entryId) }), notificationState: choice(c.notificationState, ["pending", "sending", "sent", "unconfigured", "failed", "not-requested"]) }; }) };
 }
-export function schedules(value: unknown, host: string): UpdateSchedules {
-  const o = record(value);
-  if (o.environmentId !== host) throw invalidUpdate();
-  const timeZone = id(o.timeZone); try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw invalidUpdate(); }
-  const run = (v: unknown) => { if (v === undefined) return undefined; const r = record(v); return { id: id(r.id), status: choice(r.status, ["queued", "waiting", "running", "retrying", "succeeded", "partial", "skipped", "failed", "needs_attention", "canceled"]) }; };
-  return { revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), pollingInterval: id(o.pollingInterval), autoUpdateInterval: id(o.autoUpdateInterval), pollingEnabled: bool(o.pollingEnabled), autoUpdateEnabled: bool(o.autoUpdateEnabled), masterPollingEnabled: bool(o.masterPollingEnabled), masterAutoUpdateEnabled: bool(o.masterAutoUpdateEnabled), timeZone,
-    jobs: list(o.jobs).map((v) => { const j = record(v); return { id: id(j.id), kind: text(j.kind), enabled: bool(j.enabled), schedule: text(j.schedule), timeZone: j.timeZone === undefined ? undefined : text(j.timeZone), nextRun: optionalDate(j.nextRun), code: reason(j.code), currentRun: run(j.currentRun), lastRun: run(j.lastRun), lastSuccess: optionalDate(j.lastSuccess) }; }) };
+export function window(value: unknown): import("@/domain/stack-updates").UpdateWindow {
+  const o = record(value), kind = choice(o.kind, ["daily", "weekly"]), time = text(o.time);
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw invalidUpdate();
+  if (kind === "daily") return { kind, time };
+  const day = revision(o.day); if (day > 6) throw invalidUpdate();
+  return { kind, time, day };
 }
 function version(v: string): number[] | undefined {
   v = v.split("+", 1)[0]!;
