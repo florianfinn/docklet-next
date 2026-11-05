@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -51,7 +52,11 @@ func TestRuntimeB3ProcessChild(t *testing.T) {
 	if mode == "hold-lock" {
 		require.NoError(t, os.WriteFile(os.Getenv("B3_PROCESS_READY"), []byte(generation), 0600))
 		for {
+			// Collections must not finalize the lock descriptor while the parent probes it.
+			goruntime.GC()
 			if _, err := os.Stat(os.Getenv("B3_PROCESS_RELEASE")); err == nil {
+				// Using db here keeps its lock descriptor reachable for the whole hold.
+				_ = db.Close()
 				os.Exit(0)
 			}
 			time.Sleep(10 * time.Millisecond)
