@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: One production runtime graph using existing Docker, registration and transport ports.
+// Deviations: One production runtime graph using existing Docker, registration and transport ports. M18 image lifecycle reconciliation after local startup settlement and before readiness.
 
 package di
 
@@ -153,6 +153,9 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 			return err
 		}
 		if err := runtime.InitializeLocalStartup(start, runtime.LocalStore()); err != nil {
+			return err
+		}
+		if err := projects.ReconcileImageLifecycle(start); err != nil {
 			return err
 		}
 		if err := remote.Startup(start); err != nil {
