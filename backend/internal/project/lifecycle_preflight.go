@@ -16,8 +16,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
+	"go.getarcane.app/updater"
+	"go.getarcane.app/updater/pkg/utils/tagpolicy"
 )
 
 func (s *ProjectService) SetLifecycleChecker(check func(context.Context, string) (*projectDTO.UpdateInfo, error)) {
@@ -75,6 +78,10 @@ func uniqueLifecycleReferences(snapshot *life.Snapshot) error {
 }
 func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registration string, request dto.LifecycleRequest) (*dto.LifecycleIntent, error) {
 	request = request.Clone()
+	// A restore always covers the whole stack; a service selection has no meaning there.
+	if request.PointID != "" && len(request.Services) > 0 {
+		return nil, lifecycleFailure("update.invalid-target")
+	}
 	_, current, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil {
 		return nil, err
@@ -165,7 +172,7 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		}
 		selected := img.Reference
 		kind := "rebuild"
-		if info.LatestVersion != "" && info.LatestVersion != info.CurrentVersion {
+		if lifecycleTagPolicyVersion(info, img.Reference, current.Model.Services[key].Labels) {
 			selected, err = lifecycleVersionReference(img.Reference, info.LatestVersion)
 			if err != nil {
 				return nil, err
@@ -242,4 +249,14 @@ func lifecycleVersionReference(source, version string) (string, error) {
 		return "", lifecycleFailure("update.image-binding-unsupported")
 	}
 	return selected, nil
+}
+
+// Only a tag-policy version moves the reference; without one the candidate is
+// the same reference and a newer version label is a rebuild.
+func lifecycleTagPolicyVersion(info *imageDTO.UpdateInfo, ref string, labels map[string]string) bool {
+	if info.State != "version" || info.LatestVersion == "" {
+		return false
+	}
+	policy, err := tagpolicy.Resolve(ref, updater.DefaultLabelPolicy().TagPolicy(labels))
+	return err == nil && policy.Strategy != "digest"
 }

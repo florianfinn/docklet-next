@@ -112,7 +112,8 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			return imageDTO.Failure("job.skipped", 409)
 		}
 		ref = old.Config.Image
-		if checked.LatestVersion != "" && checked.LatestVersion != checked.CurrentVersion {
+		// Only a tag-policy version moves the reference; a rebuild keeps it.
+		if checked.State == "version" && checked.LatestVersion != "" {
 			named, err := reference.ParseNormalizedNamed(ref)
 			if err != nil {
 				return imageDTO.Failure("update.invalid-target", 400)

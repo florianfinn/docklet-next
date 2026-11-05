@@ -149,7 +149,7 @@ func TestContainerImageUpdateRestoreSameTagAndConfiguration(t *testing.T) {
 	require.Equal(t, 1, d.counts["pull"], "restore must not pull")
 }
 func TestContainerImageStaleSlotAndFrozenInstance(t *testing.T) {
-	for _, tc := range []string{"outside-slot", "other-recreate", "admission-instance", "renamed"} {
+	for _, tc := range []string{"outside-slot", "other-recreate", "admission-instance", "renamed", "same-image"} {
 		t.Run(tc, func(t *testing.T) {
 			s, d, _, _ := updateFixture(t)
 			owner := updateNewID
@@ -162,7 +162,12 @@ func TestContainerImageStaleSlotAndFrozenInstance(t *testing.T) {
 				name = "old-app"
 				restore = false
 			}
-			require.NoError(t, s.replacePreviousImage(t.Context(), "app", updateOtherImage, updateRef, owner, "old-run"))
+			slotImage := updateOtherImage
+			if tc == "same-image" {
+				// The slot already holds the running image: nothing to restore.
+				owner, slotImage = updateOldID, updateOldImage
+			}
+			require.NoError(t, s.replacePreviousImage(t.Context(), "app", slotImage, updateRef, owner, "old-run"))
 			details := dto.Details{ID: updateOldID, Name: "app", ImageID: updateOldImage}
 			require.NoError(t, s.projectPreviousImage(t.Context(), &details))
 			require.Nil(t, details.PreviousImage)
@@ -261,6 +266,15 @@ func TestContainerImageVersionReferenceAndPlatform(t *testing.T) {
 	require.Equal(t, "registry.example.com/app", d.pullRef)
 	require.Equal(t, "linux/amd64", d.pullPlatform)
 }
+
+// A rebuild whose newer version label differs keeps the configured reference.
+func TestContainerImageRebuildKeepsReference(t *testing.T) {
+	s, d, p, _ := updateFixture(t)
+	p.checked.CurrentVersion = "1.2.3-ls10"
+	p.checked.LatestVersion = "1.2.3-ls11"
+	require.NoError(t, s.ExecuteContainerImage(updateContext(t), updateOldID, "app", false, user.Actor{}))
+	require.Equal(t, updateRef, d.containers[updateNewID].Config.Image)
+}
 func TestContainerImageChangedCandidateBeforePull(t *testing.T) {
 	s, d, p, _ := updateFixture(t)
 	p.checked.LatestDigest = updateOtherImage
@@ -307,4 +321,15 @@ func TestContainerImageRestoreIdentityChangesDuringInspect(t *testing.T) {
 	err := s.ExecuteContainerImage(updateContext(t), updateOldID, "app", true, user.Actor{})
 	require.Equal(t, "update.target-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	require.Empty(t, d.counts, "identity changes during a slow inspect must precede retag")
+}
+
+// The restore offer is optional: a failing slot read hides it and still returns the details.
+func TestContainerDetailsSurviveSlotReadFailure(t *testing.T) {
+	s, _, _, db := updateFixture(t)
+	require.NoError(t, s.replacePreviousImage(t.Context(), "app", updateOtherImage, updateRef, updateOldID, "old-run"))
+	require.NoError(t, db.Exec("DROP TABLE container_previous_images").Error)
+	details, err := s.GetContainerDetails(updateContext(t), updateOldID)
+	require.NoError(t, err)
+	require.Equal(t, updateOldID, details.ID)
+	require.Nil(t, details.PreviousImage)
 }

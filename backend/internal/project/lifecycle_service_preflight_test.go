@@ -27,7 +27,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Only a tag-policy version rewrites the literal; a newer version label on the
+// same reference is a rebuild that keeps it.
 func TestServiceScopeNativeCandidateAndLiteralRewrite(t *testing.T) {
+	for _, mode := range []string{"tag-policy", "rebuild"} {
+		t.Run(mode, func(t *testing.T) { serviceScopeNativeCandidate(t, mode) })
+	}
+}
+
+func serviceScopeNativeCandidate(t *testing.T, mode string) {
 	f := newLifecycleFixture(t)
 	server := httptest.NewServer(registryServer.New())
 	t.Cleanup(server.Close)
@@ -38,8 +46,16 @@ func TestServiceScopeNativeCandidateAndLiteralRewrite(t *testing.T) {
 	tag, err := name.NewTag(newRef, name.Insecure)
 	require.NoError(t, err)
 	require.NoError(t, remote.Write(tag, image, remote.WithContext(t.Context())))
+	labels := "    labels:\n      com.getarcaneapp.arcane.updater.strategy: tag\n"
+	if mode == "rebuild" {
+		labels = ""
+		tag, err = name.NewTag(oldRef, name.Insecure)
+		require.NoError(t, err)
+		require.NoError(t, remote.Write(tag, image, remote.WithContext(t.Context())))
+		newRef = oldRef
+	}
 	require.NoError(t, f.db.Create(&registryService.ContainerRegistry{URL: server.URL, Enabled: true, Insecure: true, RegistryType: "generic"}).Error)
-	source := "services:\n  app:\n    image: " + oldRef + "\n  side:\n    image: " + oldRef + " # separate literal, stays unchanged\n"
+	source := "services:\n  app:\n    image: " + oldRef + "\n" + labels + "  side:\n    image: " + oldRef + " # separate literal, stays unchanged\n"
 	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(source), 0600))
 	f.tags[oldRef] = lifecycleOldID
 	app := f.workloads["app"]
@@ -52,7 +68,7 @@ func TestServiceScopeNativeCandidateAndLiteralRewrite(t *testing.T) {
 	current := f.establishBaseline()
 	f.service.SetLifecycleChecker(func(context.Context, string) (*projectDTO.UpdateInfo, error) {
 		return &projectDTO.UpdateInfo{ServiceUpdates: map[string]projectDTO.ServiceUpdateInfo{
-			"app":  {UpdateInfo: &imageDTO.UpdateInfo{HasUpdate: true, CurrentVersion: "1.0.0", LatestVersion: "1.1.0"}},
+			"app":  {UpdateInfo: &imageDTO.UpdateInfo{HasUpdate: true, State: "version", CurrentVersion: "1.0.0", LatestVersion: "1.1.0"}},
 			"side": {UpdateInfo: &imageDTO.UpdateInfo{HasUpdate: true, CurrentVersion: "1.0.0", LatestVersion: "9.9.9"}},
 		}}, nil
 	})

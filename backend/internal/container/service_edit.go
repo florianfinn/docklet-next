@@ -456,8 +456,10 @@ func (s *ContainerService) GetContainerDetails(ctx context.Context, id string) (
 	updates := s.lookupContainerUpdateInfoInternal(ctx, []container.Summary{{ID: details.ID, Image: details.Image, ImageID: details.ImageID, Labels: details.Labels}})
 	details.UpdateInfo = updates[details.ID]
 	s.applyContainerDetailsIconInternal(ctx, &details)
+	// The restore offer is optional: a failed slot read hides it, never the details.
 	if err := s.projectPreviousImage(ctx, &details); err != nil {
-		return containertypes.Details{}, err
+		details.PreviousImage = nil
+		slog.WarnContext(ctx, "Previous image slot read failed; restore offer hidden", "container", details.ID, "error", err)
 	}
 
 	return details, nil

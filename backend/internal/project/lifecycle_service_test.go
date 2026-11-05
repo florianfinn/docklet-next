@@ -70,11 +70,14 @@ func TestServiceScopePreflightNames(t *testing.T) {
 		name     string
 		services []string
 		code     string
+		point    string
 	}{
-		{"unknown", []string{"missing"}, "update.invalid-target"},
-		{"mixed-unknown", []string{"app", "missing"}, "update.invalid-target"},
-		{"explicit", []string{"app"}, ""},
-		{"empty-whole-stack", nil, ""},
+		{"unknown", []string{"missing"}, "update.invalid-target", ""},
+		{"mixed-unknown", []string{"app", "missing"}, "update.invalid-target", ""},
+		{"explicit", []string{"app"}, "", ""},
+		{"empty-whole-stack", nil, "", ""},
+		// A restore covers the whole stack; a selection with a point is refused.
+		{"restore-with-services", []string{"app"}, "update.invalid-target", "example-point"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := serviceScopeFixture(t, serviceScopeSource)
@@ -84,7 +87,7 @@ func TestServiceScopePreflightNames(t *testing.T) {
 					"app": {UpdateInfo: &imageDTO.UpdateInfo{}}, "running": {UpdateInfo: &imageDTO.UpdateInfo{}}, "stopped": {UpdateInfo: &imageDTO.UpdateInfo{}},
 				}}, nil
 			})
-			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: current.SavedRevision, Services: test.services})
+			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: current.SavedRevision, Services: test.services, PointID: test.point})
 			if test.code != "" {
 				lifecycleCode(t, err, test.code)
 				require.Equal(t, 400, imageDTO.Neutral(err, "unexpected", 500).Status)

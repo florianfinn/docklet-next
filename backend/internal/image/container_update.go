@@ -11,6 +11,7 @@ import (
 	"github.com/distribution/reference"
 	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/pkg/utils/tagpolicy"
+	"strings"
 
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	dto "github.com/florianfinn/docklet-next/types/image"
@@ -20,6 +21,8 @@ import (
 
 // CheckContainerImage refreshes the configured reference, preserving this
 // container's tag policy instead of the aggregate result of other consumers.
+// State "version" means a tag policy chose LatestVersion, the actual target
+// tag; every other update is a rebuild of the same reference.
 func (s *ImageService) CheckContainerImage(ctx context.Context, current container.InspectResponse) (*checkDTO.Response, error) {
 	if s == nil || s.imageUpdateService == nil || current.Config == nil {
 		return nil, dto.Failure("update.check-unavailable", 503)
@@ -37,38 +40,45 @@ func (s *ImageService) CheckContainerImage(ctx context.Context, current containe
 		result = result.ImageUpdate
 	}
 	owned := *result
-	if owned.State == "version" && updater.DefaultLabelPolicy().TagPolicy(current.Config.Labels).TagPattern != "" {
-		// Public observations normalize versions; execution needs the actual tag,
-		// including a configured tag-pattern prefix. Reuse the selection engine.
-		if s.registryService == nil {
-			return nil, dto.Failure("update.check-unavailable", 503)
-		}
-		policy, err := tagpolicy.Resolve(current.Config.Image, updater.DefaultLabelPolicy().TagPolicy(current.Config.Labels))
-		if err != nil {
-			return nil, err
-		}
-		named, err := reference.ParseNormalizedNamed(current.Config.Image)
-		if err != nil {
-			return nil, err
-		}
-		tagged, ok := named.(reference.Tagged)
-		if !ok {
-			return nil, dto.Failure("update.check-unavailable", 503)
-		}
-		tags, err := s.registryService.ListImageTags(ctx, current.Config.Image, nil)
-		if err != nil {
-			return nil, err
-		}
-		selected, err := tagpolicy.Select(tagged.Tag(), tags, policy)
-		if err != nil {
-			return nil, err
-		}
-		version, err := tagpolicy.Version(selected, policy)
-		if err != nil || version != owned.LatestVersion {
-			return nil, dto.Failure("update.target-changed", 409)
-		}
-		owned.LatestVersion = selected
+	if owned.State != "version" {
+		return &owned, nil
 	}
+	policy, err := tagpolicy.Resolve(current.Config.Image, updater.DefaultLabelPolicy().TagPolicy(current.Config.Labels))
+	if err != nil {
+		return nil, err
+	}
+	if policy.Strategy == "digest" {
+		// Without a tag policy the candidate is the same reference; its newer
+		// version label is a rebuild, never a tag to move to.
+		owned.State = "rebuild"
+		return &owned, nil
+	}
+	// Public observations normalize versions; execution needs the actual tag,
+	// including a tag-pattern or "v" prefix. Reuse the selection engine.
+	if s.registryService == nil {
+		return nil, dto.Failure("update.check-unavailable", 503)
+	}
+	named, err := reference.ParseNormalizedNamed(current.Config.Image)
+	if err != nil {
+		return nil, err
+	}
+	tagged, ok := named.(reference.Tagged)
+	if !ok {
+		return nil, dto.Failure("update.check-unavailable", 503)
+	}
+	tags, err := s.registryService.ListImageTags(ctx, current.Config.Image, nil)
+	if err != nil {
+		return nil, err
+	}
+	selected, err := tagpolicy.Select(tagged.Tag(), tags, policy)
+	if err != nil {
+		return nil, err
+	}
+	version, err := tagpolicy.Version(selected, policy)
+	if err != nil || strings.TrimPrefix(version, "v") != strings.TrimPrefix(owned.LatestVersion, "v") {
+		return nil, dto.Failure("update.target-changed", 409)
+	}
+	owned.LatestVersion = selected
 	return &owned, nil
 }
 

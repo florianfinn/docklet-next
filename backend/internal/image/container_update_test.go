@@ -30,7 +30,7 @@ import (
 )
 
 func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
-	for _, store := range []string{"classic", "containerd", "pattern", "version"} {
+	for _, store := range []string{"classic", "containerd", "pattern", "version", "v-version", "label-bump"} {
 		t.Run(store, func(t *testing.T) {
 			regServer := httptest.NewServer(registryHTTP.New())
 			defer regServer.Close()
@@ -40,12 +40,19 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 				ref = repo + ":release-1.0.0"
 			} else if store == "version" {
 				ref = repo + ":1.0.0"
+			} else if store == "v-version" {
+				ref = repo + ":v1.0.0"
 			}
 			tag, err := name.NewTag(ref, name.Insecure)
 			require.NoError(t, err)
 			old, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Config: v1.Config{Labels: map[string]string{"generation": "before"}}})
 			require.NoError(t, err)
-			next, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Config: v1.Config{Labels: map[string]string{"generation": "after"}}})
+			nextLabels := map[string]string{"generation": "after"}
+			if store == "label-bump" {
+				// Same tag, newer version label: a rebuild, not a tag to move to.
+				nextLabels["org.opencontainers.image.version"] = "1.2.4"
+			}
+			next, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Config: v1.Config{Labels: nextLabels}})
 			require.NoError(t, err)
 			oldConfig, err := old.ConfigName()
 			require.NoError(t, err)
@@ -62,8 +69,12 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 				desc = &ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.Digest(localID), Platform: &ocispec.Platform{OS: "linux", Architecture: "amd64"}}
 			}
 			consumerLabels := map[string]string{}
-			if store == "version" {
+			if store == "version" || store == "v-version" {
 				consumerLabels = map[string]string{"com.getarcaneapp.arcane.updater.strategy": "tag"}
+			}
+			localLabels := map[string]any{}
+			if store == "label-bump" {
+				localLabels["org.opencontainers.image.version"] = "1.2.3"
 			}
 			if store == "pattern" {
 				consumerLabels = map[string]string{"com.getarcaneapp.arcane.updater.strategy": "tag", "com.getarcaneapp.arcane.updater.tag-pattern": "release-(?P<version>.*)", "com.getarcaneapp.arcane.updater.constraint": "~1.0"}
@@ -79,7 +90,7 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 				case strings.Contains(r.URL.Path, "/containers/"):
 					_ = json.NewEncoder(w).Encode(inspected)
 				default:
-					_ = json.NewEncoder(w).Encode(map[string]any{"Id": localID, "RepoDigests": []string{repo + "@" + oldManifest.String()}, "Os": "linux", "Architecture": "amd64", "Descriptor": desc, "Config": map[string]any{}})
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": localID, "RepoDigests": []string{repo + "@" + oldManifest.String()}, "Os": "linux", "Architecture": "amd64", "Descriptor": desc, "Config": map[string]any{"Labels": localLabels}})
 				}
 			}))
 			defer daemon.Close()
@@ -103,6 +114,11 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 				tag, err = name.NewTag(targetRef, name.Insecure)
 				require.NoError(t, err)
 			}
+			if store == "v-version" {
+				targetRef = repo + ":v1.1.0"
+				tag, err = name.NewTag(targetRef, name.Insecure)
+				require.NoError(t, err)
+			}
 			if store == "pattern" {
 				targetRef = repo + ":release-1.0.1"
 				tag, err = name.NewTag(targetRef, name.Insecure)
@@ -116,6 +132,12 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 				require.Equal(t, "release-1.0.1", fresh.LatestVersion)
 			} else if store == "version" {
 				require.Equal(t, "1.1.0", fresh.LatestVersion)
+			} else if store == "v-version" {
+				require.Equal(t, "version", fresh.State)
+				require.Equal(t, "v1.1.0", fresh.LatestVersion)
+			} else if store == "label-bump" {
+				require.Equal(t, "1.2.4", fresh.LatestVersion)
+				require.Equal(t, "rebuild", fresh.State, "a same-reference candidate never moves the tag")
 			}
 			id, platform, err := s.ExpectedContainerImage(t.Context(), inspected, targetRef)
 			require.NoError(t, err)
