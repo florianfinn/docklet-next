@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; M18 standalone image update and restore safety.
 
 // Package guard owns host-local image admission and persisted protection checks.
 package guard
@@ -92,7 +92,13 @@ func (s *Service) Reasons(ctx context.Context, id string) ([]imageDTO.Protection
 	}
 	out := make([]imageDTO.Protection, 0, len(pins))
 	for _, pin := range pins {
-		out = append(out, imageDTO.Protection{Reason: pin.Reason, OwnerID: pin.OwnerID})
+		reason := pin.Reason
+		// The container slot is its restore image; share the public restore
+		// protection vocabulary while retaining its distinct persisted owner.
+		if reason == "container-previous" {
+			reason = "restore-point"
+		}
+		out = append(out, imageDTO.Protection{Reason: reason, OwnerID: pin.OwnerID})
 	}
 	return out, nil
 }

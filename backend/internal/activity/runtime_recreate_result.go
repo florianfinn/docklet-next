@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original compact replacement identity persistence and conditional hub projection.
+// Deviations: Original compact replacement identity persistence and conditional hub projection; M18 standalone image update and restore safety.
 
 package activity
 
@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	dto "github.com/florianfinn/docklet-next/types/container"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"gorm.io/gorm"
 )
 
@@ -78,6 +79,14 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 			if row.SettledAt != nil {
 				return nil
 			}
+			if row.OperationID != nil && runtimeContainerImageOperation(RuntimeOperation(*row.OperationID)) && recovered.Code == "container.recreate-ambiguous" {
+				evidence := updaterDTO.LifecycleResult{RunID: row.RunID, Code: recovered.Code, HTTPStatus: 409}
+				if err := runtimeImageResultTx(tx, row.RunID, &evidence); err != nil {
+					return err
+				}
+				_, err := runtimeEvidenceTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: row.ExecutorStartedAt})
+				return err
+			}
 			state, code := "failed", activityDTO.Code(recovered.Code)
 			if recovered.Result != nil {
 				state, code = "success", activityDTO.CodeActivitySuccess
@@ -85,8 +94,20 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 			// The journal's committed observations are the effect evidence. Keep the
 			// ordinary terminal writer and its original receipt identity/actor.
 			result := runtimeLocalResultInternal{recovered: true, state: state, code: code, message: string(code), settledAt: now, startedAt: row.ExecutorStartedAt, recreate: recovered.Result}
+			if row.OperationID != nil && runtimeContainerImageOperation(RuntimeOperation(*row.OperationID)) {
+				evidence := updaterDTO.LifecycleResult{RunID: row.RunID, Verified: state == "success"}
+				if state == "failed" {
+					evidence.Code, evidence.HTTPStatus = recovered.Code, 409
+					if recovered.Code == "container.recreate-recovered" {
+						evidence.Code, evidence.HTTPStatus = "update.deploy-failed", 500
+					}
+					result.code = activityDTO.CodeRuntimeFailed
+					result.message = evidence.Code
+				}
+				result.imageLifecycle = &evidence
+			}
 			if state == "failed" {
-				result.errorText = new(string(code))
+				result.errorText = new(result.message)
 			}
 			_, _, err := runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
 			return err

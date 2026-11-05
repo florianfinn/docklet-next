@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original durable recreate effects and exact-identity startup compensation.
+// Deviations: Original durable recreate effects and exact-identity startup compensation; M18 standalone image update and restore safety.
 
 package container
 
@@ -18,6 +18,7 @@ import (
 
 	"github.com/containerd/errdefs"
 	dto "github.com/florianfinn/docklet-next/types/container"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	dockercontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
@@ -74,6 +75,9 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recreateEffectTimeout)
 	defer cancel()
 	j := &RecreateJournal{RunID: run, OldID: old.ID, OldName: strings.TrimPrefix(old.Name, "/"), BackupName: strings.TrimPrefix(old.Name, "/") + "-docklet-recreate-" + run, NewName: name, WasRunning: old.State != nil && old.State.Running, AutoRemove: old.HostConfig != nil && old.HostConfig.AutoRemove}
+	if expected, ok := ctx.Value(expectedContainerImageKey{}).(string); ok {
+		j.ExpectedImageID = &expected
+	}
 	if err := s.saveRecreate(ctx, j, "intent-rename"); err != nil {
 		// No effect ran yet, so this is an ordinary failure. The terminal
 		// transaction's journal check still holds the run if the row committed.
@@ -164,6 +168,9 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	if err := s.saveRecreate(ctx, j, "done"); err != nil {
 		return "", err
 	}
+	if err := s.verifyImageRecreate(ctx, c, j); err != nil {
+		return j.NewID, err
+	}
 	result := recreateResult(j)
 	dto.RecordRecreateResult(ctx, *result)
 	return j.NewID, nil
@@ -251,6 +258,13 @@ func (s *ContainerService) finishRecoveredRecreate(ctx context.Context, c *clien
 		}
 	}
 	if err := s.saveRecreate(ctx, j, "done"); err != nil {
+		return dto.RecreateRecovery{}, err
+	}
+	if err := s.verifyImageRecreate(ctx, c, j); err != nil {
+		var p *imageDTO.OperationError
+		if errors.As(err, &p) && p.Problem.Code == "update.target-changed" {
+			return dto.RecreateRecovery{RunID: j.RunID, Code: "update.target-changed"}, nil
+		}
 		return dto.RecreateRecovery{}, err
 	}
 	return dto.RecreateRecovery{RunID: j.RunID, Result: recreateResult(j)}, nil
@@ -373,4 +387,20 @@ func (s *ContainerService) PruneRecreateJournals(ctx context.Context) error {
 		return nil
 	}
 	return s.operations.db.WithContext(ctx).Where("phase IN ('done','rolled-back') AND updated_at<? AND run_id IN (SELECT run_id FROM runtime_receipts WHERE settled_at IS NOT NULL)", time.Now().UTC().Add(-7*24*time.Hour)).Delete(&RecreateJournal{}).Error
+}
+
+// Normal and startup success share the same expected-image and name proof.
+// A moved tag leaves the observed replacement intact, with no slot owner advance.
+func (s *ContainerService) verifyImageRecreate(ctx context.Context, c *client.Client, j *RecreateJournal) error {
+	if j.ExpectedImageID == nil {
+		return nil
+	}
+	current, err := recreateInspect(ctx, c, j.NewName)
+	if err != nil {
+		return err
+	}
+	if current == nil || current.ID != j.NewID || current.Image != *j.ExpectedImageID {
+		return imageDTO.Failure("update.target-changed", 409)
+	}
+	return s.advancePreviousImage(ctx, j)
 }
