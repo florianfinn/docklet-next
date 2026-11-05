@@ -213,9 +213,6 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 			require.NoError(t, hub.db.Model(&policy.Notice{}).Count(&n).Error)
 			require.Zero(t, n)
 			require.NoError(t, hub.s.deps.Settings.UpdateSetting(t.Context(), "updateNotify", "true"))
-			_, e = hub.s.RunUpdateCheck(t.Context())
-			require.NoError(t, e)
-			require.Equal(t, 3, hub.notifications)
 			manual := imageupdate.NewImageUpdateService(nil, nil, nil, nil, nil, nil, nil)
 			manual.ConfigureHubReads(envs.ProxyJSONRequest, hub.s.observeManualImages)
 			hubRouter := echo.New()
@@ -224,12 +221,18 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 				next(huma.WithContext(ctx, context.WithValue(ctx.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())))
 			})
 			imageupdate.RegisterImageUpdates(hubAPI, manual, nil, app)
+			// Manual image checks run before any notifying scheduled check, so only the real
+			// hub read hook can produce the two container entries; repeats stay deduplicated.
 			for i := 0; i < 2; i++ {
 				request := httptest.NewRequest(http.MethodGet, "/api/environments/"+env+"/image-updates/check?imageRef="+url.QueryEscape(ref), nil)
 				w := httptest.NewRecorder()
 				hubRouter.ServeHTTP(w, request)
 				require.Equal(t, 200, w.Code, w.Body.String())
+				require.Equal(t, 2, hub.notifications)
 			}
+			_, e = hub.s.RunUpdateCheck(t.Context())
+			require.NoError(t, e)
+			require.Equal(t, 3, hub.notifications)
 			hub.reopen(t)
 			configure()
 			_, e = hub.s.RunUpdateCheck(t.Context())

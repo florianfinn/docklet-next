@@ -85,6 +85,8 @@ func TestUpdateWindowOnlyScheduledAndActorRevalidated(t *testing.T) {
 				return
 			}
 			require.Equal(t, 1, f.admissions)
+			// The window's fresh check is itself a notifying source; nothing primed it.
+			require.Equal(t, 1, f.notifications)
 			f.revoked = true
 			out, err := f.s.RunUpdateWindow(jobcontext.WithExecution(t.Context(), st.Run{ID: "next-window", AttemptCount: 1}, nil), one.ID)
 			require.NoError(t, err)
