@@ -8,6 +8,9 @@ package updater
 
 import (
 	"context"
+	"log/slog"
+	"time"
+
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
@@ -24,6 +27,8 @@ func (s *UpdaterService) enrichPolicyObservation(ctx context.Context, ref, targe
 	}
 	observed, err := s.deps.ImageUpdates.NativeServiceObservation(ctx, ref, target, platform, project, record.ServiceName)
 	if err != nil {
+		// The persisted reason stays neutral; the log keeps the cause for diagnosis.
+		slog.WarnContext(ctx, "Native update observation failed", "image", ref, "target", target, "project", project, "service", record.ServiceName, "elapsed", time.Since(record.CheckTime).String(), "error", err)
 		fail()
 		return
 	}
