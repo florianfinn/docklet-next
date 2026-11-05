@@ -253,9 +253,9 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? jobKind(run) ?? "activity";
   const job = run.type === "job_run";
   // The hub's fallback job summary is "<job name>: <scheduler state>"; a real outcome message stays.
-  const jobSummary = (text: string | undefined): MessageCode | undefined => {
-    const state = run.messageCode?.slice("job.".length) ?? "";
-    return job && run.messageCode?.startsWith("job.") && JOB_STEPS.has(state) && text === `${run.resourceName ?? run.resourceId}: ${state}` ? { code: `activity.jobStep.${state}`, params: {} } : undefined;
+  const jobSummary = (text: string | undefined, code = run.messageCode): MessageCode | undefined => {
+    const state = code?.slice("job.".length) ?? "";
+    return job && code?.startsWith("job.") && JOB_STEPS.has(state) && text === `${run.resourceName ?? run.resourceId}: ${state}` ? { code: `activity.jobStep.${state}`, params: {} } : undefined;
   };
   const lifecycle = run.imageLifecycle;
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
@@ -320,7 +320,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
         : job && JOB_STEPS.has(step.name) ? { code: `activity.jobStep.${step.name}`, params: {} } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
-    log: detail.messages?.length ? detail.messages.map((item) => coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
+    log: detail.messages?.length ? detail.messages.map((item) => jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });

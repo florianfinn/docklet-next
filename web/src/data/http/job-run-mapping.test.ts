@@ -57,3 +57,10 @@ it.each([
 it("keeps a real job outcome message", () => {
   expect(renderRun(mapActivityDetail(settled("failed", "Registry example.com refused the request")), "de").error).toBe("Registry example.com refused the request");
 });
+
+it("localises the persisted message history of a settled hub update check", () => {
+  const detail = settled("partial") as unknown as { messages: unknown[] };
+  detail.messages = [{ id: "example-message", activityId: "run", level: "info", message: "Update check: partial", code: "job.partial", step: "partial", createdAt: "2026-11-05T12:01:00Z" }];
+  const run = renderRun(mapActivityDetail(detail as unknown as Detail), "de");
+  expect([run.error, run.log]).toEqual(["Teilweise abgeschlossen", ["Teilweise abgeschlossen"]]);
+});
