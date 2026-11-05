@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -8,14 +8,11 @@ import type { Finding, Host, ScannedImage, ScanRun, Severity, Stack } from "@/do
 import { StatStrip } from "@/shared/component-set/stat-strip";
 import { HostChip } from "@/shared/components/host-chip";
 import { ToneBadge } from "@/shared/components/tone";
-import { ColumnFilterRow, ColumnFilterSummary } from "@/shared/components/column-filters";
-import { ROW_EDGES, ROW_SURFACE } from "@/shared/components/overview/overview-table";
-import { SortableHead } from "@/shared/components/sortable-head";
 import { activeFilters, applyColumnFilters, type ColumnFilter, type FilterValues } from "@/shared/lib/column-filter";
 import type { SortState } from "@/shared/lib/table-sort";
-import { cn } from "@/shared/lib/utils";
-import { Card } from "@/shared/ui/card";
-import { BareTable, TableBody, TableCell, TableHeader, TableRow } from "@/shared/ui/table";
+
+import { SecurityTable } from "./SecurityTable";
+import { FINDING_GROUPS, IMAGE_GROUPS } from "./security-layout";
 
 import { RiskGauge, SevDot, ShareBar, TrendChart } from "./OverviewCharts";
 import { SEVERITIES, totalOf } from "./severity";
@@ -146,60 +143,6 @@ const byValue = <T,>(rows: T[], dir: SortState<string>["dir"], value: (r: T) => 
     return dir === "asc" ? c : -c;
   });
 
-interface FrameProps<T, K extends string> {
-  label: string;
-  columns: { id: K; label: string; short?: string }[];
-  filters: ColumnFilter<T>[];
-  values: FilterValues;
-  setValues: (fn: (cur: FilterValues) => FilterValues) => void;
-  sort: SortState<K>;
-  onSort: (key: K) => void;
-  summary: { shown: number; total: number; noun: string; nounOf: string };
-  empty: ReactNode;
-  children: ReactNode;
-}
-
-/**
- * Card frame of the security tables, matching the Stacks and Containers
- * overviews: count and reset on top, sortable headers, a recessed filter row
- * and separated row surfaces whose left edge carries --edge.
- */
-function SecurityTable<T, K extends string>({ label, columns, filters, values, setValues, sort, onSort, summary, empty, children }: FrameProps<T, K>) {
-  const t = useTranslations("security");
-  const tf = useTranslations("common.columnFilters");
-  return (
-    <Card className="gap-2 p-4" data-slot="security-table">
-      <ColumnFilterSummary {...summary} values={values} onReset={() => setValues(() => ({}))} className="px-1" />
-      <div className="-mx-1 overflow-x-auto px-1">
-        <BareTable aria-label={label} className="border-separate border-spacing-y-1">
-          <TableHeader className="[&_tr]:border-0">
-            <TableRow className="hover:bg-transparent">
-              {columns.map((c) => (
-                <SortableHead key={c.id} sortKey={c.id} sort={sort} onSort={onSort} label={t("filters.sortBy", { column: c.label })} filtered={!!values[c.id]?.trim()} filteredLabel={tf("filtered")}>
-                  {c.short ? <abbr title={c.label} className="no-underline">{c.short}</abbr> : c.label}
-                </SortableHead>
-              ))}
-            </TableRow>
-            <ColumnFilterRow columns={columns} filters={filters} values={values} onChange={(id, v) => setValues((cur) => ({ ...cur, [id]: v }))} />
-          </TableHeader>
-          <TableBody>
-            {summary.shown === 0 && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columns.length} className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
-                  {empty}
-                </TableCell>
-              </TableRow>
-            )}
-            {children}
-          </TableBody>
-        </BareTable>
-      </div>
-    </Card>
-  );
-}
-
-const ROW = cn("transition-colors duration-(--dur-fast) [&>td]:py-1.5", ROW_SURFACE, ROW_EDGES);
-const edge = (color: string) => ({ "--host": color }) as CSSProperties;
 const worst = (i: ScannedImage) => SEVERITIES.find((s) => (i.counts[s.key] ?? 0) > 0)?.color ?? "var(--border)";
 
 export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings" | "hosts"> & { highlight: string | null }) {
@@ -228,6 +171,28 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
   return (
     <SecurityTable
       label={t("tabs.findings")}
+      fitKey={JSON.stringify([findings, [...hosts.values()].map((h) => h.name)])}
+      condensed={FINDING_GROUPS}
+      rows={rows.map((f, index) => {
+        const sev = SEVERITIES.find((s) => s.key === f.severity);
+        return {
+          id: `${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${index}`,
+          selected: highlight === f.id,
+          color: sev?.color ?? "var(--border)",
+          cells: {
+            id: <span className="font-mono" title={f.title}>{f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}</span>,
+            severity: <ToneBadge tone={sev?.tone ?? "gray"}>{t(`severities.${f.severity}`)}</ToneBadge>,
+            pkg: <span className="font-mono">{f.pkg}</span>,
+            installed: <span className="font-mono text-muted-foreground">{f.installed}</span>,
+            fixed: <span className="font-mono">{f.fixedIn ?? t("noFix")}</span>,
+            image: <span className="font-mono">{f.image}</span>,
+            host: <HostChip host={hosts.get(f.hostId)} />,
+            cvss: <span className="font-semibold tabular">{f.cvss.toFixed(1)}</span>,
+            risk: <span className="tabular" title={f.risk === undefined ? t("unknownIntel") : undefined}>{f.risk?.toFixed(1) ?? "–"}</span>,
+            epss: <span className="tabular">{f.epss === undefined ? "–" : `${(f.epss * 100).toFixed(2)}%`}</span>,
+          },
+        };
+      })}
       columns={columns}
       filters={filters}
       values={values}
@@ -236,31 +201,7 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
       onSort={onSort}
       summary={{ shown: rows.length, total: findings.length, noun: t("filters.findings"), nounOf: t("filters.findingsOf") }}
       empty={activeFilters(values) ? tf("empty") : t("noFindings")}
-    >
-      {rows.map((f, index) => {
-        const sev = SEVERITIES.find((s) => s.key === f.severity);
-        return (
-          <TableRow key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${index}`} data-state={highlight === f.id ? "selected" : undefined} style={edge(sev?.color ?? "var(--border)")} className={ROW}>
-            <TableCell className="font-mono text-xs" title={f.title}>
-              {f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}
-            </TableCell>
-            <TableCell>
-              <ToneBadge tone={sev?.tone ?? "gray"}>{t(`severities.${f.severity}`)}</ToneBadge>
-            </TableCell>
-            <TableCell className="font-mono text-xs">{f.pkg}</TableCell>
-            <TableCell className="font-mono text-xs text-muted-foreground">{f.installed}</TableCell>
-            <TableCell className="font-mono text-xs">{f.fixedIn ?? t("noFix")}</TableCell>
-            <TableCell className="max-w-48 truncate font-mono text-xs">{short(f.image)}</TableCell>
-            <TableCell>
-              <HostChip host={hosts.get(f.hostId)} />
-            </TableCell>
-            <TableCell className="font-semibold tabular">{f.cvss.toFixed(1)}</TableCell>
-            <TableCell className="tabular" title={f.risk === undefined ? t("unknownIntel") : undefined}>{f.risk?.toFixed(1) ?? "–"}</TableCell>
-            <TableCell className="tabular">{f.epss === undefined ? "–" : `${(f.epss * 100).toFixed(2)}%`}</TableCell>
-          </TableRow>
-        );
-      })}
-    </SecurityTable>
+    />
   );
 }
 
@@ -300,6 +241,23 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
   return (
     <SecurityTable
       label={t("tabs.images")}
+      fitKey={JSON.stringify([images, stacks.map((s) => s.name), [...hosts.values()].map((h) => h.name)])}
+      condensed={IMAGE_GROUPS}
+      rows={rows.map((im) => {
+        const stack = stacks.find((s) => s.id === im.stackId);
+        return {
+          id: `${im.hostId}:${im.id ?? im.ref}`,
+          color: worst(im),
+          cells: {
+            image: <><div className="font-mono">{im.ref}</div>{im.platform && <div className="text-muted-foreground" title={t("notCovered")}>{t("scannedPlatform", { platform: im.platform })}</div>}</>,
+            stack: stack ? <Link to={`/stacks/${stack.id}`} className="text-primary-text hover:underline">{stack.name}</Link> : "–",
+            host: <HostChip host={hosts.get(im.hostId)} />,
+            usage: t(`usage.${im.usage}`),
+            ...Object.fromEntries(SEVERITIES.map((s) => [s.key, <ToneBadge key={s.key} tone={im.counts[s.key] ? s.tone : "gray"} className="min-w-8 justify-center">{im.unavailable || !im.scannedAt ? "–" : im.counts[s.key] ?? 0}</ToneBadge>])) as Record<Severity, React.ReactNode>,
+            scanned: <span className="text-muted-foreground">{im.unavailable ? t("scanUnavailable") : !im.scannedAt ? t("notScanned") : formatRelative(im.scannedAt)}</span>,
+          },
+        };
+      })}
       columns={columns}
       filters={filters}
       values={values}
@@ -308,28 +266,6 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
       onSort={onSort}
       summary={{ shown: rows.length, total: images.length, noun: t("filters.images"), nounOf: t("filters.images") }}
       empty={tf("empty")}
-    >
-      {rows.map((im) => {
-        const stack = stacks.find((s) => s.id === im.stackId);
-        return (
-          <TableRow key={`${im.hostId}:${im.id ?? im.ref}`} style={edge(worst(im))} className={ROW}>
-            <TableCell className="max-w-72 text-xs"><div className="truncate font-mono">{im.ref}</div>{im.platform && <div className="text-muted-foreground" title={t("notCovered")}>{t("scannedPlatform", { platform: im.platform })}</div>}</TableCell>
-            <TableCell>{stack ? <Link to={`/stacks/${stack.id}`} className="text-primary-text hover:underline">{stack.name}</Link> : "–"}</TableCell>
-            <TableCell>
-              <HostChip host={hosts.get(im.hostId)} />
-            </TableCell>
-            <TableCell className="text-xs">{t(`usage.${im.usage}`)}</TableCell>
-            {SEVERITIES.map((s) => (
-              <TableCell key={s.key}>
-                <ToneBadge tone={im.counts[s.key] ? s.tone : "gray"} className="min-w-8 justify-center">
-                  {im.unavailable || !im.scannedAt ? "–" : im.counts[s.key] ?? 0}
-                </ToneBadge>
-              </TableCell>
-            ))}
-            <TableCell className="text-xs text-muted-foreground">{im.unavailable ? t("scanUnavailable") : !im.scannedAt ? t("notScanned") : formatRelative(im.scannedAt)}</TableCell>
-          </TableRow>
-        );
-      })}
-    </SecurityTable>
+    />
   );
 }
