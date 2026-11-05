@@ -68,6 +68,17 @@ func TestUpdateCapabilitiesScopedGrants(t *testing.T) {
 			}
 		})
 	}
+	// Admin-only routes: a scoped grant alone never enables them, a global admin does,
+	// and only on their own resource kind.
+	for op, ref := range map[string]capability.ResourceRef{"listUpdatePolicies": {Kind: "host", ID: "example"}, "restoreContainerImage": {Kind: "container", ID: "example~app"}} {
+		scoped := authz.NewPermissionSet()
+		for _, grant := range authz.AllPermissions() {
+			scoped.AddEnv("example", grant)
+		}
+		require.False(t, networkDescriptor(t, scoped, ref, op).Available, op)
+		require.True(t, networkDescriptor(t, authz.SudoPermissionSet(), ref, op).Available, op)
+		require.False(t, networkDescriptor(t, authz.SudoPermissionSet(), capability.ResourceRef{Kind: "stack", ID: "example~app"}, op).Available, op)
+	}
 	for _, op := range []string{"listHostRestorePoints", "deleteHostRestorePoint"} {
 		ref := capability.ResourceRef{Kind: "host", ID: "example"}
 		all := authz.NewPermissionSet()

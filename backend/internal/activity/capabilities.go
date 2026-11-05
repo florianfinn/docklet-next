@@ -24,7 +24,7 @@ import (
 var adapterOperationIDs = []string{
 	"listContainerRegistries", "getContainerRegistry", "createContainerRegistry", "updateContainerRegistry",
 	"clearContainerRegistryCredential", "testContainerRegistry", "deleteContainerRegistry",
-	"getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply",
+	"getUpdateBaseline", "listRestorePoints", "listUpdatePolicies", "restoreContainerImage", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply",
 	"checkAllUpdates", "checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
 	"getScanSettings", "saveScanSettings", "cancelScan",
@@ -101,7 +101,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
-		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "installContainerUpdate", "setContainerAutoUpdate", "checkAllUpdates", "listSystemComponents":
+		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "installContainerUpdate", "setContainerAutoUpdate", "checkAllUpdates", "listSystemComponents", "listUpdatePolicies", "restoreContainerImage":
 			descriptors[i].Available = updateCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""

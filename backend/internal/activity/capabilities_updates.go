@@ -34,7 +34,10 @@ var updateCapabilityRules = map[string]updateCapabilityRule{
 	"installContainerUpdate": {container: true, grants: []string{authz.PermContainersRedeploy, authz.PermActivitiesRead}},
 	"setContainerAutoUpdate": {admin: true, container: true, grants: updateApplyGrants},
 	"checkAllUpdates":        {admin: true, host: true, grants: []string{authz.PermJobsManage}},
-	"listSystemComponents":   {host: true, grants: []string{authz.PermImageUpdatesRead}},
+	// Both routes are Admin-only; the descriptors say so instead of failing on click.
+	"listUpdatePolicies":    {admin: true, host: true, grants: []string{authz.PermImageUpdatesRead}},
+	"restoreContainerImage": {admin: true, container: true, grants: []string{authz.PermContainersRedeploy, authz.PermActivitiesRead}},
+	"listSystemComponents":  {host: true, grants: []string{authz.PermImageUpdatesRead}},
 }
 
 func updateCapabilityAllowed(operation string, ref capability.ResourceRef, ps *authz.PermissionSet) bool {
@@ -43,7 +46,7 @@ func updateCapabilityAllowed(operation string, ref capability.ResourceRef, ps *a
 		return false
 	}
 	env, raw, scoped := strings.Cut(ref.ID, "~")
-	if operation == "installContainerUpdate" || operation == "setContainerAutoUpdate" {
+	if operation == "installContainerUpdate" || operation == "setContainerAutoUpdate" || operation == "restoreContainerImage" {
 		if ref.Kind != "container" {
 			return false
 		}
