@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Host image lease, verified retention pins and shared-reference restore guard.
+// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement.
 
 package project
 
@@ -240,6 +240,14 @@ func (s *ProjectService) ReconcileImageLifecycle(ctx context.Context) error {
 				}
 			}
 		}
+		var deploy int64
+		if err = s.db.WithContext(ctx).Table("runtime_receipts").Where("run_id = ? AND operation_id IN ?", run.ID, []string{"deploy-project", "redeploy-project"}).Count(&deploy).Error; err != nil {
+			return err
+		}
+		// Deploy run rows retain durable point evidence for later receipt queries.
+		if deploy != 0 {
+			continue
+		}
 		if err = s.db.WithContext(ctx).Delete(&life.Run{}, "id = ?", run.ID).Error; err != nil {
 			return err
 		}
@@ -259,10 +267,7 @@ func (s *ProjectService) ReconcileImageLifecycle(ctx context.Context) error {
 	if err = s.db.WithContext(ctx).Where("reason IN ?", []string{"restore-point", "active-update"}).Find(&pins).Error; err != nil {
 		return err
 	}
-	c, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return err
-	}
+	var c *client.Client
 	for _, pin := range pins {
 		var n int64
 		table := "restore_points"
@@ -274,6 +279,14 @@ func (s *ProjectService) ReconcileImageLifecycle(ctx context.Context) error {
 		}
 		if n != 0 {
 			continue
+		}
+		// Live owners need no Docker cleanup; startup also works offline when
+		// there are no orphaned pins to release.
+		if c == nil {
+			c, err = s.dockerService.GetClient(ctx)
+			if err != nil {
+				return err
+			}
 		}
 		// Pin tags use hashed owners; enumerate only this exact owner's namespace.
 		prefix := guard.ReservedHost + "/points/" + life.Hash([]string{"points", pin.OwnerID}) + "/"

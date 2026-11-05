@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Migrated SQLite, real project files, shared image lease and controlled Docker effects.
+// Deviations: Migrated SQLite, real project files, shared image lease and controlled Docker effects. M18 controlled partial tag failures and actual prune-list responses.
 
 package project
 
@@ -77,6 +77,7 @@ type lifecycleFixture struct {
 	onPull                    func()
 	onList                    func()
 	onInspect                 func(string)
+	onTag                     func(string) error
 	normalDeploy              bool
 	containerd                bool
 }
@@ -207,6 +208,16 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		w.WriteHeader(404)
+	case path == "/images/json":
+		rows := []map[string]any{}
+		seen := map[string]bool{}
+		for _, id := range f.tags {
+			if !seen[id] {
+				rows = append(rows, map[string]any{"Id": id, "Created": 1})
+				seen[id] = true
+			}
+		}
+		_ = json.NewEncoder(w).Encode(rows)
 	case strings.HasPrefix(path, "/images/") && strings.HasSuffix(path, "/json"):
 		ref, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/images/"), "/json"))
 		hook := f.onInspect
@@ -242,6 +253,12 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 		target := r.URL.Query().Get("repo")
 		if tag := r.URL.Query().Get("tag"); tag != "" {
 			target += ":" + tag
+		}
+		if f.onTag != nil {
+			if err := f.onTag(source); err != nil {
+				w.WriteHeader(500)
+				return
+			}
 		}
 		id, ok := f.tags[source]
 		if !ok {
