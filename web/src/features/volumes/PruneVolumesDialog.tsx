@@ -1,3 +1,5 @@
+import { PRUNE_CANDIDATE_KEYS, PRUNE_SKIP_KEYS, PRUNE_FAILURE_KEYS } from "@/data/wire-catalogue-states";
+import { scopedKey, wireKey } from "@/data/wire-catalogue";
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useQuery } from "@tanstack/react-query";
@@ -79,8 +81,8 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
           <div className="flex max-h-[65vh] flex-col gap-3 overflow-auto text-sm" role="status">
             <p>{t("reclaimedLowerBound", { size: formatBytes(result.spaceReclaimed ?? 0) })}</p>
             <section aria-label={t("removed")}><h3 className="font-medium">{t("removed")} ({result.removed.length})</h3><ul>{result.removed.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)}</li>)}</ul></section>
-            <section aria-label={t("skipped")}><h3 className="font-medium">{t("skipped")} ({result.skipped.length})</h3><ul>{result.skipped.map((v) => <li key={v.id}>{candidates.find((c) => c.id === v.id)?.name ?? v.id} · {hostName(candidates.find((c) => c.id === v.id)?.hostId ?? v.id.split("~")[0]!)} · {t(`skipReasons.${v.reason}`)}</li>)}</ul></section>
-            <section aria-label={t("failed")}><h3 className="font-medium">{t("failed")} ({result.failed?.length ?? 0})</h3><ul>{result.failed?.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)} · {["volume.inspect-failed", "volume.usage-failed", "volume.remove-failed", "volume.protected"].includes(v.code) ? t(`failedReasons.${v.code.slice("volume.".length) as "inspect-failed" | "usage-failed" | "remove-failed" | "protected"}`) : t("operationFailed")}</li>)}</ul></section>
+            <section aria-label={t("skipped")}><h3 className="font-medium">{t("skipped")} ({result.skipped.length})</h3><ul>{result.skipped.map((v) => <li key={v.id}>{candidates.find((c) => c.id === v.id)?.name ?? v.id} · {hostName(candidates.find((c) => c.id === v.id)?.hostId ?? v.id.split("~")[0]!)} · {t(scopedKey(PRUNE_SKIP_KEYS[v.reason as keyof typeof PRUNE_SKIP_KEYS] ?? `volumes.prune.skipReasons.${v.reason}`, "volumes.prune."))}</li>)}</ul></section>
+            <section aria-label={t("failed")}><h3 className="font-medium">{t("failed")} ({result.failed?.length ?? 0})</h3><ul>{result.failed?.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)} · {wireKey(PRUNE_FAILURE_KEYS, v.code) ? t(scopedKey(PRUNE_FAILURE_KEYS[v.code as keyof typeof PRUNE_FAILURE_KEYS], "volumes.prune.")) : t("operationFailed")}</li>)}</ul></section>
           </div>
         ) : plan.isPending ? (
           <div aria-busy="true" className="flex flex-col gap-2">
@@ -124,7 +126,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
                         />
                         <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
                           <span className="block font-mono text-xs [overflow-wrap:anywhere]">{volumeLabel(v)}</span>
-                          <span className="text-[11px] text-muted-foreground">{hostName(v.hostId)}{reason ? ` · ${t(`candidateReasons.${reason}`)}` : ""}</span>
+                          <span className="text-[11px] text-muted-foreground">{hostName(v.hostId)}{reason ? ` · ${t(scopedKey(PRUNE_CANDIDATE_KEYS[reason], "volumes.prune."))}` : ""}</span>
                         </label>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{v.sizeUnavailable ? t("sizeUnknown") : formatBytes(v.sizeBytes)}</span>
                       </li>

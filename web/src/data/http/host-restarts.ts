@@ -2,12 +2,13 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original one-shot restart intake and identity-owned durable phase following. M14 host maintenance and availability.
+// Deviations: Original one-shot restart intake and identity-owned durable phase following. M14 host maintenance and availability. M19: total contract-code catalogue maps.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
 import type { CodedActionRun, MessageCode } from "../message-code";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
+import { RESTART_STATE_KEYS } from "../wire-catalogue-states";
 import { operationReasonKey } from "../operation-reason";
 import type { CsrfClient } from "./csrf-client";
 import { runtimeError, runtimeResponseError } from "./runtime-mapping";
@@ -43,7 +44,7 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       services: [], status: row.state === "connected" ? "succeeded" : done ? "failed" : "running",
       startedAt: row.createdAt, finishedAt: row.settledAt,
       progress: row.state === "connected" ? 100 : phase < 0 ? 0 : phase * 25,
-      steps: phases.map((name, index) => ({ key: ["validate", "stop", "wait", "connect"][index] as "validate" | "stop" | "wait" | "connect", label: message(`hosts.restart.phases.${name}`), state: row.state === "connected" ? "done" : done ? failedStep(index) : index < phase ? "done" : index === phase ? "running" : "pending" })),
+      steps: phases.map((name, index) => ({ key: ["validate", "stop", "wait", "connect"][index] as "validate" | "stop" | "wait" | "connect", label: message(RESTART_STATE_KEYS[name]), state: row.state === "connected" ? "done" : done ? failedStep(index) : index < phase ? "done" : index === phase ? "running" : "pending" })),
       ...(done && row.code ? { error: message(reason ? `containers.operationReasons.${reason}` : "hosts.errors.failed") } : {}),
       log: [], output: [],
     };

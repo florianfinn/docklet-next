@@ -233,7 +233,12 @@ export const deRunMessages = {
       "shell-orphaned": "Shell-Prozess läuft möglicherweise noch",
       "shell-not-running": "Container läuft nicht",
     },
+    run: { fresh: "Das Ergebnis ist aktuell" },
     runtime: {
+      "wait-timeout": "Zeitlimit beim Warten auf den Vorgang erreicht",
+      "waiter-disconnected": "Die Verbindung wurde beim Warten auf den Vorgang getrennt",
+      "target-removed": "Das Ziel des Vorgangs wurde entfernt",
+
       "idempotency-mismatch": "Dieser Anfrageschlüssel gehört zu einer anderen Bearbeitung",
     },
     update: {

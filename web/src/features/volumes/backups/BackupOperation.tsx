@@ -2,12 +2,14 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original activity following for rediscovered backup operations.
+// Deviations: Original activity following for rediscovered backup operations. M19: total contract-code catalogue maps.
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { backupCodeKey } from "@/data/backup-error";
-import { catalogs } from "@/app/i18n/catalog";
+import { BACKUP_REASON_KEYS } from "@/data/wire-catalogue-backup";
+import { BACKUP_STATUS_KEYS } from "@/data/wire-catalogue-states";
+import { wireKey } from "@/data/wire-catalogue";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import type { ActionDetailState } from "@/data/adapter";
@@ -42,14 +44,9 @@ export function BackupOperation({ hostId, activityId }: { hostId: string; activi
   const code = backupCodeKey(run?.backupOutcome?.errorCode);
   const reason = run?.backupOutcome?.reason,
     outcome = run?.backupOutcome?.status;
-  const detail =
-    reason && Object.hasOwn(catalogs["en-US"].volumes.uploadReasons, reason)
-      ? ` ${all(`volumes.uploadReasons.${reason as "link"}`)}`
-      : "";
-  const status =
-    outcome && ["succeeded", "failed", "partial", "unavailable", "running"].includes(outcome)
-      ? t(`status.${outcome as "partial"}`)
-      : undefined;
+  const reasonKey = wireKey(BACKUP_REASON_KEYS, reason), statusKey = wireKey(BACKUP_STATUS_KEYS, outcome);
+  const detail = reasonKey ? ` ${all(reasonKey)}` : "";
+  const status = statusKey ? all(statusKey) : undefined;
   return (
     <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
       <span>

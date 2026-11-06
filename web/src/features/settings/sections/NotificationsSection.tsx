@@ -1,3 +1,4 @@
+import { NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS } from "@/data/wire-catalogue-settings";
 import { Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { CancelledError } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -89,11 +90,11 @@ function Targets() {
       const result = await adapter.testNotificationTarget(provider);
       if (!current()) return;
       if (result.code === "notification.test-sent") {
-        toast.success(`${kind}: ${all("settings.codes.notification.test-sent")}`);
+        toast.success(`${kind}: ${all(NOTIFICATION_TEST_KEYS["notification.test-sent"])}`);
         if (result.warning) toast.warning(`${kind}: ${all("settings.codes.notification.target-disabled")}`);
       } else {
-        const reason = result.reason ? all(`settings.codes.${result.reason}` as never) : "";
-        toast.error(`${kind}: ${all("settings.codes.notification.test-failed")}${reason ? ` – ${reason}` : ""}`);
+        const reason = result.reason ? all(DELIVERY_REASON_KEYS[result.reason]) : "";
+        toast.error(`${kind}: ${all(NOTIFICATION_TEST_KEYS["notification.test-failed"])}${reason ? ` – ${reason}` : ""}`);
       }
     } catch (cause) {
       if (current() && !(cause instanceof CancelledError)) toast.error(settingsErrorMessage(cause, all));

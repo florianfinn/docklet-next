@@ -7,6 +7,8 @@ import { isRunBusy } from "@/data/run-gate";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
 import type { BackupPolicy } from "@/domain/volumes";
+import { wireKey } from "@/data/wire-catalogue";
+import { VOLUME_COMMAND_KEYS } from "@/data/wire-catalogue-backup";
 import { useCommandError } from "@/data/use-command-error";
 
 type Known = "not-found" | "exists" | "invalid-name" | "in-use" | "host-offline" | "bind-not-deletable" | "not-editable" | "no-policy" | "target-missing" | "invalid-plan";
@@ -17,7 +19,7 @@ export function useVolumeCommands() {
   const adapter = useAdapter();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const t = useTranslations("volumes.errors");
+  const t = useTranslations("volumes.errors"), all = useTranslations();
   const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -32,16 +34,17 @@ export function useVolumeCommands() {
         if (e instanceof AdapterOutcomeError && e.outcome.kind === "error") {
           const code = e.outcome.code;
           if (code === "volume.outcome-unknown" || code === "volume.helper-incompatible" || code === "volume.helper-unavailable") {
-            failure.error(t(code.slice("volume.".length) as "outcome-unknown" | "helper-incompatible" | "helper-unavailable"));
+            failure.error(code === "volume.outcome-unknown" ? t("outcome-unknown") : all(VOLUME_COMMAND_KEYS[code]));
             return undefined;
           }
         }
         const code = errorCode(e);
-        failure.error(code && KNOWN.has(code) ? t(code as Known) : commandError(e));
+        const key = wireKey(VOLUME_COMMAND_KEYS, code === "exists" ? "volume.exists" : code);
+        failure.error(key ? all(key) : code && KNOWN.has(code) ? t(code as Known) : commandError(e));
         return undefined;
       }
     },
-    [t, commandError, adapter],
+    [t, commandError, adapter, all],
   );
   return useMemo(
     () => ({
