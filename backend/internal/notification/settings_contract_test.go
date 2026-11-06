@@ -7,6 +7,7 @@
 package notification
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 	dto "github.com/florianfinn/docklet-next/types/notification"
 	"github.com/stretchr/testify/require"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -101,11 +103,17 @@ func TestDeliveryErrorsNeverPersistProviderText(t *testing.T) {
 	db, s := setupNotificationTestServiceInternal(t)
 	require.NoError(t, db.Create(&NotificationSettings{Provider: "generic", Enabled: true, Config: database.JSON{}}).Error)
 	raw := errors.New("HTTP status 401 at https://notify.example.com/credential-marker")
+	// Log sites (event logging here, callers such as the prune job) see only the classified error.
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	_, err := s.notifyEnabledProvidersInternal(t.Context(), NotificationTarget{EnvironmentID: "0"}, "image_update", "image_update", database.JSON{}, func(context.Context, notifications.NotificationProvider, database.JSON) (bool, error) {
 		return true, raw
 	})
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "credential-marker")
+	require.Contains(t, err.Error(), "delivery-auth")
 	var events []event.Event
 	require.NoError(t, db.Find(&events).Error)
 	require.Len(t, events, 1)
@@ -114,7 +122,7 @@ func TestDeliveryErrorsNeverPersistProviderText(t *testing.T) {
 	b, err := json.Marshal(events)
 	require.NoError(t, err)
 	require.NotContains(t, string(b), "credential-marker")
-	require.NotContains(t, notifications.FormatDeliveryError(raw), "credential-marker")
+	require.NotContains(t, logs.String(), "credential-marker")
 }
 func TestNotificationRoutesRequireGlobalAdminAndLocalID(t *testing.T) {
 	_, s := setupNotificationTestServiceInternal(t)

@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dto "github.com/florianfinn/docklet-next/types/notification"
 	"net"
@@ -302,6 +301,3 @@ func ValidateConfig(p NotificationProvider, c database.JSON) error {
 	}
 	return nil
 }
-
-// FormatDeliveryError deliberately logs only classification; provider diagnostics may embed credentials.
-func FormatDeliveryError(err error) string { return fmt.Sprint(ClassifyDeliveryError(err)) }
