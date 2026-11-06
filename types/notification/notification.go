@@ -6,12 +6,11 @@
 
 package notification
 
-import "github.com/florianfinn/docklet-next/types/vulnerability"
-
 import (
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/florianfinn/docklet-next/types/system"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 )
 
 // Provider is the type for notification provider identifiers.
