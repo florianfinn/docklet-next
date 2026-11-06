@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Extract subscription defaults; M17 sustained-load opt-in preserves existing defaults.
+// Deviations: Extract subscription defaults; M17 sustained-load opt-in preserves existing defaults; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -12,7 +12,7 @@ import (
 )
 
 func (s *NotificationService) isEventEnabled(localConfig database.JSON, eventType notifications.NotificationEventType) bool {
-	defaultEnabled := eventType != notifications.NotificationEventSustainedLoad
+	defaultEnabled := eventType != notifications.NotificationEventSustainedLoad && eventType != notifications.NotificationEventContainerUnhealthy
 	events, ok := localConfig["events"].(map[string]any)
 	if !ok {
 		return defaultEnabled

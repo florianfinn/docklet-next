@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -130,6 +130,9 @@ type Settings struct {
 	AutoHealInterval               SettingVariable `key:"autoHealInterval" meta:"label=Auto Heal Interval;type=cron;keywords=auto,heal,interval,frequency,schedule,health,jobs;description=How often to check container health (cron expression)" catmeta:"id=jobschedule"`
 	AutoHealExcludedContainers     SettingVariable `key:"autoHealExcludedContainers" meta:"label=Auto Heal Excluded Containers;type=text;keywords=auto,heal,exclude,containers,ignore,skip,health;category=internal;description=Comma-separated list of containers to exclude from auto-heal"`
 	AutoHealMaxRestarts            SettingVariable `key:"autoHealMaxRestarts" meta:"label=Auto Heal Max Restarts;type=number;keywords=auto,heal,max,restarts,limit,loop,protection;category=internal;description=Maximum auto-heal restarts per container within the restart window (default: 5)"`
+	AutoHealCooldownMinutes        SettingVariable `key:"autoHealCooldownMinutes" meta:"label=Auto Heal cooldown;type=number;category=internal;description=Pause after a restart in minutes"`
+	ActivityEventLimit             SettingVariable `key:"activityEventLimit" meta:"label=Activity event limit;type=number;category=general;description=Maximum events across the hub"`
+	ActivityRunLimit               SettingVariable `key:"activityRunLimit" meta:"label=Activity run limit;type=number;category=general;description=Maximum finished runs per host"`
 	AutoHealRestartWindow          SettingVariable `key:"autoHealRestartWindow" meta:"label=Auto Heal Restart Window;type=number;keywords=auto,heal,restart,window,minutes,cooldown,protection;category=internal;description=Time window in minutes for counting auto-heal restarts (default: 30)"`
 	VolumeHelperIdleTimeout        SettingVariable `key:"volumeHelperIdleTimeout" meta:"label=Volume Helper Idle Timeout;type=number;keywords=volume,workspace,helper,idle,timeout,cleanup,reaper,minutes;category=internal;description=Minutes a volume helper container may sit idle before automatic removal (default: 10; 0 disables)"`
 	MaxImageUploadSize             SettingVariable `key:"maxImageUploadSize" meta:"label=Max Image Upload Size;type=number;keywords=upload,size,limit,maximum,image,tar,file,megabytes,mb,storage;category=internal;description=Maximum size in MB for image archive uploads (default: 500)"`

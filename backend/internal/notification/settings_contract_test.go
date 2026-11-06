@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -79,7 +79,7 @@ func TestProviderSaveEffectiveConfigAndCredentials(t *testing.T) {
 		require.Error(t, err)
 	}
 	// Concurrent first saves still have exactly one channel row.
-	require.NoError(t, s.DeleteSettings(t.Context(), "ntfy"))
+	require.NoError(t, s.db.Where("provider=?", "ntfy").Delete(&NotificationSettings{}).Error)
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
 	for range 8 {

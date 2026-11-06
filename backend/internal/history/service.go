@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original cancellation-bound, revision-fenced hub history sampler.
+// Deviations: Original cancellation-bound, revision-fenced hub history sampler; M19 backend contracts and target identity integration.
 
 package history
 
@@ -149,13 +149,6 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 	}
 	conditions := dto.Conditions{HostID: host.ID, SampledAt: now, Items: []dto.Condition{}}
 	observations := []observation{{kind: "host", key: host.ID, state: dto.Down}}
-	if fetchErr == nil {
-		observations, conditions.Items = s.observations(host.ID, now, sample, old, &next)
-		next.previous = cloneSample(sample)
-		next.conditions, next.stacks = containerConditions(conditions.Items), stackConditions(conditions.Items)
-	} else {
-		next.restarts, next.conditions, next.stacks = old.restarts, old.conditions, old.stacks
-	}
 	committed := false
 	invalidated := false
 	started := time.Now()
@@ -179,11 +172,28 @@ func (s *Service) commit(ctx context.Context, host environment.Environment, now 
 		if now.Unix() <= latest || now.Unix() <= old.minute {
 			return nil
 		}
+		if fetchErr == nil && len(old.conditions) == 0 && len(old.stacks) == 0 {
+			if err := seedConditions(tx, host.ID, revision, &old); err != nil {
+				return err
+			}
+		}
+		if fetchErr == nil {
+			observations, conditions.Items = s.observations(host.ID, now, sample, old, &next)
+			next.previous = cloneSample(sample)
+			next.conditions, next.stacks = containerConditions(conditions.Items), stackConditions(conditions.Items)
+		} else {
+			next.restarts, next.conditions, next.stacks = old.restarts, old.conditions, old.stacks
+		}
 		if err := upsertMinutes(tx, host.ID, now.Unix(), observations); err != nil {
 			return err
 		}
 		if fetchErr == nil {
 			if err := s.projectTransitions(tx, host.ID, now, conditions.Items, old.conditions); err != nil {
+				return err
+			}
+		}
+		if fetchErr == nil {
+			if err := persistConditions(tx, host, now, sample, next); err != nil {
 				return err
 			}
 		}

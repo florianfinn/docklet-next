@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -37,18 +37,18 @@ func TestProviderProbeHasOneFlightAndReleasesAfterCompletion(t *testing.T) {
 	h := &NotificationHandler{notificationService: s}
 	done := make(chan error, 1)
 	go func() {
-		_, e := h.TestNotification(context.Background(), &TestNotificationInput{EnvironmentID: "0", Provider: "generic"})
+		_, e := h.TestNotification(context.Background(), &TestNotificationInput{EnvironmentID: "0", TargetID: 1})
 		done <- e
 	}()
 	<-entered
-	_, e := h.TestNotification(t.Context(), &TestNotificationInput{EnvironmentID: "0", Provider: "generic"})
+	_, e := h.TestNotification(t.Context(), &TestNotificationInput{EnvironmentID: "0", TargetID: 1})
 	var p *dto.Problem
 	require.ErrorAs(t, e, &p)
 	require.Equal(t, "notification.test-busy", p.Code)
 	require.EqualValues(t, 1, calls.Load())
 	unblock()
 	require.NoError(t, <-done)
-	_, e = h.TestNotification(t.Context(), &TestNotificationInput{EnvironmentID: "0", Provider: "generic"})
+	_, e = h.TestNotification(t.Context(), &TestNotificationInput{EnvironmentID: "0", TargetID: 1})
 	require.NoError(t, e)
 	require.EqualValues(t, 2, calls.Load())
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -66,6 +66,9 @@ func DefaultSettingsConfig() *Settings {
 		AutoHealInterval:                      SettingVariable{Value: "0 */5 * * * *"},
 		AutoHealExcludedContainers:            SettingVariable{Value: ""},
 		AutoHealMaxRestarts:                   SettingVariable{Value: "5"},
+		AutoHealCooldownMinutes:               SettingVariable{Value: "10"},
+		ActivityEventLimit:                    SettingVariable{Value: "500"},
+		ActivityRunLimit:                      SettingVariable{Value: "100"},
 		AutoHealRestartWindow:                 SettingVariable{Value: "30"},
 		VolumeHelperIdleTimeout:               SettingVariable{Value: "10"},
 		BaseServerURL:                         SettingVariable{Value: "http://localhost"},

@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration.
 
 package access
 
@@ -26,7 +26,7 @@ var Routes = []Route{
 	{"DELETE", "/environments/{id}/containers/{containerId}/origin", "reset-container-origin"},
 	{"DELETE", "/environments/{id}/images/{imageId}", "remove-image"},
 	{"DELETE", "/environments/{id}/networks/{networkId}", "delete-network"},
-	{"DELETE", "/environments/{id}/notifications/settings/{provider}", "delete-notification-settings"},
+	{"DELETE", "/environments/{id}/notifications/settings/{targetId}", "delete-notification-settings"},
 	{"DELETE", "/environments/{id}/projects/{projectId}/destroy", "destroy-project"},
 	{"DELETE", "/environments/{id}/updater/restore-points/{pointId}", "delete-host-restore-point"},
 	{"DELETE", "/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}", "delete-restore-point"},
@@ -64,7 +64,6 @@ var Routes = []Route{
 	{"GET", "/container-registries/{id}", "getContainerRegistry"},
 	{"GET", "/container-registries/{id}/repositories", "listContainerRegistryRepositories"},
 	{"GET", "/container-registries/{id}/tags", "listContainerRegistryTags"},
-	{"GET", "/customize/categories", "get-customize-categories"},
 	{"GET", "/edge-mtls/ca", "downloadEdgeMTLSCA"},
 	{"GET", "/environments", "listEnvironments"},
 	{"GET", "/environments/0/runtime-runs/{runId}", "get-runtime-run-outcome"},
@@ -109,7 +108,7 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/networks/topology", "get-network-topology"},
 	{"GET", "/environments/{id}/networks/{networkId}", "get-network"},
 	{"GET", "/environments/{id}/notifications/settings", "get-all-notification-settings"},
-	{"GET", "/environments/{id}/notifications/settings/{provider}", "get-notification-settings"},
+	{"GET", "/environments/{id}/notifications/settings/{targetId}", "get-notification-settings"},
 	{"GET", "/environments/{id}/ports", "list-ports"},
 	{"GET", "/environments/{id}/projects", "list-projects"},
 	{"GET", "/environments/{id}/projects/counts", "get-project-status-counts"},
@@ -179,7 +178,6 @@ var Routes = []Route{
 	{"GET", "/roles", "list-roles"},
 	{"GET", "/roles/available-permissions", "get-permissions-manifest"},
 	{"GET", "/roles/{id}", "get-role"},
-	{"GET", "/settings/categories", "get-settings-categories"},
 	{"GET", "/stream", "streamClient"},
 	{"GET", "/users", "listUsers"},
 	{"GET", "/users/{userId}", "getUser"},
@@ -206,7 +204,6 @@ var Routes = []Route{
 	{"POST", "/container-registries", "createContainerRegistry"},
 	{"POST", "/container-registries/sync", "syncContainerRegistries"},
 	{"POST", "/container-registries/{id}/test", "testContainerRegistry"},
-	{"POST", "/customize/search", "search-customize"},
 	{"POST", "/environments", "createEnvironment"},
 	{"POST", "/environments/0/runtime-registration", "register-runtime-executor"},
 	{"POST", "/environments/0/runtime-runs", "execute-runtime-run"},
@@ -251,7 +248,7 @@ var Routes = []Route{
 	{"POST", "/environments/{id}/networks/{networkId}/connect", "connect-network-container"},
 	{"POST", "/environments/{id}/networks/{networkId}/disconnect", "disconnect-network-container"},
 	{"POST", "/environments/{id}/notifications/settings", "create-or-update-notification-settings"},
-	{"POST", "/environments/{id}/notifications/test/{provider}", "test-notification"},
+	{"POST", "/environments/{id}/notifications/test/{targetId}", "test-notification"},
 	{"POST", "/environments/{id}/projects", "create-project"},
 	{"POST", "/environments/{id}/projects/{projectId}/archive", "archive-project"},
 	{"POST", "/environments/{id}/projects/{projectId}/build", "build-project-images"},
@@ -293,9 +290,10 @@ var Routes = []Route{
 	{"POST", "/environments/{id}/vulnerabilities/scan", "scan-host-vulnerabilities"},
 	{"POST", "/environments/{id}/vulnerabilities/unignore/bulk", "bulk-unignore-vulnerabilities"},
 	{"POST", "/environments/{id}/webhooks", "create-webhook"},
+	{"POST", "/stack-import", "import-stack-source"},
+	{"PUT", "/environments/{id}/notifications/settings/{targetId}", "update-notification-settings"},
 	{"POST", "/notifications/dispatch", "dispatch-notification"},
 	{"POST", "/roles", "create-role"},
-	{"POST", "/settings/search", "search-settings"},
 	{"POST", "/updater/check-all", "check-all-updates"},
 	{"POST", "/users", "createUser"},
 	{"POST", "/users/{userId}/disable", "disable-user"},

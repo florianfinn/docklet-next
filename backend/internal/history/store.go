@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original three-tier minute-guarded history storage and fixed bucket reads.
+// Deviations: Original three-tier minute-guarded history storage and fixed bucket reads; M19 backend contracts and target identity integration.
 
 package history
 
@@ -47,7 +47,7 @@ type bucketRow struct {
 func (bucketRow) TableName() string { return "history_buckets" }
 
 // Models supplies the history-owned shape to the development schema proof.
-func Models() []any { return []any{&bucketRow{}} }
+func Models() []any { return []any{&bucketRow{}, &conditionRow{}} }
 
 type observation struct {
 	kind, key, identity                                   string
@@ -199,6 +199,6 @@ func retain(ctx context.Context, db *database.DB, now time.Time) error {
 				return fmt.Errorf("prune history: %w", err)
 			}
 		}
-		return nil
+		return tx.Exec("DELETE FROM history_conditions WHERE host_id NOT IN (SELECT id FROM environments)").Error
 	})
 }

@@ -2,7 +2,7 @@
 // Revision: 747254e2620528ca922ef71c066f3d796fa7b856268644e2517f16edf5b0f4c5
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration.
 
 import { usersEn, keysEn } from "./users-en";
 // American English texts of hub settings and the profile page.
@@ -14,6 +14,9 @@ export const enSettings = {
   // Texts of backend notification and Auto Heal codes, keyed by the wire code path.
   codes: {
     notification: {
+      "name-taken": "A target with this name already exists",
+      "name-invalid": "Enter a target name with 1–64 characters",
+      "target-not-found": "Notification target not found",
       "config-invalid": "Invalid notification settings",
       "hub-only": "Notifications are managed on the hub",
       "dispatch-invalid": "Invalid notification event",
@@ -29,6 +32,7 @@ export const enSettings = {
       "settings-env-managed": "Auto Heal is managed by environment variables",
     },
     settings: {
+      "activity-limit-invalid": "Enter an activity limit in the allowed range",
       "key-managed": "Use the dedicated settings form",
       "invalid-time-zone": "Choose a valid time zone.",
     },
@@ -359,6 +363,7 @@ export const enSettings = {
     events: "Events",
     noEvents: "No events selected",
     eventNames: {
+      containerUnhealthy: "Container unhealthy",
       deployFailed: "Deploy failed",
       hostOffline: "Host offline or back online",
       backupFailed: "Backup or restore failed",
@@ -385,6 +390,9 @@ export const enSettings = {
     pointerLink: "Notifications",
   },
   autoHeal: {
+    cooldownMinutes: "Pause after restart",
+    invalidHint: "Auto Heal is paused on this host: {fields} outside the allowed range",
+    invalidFields: {"maxRestarts": "Maximum restarts", "windowMinutes": "Time window", "cooldownMinutes": "Pause after restart", "excludedStacks": "Excluded stacks", "excludedContainers": "Excluded containers"},
     scopeHint: "Auto Heal restarts only running containers whose healthcheck reports unhealthy. Stopped containers follow Docker''s restart policies. Settings apply per host.",
     loading: "Loading …",
     on: "On",
