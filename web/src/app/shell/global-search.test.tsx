@@ -42,7 +42,7 @@ it("user destinations all resolve in UserShell and no admin-only query is sent",
   const forbidden = [vi.spyOn(adapter, "listContainers"), vi.spyOn(adapter, "listImages"), vi.spyOn(adapter, "listVolumes"), vi.spyOn(adapter, "getTopology"), vi.spyOn(adapter, "getConnectedSettings")];
   const view = renderRoutes([{ element: <AuthGate />, children: [{ element: <AppShell />, children: ["/dashboard", "/stacks", "/profile", "/stacks/:id"].map((path) => ({ path, element: <h1>Mounted destination</h1> })) }] }], ["/dashboard"], adapter);
   await screen.findByRole("heading", { name: "Mounted destination" });
-  for (const [label, path] of [["Dashboard", "/dashboard"], ["Stacks", "/stacks"], ["Profile", "/profile"], [stack.name, `/stacks/${encodeURIComponent(stack.id)}`]]) {
+  for (const [label, path] of [["Dashboard", "/dashboard"], ["Stacks", "/stacks"], ["Profile", "/profile"], ["Show all in Stacks", "/stacks"], [stack.name, `/stacks/${encodeURIComponent(stack.id)}`]]) {
     await userEvent.click(screen.getByRole("button", { name: "Search" })); const dialog = await screen.findByRole("dialog");
     const options = await within(dialog).findAllByRole("option");
     expect(options.every((option) => ["Dashboard", "Stacks", "Profile", "Show all in Stacks", "Toggle theme", "Sign out"].includes(option.textContent ?? "") || option.textContent?.startsWith(stack.name))).toBe(true);

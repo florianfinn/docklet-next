@@ -52,3 +52,22 @@ it("Direct and Edge producer shapes render an invalid cooldown hint instead of u
   expect(fetcher.mock.calls.length).toBe(2); expect(screen.queryByText("Nicht verfügbar") === null).toBe(true);
   await act(async () => {});
 });
+
+it("cooldown slider keeps the ten-minute default and saves the sixty-minute boundary", async () => {
+  const adapter = createDemoAdapter(), save = vi.spyOn(adapter, "saveAutoHealSettings");
+  renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/autoHeal"], adapter);
+  await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Atlas" }));
+  const slider = within(await screen.findByRole("dialog")).getByRole("slider", { name: "Pause nach Neustart" });
+  expect(slider.getAttribute("aria-valuenow")).toBe("10"); slider.focus(); await userEvent.keyboard("{End}");
+  expect(slider.getAttribute("aria-valuenow")).toBe("60");
+  await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+  await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+  expect(save.mock.calls[0]?.[1].cooldownMinutes).toBe(60);
+});
+it("notification links explain APP_URL fallback and link to General when no address is configured", async () => {
+  const adapter = createDemoAdapter(), settings = await adapter.getSettings();
+  adapter.getConnectedSettings = async () => ({ ...settings, general: { ...settings.general, hubAddress: "", domainUrl: "", linkBase: "auto" } });
+  renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/notifications"], adapter);
+  expect(await screen.findByText(/Ohne interne Hub-Adresse verwenden Links APP_URL/) !== null).toBe(true);
+  expect(screen.getByRole("link", { name: "In den allgemeinen Einstellungen ändern" }).getAttribute("href")).toBe("/settings/general");
+});

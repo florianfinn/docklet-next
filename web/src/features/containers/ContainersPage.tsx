@@ -1,6 +1,5 @@
 import { useBulkRun, useBulkCapabilities } from "@/shared/hooks/use-bulk-run";
 import type { BulkItem } from "@/shared/hooks/bulk-run";
-import { BulkResultDialog } from "@/shared/components/bulk-result-dialog";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { AlertTriangle, Box, Boxes, Play, RotateCw, Search, Square } from "lucide-react";
@@ -265,7 +264,6 @@ export default function ContainersPage() {
       </Card>
       <ContainerInspector container={current} host={current ? hosts.byId.get(current.hostId) : undefined} onClose={close} />
       <RecreateDialog container={editing ?? undefined} open={!!editing} onOpenChange={(o) => !o && setEditing(null)} />
-      <BulkResultDialog results={bulkRun.results} open={bulkRun.open} onOpenChange={bulkRun.setOpen} />
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
         <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !command.available} title={command.reason} onClick={() => bulk("start")}>
           <Play data-icon="inline-start" /> {t("bulk.start")}

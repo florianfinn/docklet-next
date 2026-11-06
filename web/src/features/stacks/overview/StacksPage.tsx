@@ -1,6 +1,5 @@
 import { useBulkRun, useBulkCapabilities } from "@/shared/hooks/use-bulk-run";
 import type { BulkAction, BulkItem } from "@/shared/hooks/bulk-run";
-import { BulkResultDialog } from "@/shared/components/bulk-result-dialog";
 import { BulkUpdateDialog } from "@/shared/components/updates/BulkUpdateDialog";
 import { InventoryNotice } from "../InventoryNotice";
 import { AlertTriangle, Download, Layers, Play, Plus, RefreshCw, RotateCw, Square } from "lucide-react";
@@ -269,7 +268,6 @@ export default function StacksPage() {
           <p className="px-1 text-xs text-muted-foreground">{t("footer", { shown: rows.length, total: stacks.visible.length, hidden: hiddenTotal })}</p>
         )}
       </Card>
-      <BulkResultDialog results={bulkRun.results} open={bulkRun.open} onOpenChange={bulkRun.setOpen} />
       {updateItems && <BulkUpdateDialog items={updateItems} onClose={closeUpdates} install={(eligible, revisions, skipped) => { clearSelection(); return bulkRun.run(eligible, "update", revisions, skipped); }} />}
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
         <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !commandCapability.available} title={commandCapability.reason} onClick={() => bulk("start")}>

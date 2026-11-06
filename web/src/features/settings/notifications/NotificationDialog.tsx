@@ -196,7 +196,7 @@ export function NotificationDialog({ target, available, names = [], save, onClos
                   {t("back")}
                 </Button>
               ) : <span />}
-              <Button type="submit" disabled={busy || !name.trim() || name.trim().length > 64}>
+              <Button type="submit" disabled={busy || !name.trim() || [...name.trim()].length > 64}>
                 {busy && <Spinner data-icon="inline-start" />}
                 {t("save")}
               </Button>

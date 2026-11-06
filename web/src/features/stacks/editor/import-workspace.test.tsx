@@ -9,12 +9,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
+import { registerIdentityLifetime } from "@/data/identity-lifetime";
+import { act } from "react";
 import { renderRoutes } from "@/test/render";
 import StackPage from "../detail/StackPage";
 beforeEach(() => simulationStore.set((state) => ({ ...state, latency: "instant", live: false })));
 afterEach(() => { simulationStore.reset(); localStorage.clear(); });
-it("edited new stack asks once before replacing compose and never deploys on Apply", async () => {
+it.each([false, true])("edited new stack asks once before replacing compose and never deploys on Apply; identity end=%s", async (endIdentity) => {
   const adapter = createDemoAdapter();
+  const listeners = new Set<() => void>(); let version = 0;
+  registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => version === 0, listen: (fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; } });
   adapter.importSource = async () => ({ title: "proposal-app", composeContent: "services:\n  imported:\n    image: example/app:1\n", envNames: ["TOKEN"], found: ["import.found.compose"], missing: [] });
   const deploy = vi.spyOn(adapter, "deployStack");
   renderRoutes([{ path: "/stacks/new", element: <StackPage /> }], ["/stacks/new"], adapter);
@@ -25,6 +29,7 @@ it("edited new stack asks once before replacing compose and never deploys on App
   await screen.findByText("proposal-app"); await userEvent.click(screen.getByRole("button", { name: "Übernehmen" }));
   expect(screen.queryByRole("alertdialog") !== null).toBe(true);
   const confirm = screen.getByRole("alertdialog"); expect(within(confirm).getByRole("heading").textContent).toBe("Bearbeitete Compose-Datei ersetzen?");
+  if (endIdentity) { await act(() => { version++; listeners.forEach((fn) => fn()); }); expect(screen.queryByRole("alertdialog") === null).toBe(true); expect(deploy).toHaveBeenCalledTimes(0); return; }
   await userEvent.click(within(confirm).getByRole("button", { name: "Übernehmen" }));
   await waitFor(() => expect(screen.queryByRole("alertdialog") === null).toBe(true));
   expect(deploy).toHaveBeenCalledTimes(0);

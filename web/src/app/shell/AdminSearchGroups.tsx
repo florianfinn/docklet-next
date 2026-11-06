@@ -1,3 +1,5 @@
+import { captureCommandFailure } from "@/shared/components/command-failure";
+import { useCommandError } from "@/data/use-command-error";
 // Source: docklet-next/issues/356
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
@@ -19,11 +21,12 @@ interface Props { query: string; select: (to?: string, run?: () => void) => void
 export function AdminSearchGroups({ query, select, hostName, pages, actions: sharedActions, stacks, stacksLoading }: Props) {
   const hosts = useHosts(), containers = useContainers(), images = useImages(), volumes = useVolumes(), topology = useTopology();
   const t = useTranslations("shell.search"), nav = useTranslations("shell.nav"), settings = useTranslations("settings.sections"), adapter = useAdapter();
+  const commandError = useCommandError();
   const create = useCapability("deployStack"), add = useCapability("registerHost"), updates = useCapability("checkUpdates"), activity = useCapability("listActions");
   const actions = [
     ...(create.available ? [{ id: "new-stack", label: t("newStack"), to: "/stacks/new" }] : []),
     ...(add.available ? [{ id: "add-host", label: nav("newHost"), to: "/hosts/new" }] : []),
-    ...(updates.available ? [{ id: "updates", label: t("checkUpdates"), run: () => { void (adapter.checkAllUpdates ? adapter.checkAllUpdates() : adapter.checkUpdates({})).catch(() => undefined); } }] : []),
+    ...(updates.available ? [{ id: "updates", label: t("checkUpdates"), run: () => { const failure = captureCommandFailure(adapter); void (adapter.checkAllUpdates ? adapter.checkAllUpdates() : adapter.checkUpdates({})).catch((error) => failure.error(commandError(error))); } }] : []),
     ...(activity.available ? [{ id: "activity", label: t("activity"), run: () => openActivity() }] : []),
   ];
   return <><SearchGroup name={t("pages")} entries={[...pages, ...NAV.flatMap((group) => group.items).filter((item) => !item.preview && !["dashboard", "stacks"].includes(item.key)).map((item) => ({ id: item.key, label: nav(item.key), to: item.to }))]} query={query} select={select} /><SearchGroup name={t("settings")} entries={IDS.map((id) => ({ id, label: settings(id), keywords: [id], to: `/settings/${id}` }))} query={query} select={select} />

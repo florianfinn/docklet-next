@@ -272,6 +272,7 @@ export const deRunMessages = {
       "interrupted": "Auto-Heal-Versuch unterbrochen",
     },
     notification: {
+      target: "{provider} ({name})",
       "send": "Benachrichtigung über {provider} gesendet",
       "delivery-failed": "Benachrichtigung konnte nicht zugestellt werden",
       "delivery-failed-via": "Benachrichtigung über {provider} fehlgeschlagen",

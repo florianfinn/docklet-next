@@ -46,7 +46,7 @@ function SearchContents({ close, signOut }: { close: () => void; signOut: () => 
   const select = (to?: string, run?: () => void) => { close(); if (to) void navigate(to); else run?.(); };
   const hostName = (id: string) => hosts.data?.find((host) => host.id === id)?.name ?? id;
   const pages = [{ id: "dashboard", label: nav("dashboard"), to: "/dashboard" }, { id: "stacks", label: nav("stacks"), to: "/stacks" }, { id: "profile", label: nav("profile"), to: "/profile" }];
-  const actions = [{ id: "theme", label: t("theme"), run: () => setTokens({ theme: tokens.theme === "dark" ? "light" : "dark" }) }, ...(mode.data === "none" ? [] : [{ id: "logout", label: t("signOut"), run: signOut }])];
+  const actions = [{ id: "theme", label: t("theme"), run: () => setTokens({ theme: tokens.theme === "dark" ? "light" : "dark" }) }, ...(["local", "proxy"].includes(mode.data ?? "") ? [{ id: "logout", label: t("signOut"), run: signOut }] : [])];
   return <Command shouldFilter={false}><CommandInput aria-label={t("title")} placeholder={t("placeholder")} value={query} onValueChange={setQuery} /><CommandList><CommandEmpty>{t("empty")}</CommandEmpty>
     {user ? <>
       <SearchGroup name={t("pages")} entries={pages} query={query} select={select} />

@@ -111,7 +111,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                       <HostChip host={host} />
                     </Row>
                     <Row label={td("architecture")} mono>
-                      {metadataText(detail ? `${detail.os}/${detail.architecture}` : undefined)}
+                      {metadataText(detail?.os && detail.architecture ? `${detail.os}/${detail.architecture}` : undefined)}
                     </Row>
                     <Row label={td("created")}>
                       <span title={formatDateTime(image.createdAt)}>{formatRelative(image.createdAt)}</span>

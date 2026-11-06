@@ -1,3 +1,4 @@
+import { identityLifetime } from "@/data/identity-lifetime";
 import type { ImportResult } from "@/data/adapter";
 import { applyImportProposal } from "./import-proposal";
 // Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/editor/StackWorkspace.tsx
@@ -117,6 +118,7 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
 
   const importCapability = useCapability("importSource");
   const [proposal, setProposal] = useState<ImportResult>();
+  useEffect(() => identityLifetime(adapter).listen(() => { setDialog(null); setProposal(undefined); }), [adapter]);
   const applyProposal = (result: ImportResult) => {
     const next = applyImportProposal(result, model?.name ?? "", draft.env);
     draft.setCompose(next.compose); draft.setEnv(next.env);
