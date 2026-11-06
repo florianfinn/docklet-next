@@ -93,9 +93,12 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatSlack} {
 		content.Text[f] = text
 	}
-	htmlText := strings.ReplaceAll(html.EscapeString(text), "\n", "<br>")
-	content.Text[notifications.MessageFormatHTML] = htmlText
-	content.RenderEmail = func() (string, string, error) { return title, "<p>" + htmlText + "</p>", nil }
+	// Telegram HTML keeps literal newlines (it has no <br>); only the email body uses line-break tags.
+	escaped := html.EscapeString(text)
+	content.Text[notifications.MessageFormatHTML] = escaped
+	content.RenderEmail = func() (string, string, error) {
+		return title, "<p>" + strings.ReplaceAll(escaped, "\n", "<br>") + "</p>", nil
+	}
 	return s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventType(row.Event), row.Event, database.JSON{"eventType": row.Event, "notificationId": row.ID}, func(ctx context.Context, p notifications.NotificationProvider, c database.JSON) (bool, error) {
 		return notifications.Deliver(ctx, p, c, content)
 	})

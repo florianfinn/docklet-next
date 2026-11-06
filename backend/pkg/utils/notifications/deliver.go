@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M19 #308 ntfy uses the notice title when none is configured.
 
 package notifications
 
@@ -26,7 +26,7 @@ type Content struct {
 	// Title is the generic-webhook title.
 	Title string
 
-	// DefaultTitle is applied to pushover/gotify when their config has no
+	// DefaultTitle is applied to pushover/gotify/ntfy when their config has no
 	// title; "" means don't default.
 	DefaultTitle string
 
@@ -189,6 +189,9 @@ func deliverNtfy(ctx context.Context, config database.JSON, c Content) error {
 	ntfyConfig, err := PrepareNtfyConfig(config, "Ntfy", c.RequireNtfyTopic)
 	if err != nil {
 		return err
+	}
+	if ntfyConfig.Title == "" && c.DefaultTitle != "" {
+		ntfyConfig.Title = c.DefaultTitle
 	}
 	if sendNtfyErr := SendNtfy(ctx, ntfyConfig, c.Text[MessageFormatPlain]); sendNtfyErr != nil {
 		return fmt.Errorf("failed to send Ntfy notification: %w", sendNtfyErr)
