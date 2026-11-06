@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package di
 
@@ -47,9 +47,9 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
-	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/stackimport"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
@@ -68,9 +68,9 @@ type graphParams struct {
 	Project           *project.ProjectService
 	Environment       *environment.EnvironmentService
 	Settings          *settings.SettingsService
+	StackImport       *stackimport.Module
 	KV                *kv.KVService
 	JobSchedule       *job.JobService
-	Search            *search.Module
 	Container         *container.Module
 	Image             *image.ImageService
 	Build             *build.BuildService

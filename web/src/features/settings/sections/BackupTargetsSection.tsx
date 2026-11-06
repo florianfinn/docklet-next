@@ -1,9 +1,10 @@
+import { BACKUP_TARGET_KIND_KEYS, BACKUP_DELIVERY_STATE_KEYS } from "@/data/wire-catalogue-states";
 import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/284
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live targets CRUD and per-host delivery/test results. M14 host maintenance and availability. M16 delivery states and default retention (#289, #329).
+// Deviations: Original live targets CRUD and per-host delivery/test results. M14 host maintenance and availability. M16 delivery states and default retention (#289, #329). M19: total contract-code catalogue maps.
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -126,7 +127,7 @@ function TargetCard({
   return <article className="space-y-3 rounded-xl border p-4">
     <div className="flex flex-wrap items-center gap-2">
       <h3 className="break-all font-medium">{target.name}</h3>
-      <ToneBadge tone="gray">{t(`kinds.${target.kind}`)}</ToneBadge>
+      <ToneBadge tone="gray">{all(BACKUP_TARGET_KIND_KEYS[target.kind])}</ToneBadge>
       {target.retiredAt && <ToneBadge tone="warn">{t("retired")}</ToneBadge>}
     </div>
     <p className="break-all font-mono text-xs">
@@ -139,7 +140,7 @@ function TargetCard({
         const check = target.checks?.find((value) => value.hostId === host.id);
         const delivery = target.delivery?.find((value) => value.hostId === host.id);
         return <li key={host.id}>
-          {host.name}: {delivery?.state === "current" ? t("delivered") : delivery?.state === "conflict" ? t("deliveryConflict") : t("deliveryPending")}
+          {host.name}: {all(BACKUP_DELIVERY_STATE_KEYS[delivery?.state ?? "pending"])}
           {delivery?.code && delivery.state !== "current" && <p className="text-xs">{all(backupCodeKey(delivery.code) ?? "common.commandErrors.failed")}</p>}
           <p className="text-xs text-muted-foreground">
             {check

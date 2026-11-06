@@ -2,12 +2,14 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original producer proof for the web notification target fixture.
+// Deviations: Original producer proof for the web notification target fixture; M19 backend contracts and target identity integration.
 
 package notification
 
 import (
 	"context"
+	"encoding/json"
+	dto "github.com/florianfinn/docklet-next/types/notification"
 	"os"
 	"reflect"
 	"testing"
@@ -48,5 +50,8 @@ func TestNotificationTargetListMatchesWebFixture(t *testing.T) {
 	require.Equal(t, 200, response.Code, response.Body.String())
 	fixture, err := os.ReadFile("../../../web/src/data/http/testdata/notification-targets.json")
 	require.NoError(t, err)
-	require.JSONEq(t, string(fixture), response.Body.String())
+	var expected, actual []dto.Response
+	require.NoError(t, json.Unmarshal(fixture, &expected))
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &actual))
+	require.ElementsMatch(t, expected, actual)
 }

@@ -2,7 +2,7 @@
 // Revision: 81be6ce24058459478dde21b11c6a5605fdb3e7b4d5fc409bc2aacce9a333cfd
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. Issue #102: optional classified activity source read-health subscription. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. List summaries and owned detail reads with bounded recovery (#225, #223). Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. M11 #262: live vulnerability reads, scan controls and security settings. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. Issue #102: optional classified activity source read-health subscription. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. List summaries and owned detail reads with bounded recovery (#225, #223). Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. M11 #262: live vulnerability reads, scan controls and security settings. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
 import type { components } from "@/api/generated/schema";
 import type {
@@ -66,6 +66,9 @@ export class StackCreatedError extends Error {
 
 export type RecreateInput = components["schemas"]["ContainerRecreateRequest"]["edit"];
 
+export interface RuntimeAdmission { outcome: "started" | "joined"; runId: string }
+export interface RuntimeCommandRequest { kind: "stack" | "container"; id: string; command: StackCommand | ContainerCommand | "update"; input?: import("@/domain/stack-updates").LifecycleInput }
+
 export interface ImportRequest {
   kind: "github" | "dockerhub";
   ref: string;
@@ -74,9 +77,10 @@ export interface ImportRequest {
 /** One-time import result; values the source does not provide stay empty. */
 export interface ImportResult {
   title: string;
-  found: string[];
-  missing: string[];
-  services: { key: string; body: Record<string, unknown> }[];
+  composeContent: string;
+  envNames: string[];
+  found: components["schemas"]["StackimportResult"]["found"];
+  missing: components["schemas"]["StackimportResult"]["missing"];
 }
 
 /** Query topics used to invalidate cached reads after server-side changes. */
@@ -135,6 +139,8 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, UsersApi, HostsApi,
   setAutoUpdate(stackId: string, policy: AutoUpdatePolicy): Promise<void>;
   restartService(stackId: string, service: string): Promise<string>;
   importSource(request: ImportRequest): Promise<ImportResult>;
+  getImageMetadata?(id: string): Promise<{ architecture: string; os: string; layers: number }>;
+  admitRuntimeCommand?(request: RuntimeCommandRequest, options?: { quiet?: boolean }): Promise<RuntimeAdmission>;
   convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
 
   openContainerShell: OpenShell;

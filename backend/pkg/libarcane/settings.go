@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation.
+// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package libarcane
 
@@ -69,6 +69,11 @@ var cronSettingKeys = []string{
 // TimeoutSettingKeys returns the settings propagated to remote environments.
 func TimeoutSettingKeys() []string {
 	return slices.Clone(timeoutSettingKeys)
+}
+
+// AgentSyncedSettingKeys returns a fresh copy of every hub setting propagated to agents.
+func AgentSyncedSettingKeys() []string {
+	return append(TimeoutSettingKeys(), "activityEventLimit", "activityRunLimit")
 }
 
 func IsCronSettingKey(key string) bool {

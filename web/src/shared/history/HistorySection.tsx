@@ -2,8 +2,10 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original availability and resource sections for issues #335 and #336.
+// Deviations: Original availability and resource sections for issues #335 and #336. M19: total contract-code catalogue maps.
 
+import { HISTORY_STATE_KEYS } from "@/data/wire-catalogue-states";
+import { scopedKey } from "@/data/wire-catalogue";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
@@ -96,7 +98,7 @@ function StatusStrip({ buckets, range }: { buckets: HistoryBucket[]; range: Hist
           <TooltipTrigger asChild>
             <span
               role="listitem"
-              aria-label={`${span(b, range)}: ${t(`states.${b.state}`)}`}
+              aria-label={`${span(b, range)}: ${t(scopedKey(HISTORY_STATE_KEYS[b.state], "history."))}`}
               data-state={b.state}
               data-tone={BUCKET_TONE[b.state] === "none" ? undefined : BUCKET_TONE[b.state]}
               className={cn(
@@ -121,8 +123,8 @@ function BucketTip({ bucket: b, range }: { bucket: HistoryBucket; range: History
   return (
     <div className="flex flex-col gap-0.5" data-bucket-tip={b.state}>
       <b>{span(b, range)}</b>
-      <span>{t(`states.${b.state}`)}</span>
-      {lines.map((s) => <span key={s}>{t("minutes", { state: t(`states.${s}`), minutes: Math.round(b.minutes[s]) })}</span>)}
+      <span>{t(scopedKey(HISTORY_STATE_KEYS[b.state], "history."))}</span>
+      {lines.map((s) => <span key={s}>{t("minutes", { state: t(scopedKey(HISTORY_STATE_KEYS[s], "history.")), minutes: Math.round(b.minutes[s]) })}</span>)}
       {b.minutes.stopped > 0 && <span className="opacity-80">{t("stoppedNote")}</span>}
       {b.exitCode !== undefined && b.minutes.down > 0 && <span>{t("exitCode", { code: b.exitCode })}</span>}
       {b.partial && <span className="opacity-80">{t("partial")}</span>}
@@ -156,7 +158,7 @@ function Legend() {
             data-tone={BUCKET_TONE[s] === "none" ? undefined : BUCKET_TONE[s]}
             className={cn("size-2.5 rounded-[2px]", s === "nodata" ? "border border-border" : s === "stopped" ? "bg-muted-foreground/55" : "bg-(--tone)")}
           />
-          {t(`states.${s}`)}
+          {t(scopedKey(HISTORY_STATE_KEYS[s], "history."))}
         </li>
       ))}
     </ul>

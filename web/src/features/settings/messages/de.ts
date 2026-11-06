@@ -2,7 +2,7 @@
 // Revision: cb93d80db5b6979f6ae3f3253884563643ea35ba57ac2588a380d7ed63713312
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration.
 
 import { usersDe, keysDe } from "./users-de";
 // German texts of hub settings and the profile page.
@@ -15,6 +15,9 @@ export const deSettings: typeof enSettings = {
   // Texts of backend notification and Auto Heal codes, keyed by the wire code path.
   codes: {
     notification: {
+      "name-taken": "Ein Ziel mit diesem Namen ist bereits vorhanden",
+      "name-invalid": "Gib einen Zielnamen mit 1–64 Zeichen ein",
+      "target-not-found": "Benachrichtigungsziel nicht gefunden",
       "config-invalid": "Ungültige Benachrichtigungseinstellungen",
       "hub-only": "Benachrichtigungen werden im Hub verwaltet",
       "dispatch-invalid": "Ungültiges Benachrichtigungsereignis",
@@ -30,6 +33,7 @@ export const deSettings: typeof enSettings = {
       "settings-env-managed": "Auto Heal wird durch Umgebungsvariablen verwaltet",
     },
     settings: {
+      "activity-limit-invalid": "Gib ein Aktivitätslimit im erlaubten Bereich ein",
       "key-managed": "Das zugehörige Einstellungsformular verwenden",
       "invalid-time-zone": "Wähle eine gültige Zeitzone.",
     },
@@ -298,7 +302,11 @@ export const deSettings: typeof enSettings = {
     targetInUse: "Mindestens ein Backup-Plan nutzt ein entferntes Ziel. Erst die Pläne umstellen.",
   },
   notifications: {
-    onlyConfigured: "Ein Ziel je Kanal. Nur eingerichtete Kanäle werden gelistet; weitere über „Ziel hinzufügen“.",
+    name: "Name",
+    linkHint: "Links in Nachrichten zeigen auf {url}.",
+    linkFallback: "Ohne interne Hub-Adresse verwenden Links APP_URL.",
+    linkGeneral: "In den allgemeinen Einstellungen ändern",
+    onlyConfigured: "Jedes Ziel hat einen eigenen Namen; ein Kanal kann mehrere Ziele haben. Weitere über „Ziel hinzufügen“.",
     loading: "Benachrichtigungsziele werden geladen …",
     empty: "Noch keine Benachrichtigungsziele.",
     add: "Ziel hinzufügen",
@@ -360,6 +368,7 @@ export const deSettings: typeof enSettings = {
     events: "Ereignisse",
     noEvents: "Keine Ereignisse gewählt",
     eventNames: {
+      containerUnhealthy: "Container ungesund",
       deployFailed: "Deploy fehlgeschlagen",
       hostOffline: "Host offline oder wieder online",
       backupFailed: "Backup oder Wiederherstellung fehlgeschlagen",
@@ -386,6 +395,12 @@ export const deSettings: typeof enSettings = {
     pointerLink: "Benachrichtigungen",
   },
   autoHeal: {
+    cooldown: "Pause nach Neustart",
+    cooldownSummary: "{minutes} Min. Pause nach Neustart",
+    fieldNames: { maxRestarts: "Neustartlimit", windowMinutes: "Zeitfenster", cooldownMinutes: "Pause nach Neustart", excludedStacks: "Stack-Ausnahmen", excludedContainers: "Container-Ausnahmen" },
+    cooldownMinutes: "Pause nach Neustart",
+    invalidHint: "Auto Heal ist auf diesem Host pausiert: {fields} außerhalb des erlaubten Bereichs",
+    invalidFields: {"maxRestarts": "Maximale Neustarts", "windowMinutes": "Zeitfenster", "cooldownMinutes": "Pause nach Neustart", "excludedStacks": "Ausgeschlossene Stacks", "excludedContainers": "Ausgeschlossene Container"},
     scopeHint: "Auto Heal startet nur laufende Container neu, deren Healthcheck unhealthy meldet. Gestoppte Container regeln die Docker-Neustartregeln. Die Einstellungen gelten je Host.",
     loading: "Wird geladen …",
     on: "An",
@@ -452,7 +467,7 @@ export const deSettings: typeof enSettings = {
     actions: "Höchstens abgeschlossene Aktionen",
     eventsHint: "{min}–{max} Einträge, Standard {fallback}. Darüber fallen die ältesten Ereignisse weg.",
     actionsHint: "{min}–{max} Einträge, Standard {fallback}. Laufende Aktionen zählen nicht und bleiben immer.",
-    historyNote: "Der Verlauf behält 500 Ereignisse und 100 abgeschlossene Abläufe je Umgebung. Aktive Abläufe bleiben erhalten.",
+    historyNote: "Ereignisse werden hubweit gezählt, abgeschlossene Abläufe je Host. Aktive Abläufe bleiben erhalten.",
     errors: { range: "Bitte eine Zahl von {min} bis {max} eingeben.", integer: "Bitte eine ganze Zahl eingeben." },
     output: "Ausgaben von Aktionen speichern",
     outputHint: "Steuert neue Rohzeilen. Bereits gespeicherte Ausgaben bleiben bis zum Entfernen des Ablaufs erhalten; Meldungen und Ergebnisse bleiben sichtbar.",

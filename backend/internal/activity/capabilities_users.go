@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M19 backend contracts and target identity integration.
 
 package activity
 
@@ -18,7 +18,7 @@ import (
 
 var userCapabilityOperations = map[string]string{
 	"listStacks": "list-projects", "listHosts": "listEnvironments", "getStack": "get-project",
-	"runStackCommand": "deploy-project", "runContainerCommand": "start-container", "restartService": "restart-project",
+	"redeployStack": "redeploy-project", "runStackCommand": "deploy-project", "runContainerCommand": "start-container", "restartService": "restart-project",
 	"subscribeLogs":          "GET /api/environments/:id/ws/projects/:projectId/logs",
 	"subscribeContainerLogs": "GET /api/environments/:id/ws/containers/:containerId/logs",
 	"subscribeMetrics":       "GET /api/environments/:id/ws/containers/:containerId/stats",

@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original image and registry safety contract for issue #229; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Original image and registry safety contract for issue #229; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M19 backend contracts and target identity integration.
 
 package contract
 
@@ -21,7 +21,7 @@ import (
 )
 
 func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v14.json")
+	body, err := os.ReadFile("testdata/agent-hub-v15.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -31,12 +31,12 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 		ImageSafety struct{ RegistryTestFields, RegistryPublicFields, UpdateInfoFields, PruneFields, ProtectionFields, ErrorCodes, InactiveCapabilities, Capabilities, UpdateStates []string }
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
-	require.Equal(t, 14, AgentHubVersion)
-	require.Equal(t, 14, MinimumAgentVersion)
+	require.Equal(t, 15, AgentHubVersion)
+	require.Equal(t, 15, MinimumAgentVersion)
 	require.Equal(t, AgentHubVersion, fixture.Version)
 	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
 	require.False(t, AgentCompatible(6, "be97c8565af13b50db70f2447a1aa47cddb38fff918ddf03c04a3670aa046e25"))
-	require.True(t, AgentCompatible(14, AgentHubFingerprint))
+	require.True(t, AgentCompatible(15, AgentHubFingerprint))
 	require.False(t, AgentCompatible(7, "mixed-intermediate-build"))
 	// Every fixture field list is checked against the real wire producer type,
 	// including optional credential/config fields populated with synthetic data.

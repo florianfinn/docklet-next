@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #269 scan receipt repair wiring.
 
 package bootstrap
 
@@ -343,6 +343,7 @@ func registerJobs(params registerJobsParams) error {
 		}
 	}
 	hub := vulnerability.NewHubScans(params.DB, params.Settings, params.Environment, params.Vulnerability, params.Notification)
+	hub.UseRunRecords(params.JobSchedule.Coordinator().Records)
 	params.VulnerabilityScan.SetDispatcher(hub)
 	if err := registerVulnerabilityJobs(params.Scheduler, params.Config, params.VulnerabilityScan, params.VulnerabilityRisk, &scheduler.VulnerabilityNotifyJob{Hub: hub}); err != nil {
 		return err
@@ -514,7 +515,7 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 	}
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey}, params.VulnerabilityRisk)
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "imageAutoPatchEnabled", "imageAutoPatchInterval"}, params.AutoPatch)
-	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow"}, params.AutoHeal)
+	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow", "autoHealCooldownMinutes"}, params.AutoHeal)
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
@@ -531,18 +532,22 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 }
 
 type timeoutSyncWorkerInternal struct {
-	mu      sync.Mutex
-	updates [][]libarcane.SettingUpdate
-	wake    chan struct{}
-	done    chan struct{}
-	ctx     context.Context
-	cancel  context.CancelFunc
-	closed  bool
+	onlineUnsubscribe func()
+	mu                sync.Mutex
+	updates           [][]libarcane.SettingUpdate
+	wake              chan struct{}
+	done              chan struct{}
+	ctx               context.Context
+	cancel            context.CancelFunc
+	closed            bool
 }
 
 func (w *timeoutSyncWorkerInternal) Stop(ctx context.Context) error {
 	if w == nil {
 		return nil
+	}
+	if w.onlineUnsubscribe != nil {
+		w.onlineUnsubscribe()
 	}
 	w.mu.Lock()
 	w.closed = true
@@ -557,7 +562,7 @@ func (w *timeoutSyncWorkerInternal) Stop(ctx context.Context) error {
 }
 
 func setupTimeoutSettingsSubscriptionInternal(params settingsSubscriptionsParams, subscribe func([]string, func([]libarcane.SettingUpdate))) (*timeoutSyncWorkerInternal, context.CancelFunc) {
-	if params.Config.AgentMode {
+	if params.Config.AgentMode || params.Config.EdgeAgent {
 		return nil, nil
 	}
 	ctx, cancel := context.WithCancel(params.LifecycleCtx)
@@ -583,26 +588,43 @@ func setupTimeoutSettingsSubscriptionInternal(params settingsSubscriptionsParams
 			}
 		}
 	}()
-	subscribe(libarcane.TimeoutSettingKeys(), func(updates []libarcane.SettingUpdate) {
-		worker.mu.Lock()
-		defer worker.mu.Unlock()
-		if worker.closed {
-			return
+	subscribe(libarcane.AgentSyncedSettingKeys(), worker.enqueue)
+	if online, ok := params.Environment.(interface {
+		SubscribeAgentOnline(func(context.Context, string)) func()
+	}); ok {
+		if values, ok := params.Settings.(interface {
+			GetStringSetting(context.Context, string, string) string
+		}); ok {
+			worker.onlineUnsubscribe = online.SubscribeAgentOnline(func(ctx context.Context, _ string) {
+				updates := []libarcane.SettingUpdate{}
+				for _, key := range libarcane.AgentSyncedSettingKeys() {
+					updates = append(updates, libarcane.SettingUpdate{Key: key, Value: values.GetStringSetting(ctx, key, "")})
+				}
+				worker.enqueue(updates)
+			})
 		}
-		worker.updates = append(worker.updates, slices.Clone(updates))
-		select {
-		case worker.wake <- struct{}{}:
-		default:
-		}
-	})
+	}
 	return worker, cancel
 }
 
-// syncTimeoutSettingsToAgentsInternal syncs timeout settings to all connected remote environments
+func (worker *timeoutSyncWorkerInternal) enqueue(updates []libarcane.SettingUpdate) {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+	if worker.closed {
+		return
+	}
+	worker.updates = append(worker.updates, slices.Clone(updates))
+	select {
+	case worker.wake <- struct{}{}:
+	default:
+	}
+}
+
+// syncTimeoutSettingsToAgentsInternal syncs shared settings to all connected remote environments
 func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment timeoutSettingsEnvironmentInternal, timeoutSettings []libarcane.SettingUpdate) {
 	envs, err := localEnvironment.ListRemoteEnvironments(ctx)
 	if err != nil {
-		slog.WarnContext(ctx, "Failed to list remote environments for timeout sync", "error", err)
+		slog.WarnContext(ctx, "Failed to list remote environments for agent settings sync", "error", err)
 		return
 	}
 
@@ -628,14 +650,14 @@ func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment t
 	for _, env := range envs {
 		responseBody, statusCode, proxyRequestErr := localEnvironment.ProxyRequest(ctx, env.ID, http.MethodPut, "/api/environments/0/settings", body)
 		if proxyRequestErr != nil {
-			slog.WarnContext(ctx, "Failed to sync timeout settings to environment", "environmentId", env.ID, "environmentName", env.Name, "error", proxyRequestErr)
+			slog.WarnContext(ctx, "Failed to sync agent settings to environment", "environmentId", env.ID, "environmentName", env.Name, "error", proxyRequestErr)
 			continue
 		}
 		if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-			slog.WarnContext(ctx, "Environment returned non-OK status for timeout sync", "environmentId", env.ID, "environmentName", env.Name, "statusCode", statusCode, "response", string(responseBody))
+			slog.WarnContext(ctx, "Environment returned non-OK status for agent settings sync", "environmentId", env.ID, "environmentName", env.Name, "statusCode", statusCode, "response", string(responseBody))
 			continue
 		}
-		slog.DebugContext(ctx, "Successfully synced timeout settings to environment", "environmentId", env.ID, "environmentName", env.Name)
+		slog.DebugContext(ctx, "Successfully synced agent settings to environment", "environmentId", env.ID, "environmentName", env.Name)
 	}
 }
 

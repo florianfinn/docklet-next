@@ -2,18 +2,18 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M19 backend contracts and target identity integration.
 
 package notification
 
 import (
 	"context"
-	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 	"gorm.io/gorm"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -83,43 +83,23 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 		}
 		target = t
 	}
-	appURL := ""
-	if s.config != nil {
-		appURL = s.config.GetAppURL()
+	text := outboxText(row.Event, target.EnvironmentName, row.Payload, s.LinkBase(ctx))
+	title := strings.SplitN(text, "\n", 2)[0]
+	vars := notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventType(row.Event))
+	if reason, ok := row.Payload["reason"].(string); ok && reason != "" {
+		vars["reason"] = reason
 	}
-	text := outboxText(row.Event, target.EnvironmentName, row.Payload, appURL)
-	content := notifications.Content{Title: row.Event, DefaultTitle: row.Event, Text: map[notifications.MessageFormat]string{}, Vars: notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventType(row.Event))}
-	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatHTML, notifications.MessageFormatSlack} {
+	content := notifications.Content{Title: title, DefaultTitle: title, Text: map[notifications.MessageFormat]string{}, Vars: vars}
+	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatSlack} {
 		content.Text[f] = text
 	}
-	content.RenderEmail = func() (string, string, error) { return row.Event, "<p>" + html.EscapeString(text) + "</p>", nil }
+	// Telegram HTML keeps literal newlines (it has no <br>); only the email body uses line-break tags.
+	escaped := html.EscapeString(text)
+	content.Text[notifications.MessageFormatHTML] = escaped
+	content.RenderEmail = func() (string, string, error) {
+		return title, "<p>" + strings.ReplaceAll(escaped, "\n", "<br>") + "</p>", nil
+	}
 	return s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventType(row.Event), row.Event, database.JSON{"eventType": row.Event, "notificationId": row.ID}, func(ctx context.Context, p notifications.NotificationProvider, c database.JSON) (bool, error) {
 		return notifications.Deliver(ctx, p, c, content)
 	})
-}
-
-// outboxText is the plain message of one outbox event; load alerts name metric, value and threshold.
-func outboxText(eventType, host string, payload database.JSON, appURL string) string {
-	text := fmt.Sprintf("%s on %s", eventType, host)
-	for _, f := range []string{"stack", "container", "volume", "operation", "outcome", "reason"} {
-		if v, ok := payload[f].(string); ok && v != "" {
-			text += fmt.Sprintf("\n%s: %s", f, v)
-		}
-	}
-	if metric, ok := payload["metric"].(string); ok && metric != "" {
-		number := func(key string) float64 {
-			switch v := payload[key].(type) {
-			case float64:
-				return v
-			case int:
-				return float64(v)
-			}
-			return 0
-		}
-		text += fmt.Sprintf("\nload: %s %.0f%% above %.0f%% for %.0f min", metric, number("percent"), number("threshold"), number("minutes"))
-	}
-	if appURL != "" {
-		text += "\n" + appURL
-	}
-	return text
 }

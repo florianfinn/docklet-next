@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; split existing delivery and operator probes from service; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; split existing delivery and operator probes from service; notification and Auto Heal contracts and delivery for #296; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -272,11 +272,12 @@ func (s *NotificationService) testNotificationContentInternal(environmentName, t
 // TestNotification sends a test message to the provider regardless of its enabled
 // state (testing before enabling is legitimate) and returns a warning when a real
 // notification of the tested kind would not send.
-func (s *NotificationService) TestNotification(ctx context.Context, environmentID string, provider notifications.NotificationProvider, testType string) (string, error) {
-	setting, err := s.GetSettingsByProvider(ctx, provider)
+func (s *NotificationService) TestNotification(ctx context.Context, environmentID string, targetID uint, testType string) (string, error) {
+	setting, err := s.GetSettingsByID(ctx, targetID)
 	if err != nil {
-		return "", fmt.Errorf("please save your %s settings before testing", provider)
+		return "", err
 	}
+	provider := setting.Provider
 	testType = cmp.Or(strings.TrimSpace(testType), notificationTestTypeSimple)
 	if _, ok := supportedNotificationTestTypes[testType]; !ok {
 		return "", fmt.Errorf("unsupported notification test type: %s", testType)

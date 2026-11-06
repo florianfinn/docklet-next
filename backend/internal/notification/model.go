@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -20,6 +20,7 @@ type NotificationSettings struct {
 	Config    database.JSON                      `json:"config" gorm:"type:text"`
 	CreatedAt time.Time                          `json:"createdAt"`
 	UpdatedAt time.Time                          `json:"updatedAt"`
+	Name      string                             `json:"name" gorm:"not null;default:''"`
 }
 
 func (NotificationSettings) TableName() string {

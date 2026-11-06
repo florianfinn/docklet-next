@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original connected settings persistence and in-flight draft tests.
+// Deviations: Original connected settings persistence and in-flight draft tests. M19 web consumer integration.
 
 import { useFormatter } from "use-intl";
 
@@ -22,7 +22,7 @@ import { createHttpAdapter } from "./http-adapter";
 const initial = {
   setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
   defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true",
-  keepActionOutput: "true", actionPresentation: "dialog",
+  keepActionOutput: "true", actionPresentation: "dialog", activityEventLimit: "500", activityRunLimit: "100",
 };
 
 function connectedServer(zone = "Europe/Berlin") {
@@ -33,6 +33,7 @@ function connectedServer(zone = "Europe/Berlin") {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
     if (path === "/api/auth/mode") return new Response(JSON.stringify({ success: true, data: { mode: "local" } }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
+    if (path === "/api/capabilities") return new Response(JSON.stringify({ success: true, data: [{ operationId: "saveSettings", available: true, resourceRef: { kind: "hub", id: "0" } }] }));
     if (path === "/api/environments/0/settings") {
       if (init?.method === "PUT") {
         expect(new Headers(init.headers).get("X-CSRF-Token")).toBe("example".padEnd(43, "x"));
@@ -156,4 +157,14 @@ it("the shared General picker also persists an explicit zone during first-run se
   const settings = await server.adapter.getConnectedSettings();
   await server.adapter.completeSetup({ general: { ...settings.general, configuredTimeZone: "UTC" }, hostDefaults: settings.hostDefaults, auth: { mode: "none", local: { username: "", passwordSet: false }, proxy: { userHeader: "", emailHeader: "", groupsHeader: "", trustedProxies: "", logoutUrl: "" } } });
   expect(server.writes.at(-1)?.timeZone).toBe("UTC");
+});
+
+it("reads and writes configured retention counts through the real settings HTTP mapper", async () => {
+  const server = connectedServer();
+  Object.assign(server.settings, { activityEventLimit: "123", activityRunLimit: "27" });
+  const settings = await server.adapter.getConnectedSettings();
+  expect(settings.activity).toMatchObject({ maxEvents: 123, maxFinishedActions: 27 });
+  await server.adapter.saveSettings("activity", { ...settings.activity, maxEvents: 321, maxFinishedActions: 42 });
+  expect(server.writes.at(-1)).toMatchObject({ activityEventLimit: "321", activityRunLimit: "42" });
+  expect((await server.adapter.getConnectedSettings()).activity).toMatchObject({ maxEvents: 321, maxFinishedActions: 42 });
 });

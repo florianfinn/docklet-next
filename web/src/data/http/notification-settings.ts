@@ -2,14 +2,14 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original live notification target and Auto Heal settings transport.
+// Deviations: Original live notification target and Auto Heal settings transport; M19 backend contracts and target identity integration.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { AutoHealApi, NotificationsApi } from "../api";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { settingsProblem } from "../settings-error";
 import type { AutoHealSettings } from "@/domain/auto-heal";
-import { DELIVERY_REASONS, eventMap, isProvider, parseNotificationTarget, type NotificationTestResult, type WireEvent } from "@/domain/notifications";
+import { DELIVERY_REASONS, eventMap, parseNotificationTarget, type NotificationTestResult, type WireEvent } from "@/domain/notifications";
 import type { CsrfClient } from "./csrf-client";
 
 export const NOTIFICATION_SETTINGS_OPERATIONS = [
@@ -28,9 +28,9 @@ const HUB: ResourceRef = { kind: "hub", id: "0" };
 const TEST_CODES = ["notification.test-sent", "notification.test-failed"];
 const invalidResponse = () => new AdapterOutcomeError({ kind: "error", code: "http.error" });
 
-function names(value: unknown): string[] {
+function names(value: unknown, invalid = false): string[] {
   if (value === null) return [];
-  if (!Array.isArray(value) || value.length > 200 || !value.every((n) => typeof n === "string")) throw invalidResponse();
+  if (!Array.isArray(value) || (!invalid && value.length > 200) || !value.every((n) => typeof n === "string")) throw invalidResponse();
   return value as string[];
 }
 
@@ -38,9 +38,20 @@ function names(value: unknown): string[] {
 export function parseAutoHeal(raw: unknown): AutoHealSettings {
   if (!raw || typeof raw !== "object") throw invalidResponse();
   const v = raw as Record<string, unknown>;
-  const int = (x: unknown, min: number, max: number) => typeof x === "number" && Number.isInteger(x) && x >= min && x <= max;
-  if (typeof v.enabled !== "boolean" || typeof v.managedByEnvironment !== "boolean" || !int(v.maxRestarts, 1, 10) || !int(v.windowMinutes, 5, 1440)) throw invalidResponse();
-  return { enabled: v.enabled, maxRestarts: v.maxRestarts as number, windowMinutes: v.windowMinutes as number, excludedStacks: names(v.excludedStacks), excludedContainers: names(v.excludedContainers), managedByEnvironment: v.managedByEnvironment };
+  const fields = ["maxRestarts", "windowMinutes", "cooldownMinutes", "excludedStacks", "excludedContainers"] as const;
+  if (!Array.isArray(v.invalidFields) || !v.invalidFields.every((f) => typeof f === "string" && (fields as readonly string[]).includes(f))) throw invalidResponse();
+  const invalidFields = v.invalidFields as NonNullable<AutoHealSettings["invalidFields"]>;
+  const numeric = (field: "maxRestarts" | "windowMinutes" | "cooldownMinutes", min: number, max: number) => {
+    const value = v[field];
+    return typeof value === "number" && Number.isInteger(value) && (invalidFields.includes(field) || value >= min && value <= max);
+  };
+  if (typeof v.enabled !== "boolean" || typeof v.managedByEnvironment !== "boolean" || !numeric("maxRestarts", 1, 10) || !numeric("windowMinutes", 5, 1440) || !numeric("cooldownMinutes", 1, 60)) throw invalidResponse();
+  const excludedStacks = names(v.excludedStacks, invalidFields.includes("excludedStacks"));
+  const excludedContainers = names(v.excludedContainers, invalidFields.includes("excludedContainers"));
+  if (!invalidFields.includes("excludedStacks") && excludedStacks.some((n) => n.length > 63 || !/^[a-z0-9][a-z0-9_-]*$/.test(n))) throw invalidResponse();
+  if (!invalidFields.includes("excludedContainers") && excludedContainers.some((n) => n.length > 128 || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(n))) throw invalidResponse();
+  return { enabled: v.enabled, maxRestarts: v.maxRestarts as number, windowMinutes: v.windowMinutes as number, cooldownMinutes: v.cooldownMinutes as number, invalidFields, excludedStacks, excludedContainers, managedByEnvironment: v.managedByEnvironment };
+
 }
 
 export function parseTestResult(raw: unknown): NotificationTestResult {
@@ -94,18 +105,18 @@ export function createNotificationSettings({ baseUrl, client, capability, genera
     async saveNotificationTarget(input) {
       await require("saveNotificationTarget", HUB);
       const config = { ...input.config, events: eventMap(input.events, input.config.events as Partial<Record<WireEvent, boolean>> | undefined) };
-      const saved = parseNotificationTarget(await call("/environments/0/notifications/settings", { method: "POST", body: JSON.stringify({ provider: input.provider, enabled: input.enabled, config }) }));
+      const saved = parseNotificationTarget(await call(`/environments/0/notifications/settings${input.id === undefined ? "" : `/${input.id}`}`, { method: input.id === undefined ? "POST" : "PUT", body: JSON.stringify({ name: input.name ?? input.provider, provider: input.provider, enabled: input.enabled, config }) }));
       if (saved?.kind !== "target") throw invalidResponse();
       return saved;
     },
-    async deleteNotificationTarget(provider) {
+    async deleteNotificationTarget(targetId) {
       await require("deleteNotificationTarget", HUB);
-      if (!isProvider(provider)) throw invalidResponse();
-      enveloped(await call(`/environments/0/notifications/settings/${provider}`, { method: "DELETE" }));
+      if (!Number.isInteger(targetId) || targetId <= 0) throw invalidResponse();
+      enveloped(await call(`/environments/0/notifications/settings/${targetId}`, { method: "DELETE" }));
     },
-    async testNotificationTarget(provider) {
+    async testNotificationTarget(targetId) {
       await require("testNotificationTarget", HUB);
-      return parseTestResult(enveloped(await call(`/environments/0/notifications/test/${provider}`, { method: "POST" })));
+      return parseTestResult(enveloped(await call(`/environments/0/notifications/test/${targetId}`, { method: "POST" })));
     },
     async getAutoHealSettings(hostId) {
       await require("getAutoHealSettings", { kind: "host", id: hostId });
@@ -119,7 +130,7 @@ export function createNotificationSettings({ baseUrl, client, capability, genera
     },
     async saveAutoHealSettings(hostId, input) {
       await require("saveAutoHealSettings", { kind: "host", id: hostId });
-      const body = { enabled: input.enabled, maxRestarts: input.maxRestarts, windowMinutes: input.windowMinutes, excludedStacks: input.excludedStacks, excludedContainers: input.excludedContainers };
+      const body = { enabled: input.enabled, maxRestarts: input.maxRestarts, windowMinutes: input.windowMinutes, ...(input.cooldownMinutes === undefined ? {} : { cooldownMinutes: input.cooldownMinutes }), excludedStacks: input.excludedStacks, excludedContainers: input.excludedContainers };
       return parseAutoHeal(await call(host(hostId), { method: "PUT", body: JSON.stringify(body) }));
     },
   };

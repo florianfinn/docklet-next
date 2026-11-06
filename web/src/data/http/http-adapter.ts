@@ -1,3 +1,5 @@
+import { createImageMetadata } from "./image-metadata";
+import { createStackImport } from "./stack-import";
 import { nextOccurrence } from "@/domain/schedule";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
@@ -9,7 +11,7 @@ import { createRegistryCommands } from "./registry-commands";
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
@@ -80,15 +82,10 @@ const IMPLEMENTED = new Set<string>([
   "getScanSettings",
   "saveScanSettings",
   "cancelScan",
-  "deleteRestorePoint",
-  "deleteHostRestorePoint",
-  "listHostRestorePoints",
+  "deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints",
   "getUpdateBaseline",
   "listRestorePoints",
-  "getAutoUpdatePolicy",
-  "saveAutoUpdatePolicy",
-  "setAutoUpdate",
-  "setAutoUpdateApply",
+  "getAutoUpdatePolicy", "saveAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply",
   "listUpdatePolicies",
   "getContainerUpdatePolicy",
   "saveContainerUpdatePolicy",
@@ -97,7 +94,6 @@ const IMPLEMENTED = new Set<string>([
   "getContainerPreviousImage",
   "checkAllUpdates",
   "getUpdateSettings",
-
   "listSchedule",
   "getSystemImageHints",
   "listSystemComponents",
@@ -138,6 +134,7 @@ const IMPLEMENTED = new Set<string>([
   "subscribeLogs",
   "subscribeContainerLogs",
   "openContainerShell",
+  "redeployStack",
   "runStackCommand",
   "runContainerCommand",
   "deployStack",
@@ -172,6 +169,7 @@ const IMPLEMENTED = new Set<string>([
   "setContainerOrigin",
   "recreateContainer",
   "restartService",
+  "importSource", "getImageMetadata",
   "listImages",
   "listVolumes",
   "getVolume",
@@ -768,6 +766,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     installContainerUpdate: runtime.installContainerUpdate,
     restoreContainerImage: runtime.restoreContainerImage,
     restoreRestorePoint: runtime.restoreRestorePoint,
+    admitRuntimeCommand: runtime.admitRuntimeCommand,
     runStackCommand: runtime.runStackCommand,
     runContainerCommand: runtime.runContainerCommand,
     recreateContainer: runtime.recreateContainer,
@@ -824,6 +823,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const history = known ? early : await backups.history(id).catch(() => null);
       return { ...entry, backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
     },
+    ...createImageMetadata(baseUrl, fetcher), ...createStackImport(baseUrl, client, () => lifetimeGeneration, getCapability),
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),
     ...createProjectWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),

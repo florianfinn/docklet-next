@@ -1,3 +1,5 @@
+import { SCAN_STATUS_KEYS } from "@/data/wire-catalogue-states";
+import { scopedKey } from "@/data/wire-catalogue";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -48,7 +50,7 @@ export function OverviewTab({ images: allImages, findings, history, stacks, host
           </div>
           <TrendChart history={history} hosts={hosts} animate={animate} />
           <ul className="max-h-32 overflow-y-auto text-xs text-muted-foreground" aria-label={t("trend.label")}>
-            {history.map((r, index) => <li key={`${r.hostId}:${r.id ?? index}`}>{hosts.get(r.hostId ?? "")?.name ?? r.hostId} · {formatRelative(r.at)} · {r.status ? t(`historyStatus.${r.status}`) : r.trigger}</li>)}
+            {history.map((r, index) => <li key={`${r.hostId}:${r.id ?? index}`}>{hosts.get(r.hostId ?? "")?.name ?? r.hostId} · {formatRelative(r.at)} · {r.status ? t(scopedKey(SCAN_STATUS_KEYS[r.status], "security.")) : r.trigger}</li>)}
           </ul>
           <div className="grid gap-4 md:grid-cols-2">
             <div>

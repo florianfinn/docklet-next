@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps.
 
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
@@ -14,7 +14,11 @@ import type { RuntimeView } from "@/features/activity/runtime-presentation";
 import { reason, record, bool, id, date, optionalDate } from "./update-validation";
 import { inventoryId } from "./inventory-mapping";
 import { backupCodeKey } from "../backup-error";
-import { VULNERABILITY_CODES } from "./vulnerability-decoders";
+import { wireKey, scopedKey } from "../wire-catalogue";
+import { MESSAGE_CODE_KEYS, HUB_EVENT_TITLE_KEYS } from "../wire-catalogue-messages";
+import { DELIVERY_REASON_KEYS } from "../wire-catalogue-settings";
+import { IMAGE_ERROR_KEYS } from "../wire-catalogue-errors";
+import { UPDATE_REASON_KEYS } from "../wire-catalogue-update";
 
 type Activity = components["schemas"]["ActivityActivity"];
 type Detail = components["schemas"]["ActivityDetail"];
@@ -71,9 +75,19 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
-  // Auto Heal, notification delivery, load and condition codes live under runMessages.codes, keyed by their wire path.
-  if (code && /^(autoheal|notification|load|container\.condition)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
-  return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+  const key = wireKey(MESSAGE_CODE_KEYS, code);
+  // Activity status codes remain wire aliases in the adapter port; renderMessage resolves their keys.
+  if (key) return { code: code?.startsWith("activity.") ? code : key, params: code === "activity.message" ? { message: sourceText } : {}, sourceText };
+  return code ? { code, params: {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+}
+
+// Run messages with these codes carry producer detail (image, job outcome, event subject); their text stays as data.
+function carrierText(code: string | undefined, sourceText: string): MessageCode | undefined {
+  if (!code || !sourceText) return undefined;
+  if (code === "activity.message") return { code, params: { message: sourceText }, sourceText };
+  const key = wireKey(MESSAGE_CODE_KEYS, code);
+  const carrier = code === "deploy.pull" || code.startsWith("job.") || !!key?.startsWith("runMessages.events.labels.");
+  return key && carrier ? { code: "runMessages.value", params: { value: sourceText } } : undefined;
 }
 
 const CONDITION_CODES = ["down", "unhealthy", "restart-loop", "running-again"] as const;
@@ -84,92 +98,17 @@ function conditionTitle(event: Event, meta: Record<string, unknown> | undefined)
   const kind = event.messageCode?.startsWith("container.condition.") ? event.messageCode.slice("container.condition.".length) : undefined;
   if (!kind || !(CONDITION_CODES as readonly string[]).includes(kind)) return undefined;
   const name = typeof meta?.containerName === "string" && meta.containerName ? meta.containerName : event.resourceName ?? "";
-  return { code: `runMessages.codes.container.condition.${kind}`, params: { name, exitCode: count(meta?.exitCode), restarts: count(meta?.restarts) }, sourceText: event.title };
+  return { code: MESSAGE_CODE_KEYS[event.messageCode], params: { name, exitCode: count(meta?.exitCode), restarts: count(meta?.restarts) }, sourceText: event.title };
 }
 
-// Hub event codes with a catalogued title; the type keeps this list complete against the event codes of the contract.
-type HubEventCode = Exclude<Extract<Event["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment" | "webhook"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
-export const HUB_EVENT_CODES: readonly string[] = Object.keys({
-  "container.start": true,
-  "container.stop": true,
-  "container.restart": true,
-  "container.delete": true,
-  "container.create": true,
-  "container.scan": true,
-  "container.update": true,
-  "container.deploy": true,
-  "container.kill": true,
-  "container.pause": true,
-  "container.unpause": true,
-  "container.die": true,
-  "container.oom": true,
-  "container.rename": true,
-  "container.unhealthy": true,
-  "container.error": true,
-  "image.pull": true,
-  "image.load": true,
-  "image.import": true,
-  "image.tag": true,
-  "image.untag": true,
-  "image.commit": true,
-  "image.delete": true,
-  "image.prune": true,
-  "image.scan": true,
-  "image.vulnerability_scan": true,
-  "image.error": true,
-  "project.deploy": true,
-  "project.delete": true,
-  "project.start": true,
-  "project.stop": true,
-  "project.create": true,
-  "project.update": true,
-  "project.error": true,
-  "volume.create": true,
-  "volume.rename": true,
-  "volume.delete": true,
-  "volume.prune": true,
-  "volume.error": true,
-  "volume.file.create": true,
-  "volume.file.delete": true,
-  "volume.file.upload": true,
-  "volume.file.update": true,
-  "volume.workspace.update": true,
-  "volume.backup.create": true,
-  "volume.backup.delete": true,
-  "volume.backup.restore": true,
-  "volume.backup.restore_files": true,
-  "volume.backup.download": true,
-  "volume.backup.target.key_viewed": true,
-  "network.create": true,
-  "network.delete": true,
-  "network.connect": true,
-  "network.disconnect": true,
-  "network.prune": true,
-  "network.error": true,
-  "system.prune": true,
-  "system.auto_update": true,
-  "system.upgrade": true,
-  "user.login": true,
-  "user.logout": true,
-  "environment.create": true,
-  "environment.connect": true,
-  "environment.disconnect": true,
-  "environment.update": true,
-  "environment.delete": true,
-  "environment.api_key.regenerated": true,
-  "environment.mtls.ca_generated": true,
-  "environment.mtls.cert_issued": true,
-  "environment.mtls.enroll": true,
-  "environment.mtls.download": true,
-  "webhook.create": true,
-  "webhook.update": true,
-  "webhook.delete": true,
-  "webhook.trigger": true,
-} satisfies Record<HubEventCode, true>);
+export const HUB_EVENT_CODES: readonly string[] = Object.keys(HUB_EVENT_TITLE_KEYS);
 const EVENT_TITLES = new Set(HUB_EVENT_CODES);
 
 /** Catalogue key of an event title: the wire code with underscores for dots, renamed where it reads like a credential. */
-export const eventTitleKey = (code: string) => (code === "environment.api_key.regenerated" ? "environment_host_key_regenerated" : code.replaceAll(".", "_"));
+export const eventTitleKey = (code: string) => {
+  const key = wireKey(HUB_EVENT_TITLE_KEYS, code);
+  return key?.startsWith("runMessages.events.labels.") ? scopedKey(key, "runMessages.events.labels.") : code.replaceAll(".", "_");
+};
 
 // Bulk prunes record a marker instead of a resource: no resource id, a prune code or action, and one of these names.
 const PRUNE_MARKERS = new Set(["bulk_prune", "prune"]);
@@ -213,16 +152,17 @@ function eventTitle(event: Event): MessageCode {
   const condition = conditionTitle(event, meta);
   if (condition) return condition;
   const provider = meta?.provider;
+  const targetChannel = (channel: MessageCode | string): MessageCode | string => typeof meta?.targetName === "string" && meta.targetName.trim() ? { code: "runMessages.codes.notification.target", params: { provider: channel, name: meta.targetName } } : channel;
   // A sent notification names its channel; the hub's English title is only the fallback.
   if (event.messageCode === "notification.send") {
     const channel = isProvider(provider) ? { code: `settings.notifications.kinds.${provider}`, params: {} } : String(provider ?? event.resourceName ?? "");
-    return { code: "runMessages.codes.notification.send", params: { provider: channel }, sourceText: event.title };
+    return { code: "runMessages.codes.notification.send", params: { provider: targetChannel(channel) }, sourceText: event.title };
   }
   if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return hubEventTitle(event) ?? message(event.messageCode, event.title);
-  const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
+  const via = targetChannel({ code: `settings.notifications.kinds.${provider}`, params: {} });
   const reason = meta?.reason;
   return typeof reason === "string" && (DELIVERY_REASONS as readonly string[]).includes(reason)
-    ? { code: "runMessages.codes.notification.delivery-failed-reason", params: { provider: via, reason: { code: `settings.codes.${reason}`, params: {} } }, sourceText: event.title }
+    ? { code: "runMessages.codes.notification.delivery-failed-reason", params: { provider: via, reason: { code: DELIVERY_REASON_KEYS[reason as keyof typeof DELIVERY_REASON_KEYS], params: {} } }, sourceText: event.title }
     : { code: "runMessages.codes.notification.delivery-failed-via", params: { provider: via }, sourceText: event.title };
 }
 
@@ -233,7 +173,8 @@ function knownBackupError(error: string): MessageCode | undefined {
 
 /** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
 function vulnerabilityError(error: string): MessageCode | undefined {
-  return (VULNERABILITY_CODES as readonly string[]).includes(error) ? { code: `images.errors.${error.replaceAll(".", "_")}`, params: {} } : undefined;
+  const key = error.startsWith("vulnerability.") ? wireKey(IMAGE_ERROR_KEYS, error) : undefined;
+  return key ? { code: key, params: {} } : undefined;
 }
 
 function stepKey(name: string): DeployStepKey {
@@ -268,11 +209,13 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     }
     const operationReason = operationReasonKey(code ?? source);
     if (operationReason) return { code: `containers.operationReasons.${operationReason}`, params: {} };
+    const carried = (field === "progress" || !m10) ? carrierText(code, source) : undefined;
+    if (carried) return carried;
     if (!m10) return message(code, source);
     const safe = reason(code);
-    if (safe && safe !== "http.error") return { code: `images.errors.${safe.replaceAll(".", "_")}`, params: {} };
-    const keys: Record<string, string> = { "run.started": "activity.status.running", "run.joined": "activity.status.running", "runtime.cancelled": "activity.runtime.cancelledBody", "runtime.failed": "activity.runtime.failedBody" };
-    const key = keys[code ?? ""];
+    const safeKey = wireKey(UPDATE_REASON_KEYS, safe);
+    if (safeKey) return { code: safeKey, params: {} };
+    const key = wireKey(MESSAGE_CODE_KEYS, code);
     if (key) return { code: key, params: {} };
     return field === "error" ? { code: "common.commandErrors.failed", params: {} } : message(code, source);
   };

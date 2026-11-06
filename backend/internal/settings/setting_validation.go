@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; write validation for upgrade retention and features. #69 first-run setup and hub settings persistence; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -20,6 +20,17 @@ import (
 )
 
 func validateSettingValueInternal(key, value string) error {
+	if key == "activityEventLimit" || key == "activityRunLimit" {
+		low, high := 50, 5000
+		if key == "activityRunLimit" {
+			low, high = 10, 1000
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < low || n > high {
+			return &dto.Problem{Code: "settings.activity-limit-invalid", Field: "/" + key, Status: 400}
+		}
+	}
+
 	if key == "updateCheckInterval" && value != "6h" && value != "12h" && value != "24h" {
 		return common.Classify(common.ErrValidation, errors.New("updateCheckInterval must be 6h, 12h or 24h"))
 	}

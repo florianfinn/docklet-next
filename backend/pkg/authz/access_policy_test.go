@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; M19 backend contracts and target identity integration.
 
 package authz_test
 
@@ -11,8 +11,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/florianfinn/docklet-next/backend/internal/search"
-	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 )
 
@@ -127,24 +125,7 @@ func TestAccessSurfaceRegistryIsDefensiveAndInternallyConsistent(t *testing.T) {
 	}
 }
 
-func TestAccessSurfaceCategoryRegistryCoversBackendCategories(t *testing.T) {
-	hiddenSettingsCategories := map[string]struct{}{
-		"security": {},
-	}
-
-	for _, category := range settings.NewSettingsSearchService().GetSettingsCategories() {
-		if _, hidden := hiddenSettingsCategories[category.ID]; hidden {
-			continue
-		}
-		_, ok := findAccessSurfaceInternal("settings.category." + category.ID)
-		require.True(t, ok, "settings category %s must have an access surface", category.ID)
-	}
-
-	for _, category := range search.NewCustomizeSearchService().GetCustomizeCategories() {
-		_, ok := findAccessSurfaceInternal("customize.category." + category.ID)
-		require.True(t, ok, "customize category %s must have an access surface", category.ID)
-	}
-}
+// Search category endpoints were retired in M19; access-surface self-consistency remains covered above.
 
 func requireAccessSurfaceInternal(t *testing.T, id string) authz.AccessSurface {
 	t.Helper()

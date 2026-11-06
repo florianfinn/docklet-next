@@ -11,6 +11,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/autoheal"
 	settingsDTO "github.com/florianfinn/docklet-next/types/settings"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,4 +85,20 @@ func TestAutoHealEffectiveEnvironmentPresenceByRole(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Auto Heal reads its settings once per candidate under an errgroup; the reads must be race-free (#299).
+func TestAutoHealConcurrentCandidateReadsAreRaceFree(t *testing.T) {
+	t.Setenv("AGENT_MODE", "true")
+	s, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
+	require.NoError(t, err)
+	var g errgroup.Group
+	for range 8 {
+		g.Go(func() error {
+			AutoHealManagedByEnvironment()
+			_, err := s.AutoHealSettings(t.Context())
+			return err
+		})
+	}
+	require.NoError(t, g.Wait())
 }

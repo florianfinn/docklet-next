@@ -2,14 +2,14 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 web consumer integration.
 
 import { readStackStopMode } from "./settings-core";
 import type { components } from "@/api/generated/schema";
 import { commandUUID } from "../intent-key";
 import type { LifecycleInput } from "@/domain/stack-updates";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
-import type { ContainerCommand, RecreateInput, RuntimeReleaseInput, StackCommand } from "../adapter";
+import type { RuntimeAdmission, RuntimeCommandRequest, ContainerCommand, RecreateInput, RuntimeReleaseInput, StackCommand } from "../adapter";
 import { AdapterOutcomeError, unavailable } from "../capability";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { CodedActionRun } from "../message-code";
@@ -44,7 +44,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rights: { task: Promise<Record<string, unknown>>; readAt?: number } | undefined;
   const controllers = new Set<AbortController>();
-  const pending = new Map<string, Promise<string>>();
+  const pending = new Map<string, Promise<RuntimeAdmission>>();
   const ambiguous = new Set<string>();
   const recreateKeys = new Map<string, string>();
   const runs = new Map<string, RuntimeRun>();
@@ -194,7 +194,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">): Promise<string> {
+  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">): Promise<RuntimeAdmission> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
     const imageOperation = kind === "stack" && (command === "update" || command === "restore");
@@ -202,11 +202,11 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
     const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : ""}`;
     if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
-    const existing = pending.get(key); if (existing) return existing;
+    const existing = pending.get(key); if (existing) return existing.then((result) => ({ ...result, outcome: "joined" }));
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
     const version = generation;
     const task = (async () => {
-      const operation = service ? "restartService" : recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "container" && command === "update" ? "installContainerUpdate" : kind === "container" && command === "restore" ? "restoreContainerImage" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      const operation = service ? "restartService" : recreate ? "recreateContainer" : imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "container" && command === "update" ? "installContainerUpdate" : kind === "container" && command === "restore" ? "restoreContainerImage" : kind === "stack" ? command === "redeploy" ? "redeployStack" : "runStackCommand" : "runContainerCommand";
       if (imageOperation) {
         if (!lifecycle || !/^[a-f0-9]{64}$/.test(lifecycle.expectedRevision) || (command === "restore" && !lifecycle.pointId)) throw runtimeError("runtime.invalid-target");
         for (const read of command === "restore" ? ["getUpdateBaseline", "listRestorePoints"] : ["getUpdateBaseline"]) { const cap = await capability(read, { kind: "stack", id: target }); check(version); if (!cap.available) throw unavailable(read, cap.resourceRef, cap.disabledReasonCode); }
@@ -286,7 +286,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
             ambiguous.delete(scope);
             // A final admission response ends key retention. Future work is query-only.
             void detail(host, run.id).catch(() => undefined);
-            return run.id;
+            return { outcome: response.status === 202 ? "started" as const : "joined" as const, runId: run.id };
           } catch { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
         }
         ambiguous.add(scope);
@@ -297,6 +297,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     void task.finally(() => { if (pending.get(key) === task) pending.delete(key); }).catch(() => undefined);
     return task;
   }
+  const command = (...args: Parameters<typeof admit>) => admit(...args).then((result) => result.runId);
   async function mutate(host: string, id: string, action: "cancel" | "release", input?: RuntimeReleaseInput) {
     const version = generation;
     if (action === "release" && (input?.acknowledgeRisk !== true || !input.reason.trim() || input.reason.length > 2048)) throw runtimeError("runtime.release-invalid");
@@ -315,6 +316,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     return runs.get(id) ?? run;
   }
   return {
+    admitRuntimeCommand: (request: RuntimeCommandRequest) => admit(request.kind, request.id, request.command, request.input),
     installContainerUpdate: (id: string) => command("container", id, "update"),
     restoreContainerImage: (id: string) => command("container", id, "restore"),
     installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),

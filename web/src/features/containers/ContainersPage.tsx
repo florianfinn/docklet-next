@@ -1,4 +1,5 @@
-import { useCapability } from "@/data/use-capability";
+import { useBulkRun, useBulkCapabilities } from "@/shared/hooks/use-bulk-run";
+import type { BulkItem } from "@/shared/hooks/bulk-run";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { AlertTriangle, Box, Boxes, Play, RotateCw, Search, Square } from "lucide-react";
@@ -21,7 +22,6 @@ import { OverviewTable, type OverviewColumn, type TableView } from "@/shared/com
 import { OverviewViewControls } from "@/shared/components/overview-mode-toggle";
 import { OverviewSkeleton } from "@/shared/components/overview-skeleton";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
-import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useHostScope, useVisibleContainers } from "@/shared/hooks/use-host-scope";
 import { useOverviewSelection } from "@/shared/hooks/use-overview-selection";
 import { sortForMetric, type LoadMetric } from "@/shared/lib/load-sort";
@@ -46,8 +46,6 @@ export default function ContainersPage() {
   const tst = useTranslations("common.status");
   const containers = useVisibleContainers();
   const hosts = useHostScope();
-  const cmd = useContainerCommands();
-  const command = useCapability("runContainerCommand");
   const restart = useContainerRestart();
   const mode = usePreference("containersMode");
   const layout = usePreference("containersLayout");
@@ -125,10 +123,14 @@ export default function ContainersPage() {
       aria-label={label}
     />
   );
-  const bulk = (command: "start" | "stop" | "restart") => {
-    if (command === "restart") restart(containers.data?.filter((c) => visibleSelected.includes(c.id)) ?? []);
-    else visibleSelected.forEach((id) => void cmd.run(id, command));
-    setSelected([]);
+  const bulkRun = useBulkRun();
+  const items: BulkItem[] = rows.filter((row) => visibleSelected.includes(row.id)).map((row) => ({ kind: "container", id: row.id, name: row.name, host: hosts.byId.get(row.hostId)?.name ?? row.hostId, stale: row.inventory?.stale }));
+  const command = useBulkCapabilities(items, "start");
+  const bulk = (action: "start" | "stop" | "restart") => {
+    const captured = items.map((item) => ({ ...item }));
+    const send = () => { clearSelection(); return bulkRun.run(captured, action); };
+    if (action === "restart") restart(containers.data?.filter((c) => visibleSelected.includes(c.id)) ?? [], send);
+    else void send();
   };
   const scope = hosts.filtered ? ts("scopeSome", { hosts: hosts.visible.map((h) => h.name).join(", ") }) : ts("scopeAll");
   const current = containers.visible.find((c) => c.id === openId) ?? containers.data?.find((c) => c.id === openId);
@@ -263,13 +265,13 @@ export default function ContainersPage() {
       <ContainerInspector container={current} host={current ? hosts.byId.get(current.hostId) : undefined} onClose={close} />
       <RecreateDialog container={editing ?? undefined} open={!!editing} onOpenChange={(o) => !o && setEditing(null)} />
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("start")}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !command.available} title={command.reason} onClick={() => bulk("start")}>
           <Play data-icon="inline-start" /> {t("bulk.start")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("stop")}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !command.available} title={command.reason} onClick={() => bulk("stop")}>
           <Square data-icon="inline-start" /> {t("bulk.stop")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("restart")}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !command.available} title={command.reason} onClick={() => bulk("restart")}>
           <RotateCw data-icon="inline-start" /> {t("bulk.restart")}
         </Button>
       </BulkActionBar>

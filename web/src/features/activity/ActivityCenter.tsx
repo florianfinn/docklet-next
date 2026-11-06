@@ -1,3 +1,4 @@
+import { useConnectedSettings } from "@/data/queries";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { CheckCircle2, ChevronDown, History, ListChecks, Loader2, Maximize2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -212,12 +213,13 @@ function EventsTab() {
   );
 }
 
-/** Fixed hub history limits. */
+/** Configured event and per-host finished-run limits. */
 function HistoryLimit({ kind }: { kind: "actions" | "events" }) {
+  const settings = useConnectedSettings();
   const t = useTranslations("activity");
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground" data-slot="history-limit">
-      {kind === "actions" ? t("historyLimit", { count: HISTORY_LIMITS.actions.default }) : t("historyLimitEvents", { count: HISTORY_LIMITS.events.default })}
+      {kind === "actions" ? t("historyLimit", { count: settings.data?.activity.maxFinishedActions ?? HISTORY_LIMITS.actions.default }) : t("historyLimitEvents", { count: settings.data?.activity.maxEvents ?? HISTORY_LIMITS.events.default })}
     </p>
   );
 }

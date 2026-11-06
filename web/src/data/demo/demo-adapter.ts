@@ -2,8 +2,9 @@
 // Revision: 93a1bd85562f9c156a80280dc7b450877d71881b45f83cf5b901d6ac993ffd71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
+import { createDemoBulkUpdates } from "./demo-bulk-updates";
 import { SettingsProblemError } from "../settings-error";
 import { isHostAvailable } from "@/domain/hosts";
 import { createDemoContainerOperations } from "./demo-container-operations";
@@ -178,6 +179,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     ...createNetworksApi(ctx),
     ...createSettingsApi(ctx),
     ...createDemoNotifications(ctx),
+    ...createDemoBulkUpdates(ctx),
 
     async listHosts() {
       const latency = simulationStore.get().latency;
@@ -463,6 +465,11 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       return { compose: stringify({ services: { [conv.key]: conv.body } }, { lineWidth: 0 }), env: "", serviceName: conv.key };
     },
 
+    async admitRuntimeCommand(request) {
+      const runId = request.kind === "container" ? await this.runContainerCommand(request.id, request.command as "start" | "stop" | "restart") : request.command === "update" ? await this.installStackUpdates(request.id, request.input) : await this.runStackCommand(request.id, request.command);
+      return { outcome: "started", runId };
+    },
+
     async importSource(request) {
       await new Promise((r) => setTimeout(r, 700));
       return simulateImport(request);
@@ -632,6 +639,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     if (operationId !== "getCapability" && typeof value === "function") supportedOperations.add(operationId);
   }
   supportedOperations.add("clearContainerRegistryCredential");
+  supportedOperations.add("redeployStack");
   for (const operationId of options.missingCapabilities ?? []) supportedOperations.delete(operationId);
   registerDemoOptions(adapter, options);
   return adapter;

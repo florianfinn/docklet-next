@@ -882,3 +882,39 @@ func TestCreateEventCorrelationEligibility(t *testing.T) {
 		})
 	}
 }
+
+// IDs are random UUIDs; the default list and the environment list are newest first (#303).
+func TestM19EventListsAreNewestFirst(t *testing.T) {
+	ctx := t.Context()
+	db := setupEventServiceTestDB(t)
+	svc := NewEventService(db, nil, nil)
+	base := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	rows := []struct {
+		id, title string
+		at        time.Time
+	}{
+		{"ffffffff-0000-4000-8000-000000000001", "oldest", base},
+		{"00000000-0000-4000-8000-000000000002", "newest", base.Add(2 * time.Minute)},
+		{"88888888-0000-4000-8000-000000000003", "middle", base.Add(time.Minute)},
+		{"11111111-0000-4000-8000-000000000004", "middle-tie", base.Add(time.Minute)},
+	}
+	for _, r := range rows {
+		require.NoError(t, db.Create(&Event{BaseModel: database.BaseModel{ID: r.id}, Type: EventTypeContainerStart, Title: r.title, Severity: EventSeverityInfo, EnvironmentID: new("example"), Timestamp: r.at}).Error)
+	}
+	titles := func(events []event.Event) []string {
+		out := make([]string, 0, len(events))
+		for _, e := range events {
+			out = append(out, e.Title)
+		}
+		return out
+	}
+	events, _, err := svc.ListEventsPaginated(ctx, pagination.QueryParams{Params: pagination.Params{Limit: 10}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"newest", "middle", "middle-tie", "oldest"}, titles(events))
+	events, _, err = svc.GetEventsByEnvironmentPaginated(ctx, "example", pagination.QueryParams{Params: pagination.Params{Limit: 10}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"newest", "middle", "middle-tie", "oldest"}, titles(events))
+	events, _, err = svc.ListEventsPaginated(ctx, pagination.QueryParams{SortParams: pagination.SortParams{Sort: "timestamp", Order: pagination.SortAsc}, Params: pagination.Params{Limit: 10}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"oldest", "middle-tie", "middle", "newest"}, titles(events))
+}

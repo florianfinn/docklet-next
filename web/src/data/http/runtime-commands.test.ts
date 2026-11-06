@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 unreachable agent refusal before admission.
 
 import { afterEach, expect, it, vi } from "vitest";
 import { COMMAND_RETRY_MS } from "./runtime-commands";
@@ -130,4 +130,11 @@ it("unavailable cryptographic randomness refuses before sending any command or i
   const f = runtimeFixture();
   await expect(f.helper.runContainerCommand("0~target", "start")).rejects.toMatchObject({ outcome: { code: "runtime.key-unavailable" } });
   expect(f.commands()).toHaveLength(0); expect(f.published).toEqual([]);
+});
+
+it("an agent unreachable before admission refuses with its code and no ambiguous state", async () => {
+  const f = runtimeFixture(); f.state.command = () => response({ message: "Agent unavailable", code: "agent.unavailable", statusCode: 503 }, 503);
+  await expect(f.helper.runStackCommand("direct~target", "start")).rejects.toMatchObject({ outcome: { kind: "error", code: "agent.unavailable", status: 503 } });
+  await expect(f.helper.runStackCommand("direct~target", "start")).rejects.toMatchObject({ outcome: { code: "agent.unavailable" } });
+  expect(f.published).toEqual([]); expect(f.commands()).toHaveLength(2);
 });

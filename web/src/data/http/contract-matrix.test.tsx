@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original web contract matrix for issue 38.
+// Deviations: Original web contract matrix for issue 38. M19 web consumer integration.
 // Cases 5–7 and 10–12 exercise HTTP transport, SSE, and recorded DTOs only.
 
 import { act, screen, waitFor } from "@testing-library/react";
@@ -402,13 +402,13 @@ describe("#38 adapter contract matrix", () => {
     expect(screen.queryByText("Simuliert")).toBeNull();
   });
 
-  it("9 exposes no editable history limits in settings", async () => {
+  it("9 exposes validated history limits with accurate hub and host scope", async () => {
     const demo = createDemoAdapter();
     renderWithApp(<ActivitySection settings={await demo.getSettings()} />, demo);
-    expect(screen.queryByLabelText("Höchstens Ereignisse") === null).toBe(true);
-    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") === null).toBe(true);
+    expect(screen.queryByLabelText("Höchstens Ereignisse") !== null).toBe(true);
+    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") !== null).toBe(true);
     const file = await import("@/features/settings/messages/de");
-    expect(file.deSettings.activity.historyNote).toContain("500 Ereignisse und 100 abgeschlossene Abläufe");
+    expect(file.deSettings.activity.historyNote).toContain("Ereignisse werden hubweit gezählt");
   });
 
   it("10 maps raw lines after a detail read", async () => {

@@ -210,6 +210,7 @@ export function agentFixture(spec, fixture) {
   manifest.autoHeal = {
     routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["get-auto-heal-settings","update-auto-heal-settings"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
     settings: schemas.AutohealSettings, update: schemas.AutohealUpdate,
+    cooldownSetting:"autoHealCooldownMinutes", cooldownDefault:10, cooldownRange:[1,60], invalidFields:"effective values pause healing; same validator as the job",
     edgeCommands:["auto_heal.settings.get","auto_heal.settings.update"],
   };
   manifest.notificationDispatch = { request:schemas.NotificationDispatchRequest, autoHeal:schemas.NotificationDispatchAutoHeal, backupFailed:schemas.NotificationDispatchBackupFailed, origin:"captured credential and Edge session; transaction rechecks binding", legacy:"direct fan-out, no eventId", hostEvents:"best effort; no agent outbox" };

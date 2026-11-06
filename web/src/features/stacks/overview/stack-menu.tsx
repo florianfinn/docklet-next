@@ -2,7 +2,7 @@
 // Revision: 4f3bdebc11c000b74cc60f3d5e648c846e3a36051286b245607bcbd4c16fc8b8
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
 import { useIsUser } from "@/data/use-principal";
 import { useAdapter } from "@/data/use-adapter";
@@ -30,6 +30,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
   const edit = useCapability("saveStackFiles", { kind: "stack", id: stack.id });
   const update = useCapability("installStackUpdates", ref);
   const check = useCapability("checkUpdates", ref);
+  const redeploy = useCapability("redeployStack", { kind: "stack", id: stack.id });
   const command = useStackCapability(stack.id, stack.hostId);
   const hide = useHideAction("stacks");
   const allStopped = user && stack.runningCount !== undefined ? stack.runningCount === 0 : stack.services.every((s) => s.state === "stopped");
@@ -53,7 +54,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
     [
       ...run,
       ...stopMode.alternates.map((alternate): MenuAction => ({ id: alternate, label: stopText(alternate), icon: <Square />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, alternate) })),
-      { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !command.available || (user && !edit.available) || !!stack.inventory?.stale, title: user ? edit.reason : command.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
+      { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !redeploy.available || !!stack.inventory?.stale, title: redeploy.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
       ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy || ((!live || user) && !update.available), title: update.reason, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
       { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy || ((!live || user) && !check.available), title: check.reason, onSelect: () => live ? navigate(href) : void cmd.checkUpdates(stack.id) },
     ],

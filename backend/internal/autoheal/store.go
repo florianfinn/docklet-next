@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation; determined agent outcomes are sent with a bounded detached context.
+// Deviations: Original notification and Auto Heal foundation; determined agent outcomes are sent with a bounded detached context; M19 backend contracts and target identity integration.
 
 package autoheal
 
@@ -71,6 +71,15 @@ func (s *Store) Reserve(ctx context.Context, runID, id, name, stack string, b Ba
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
+		}
+		var latest Restart
+		err = tx.Where("container_id=? AND outcome IN ?", id, []string{"attempting", "restarted", "restart-failed", "interrupted"}).Order("started_at DESC").First(&latest).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err == nil && latest.StartedAt.After(now.Add(-time.Duration(cfg.CooldownMinutes)*time.Minute)) {
+			slog.DebugContext(ctx, "Auto Heal cooldown active", "containerId", id)
+			return nil
 		}
 		cutoff := now.Add(-time.Duration(cfg.WindowMinutes) * time.Minute)
 		var count int64

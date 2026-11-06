@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite-only local persistence; actor-host loss ends the application with a fatal cause; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite-only local persistence; actor-host loss ends the application with a fatal cause; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package di
 
@@ -63,8 +63,8 @@ func provideImageUpdateModuleInternal(service *imageupdate.ImageUpdateService, i
 	return imageupdate.New(service, imageService.GetUpdateInfoByImageRefs)
 }
 
-func provideSettingsModuleInternal(service *settings.SettingsService, search *settings.SettingsSearchService, localEnvironment *environment.EnvironmentService, cfg *config.Config) *settings.Module {
-	return settings.New(service, search, localEnvironment.ProxyJSONRequest, cfg)
+func provideSettingsModuleInternal(service *settings.SettingsService, localEnvironment *environment.EnvironmentService, cfg *config.Config) *settings.Module {
+	return settings.New(service, localEnvironment.ProxyJSONRequest, cfg)
 }
 
 func provideSettingsServiceInternal(ctx context.Context, db *database.DB, cfg *config.Config) (*settings.SettingsService, error) {

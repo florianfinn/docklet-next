@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original ordered runtime condition classifier and caller-owned snapshots.
+// Deviations: Original ordered runtime condition classifier and caller-owned snapshots; M19 backend contracts and target identity integration.
 
 package history
 
@@ -54,21 +54,21 @@ func neverStarted(value string) bool {
 }
 
 type restartPoint struct {
-	minute int64
-	count  int
+	Minute int64 `json:"minute"`
+	Count  int   `json:"count"`
 }
 
 func restartWindow(points []restartPoint, minute int64, count int) ([]restartPoint, int) {
 	first := 0
-	for first < len(points) && points[first].minute < minute-9*60 {
+	for first < len(points) && points[first].Minute < minute-9*60 {
 		first++
 	}
 	points = slices.Clone(points[first:])
-	if len(points) > 0 && count < points[len(points)-1].count {
+	if len(points) > 0 && count < points[len(points)-1].Count {
 		points = nil
 	}
 	points = append(points, restartPoint{minute, count})
-	return points, count - points[0].count
+	return points, count - points[0].Count
 }
 
 type snapshots struct {

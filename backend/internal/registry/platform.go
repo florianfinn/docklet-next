@@ -2,18 +2,16 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; shared credential and platform resolution for stack import.
 
 package registry
 
 import (
 	"context"
+	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
-	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/registryauth"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -35,47 +33,10 @@ func (s *ContainerRegistryService) PlatformImage(ctx context.Context, raw string
 	if platform.OS == "" || platform.Architecture == "" {
 		return out, imageDTO.Failure("update.check-unavailable", 503)
 	}
-	refs := []name.Option{name.WeakValidation}
-	opts := []remote.Option{remote.WithContext(ctx), remote.WithPlatform(platform), remote.WithTransport(s.distributionHTTPClient.Transport)}
-	// A nil transport uses the library default, preserving TLS and registry auth.
-	if s.distributionHTTPClient.Transport == nil {
-		opts = opts[:2]
-	}
-	parsed, err := name.ParseReference(raw, refs...)
+	parsed, opts, authState, err := s.platformOptionsInternal(ctx, raw, platform, false)
+	out.AuthState = authState
 	if err != nil {
-		return out, imageDTO.Failure("image.invalid-reference", 400)
-	}
-	registries, err := s.GetEnabledRegistries(ctx)
-	if err != nil {
-		return out, imageDTO.Failure("registry.unavailable", 503)
-	}
-	for i := range registries {
-		reg := &registries[i]
-		if !registryauth.IsRegistryMatch(reg.URL, parsed.Context().RegistryStr()) {
-			continue
-		}
-		if reg.Insecure {
-			refs = append(refs, name.Insecure)
-			parsed, err = name.ParseReference(raw, refs...)
-			if err != nil {
-				return out, imageDTO.Failure("image.invalid-reference", 400)
-			}
-		}
-		if reg.Token != "" || reg.AWSSecretAccessKey != "" {
-			out.AuthState = "unknown"
-			if err = settings.ValidateCredentialEncryption(); err != nil {
-				return out, err
-			}
-			cred, e := s.credentialForRegistryInternal(ctx, reg)
-			if e != nil {
-				return out, imageDTO.Failure("registry.credential-unavailable", 503)
-			}
-			if cred != nil {
-				opts = append(opts, remote.WithAuth(authn.FromConfig(authn.AuthConfig{Username: cred.Username, Password: cred.Token})))
-				out.AuthState = "credential"
-			}
-		}
-		break
+		return out, err
 	}
 	// A HEAD request does not count against registry pull allowances; an
 	// unchanged top-level digest reuses the earlier platform observation. It is
@@ -161,7 +122,7 @@ func (c *platformCacheInternal) put(key string, out PlatformObservation) {
 
 // Registry libraries compare index variants literally. Select candidates with
 // the same normalized strict matcher as local evidence, including nested indexes.
-func platformImageInternal(desc *remote.Descriptor, wanted v1.Platform) (v1.Image, error) {
+func platformImageInternal(desc *remote.Descriptor, wanted v1.Platform, stopOnRemoteFailure ...bool) (v1.Image, error) {
 	if !desc.MediaType.IsIndex() {
 		return desc.Image()
 	}
@@ -169,9 +130,9 @@ func platformImageInternal(desc *remote.Descriptor, wanted v1.Platform) (v1.Imag
 	if err != nil {
 		return nil, err
 	}
-	return platformIndexImageInternal(index, wanted, 0)
+	return platformIndexImageInternal(index, wanted, 0, stopOnRemoteFailure...)
 }
-func platformIndexImageInternal(index v1.ImageIndex, wanted v1.Platform, depth int) (v1.Image, error) {
+func platformIndexImageInternal(index v1.ImageIndex, wanted v1.Platform, depth int, stopOnRemoteFailure ...bool) (v1.Image, error) {
 	fail := func() (v1.Image, error) { return nil, imageDTO.Failure("update.check-unavailable", 503) }
 	if depth > 8 {
 		return fail()
@@ -191,8 +152,14 @@ func platformIndexImageInternal(index v1.ImageIndex, wanted v1.Platform, depth i
 			if e != nil {
 				return nil, e
 			}
-			candidate, err = platformIndexImageInternal(nested, wanted, depth+1)
+			candidate, err = platformIndexImageInternal(nested, wanted, depth+1, stopOnRemoteFailure...)
 			if err != nil {
+				// Imports must preserve transport refusals such as deadlines.
+				// Observations retain fallback across unavailable nested candidates.
+				var mismatch *imageDTO.OperationError
+				if len(stopOnRemoteFailure) > 0 && stopOnRemoteFailure[0] && !errors.As(err, &mismatch) {
+					return nil, err
+				}
 				continue
 			}
 		} else if child.Platform != nil && child.MediaType.IsImage() {

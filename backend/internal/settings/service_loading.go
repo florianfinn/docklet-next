@@ -24,16 +24,16 @@ import (
 )
 
 func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *database.DB) (*Settings, error) {
-	if config.Load().UIConfigurationDisabled || config.Load().AgentMode || config.Load().EdgeAgent {
+	if role := config.LoadRole(); role.UIConfigurationDisabled || role.AgentMode || role.EdgeAgent {
 		slog.DebugContext(
 			ctx,
 			"loadDatabaseSettingsInternal: using env path",
 			"uiConfigurationDisabled",
-			config.Load().UIConfigurationDisabled,
+			role.UIConfigurationDisabled,
 			"agentMode",
-			config.Load().AgentMode,
+			role.AgentMode,
 			"environment",
-			config.Load().Environment,
+			role.Environment,
 		)
 		return s.loadDatabaseConfigFromEnv(ctx, db)
 	}
@@ -198,7 +198,7 @@ func (s *SettingsService) IsEnvOverrideActive(key string) bool {
 // validEnvSettingInternal keeps an invalid stop mode from the environment out of
 // effective and persisted settings; the stored or default value applies instead.
 func validEnvSettingInternal(ctx context.Context, key, envVarName, value string) bool {
-	if key != "stackStopMode" && key != "backupDefaultRetentionCount" {
+	if key != "stackStopMode" && key != "backupDefaultRetentionCount" && key != "activityEventLimit" && key != "activityRunLimit" {
 		return true
 	}
 	if err := validateSettingValueInternal(key, kit.TrimQuotes(value)); err != nil {

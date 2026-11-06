@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration.
 
 package access
 
@@ -87,6 +87,8 @@ var Rules = map[string]Rule{
 	"create-container":                             Rule{Kind: Admin},
 	"create-my-api-key":                            Rule{Kind: Self},
 	"create-network":                               Rule{Kind: Admin},
+	"import-stack-source":                          Rule{Kind: Admin},
+	"update-notification-settings":                 Rule{Kind: Admin},
 	"create-or-update-notification-settings":       Rule{Kind: Admin},
 	"create-project":                               Rule{Kind: Admin},
 	"create-role":                                  Rule{Kind: Admin},
@@ -148,7 +150,6 @@ var Rules = map[string]Rule{
 	"get-container-edit-config":                    Rule{Kind: Admin},
 	"get-container-processes":                      Rule{Kind: App, Ref: ContainerPath, Level: Restricted},
 	"get-current-user":                             Rule{Kind: Self},
-	"get-customize-categories":                     Rule{Kind: Admin},
 	"get-dashboard":                                Rule{Kind: Admin},
 	"get-default-profile":                          Rule{Kind: Public},
 	"get-docker-info":                              Rule{Kind: Admin},
@@ -184,7 +185,6 @@ var Rules = map[string]Rule{
 	"get-pwa-icon":                                 Rule{Kind: Public},
 	"get-role":                                     Rule{Kind: Admin},
 	"get-settings":                                 Rule{Kind: Self},
-	"get-settings-categories":                      Rule{Kind: Admin},
 	"get-sign-in-mode":                             Rule{Kind: Public},
 	"get-system-backup-maintenance":                Rule{Kind: Admin},
 	"get-system-backup-policies":                   Rule{Kind: Admin},
@@ -305,9 +305,7 @@ var Rules = map[string]Rule{
 	"run-updater":                                  Rule{Kind: Admin},
 	"scan-host-vulnerabilities":                    Rule{Kind: Admin},
 	"scan-image-vulnerabilities":                   Rule{Kind: Admin},
-	"search-customize":                             Rule{Kind: Admin},
 	"search-images":                                Rule{Kind: Admin},
-	"search-settings":                              Rule{Kind: Admin},
 	"set-auto-update-policy":                       Rule{Kind: App, Ref: PolicyPath, Level: Full},
 	"list-update-policies":                         Rule{Kind: Admin},
 	"check-all-updates":                            Rule{Kind: Admin},

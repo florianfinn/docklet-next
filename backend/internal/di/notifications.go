@@ -8,11 +8,13 @@ package di
 
 import (
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 )
 
-func wireNotifications(n *notification.NotificationService, v *volume.VolumeService, s *system.SystemService) {
+func wireNotifications(n *notification.NotificationService, v *volume.VolumeService, s *system.SystemService, settingsSvc *settings.SettingsService) {
+	n.UseLinkSettings(settingsSvc)
 	v.SetNotificationDispatch(n.SendHostEvent)
 	s.SetNotificationDispatch(n.SendHostEvent)
 }

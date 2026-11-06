@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original producer-fixture and transport proofs for notification targets and Auto Heal.
+// Deviations: Original producer-fixture and transport proofs for notification targets and Auto Heal; M19 backend contracts and target identity integration.
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,8 @@ import { createDemoAdapter } from "../demo/demo-adapter";
 import { simulationStore } from "../demo/simulation";
 import { DEFAULT_EVENTS, EVENT_KEYS, eventMap, eventsFromMap, parseNotificationTarget } from "@/domain/notifications";
 import type { CsrfClient } from "./csrf-client";
-import { createNotificationSettings } from "./notification-settings";
+import invalidHeal from "./testdata/autoheal-v15.json";
+import { parseAutoHeal, createNotificationSettings } from "./notification-settings";
 import fixture from "./testdata/notification-targets.json";
 
 type Reply = { status?: number; body?: unknown; text?: string };
@@ -31,7 +32,7 @@ function api(reply: (url: string, init: RequestInit) => Reply) {
   return { adapter, calls };
 }
 
-const heal = { enabled: true, maxRestarts: 3, windowMinutes: 90, excludedStacks: ["web"], excludedContainers: null, managedByEnvironment: false };
+const heal = { cooldownMinutes: 10, invalidFields: [], enabled: true, maxRestarts: 3, windowMinutes: 90, excludedStacks: ["web"], excludedContainers: null, managedByEnvironment: false };
 
 describe("notification target transport", () => {
   it("reads the real producer list as typed targets", async () => {
@@ -167,5 +168,34 @@ describe("Auto Heal transport", () => {
     const { adapter } = api(() => ({ status: 409, body: { code: "autoheal.settings-env-managed" } }));
     const error = await adapter.saveAutoHealSettings("agent-1", { enabled: true, maxRestarts: 3, windowMinutes: 60, excludedStacks: [], excludedContainers: [] }).catch((e: unknown) => e);
     expect((error as SettingsProblemError).code).toBe("autoheal.settings-env-managed");
+  });
+});
+
+describe("M19 named targets and v15 validity hints", () => {
+  it("uses the target ID for update, delete and test while preserving its name", async () => {
+    const { adapter, calls } = api((url) => url.includes("/test/") ? { body: { success: true, data: { code: "notification.test-sent" } } } : { body: url.endsWith("/settings/1") && calls.length > 1 ? { success: true, data: {} } : fixture[0] });
+    await adapter.saveNotificationTarget({ id: 1, name: "Main mail", provider: "email", enabled: true, config: fixture[0]!.config, events: [] });
+    expect(calls[0]!.url).toBe("/api/environments/0/notifications/settings/1");
+    expect(calls[0]!.init.method).toBe("PUT");
+    expect(JSON.parse(calls[0]!.init.body as string)).toMatchObject({ name: "Main mail", provider: "email" });
+    await adapter.testNotificationTarget(1);
+    expect(calls[1]!.url).toBe("/api/environments/0/notifications/test/1");
+    await adapter.deleteNotificationTarget(1);
+    expect(calls[2]!.url).toBe("/api/environments/0/notifications/settings/1");
+  });
+  it("keeps unhealthy notices opt-in in the real target decoder", () => {
+    expect(eventsFromMap({})).not.toContain("containerUnhealthy");
+    expect(eventsFromMap({ container_unhealthy: true })).toContain("containerUnhealthy");
+    expect(eventMap(DEFAULT_EVENTS).container_unhealthy).toBe(false);
+    const target = parseNotificationTarget(fixture[0]);
+    expect(target?.kind === "target" ? target.name : undefined).toBe(fixture[0]!.name);
+  });
+  it("accepts the actual Direct/Edge producer fixture only with its declared invalid field", () => {
+    expect(parseAutoHeal(invalidHeal)).toMatchObject({ cooldownMinutes: 0, invalidFields: ["cooldownMinutes"] });
+    expect(() => parseAutoHeal({ ...invalidHeal, invalidFields: [] })).toThrow();
+    expect(() => parseAutoHeal({ ...invalidHeal, invalidFields: ["unknown"] })).toThrow();
+    expect(() => parseAutoHeal({ ...invalidHeal, maxRestarts: 11 })).toThrow();
+    expect(() => parseAutoHeal({ ...invalidHeal, excludedStacks: ["bad stack"] })).toThrow();
+    expect(parseAutoHeal({ ...invalidHeal, excludedStacks: ["bad stack"], invalidFields: ["cooldownMinutes", "excludedStacks"] }).excludedStacks).toEqual(["bad stack"]);
   });
 });

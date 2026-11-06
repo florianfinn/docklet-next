@@ -2,7 +2,7 @@
 // Revision: 357dd6dee16118e0880ca694d222699556389d977c3d15d6148e23e2acee23d7
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration.
 
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
@@ -14,7 +14,7 @@ import type { HubDiscovery } from "@/domain/hub-discovery";
 import type { AutoUpdatePolicy, FileOwner, Host, HostConnection, NetworkAttachment, Topology, TopologyNetwork } from "@/domain/model";
 import type { NetworkDraft } from "@/domain/networks";
 import type { BackupTarget, BackupTargetInput, BackupTargetReferences, HubSettings, SettingsSection } from "@/domain/settings";
-import type { NotificationProvider, NotificationTarget, NotificationTargetInput, NotificationTargetRow, NotificationTestResult } from "@/domain/notifications";
+import type { NotificationTarget, NotificationTargetInput, NotificationTargetRow, NotificationTestResult } from "@/domain/notifications";
 import type { AutoHealInput, AutoHealSettings } from "@/domain/auto-heal";
 import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
@@ -305,13 +305,13 @@ export interface SettingsApi {
   setContainerAutoUpdate(containerId: string, policy: AutoUpdatePolicy): Promise<void>;
 }
 
-/** Hub-global notification targets, one per provider; global administrators only. */
+/** Hub-global notification targets, identified by target ID; global administrators only. */
 export interface NotificationsApi {
   listNotificationTargets(): Promise<NotificationTargetRow[]>;
   saveNotificationTarget(input: NotificationTargetInput): Promise<NotificationTarget>;
-  deleteNotificationTarget(provider: NotificationProvider): Promise<void>;
+  deleteNotificationTarget(targetId: number): Promise<void>;
   /** Sends a test through the saved target. */
-  testNotificationTarget(provider: NotificationProvider): Promise<NotificationTestResult>;
+  testNotificationTarget(targetId: number): Promise<NotificationTestResult>;
 }
 
 /** Auto Heal settings belong to the host that restarts its containers. */

@@ -5,6 +5,12 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["POST /stack-import", "import-stack-source"],
+  ["PUT /environments/{id}/notifications/settings/{targetId}", "update-notification-settings"],
+  ["GET /environments/{id}/notifications/settings/{targetId}", "get-notification-settings"],
+  ["DELETE /environments/{id}/notifications/settings/{targetId}", "delete-notification-settings"],
+  ["POST /environments/{id}/notifications/test/{targetId}", "test-notification"],
+
   ["GET /auth/me/ui-preferences", "get-my-ui-preferences"],
   ["PUT /auth/me/ui-preferences/{section}", "put-my-ui-preferences"],
   ["GET /environments/{id}/history/sample", "get-history-sample"],
@@ -84,6 +90,11 @@ const laterOperations = new Map([
   ["POST /environments/{id}/runtime-runs/{runId}/cancel", "cancel-hub-runtime-run"],
   ["POST /environments/{id}/runtime-runs/{runId}/release", "release-runtime-run"],
 ]);
+const replacedRoutes = new Map([
+  ["GET /environments/{id}/notifications/settings/{provider}", "GET /environments/{id}/notifications/settings/{targetId}"],
+  ["DELETE /environments/{id}/notifications/settings/{provider}", "DELETE /environments/{id}/notifications/settings/{targetId}"],
+  ["POST /environments/{id}/notifications/test/{provider}", "POST /environments/{id}/notifications/test/{targetId}"],
+]);
 const retiredSystemRecovery = new Map([
   ["GET /backups/volumes/config", "get-system-volume-backup-config"],
   ["PUT /backups/volumes/config", "update-system-volume-backup-config"],
@@ -112,9 +123,9 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   ));
 
   assert.equal(baseline.size, manifest.baselineOperations);
-  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size);
+  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size - replacedRoutes.size);
   assert.equal(removed.size, manifest.removedOperations.length);
-  assert.equal(removed.size, 159);
+  assert.equal(removed.size, 163);
   for (const [key, id] of removed) {
     assert.equal(baseline.get(key), id, `removed operation must exist in the baseline: ${key}`);
     assert.equal(current.has(key), false, `removed route reappeared: ${key}`);
@@ -128,7 +139,8 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
       assert.equal([...current.values()].includes(id), false, `obsolete system recovery ID remains: ${id}`);
       continue;
     }
-    assert.equal(current.get(key), id, `retained operation changed: ${key}`);
+    assert.equal(current.get(replacedRoutes.get(key) ?? key), id, `retained operation changed: ${key}`);
+    if (replacedRoutes.has(key)) assert.equal(current.has(key), false, `provider route remains: ${key}`);
   }
   for (const [key, id] of current) {
     if (laterOperations.has(key)) {

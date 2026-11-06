@@ -124,7 +124,7 @@ func NewService(deps Dependencies) *Service {
 	s.restore = restore.NewService(restore.Dependencies{DB: deps.DB,
 		Docker: deps.Docker, Engine: deps.Engine, Run: deps.Store.Run, Repository: s.rusticRepositoryForBackupInternal, Password: s.volumeBackupPasswordInternal, HelperImage: deps.HelperImage, Exec: deps.Exec,
 	})
-	s.notifier = backupnotify.Notifier{DB: deps.DB, Agent: config.Load().AgentMode || config.Load().EdgeAgent}
+	s.notifier = backupnotify.Notifier{DB: deps.DB, Agent: config.LoadRole().AgentMode}
 	s.configureRestoreLifecycle()
 	if deps.Engine != nil {
 		deps.Engine.RegisterRunKind("volume", s.executeDurableBackupInternal, s.failDurableBackupInternal)

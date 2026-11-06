@@ -1,6 +1,6 @@
 {
   "baselineOperations": 416,
-  "remainingOperations": 257,
+  "remainingOperations": 253,
   "removedOperations": [
     {
       "method": "POST",
@@ -796,6 +796,26 @@
       "method": "PUT",
       "path": "/variables/{id}",
       "operationId": "updateVariable"
+    },
+    {
+      "method": "POST",
+      "path": "/settings/search",
+      "operationId": "search-settings"
+    },
+    {
+      "method": "GET",
+      "path": "/settings/categories",
+      "operationId": "get-settings-categories"
+    },
+    {
+      "method": "POST",
+      "path": "/customize/search",
+      "operationId": "search-customize"
+    },
+    {
+      "method": "GET",
+      "path": "/customize/categories",
+      "operationId": "get-customize-categories"
     }
   ]
 }

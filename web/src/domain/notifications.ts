@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification target model typed by the generated v10 schemas.
+// Deviations: Original notification target model typed by the generated v10 schemas; M19 backend contracts and target identity integration.
 
 import type { components } from "@/api/generated/schema";
 
@@ -28,8 +28,8 @@ export type NotificationTestResult = Schema["NotificationTestResponse"];
 
 export const NOTIFICATION_PROVIDERS: readonly NotificationProvider[] = ["email", "discord", "telegram", "signal", "slack", "ntfy", "pushover", "gotify", "matrix", "googlechat", "generic"];
 
-export type NotificationEvent = "deployFailed" | "hostOffline" | "backupFailed" | "autoHeal" | "updates" | "security" | "cleanup" | "sustainedLoad";
-export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = ["deployFailed", "hostOffline", "backupFailed", "autoHeal", "updates", "security", "cleanup", "sustainedLoad"];
+export type NotificationEvent = "deployFailed" | "hostOffline" | "backupFailed" | "autoHeal" | "updates" | "security" | "cleanup" | "sustainedLoad" | "containerUnhealthy";
+export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = ["deployFailed", "hostOffline", "backupFailed", "autoHeal", "updates", "security", "cleanup", "sustainedLoad", "containerUnhealthy"];
 /** New targets start with the failure and recovery events. */
 export const DEFAULT_EVENTS: readonly NotificationEvent[] = ["deployFailed", "hostOffline", "backupFailed", "autoHeal"];
 
@@ -43,9 +43,10 @@ export const EVENT_KEYS: Record<NotificationEvent, readonly WireEvent[]> = {
   security: ["vulnerability_found"],
   cleanup: ["prune_report"],
   sustainedLoad: ["sustained_load"],
+  containerUnhealthy: ["container_unhealthy"],
 };
 /** Wire keys a target only receives after an explicit opt-in; the hub treats them as off when missing. */
-const OPT_IN_KEYS: readonly WireEvent[] = ["sustained_load"];
+const OPT_IN_KEYS: readonly WireEvent[] = ["sustained_load", "container_unhealthy"];
 const WIRE_EVENTS = Object.values(EVENT_KEYS).flat();
 
 type ValueKind = "string" | "number" | "boolean" | "list" | "map" | "events";
@@ -68,6 +69,7 @@ export type NotificationConfig = Record<string, unknown>;
 
 export interface NotificationTarget {
   kind: "target";
+  name: string;
   id: number;
   provider: NotificationProvider;
   enabled: boolean;
@@ -86,6 +88,8 @@ export interface UnsupportedNotificationTarget {
 export type NotificationTargetRow = NotificationTarget | UnsupportedNotificationTarget;
 
 export interface NotificationTargetInput {
+  id?: number;
+  name?: string;
   provider: NotificationProvider;
   enabled: boolean;
   /** Empty credential fields keep the stored secret. */
@@ -162,11 +166,11 @@ export function parseNotificationTarget(raw: unknown): NotificationTargetRow | u
   const id = row.id;
   const provider = row.provider;
   const unsupported: UnsupportedNotificationTarget = { kind: "unsupported", id, provider: typeof provider === "string" ? provider : "" };
-  if (!isProvider(provider) || typeof row.enabled !== "boolean") return unsupported;
+  if (!isProvider(provider) || typeof row.name !== "string" || row.name.trim() === "" || typeof row.enabled !== "boolean") return unsupported;
   const config = row.config;
   if (!config || typeof config !== "object" || Array.isArray(config) || !validConfig(provider, config as Record<string, unknown>)) return unsupported;
   const credentials = row.credentialsSet === null ? [] : row.credentialsSet;
   if (!Array.isArray(credentials) || !credentials.every((c) => typeof c === "string")) return unsupported;
   const typed = config as NotificationConfig;
-  return { kind: "target", id, provider, enabled: row.enabled, config: typed, credentialsSet: credentials as string[], events: eventsFromMap(typed.events as Record<WireEvent, boolean> | undefined) };
+  return { kind: "target", id, name: row.name, provider, enabled: row.enabled, config: typed, credentialsSet: credentials as string[], events: eventsFromMap(typed.events as Record<WireEvent, boolean> | undefined) };
 }

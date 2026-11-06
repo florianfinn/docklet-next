@@ -3,8 +3,8 @@
 Auto Heal belongs to each executing Docker host. A global administrator reads or
 updates typed settings at `/environments/{id}/auto-heal`. The hub serves local
 settings and proxies remote settings through Direct HTTP or the Edge command
-allowlist. Agent contract 10 is the minimum: older agents refuse through the
-shared agent-access envelope.
+allowlist. Agent contract 15 is the minimum (cooldown and validity hint, M19):
+older agents refuse through the shared agent-access envelope.
 
 Settings expose enabled, maximum restarts, window minutes and exact stack and
 container-name exclusions. The interval remains on the schedule surface.
@@ -20,6 +20,13 @@ typed writes read-only on that executing host. Unreadable files use the loader's
 normal fallback semantics.
 Effective values outside the typed contract fail closed: the host is skipped and
 each run logs the invalid fields.
+
+From M19 a per-host cooldown (1–60 minutes, default 10) pauses a container after
+its last attempt, before the window count applies. A read of settings that fail
+validation lists the offending fields as `invalidFields`, so the web shows why
+healing is paused instead of "Unavailable"; the hint never permits a restart.
+Both change the agent contract (v15); see
+[unhealthy notice and cooldown](unhealthy-cooldown.md).
 
 ## Eligibility and ownership
 

@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original real Direct and Edge history producer/receiver boundary tests.
+// Deviations: Original real Direct and Edge history producer/receiver boundary tests; M19 backend contracts and target identity integration.
 
 package history
 
@@ -13,17 +13,21 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
+	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	containerservice "github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	proxyservice "github.com/florianfinn/docklet-next/backend/internal/environment/children/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/notification"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/runtimeintent"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
 	"github.com/florianfinn/docklet-next/types/base"
 	dto "github.com/florianfinn/docklet-next/types/history"
 	userDTO "github.com/florianfinn/docklet-next/types/user"
@@ -33,6 +37,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,6 +49,7 @@ import (
 type historyDocker struct {
 	mu                 sync.Mutex
 	id, state, started string
+	health             string
 	exit               int
 	failed             bool
 	statsCalls         atomic.Int32
@@ -68,7 +75,7 @@ func (f *historyDocker) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(listed)
 	case strings.HasSuffix(r.URL.Path, "/json"):
-		_ = json.NewEncoder(w).Encode(map[string]any{"Id": f.id, "Name": "/app", "Config": map[string]any{"Labels": map[string]string{}}, "State": map[string]any{"Status": f.state, "Running": f.state == "running", "StartedAt": f.started, "FinishedAt": "2026-11-03T12:00:00Z", "ExitCode": f.exit}, "RestartCount": 0})
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": f.id, "Name": "/app", "Config": map[string]any{"Labels": map[string]string{}}, "State": map[string]any{"Status": f.state, "Running": f.state == "running", "StartedAt": f.started, "FinishedAt": "2026-11-03T12:00:00Z", "ExitCode": f.exit, "Health": map[string]any{"Status": f.health}}, "RestartCount": 0})
 	case strings.HasSuffix(r.URL.Path, "/stats"):
 		f.statsCalls.Add(1)
 		if r.URL.Query().Get("stream") != "false" || r.URL.Query().Get("one-shot") != "true" {
@@ -156,9 +163,12 @@ func TestHB5HB8HB9ActualDirectAndEdgeSample(t *testing.T) {
 			producer.inspectTimeout = 200 * time.Millisecond
 			producer.hostSample = func(context.Context) (dto.HostSample, error) { return fixtureSample().Host, nil }
 			router := echo.New()
-			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("history", "test"))
+			specConfig := huma.DefaultConfig("history", "test")
+			specConfig.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", func(t reflect.Type, h string) string { return t.PkgPath() + "." + huma.DefaultSchemaNamer(t, h) })
+			api := humaecho.NewWithGroup(router, router.Group("/api"), specConfig)
 			api.UseMiddleware(auth.NewHumaMiddleware(api, &auth.AuthService{}, nil, nil, nil, cfg))
 			New(nil, producer).RegisterRoutes(api, true)
+			autoheal.New(setting, &environment.EnvironmentService{}, cfg).RegisterRoutes(api)
 			var oversized atomic.Bool
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/stop") {
@@ -256,11 +266,63 @@ func TestHB5HB8HB9ActualDirectAndEdgeSample(t *testing.T) {
 			require.False(t, sample.Containers[0].StopIntent)
 			state, _ = Classify(sample.Containers[0], 0)
 			require.Equal(t, dto.Down, state)
+			// The v15 DTO crosses the real Direct proxy or Edge auto_heal.settings command path.
+			proxyContext := func() context.Context {
+				ctx := t.Context()
+				if isEdge {
+					ctx = edge.WithSessionTunnel(edge.WithSessionCredential(ctx, "example-key", credential, nil), tunnel)
+				}
+				return ctx
+			}
+			var healed autohealDTO.Settings
+			update := autohealDTO.Update{Enabled: true, MaxRestarts: 3, WindowMinutes: 30, CooldownMinutes: new(17), ExcludedStacks: []string{}, ExcludedContainers: []string{}}
+			updateBytes, err := json.Marshal(update)
+			require.NoError(t, err)
+			require.NoError(t, transport.JSON(proxyContext(), target, "PUT", "/api/environments/0/auto-heal", updateBytes, &healed))
+			require.Equal(t, 17, healed.CooldownMinutes)
+			require.Empty(t, healed.InvalidFields)
+			require.NoError(t, setting.UpdateSetting(t.Context(), "autoHealCooldownMinutes", "0"))
+			require.NoError(t, transport.JSON(proxyContext(), target, "GET", "/api/environments/0/auto-heal", nil, &healed))
+			require.Equal(t, 0, healed.CooldownMinutes)
+			require.Equal(t, []string{"cooldownMinutes"}, healed.InvalidFields)
+			fixture, err := os.ReadFile("../../../web/src/data/http/testdata/autoheal-v15.json")
+			require.NoError(t, err)
+			encoded, err := json.Marshal(healed)
+			require.NoError(t, err)
+			require.JSONEq(t, string(fixture), string(encoded))
+			// Real Docker producer -> transport -> projection -> persisted outbox -> real delivery receiver.
+			fake.mu.Lock()
+			fake.state = "running"
+			fake.health = "unhealthy"
+			fake.mu.Unlock()
+			hub, host, minute := samplerFixture(t)
+			delivered := make(chan struct{}, 2)
+			receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { delivered <- struct{}{}; w.WriteHeader(200) }))
+			defer receiver.Close()
+			require.NoError(t, hub.db.Create(&notification.NotificationSettings{Name: "Example", Provider: "generic", Enabled: true, Config: database.JSON{"webhookUrl": receiver.URL, "events": map[string]any{"container_unhealthy": true}}}).Error)
+			fetch := func(context.Context, environment.Environment) (dto.Sample, error) { return request() }
+			hub.fetch = fetch
+			require.NoError(t, hub.SampleHost(t.Context(), host, minute))
+			hub = NewService(hub.db, nil, nil, nil, nil)
+			hub.fetch = fetch
+			require.NoError(t, hub.SampleHost(t.Context(), host, minute.Add(7*time.Minute)))
+			require.NoError(t, hub.SampleHost(t.Context(), host, minute.Add(10*time.Minute)))
+			require.EqualValues(t, 1, noticeCount(t, hub))
+			notifier := notification.NewNotificationService(hub.db, &config.Config{}, nil, nil)
+			require.NoError(t, notifier.DeliverPending(t.Context(), minute.Add(10*time.Minute)))
+			select {
+			case <-delivered:
+			default:
+				t.Fatal("history notice did not reach the receiver")
+			}
+			require.NoError(t, hub.SampleHost(t.Context(), host, minute.Add(11*time.Minute)))
+			require.EqualValues(t, 1, noticeCount(t, hub))
+			require.EqualValues(t, 1, countEvents(t, hub, dto.EventUnhealthy))
 			oversized.Store(true)
 			_, err = request()
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "history.sample-too-large")
-			hub, host, minute := samplerFixture(t)
+			hub, host, minute = samplerFixture(t)
 			hub.fetch = func(context.Context, environment.Environment) (dto.Sample, error) { return request() }
 			require.NoError(t, hub.SampleHost(t.Context(), host, minute))
 			require.NoError(t, hub.db.Table("history_buckets").Where("kind<>'host'").Count(&count).Error)

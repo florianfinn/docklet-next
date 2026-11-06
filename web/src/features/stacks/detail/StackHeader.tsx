@@ -2,7 +2,7 @@
 // Revision: f25cf36c7495738d1c83aa44c9e20da905b50eb78fe158af11f89d4fe57c0e09
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
 import { useIsUser } from "@/data/use-principal";
 import { useStackCapability } from "@/shared/hooks/use-stack-capability";
@@ -40,8 +40,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const cmd = useStackCommands();
   const command = useStackCapability(stack.id, stack.hostId);
   const user = useIsUser();
-  const full = useCapability("saveStackFiles", { kind: "stack", id: stack.id });
-  const redeploy = user ? full : command;
+  const redeploy = useCapability("redeployStack", { kind: "stack", id: stack.id });
   const check = useCapability("checkUpdates", { kind: "stack", id: stack.id });
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
   const stopMode = useStackStopMode();

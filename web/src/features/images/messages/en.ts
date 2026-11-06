@@ -38,6 +38,8 @@ export const enImages = {
   offlineNote: "Host disconnected – last known state, actions locked.",
   menu: { details: "Details", pullAgain: "Pull again", remove: "Remove", openUpdate: "Open update", security: "View findings" },
   details: {
+    metadataLoading: "Loading metadata …",
+    metadataError: "Metadata unavailable",
     unknown: "Unknown",
     title: "Image {name}",
     overview: "Overview",

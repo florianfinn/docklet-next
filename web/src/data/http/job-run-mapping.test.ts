@@ -64,3 +64,31 @@ it("localises the persisted message history of a settled hub update check", () =
   const run = renderRun(mapActivityDetail(detail as unknown as Detail), "de");
   expect([run.error, run.log]).toEqual(["Teilweise abgeschlossen", ["Teilweise abgeschlossen"]]);
 });
+
+// Producer texts of carrier codes stay data in run logs (#357 S0R1-1): outcome, activity.message and event detail.
+it("keeps a real job outcome in the latest message and the persisted history", () => {
+  const outcome = "Registry example.com refused the request";
+  const detail = settled("failed", outcome) as unknown as { messages: unknown[] };
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(renderRun(mapActivityDetail(detail as unknown as Detail), "de").log).toEqual([outcome]);
+    detail.messages = [{ id: "example-message", activityId: "run", level: "error", message: outcome, code: "job.failed", step: "failed", createdAt: "2026-11-05T12:01:00Z" }];
+    expect(renderRun(mapActivityDetail(detail as unknown as Detail), "de").log).toEqual([outcome]);
+    expect(errors).not.toHaveBeenCalled();
+  } finally { errors.mockRestore(); }
+});
+
+it.each(["project_update", "project_restore"])("keeps activity.message and event detail text in a %s log", (type) => {
+  const at = "2026-11-05T12:00:00Z";
+  const line = (id: string, code: string, message: string) => ({ id, activityId: "run", level: "info", message, code, step: "pull", createdAt: at });
+  const detail = {
+    activity: { id: "run", type, environmentId: "example", resourceType: "project", resourceId: "app", resourceName: "app", status: "running", startedAt: at, createdAt: at },
+    stepTrace: [], output: [], outputTruncated: false,
+    messages: [line("m1", "activity.message", "Pulling example/app:1.2.3"), line("m2", "deploy.pull", "Pulled example/app:1.2.3"), line("m3", "container.start", "Started app-web-1"), line("m4", "run.started", "Started")],
+  } as unknown as Detail;
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(renderRun(mapActivityDetail(detail), "de").log).toEqual(["Pulling example/app:1.2.3", "Pulled example/app:1.2.3", "Started app-web-1", "Läuft"]);
+    expect(errors).not.toHaveBeenCalled();
+  } finally { errors.mockRestore(); }
+});

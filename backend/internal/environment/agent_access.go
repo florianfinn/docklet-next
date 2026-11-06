@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation.
+// Deviations: Original host registration implementation. M19 #355 online transition announced on every authenticated online write.
 
 package environment
 
@@ -253,6 +253,11 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 		return nil, nil, ErrInvalidEnvironmentAccessToken
 	}
 	s.invalidateEnvironmentCacheInternal(id)
+	// Every authenticated online write passes here (health job, manual test, Edge heartbeat), so an
+	// agent seen coming back by any of them gets the synced settings again.
+	if compatible && env.Status != status {
+		s.notifyAgentOnline(checkCtx, id)
+	}
 	s.agentRuntime.mu.Lock()
 	if s.agentRuntime.reports == nil {
 		s.agentRuntime.reports = make(map[string]agentReport)

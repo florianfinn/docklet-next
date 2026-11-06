@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; a tunnel drop or failed Edge probe keeps the update-required verdict.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; a tunnel drop or failed Edge probe keeps the update-required verdict; M19 backend contracts and target identity integration; the online announcement moved to the compatibility write.
 
 package environment
 
@@ -175,8 +175,8 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		return scheduler.Outcome{Status: scheduler.Succeeded}, nil
 	}
 
-	// An agent that just came back may have restarted with different state;
-	// resend everything once instead of trusting the last delivered payload.
+	// An agent that just came back may have restarted with different state; resend everything once
+	// instead of trusting the last delivered payload. The compatibility write announced the transition.
 	if !wasOnline {
 		s.ForgetSyncState(envID)
 	}

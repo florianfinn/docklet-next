@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 106c22aac8d9229410e511de8e2cd2a77177bafea92ef2ae34d083d756d7d022
+// Revision: 3de6c50ecf3ca0518a26990340bbb669d4089da9ea7879d4b137da1bfefea4df
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -851,46 +851,6 @@ export interface paths {
          * @description Test connectivity and authentication to a container registry
          */
         post: operations["testContainerRegistry"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/customize/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get customization categories
-         * @description Get all available customization categories with metadata
-         */
-        get: operations["get-customize-categories"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/customize/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Search customization options
-         * @description Search customization categories and options by query
-         */
-        post: operations["search-customize"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2593,7 +2553,7 @@ export interface paths {
         /** Get all notification settings */
         get: operations["get-all-notification-settings"];
         put?: never;
-        /** Create or update notification settings */
+        /** Create notification target */
         post: operations["create-or-update-notification-settings"];
         delete?: never;
         options?: never;
@@ -2601,16 +2561,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/environments/{id}/notifications/settings/{provider}": {
+    "/environments/{id}/notifications/settings/{targetId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get notification settings by provider */
+        /** Get notification settings by target ID */
         get: operations["get-notification-settings"];
-        put?: never;
+        /** Update notification target */
+        put: operations["update-notification-settings"];
         post?: never;
         /** Delete notification settings */
         delete: operations["delete-notification-settings"];
@@ -2619,7 +2580,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/environments/{id}/notifications/test/{provider}": {
+    "/environments/{id}/notifications/test/{targetId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4982,27 +4943,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settings/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get settings categories
-         * @description Get all available settings categories with metadata
-         */
-        get: operations["get-settings-categories"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings/search": {
+    "/stack-import": {
         parameters: {
             query?: never;
             header?: never;
@@ -5011,11 +4952,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Search settings
-         * @description Search settings categories and individual settings by query
-         */
-        post: operations["search-settings"];
+        /** Import an unsaved stack proposal */
+        post: operations["import-stack-source"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5907,9 +5845,12 @@ export interface components {
              * @example /api/schemas/AutohealSettings.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            cooldownMinutes: number;
             enabled: boolean;
             excludedContainers: string[] | null;
             excludedStacks: string[] | null;
+            readonly invalidFields: ("maxRestarts" | "windowMinutes" | "cooldownMinutes" | "excludedStacks" | "excludedContainers")[];
             readonly managedByEnvironment: boolean;
             /** Format: int64 */
             maxRestarts: number;
@@ -5923,6 +5864,8 @@ export interface components {
              * @example /api/schemas/AutohealUpdate.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            cooldownMinutes?: number;
             enabled: boolean;
             excludedContainers: string[] | null;
             excludedStacks: string[] | null;
@@ -8151,18 +8094,6 @@ export interface components {
         CapabilityResourceRef: {
             id: string;
             kind: string;
-        };
-        CategoryCategory: {
-            description: string;
-            icon: string;
-            id: string;
-            keywords: string[] | null;
-            matchingSettings?: components["schemas"]["MetaMetadata"][] | null;
-            /** Format: int64 */
-            relevanceScore?: number;
-            settings: components["schemas"]["MetaMetadata"][] | null;
-            title: string;
-            url: string;
         };
         ContainerActionResult: {
             activityId?: string;
@@ -10634,13 +10565,6 @@ export interface components {
             readonly $schema?: string;
             key: string;
         };
-        MetaMetadata: {
-            description?: string;
-            key: string;
-            keywords?: string[] | null;
-            label: string;
-            type: string;
-        };
         NetworkConnectContainerRequest: {
             /**
              * Format: uri
@@ -11030,6 +10954,7 @@ export interface components {
         NotificationEventMap: {
             auto_heal?: boolean;
             backup_failed?: boolean;
+            container_unhealthy?: boolean;
             container_update?: boolean;
             deploy_failed?: boolean;
             host_offline?: boolean;
@@ -11040,7 +10965,7 @@ export interface components {
         };
         NotificationProblem: {
             /** @enum {string} */
-            code: "notification.config-invalid" | "notification.hub-only" | "notification.dispatch-invalid" | "notification.dispatch-unsupported" | "notification.dispatch-stale" | "notification.test-busy";
+            code: "notification.config-invalid" | "notification.hub-only" | "notification.dispatch-invalid" | "notification.dispatch-unsupported" | "notification.dispatch-stale" | "notification.test-busy" | "notification.name-taken" | "notification.name-invalid" | "notification.target-not-found";
             field?: string;
             /** Format: int64 */
             status: number;
@@ -11059,6 +10984,7 @@ export interface components {
             enabled: boolean;
             /** Format: int64 */
             id: number;
+            name: string;
             provider: string;
         };
         NotificationTestResponse: {
@@ -11080,6 +11006,7 @@ export interface components {
                 [key: string]: unknown;
             } | components["schemas"]["NotificationConfigDiscord"] | components["schemas"]["NotificationConfigEmail"] | components["schemas"]["NotificationConfigTelegram"] | components["schemas"]["NotificationConfigSignal"] | components["schemas"]["NotificationConfigSlack"] | components["schemas"]["NotificationConfigNtfy"] | components["schemas"]["NotificationConfigPushover"] | components["schemas"]["NotificationConfigGotify"] | components["schemas"]["NotificationConfigMatrix"] | components["schemas"]["NotificationConfigGoogleChat"] | components["schemas"]["NotificationConfigGeneric"];
             enabled: boolean;
+            name: string;
             provider: string;
         };
         PortPortMapping: {
@@ -11687,27 +11614,6 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
-        SearchRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/SearchRequest.json
-             */
-            readonly $schema?: string;
-            query: string;
-        };
-        SearchResponse: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/SearchResponse.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            count: number;
-            query: string;
-            results: components["schemas"]["CategoryCategory"][] | null;
-        };
         ServiceConfig: {
             annotations?: {
                 [key: string]: string;
@@ -11922,6 +11828,13 @@ export interface components {
             /** @description Whether auto-update is enabled for this container */
             enabled: boolean;
         };
+        SettingsProblem: {
+            /** @enum {string} */
+            code: "settings.activity-limit-invalid";
+            field: string;
+            /** Format: int64 */
+            status: number;
+        };
         SettingsPublicSetting: {
             key: string;
             type: string;
@@ -11941,6 +11854,8 @@ export interface components {
              */
             readonly $schema?: string;
             actionPresentation?: string | null;
+            activityEventLimit?: string | null;
+            activityRunLimit?: string | null;
             agentInstallDirectory?: string | null;
             agentProjectsDirectory?: string | null;
             /**
@@ -11950,6 +11865,7 @@ export interface components {
             authLocalEnabled?: string | null;
             authPasswordPolicy?: string | null;
             authSessionTimeout?: string | null;
+            autoHealCooldownMinutes?: string | null;
             autoHealEnabled?: string | null;
             autoHealExcludedContainers?: string | null;
             autoHealExcludedStacks?: string | null;
@@ -12056,6 +11972,50 @@ export interface components {
             /** @description JSON manual/daily/weekly wall-clock schedule in the hub time zone */
             vulnerabilityScanSchedule?: string | null;
             vulnerabilityThreatIntelEnabled?: string | null;
+        };
+        StackimportPlatform: {
+            architecture: string;
+            os: string;
+        };
+        StackimportProblem: {
+            /** @enum {string} */
+            code: "import.invalid-reference" | "import.registry-not-configured" | "import.not-found" | "import.too-large" | "import.timeout" | "import.redirect-refused" | "import.source-unavailable" | "import.invalid-compose" | "import.unauthorized" | "import.busy";
+            /** Format: int64 */
+            line?: number;
+            /** Format: int64 */
+            status: number;
+        };
+        StackimportRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/StackimportRequest.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            kind: "github" | "registry";
+            platform?: components["schemas"]["StackimportPlatform"];
+            ref: string;
+        };
+        StackimportResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/StackimportResult.json
+             */
+            readonly $schema?: string;
+            composeContent: string;
+            envNames: string[];
+            found: ("import.found.compose" | "import.found.env-example" | "import.found.image-config" | "import.found.ports" | "import.found.volumes" | "import.found.environment")[];
+            missing: ("import.missing.env-file" | "import.missing.label-file" | "import.missing.include" | "import.missing.extends" | "import.missing.build-context" | "import.missing.variables" | "import.missing.compose")[];
+            source: components["schemas"]["StackimportSource"];
+            title: string;
+        };
+        StackimportSource: {
+            canonicalRef: string;
+            /** @enum {string} */
+            kind: "github" | "registry";
+            resolvedDigest?: string;
         };
         StreamEvent: {
             activity?: components["schemas"]["ActivityStreamEvent"];
@@ -17172,68 +17132,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-customize-categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CategoryCategory"][] | null;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "search-customize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SearchRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchResponse"];
                 };
             };
             /** @description Error */
@@ -24336,6 +24234,15 @@ export interface operations {
                 };
             };
             /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -24390,6 +24297,15 @@ export interface operations {
                 };
             };
             /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -24416,8 +24332,8 @@ export interface operations {
             path: {
                 /** @description Environment ID */
                 id: string;
-                /** @description Provider */
-                provider: string;
+                /** @description Notification target ID */
+                targetId: number;
             };
             cookie?: never;
         };
@@ -24434,6 +24350,78 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                targetId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24468,8 +24456,8 @@ export interface operations {
             path: {
                 /** @description Environment ID */
                 id: string;
-                /** @description Provider */
-                provider: string;
+                /** @description Notification target ID */
+                targetId: number;
             };
             cookie?: never;
         };
@@ -24486,6 +24474,15 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24522,8 +24519,8 @@ export interface operations {
             path: {
                 /** @description Environment ID */
                 id: string;
-                /** @description Provider */
-                provider: string;
+                /** @description Notification target ID */
+                targetId: number;
             };
             cookie?: never;
         };
@@ -24540,6 +24537,15 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -26193,6 +26199,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseListSettingsSettingDto"];
+                };
+            };
+            /** @description Invalid setting */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["SettingsProblem"];
                 };
             };
             /** @description Host or framework refusal */
@@ -34620,6 +34635,15 @@ export interface operations {
                 };
             };
             /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -35127,36 +35151,7 @@ export interface operations {
             };
         };
     };
-    "get-settings-categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CategoryCategory"][] | null;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "search-settings": {
+    "import-stack-source": {
         parameters: {
             query?: never;
             header?: never;
@@ -35165,7 +35160,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SearchRequest"];
+                "application/json": components["schemas"]["StackimportRequest"];
             };
         };
         responses: {
@@ -35175,7 +35170,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchResponse"];
+                    "application/json": components["schemas"]["StackimportResult"];
+                };
+            };
+            /** @description Import refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
                 };
             };
             /** @description Error */

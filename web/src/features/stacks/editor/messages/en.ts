@@ -226,6 +226,9 @@ export const enEditor = {
     },
   },
   source: {
+    registriesHint: "Docker Hub and registries enabled in Settings are supported.",
+    replaceTitle: "Replace the edited Compose file?",
+    replaceHint: "The imported proposal replaces the Compose content. Existing environment values are kept.",
     title: "One-time import",
     description: "Takes over values once from a repository or a Docker Hub image. No permanent Git connection, no Git sync.",
     github: "GitHub",
