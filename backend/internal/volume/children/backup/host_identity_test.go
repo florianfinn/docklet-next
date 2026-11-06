@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original backup-route Direct/Edge session revocation and late-response proofs; M15 assignment schema in the environment fixture; M17 empty history deletion fixture.
+// Deviations: Original backup-route Direct/Edge session revocation and late-response proofs; M15 assignment schema in the environment fixture; M17 empty history deletion fixture; M19 durable condition deletion fixture.
 
 package backup
 
@@ -45,6 +45,10 @@ type historyDeletionFixture struct{ HostID string }
 
 func (historyDeletionFixture) TableName() string { return "history_buckets" }
 
+type conditionDeletionFixture struct{ HostID string }
+
+func (conditionDeletionFixture) TableName() string { return "history_conditions" }
+
 func (c *backupIdentityConn) Send(m *edge.TunnelMessage) error {
 	c.mu.Lock()
 	closed := c.closed
@@ -77,7 +81,7 @@ func TestBackupRoutesDropHeldDirectAndEdgeResponsesOnHostRotation(t *testing.T) 
 					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 					defer cancel()
 					f := newRuntimePlan(t)
-					require.NoError(t, f.service.deps.DB.AutoMigrate(&policyModels.Policy{}, &policyModels.Child{}, &policyModels.Candidate{}, &policyModels.Notice{}, &environment.Environment{}, &backuptarget.Target{}, &access.Assignment{}, &historyDeletionFixture{}))
+					require.NoError(t, f.service.deps.DB.AutoMigrate(&policyModels.Policy{}, &policyModels.Child{}, &policyModels.Candidate{}, &policyModels.Notice{}, &environment.Environment{}, &backuptarget.Target{}, &access.Assignment{}, &historyDeletionFixture{}, &conditionDeletionFixture{}))
 					entered := make(chan struct{}, 1)
 					release := make(chan struct{})
 					info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})

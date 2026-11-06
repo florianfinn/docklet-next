@@ -76,7 +76,7 @@ function Targets() {
   const toggle = async (target: NotificationTarget, enabled: boolean) => {
     setError(undefined);
     try {
-      await write(target.provider, () => adapter.saveNotificationTarget({ provider: target.provider, enabled, config: target.config, events: target.events }));
+      await write(target.provider, () => adapter.saveNotificationTarget({ id: target.id, name: target.name, provider: target.provider, enabled, config: target.config, events: target.events }));
     } catch (cause) {
       if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
     }
@@ -87,7 +87,7 @@ function Targets() {
     const kind = t(`kinds.${provider}`);
     const current = () => live.current.mounted && live.current.rows.some((r) => r.id === id && r.provider === provider);
     try {
-      const result = await adapter.testNotificationTarget(provider);
+      const result = await adapter.testNotificationTarget(id);
       if (!current()) return;
       if (result.code === "notification.test-sent") {
         toast.success(`${kind}: ${all(NOTIFICATION_TEST_KEYS["notification.test-sent"])}`);
@@ -187,7 +187,7 @@ function Targets() {
           key={dialog.generation}
           target={dialog.target}
           available={available}
-          save={(input: NotificationTargetInput) => write(input.provider, () => adapter.saveNotificationTarget(input))}
+          save={(input: NotificationTargetInput) => write(input.provider, () => adapter.saveNotificationTarget({ ...input, ...(dialog.target ? { id: dialog.target.id, name: dialog.target.name } : {}) }))}
           onClose={() => close(dialog.generation)}
           onSaved={() => close(dialog.generation)}
         />
@@ -200,9 +200,10 @@ function Targets() {
         confirmLabel={t("remove")}
         onConfirm={async () => {
           const provider = remove?.provider;
-          if (!isProvider(provider)) return;
+          if (!remove || !isProvider(provider)) return;
           try {
-            await write(provider, () => adapter.deleteNotificationTarget(provider));
+            const targetId = remove.id;
+            await write(provider, () => adapter.deleteNotificationTarget(targetId));
           } catch (cause) {
             if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
             return false;

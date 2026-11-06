@@ -2,13 +2,13 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M19 backend contracts and target identity integration.
 
 package notification
 
 // Problem carries stable codes and a submitted-field pointer, never provider text.
 type Problem struct {
-	Code   string `json:"code" enum:"notification.config-invalid,notification.hub-only,notification.dispatch-invalid,notification.dispatch-unsupported,notification.dispatch-stale,notification.test-busy"`
+	Code   string `json:"code" enum:"notification.config-invalid,notification.hub-only,notification.dispatch-invalid,notification.dispatch-unsupported,notification.dispatch-stale,notification.test-busy,notification.name-taken,notification.name-invalid,notification.target-not-found"`
 	Field  string `json:"field,omitempty"`
 	Status int    `json:"status"`
 }

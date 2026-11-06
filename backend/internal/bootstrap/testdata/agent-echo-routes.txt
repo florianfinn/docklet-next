@@ -114,7 +114,6 @@ GET /api/environments/:id/ws/containers/:containerId/terminal
 GET /api/environments/:id/ws/projects/:projectId/logs
 GET /api/environments/:id/ws/system/stats
 GET /api/health
-GET /api/settings/categories
 GET /api/version
 HEAD /api/environments/:id/system/health
 HEAD /api/health
@@ -196,7 +195,6 @@ POST /api/environments/:id/vulnerabilities/ignore
 POST /api/environments/:id/vulnerabilities/ignore/bulk
 POST /api/environments/:id/vulnerabilities/scan
 POST /api/environments/:id/vulnerabilities/unignore/bulk
-POST /api/settings/search
 POST /api/system/agent/restart
 POST /api/updater/check-all
 PUT /api/environments/:id/auto-heal

@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Original notification and Auto Heal foundation; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M19 backend contracts and target identity integration.
 
 package contract
 
@@ -14,9 +14,9 @@ import (
 )
 
 func TestNotificationAutoHealBoundaryVersion(t *testing.T) {
-	require.Equal(t, 14, AgentHubVersion)
-	require.Equal(t, 14, MinimumAgentVersion)
-	b, e := os.ReadFile("testdata/agent-hub-v14.json")
+	require.Equal(t, 15, AgentHubVersion)
+	require.Equal(t, 15, MinimumAgentVersion)
+	b, e := os.ReadFile("testdata/agent-hub-v15.json")
 	require.NoError(t, e)
 	var fixture struct {
 		Minimum int `json:"minimumAgentContractVersion"`

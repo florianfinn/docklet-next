@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -63,6 +63,7 @@ const (
 )
 
 type Update struct {
+	Name string `json:"name"`
 	// Provider is the notification provider type.
 	//
 	// Required: true
@@ -80,6 +81,7 @@ type Update struct {
 }
 
 type Response struct {
+	Name string `json:"name"`
 	// ID is the unique identifier of the notification settings.
 	//
 	// Required: true

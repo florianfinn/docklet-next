@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -19,9 +19,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	autohealDTO "github.com/florianfinn/docklet-next/types/autoheal"
 	"github.com/florianfinn/docklet-next/types/base"
-	"github.com/florianfinn/docklet-next/types/category"
 	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
-	searchtypes "github.com/florianfinn/docklet-next/types/search"
 	"github.com/florianfinn/docklet-next/types/settings"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/kit/pkg/mapping"
@@ -29,8 +27,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
-	"github.com/florianfinn/docklet-next/backend/internal/search"
-	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -44,10 +40,9 @@ const (
 
 // SettingsHandler provides Huma-based settings management endpoints.
 type SettingsHandler struct {
-	settingsService       *SettingsService
-	settingsSearchService *SettingsSearchService
-	proxyRemoteJSON       handlerutil.RemoteJSONProxy
-	cfg                   *config.Config
+	settingsService *SettingsService
+	proxyRemoteJSON handlerutil.RemoteJSONProxy
+	cfg             *config.Config
 }
 
 type GetSettingsInput struct {
@@ -69,18 +64,6 @@ type GetPublicSettingsOutput struct {
 type UpdateSettingsInput struct {
 	EnvironmentID string          `path:"id" doc:"Environment ID"`
 	Body          settings.Update `doc:"Settings update data"`
-}
-
-type SearchSettingsInput struct {
-	Body searchtypes.Request `doc:"Search query"`
-}
-
-type SearchSettingsOutput struct {
-	Body searchtypes.Response
-}
-
-type GetCategoriesOutput struct {
-	Body []category.Category
 }
 
 // validateProjectsDirectoryValueInternal validates a projects directory value allowing:
@@ -121,34 +104,6 @@ func validateAbsoluteDirectoryPathInternal(path string) error {
 	default:
 		return errors.New("must be an absolute path")
 	}
-}
-
-func filterSettingsCategoriesInternal(ps *authz.PermissionSet, categories []category.Category) []category.Category {
-	if ps == nil {
-		return []category.Category{}
-	}
-	filtered := make([]category.Category, 0, len(categories))
-	for _, cat := range categories {
-		if canAccessSettingsCategoryAtAnyScopeInternal(ps, cat.ID) {
-			filtered = append(filtered, cat)
-		}
-	}
-	return filtered
-}
-
-func canAccessSettingsCategoryAtAnyScopeInternal(ps *authz.PermissionSet, categoryID string) bool {
-	if ps == nil {
-		return false
-	}
-	if authz.CanAccessSettingsCategory(ps, categoryID, "") {
-		return true
-	}
-	for envID := range ps.PerEnv {
-		if authz.CanAccessSettingsCategory(ps, categoryID, envID) {
-			return true
-		}
-	}
-	return false
 }
 
 func (h *SettingsHandler) appendRuntimeSettingsInternal(settingsDto []settings.PublicSetting, includeAuthenticatedOnly bool) []settings.PublicSetting {
@@ -387,6 +342,9 @@ func (h *SettingsHandler) updateSettingsForLocalEnvironment(ctx context.Context,
 
 	updatedSettings, err := h.settingsService.UpdateSettings(ctx, input)
 	if err != nil {
+		if p, ok := errors.AsType[*settings.Problem](err); ok {
+			return nil, p
+		}
 		var problem *imageDTO.OperationError
 		if errors.As(err, &problem) {
 			return nil, problem
@@ -417,26 +375,6 @@ func (h *SettingsHandler) updateSettingsForLocalEnvironment(ctx context.Context,
 
 func hasAuthSettingsUpdateInternal(req settings.Update) bool {
 	return req.AuthLocalEnabled != nil || req.AuthSessionTimeout != nil || req.AuthPasswordPolicy != nil
-}
-
-// Search searches settings by query.
-func (h *SettingsHandler) Search(ctx context.Context, input *SearchSettingsInput) (*SearchSettingsOutput, error) {
-	if strings.TrimSpace(input.Body.Query) == "" {
-		return nil, huma.Error400BadRequest("Query parameter is required")
-	}
-
-	ps, _ := middleware.PermissionsFromContext(ctx)
-	results := search.Search(h.settingsSearchService.GetSettingsCategories(), input.Body.Query, searchtypes.SettingsProfile)
-	results.Results = filterSettingsCategoriesInternal(ps, results.Results)
-	results.Count = len(results.Results)
-	return &SearchSettingsOutput{Body: results}, nil
-}
-
-// GetCategories returns all available settings categories.
-func (h *SettingsHandler) GetCategories(ctx context.Context, input *struct{}) (*GetCategoriesOutput, error) {
-	ps, _ := middleware.PermissionsFromContext(ctx)
-	categories := filterSettingsCategoriesInternal(ps, h.settingsSearchService.GetSettingsCategories())
-	return &GetCategoriesOutput{Body: categories}, nil
 }
 
 func withoutStackStopMode(values []settings.PublicSetting) []settings.PublicSetting {

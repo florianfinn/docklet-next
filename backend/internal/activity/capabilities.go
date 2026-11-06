@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration.
 package activity
 
 import (
@@ -36,7 +36,7 @@ var adapterOperationIDs = []string{
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
 	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
 	"restoreRestorePoint", "runContainerCommand", "runScan",
-	"runStackCommand", "saveSettings", "saveStackFiles", "setAutoUpdate",
+	"runStackCommand", "redeployStack", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
 	"subscribeMetrics", "updateHost", "uploadFile",
@@ -71,6 +71,13 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {
 		switch descriptors[i].OperationID {
+		case "importSource":
+			descriptors[i].Available = permissions.IsGlobalAdmin()
+			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "access.admin-required"
+			}
 		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan":
 			ref := descriptors[i].ResourceRef
 			grant := authz.PermVulnsRead
@@ -108,7 +115,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
-		case "runStackCommand", "runContainerCommand":
+		case "runStackCommand", "redeployStack", "runContainerCommand":
 			ref := descriptors[i].ResourceRef
 			kind := "stack"
 			required := deployRuntimeGrantsInternal
@@ -353,7 +360,16 @@ func RegisterCapabilities(api huma.API, readers ...middleware.PointAccessReader)
 		Tags:        []string{"Capabilities"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, func(ctx context.Context, in *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
-		return getCapabilitiesWithPoints(ctx, in, reader)
+		out, err := getCapabilitiesWithPoints(ctx, in, reader)
+		if err == nil && api.OpenAPI().Paths["/stack-import"] == nil {
+			for i := range out.Body.Data {
+				if out.Body.Data[i].OperationID == "importSource" {
+					out.Body.Data[i].Available = false
+					out.Body.Data[i].DisabledReasonCode = "capability.mapping-unavailable"
+				}
+			}
+		}
+		return out, err
 	})
 }
 

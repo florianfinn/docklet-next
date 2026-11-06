@@ -1,0 +1,1 @@
+{"enabled":true,"maxRestarts":3,"windowMinutes":30,"cooldownMinutes":0,"invalidFields":["cooldownMinutes"],"excludedStacks":[],"excludedContainers":[],"managedByEnvironment":false}

@@ -5,13 +5,14 @@
 // Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability. M19: total contract-code catalogue maps.
 
 import type { useTranslations } from "use-intl";
-import { AUTOHEAL_CODE_KEYS, NOTIFICATION_CODE_KEYS } from "./wire-catalogue-settings";
+import { AUTOHEAL_CODE_KEYS, NOTIFICATION_CODE_KEYS, SETTINGS_CODE_KEYS } from "./wire-catalogue-settings";
 import type { CatalogueKey } from "./wire-catalogue";
 import { AdapterOutcomeError } from "./capability";
 
 /** Producer codes the settings UI translates; anything else stays generic. */
 export const SETTINGS_PROBLEM_CODES = [
   "notification.config-invalid", "notification.hub-only", "notification.test-busy",
+  "notification.name-taken", "notification.name-invalid", "notification.target-not-found", "settings.activity-limit-invalid",
   "autoheal.settings-invalid", "autoheal.settings-env-managed", "settings.key-managed", "settings.ui-configuration-disabled", "settings.invalid-time-zone",
 ] as const;
 const ACCESS_CODES = ["agent.unavailable", "agent.invalid-token", "agent.update-required", "agent.ui-configuration-disabled"] as const;
@@ -41,6 +42,7 @@ export function settingsProblem(body: unknown, status: number): AdapterOutcomeEr
 const KEYS = {
   ...AUTOHEAL_CODE_KEYS,
   ...NOTIFICATION_CODE_KEYS,
+  ...SETTINGS_CODE_KEYS,
   "settings.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
   "agent.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
   "settings.invalid-time-zone": "settings.codes.settings.invalid-time-zone",

@@ -16,6 +16,9 @@ export const NOTIFICATION_CODE_KEYS = {
   "notification.dispatch-unsupported": "settings.codes.notification.dispatch-unsupported",
   "notification.dispatch-stale": "settings.codes.notification.dispatch-stale",
   "notification.test-busy": "settings.codes.notification.test-busy",
+  "notification.name-taken": "settings.codes.notification.name-taken",
+  "notification.name-invalid": "settings.codes.notification.name-invalid",
+  "notification.target-not-found": "settings.codes.notification.target-not-found",
 } satisfies Record<NonNullable<
   | Schema["NotificationProblem"]["code"]
 >, CatalogueKey>;
@@ -26,6 +29,12 @@ export const AUTOHEAL_CODE_KEYS = {
   "settings.key-managed": "settings.codes.settings.key-managed",
 } satisfies Record<NonNullable<
   | Schema["AutohealProblem"]["code"]
+>, CatalogueKey>;
+
+export const SETTINGS_CODE_KEYS = {
+  "settings.activity-limit-invalid": "settings.codes.settings.activity-limit-invalid",
+} satisfies Record<NonNullable<
+  | Schema["SettingsProblem"]["code"]
 >, CatalogueKey>;
 
 export const NOTIFICATION_TEST_KEYS = {

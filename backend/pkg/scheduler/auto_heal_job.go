@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296; workers keep panic recovery and cancelled attempts are interrupted; M18 live scheduling, policy and contract foundation.
+// Deviations: Durable per-host attempts, current final eligibility and crash-safe projection for issue #296; workers keep panic recovery and cancelled attempts are interrupted; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package scheduler
 
@@ -283,7 +283,7 @@ func (j *AutoHealJob) processCandidateInternal(ctx context.Context, cli *client.
 	return target, nil
 }
 func autohealUpdate(s autohealDTO.Settings) autohealDTO.Update {
-	return autohealDTO.Update{Enabled: s.Enabled, MaxRestarts: s.MaxRestarts, WindowMinutes: s.WindowMinutes, ExcludedStacks: s.ExcludedStacks, ExcludedContainers: s.ExcludedContainers}
+	return autohealDTO.Update{Enabled: s.Enabled, MaxRestarts: s.MaxRestarts, WindowMinutes: s.WindowMinutes, CooldownMinutes: &s.CooldownMinutes, ExcludedStacks: s.ExcludedStacks, ExcludedContainers: s.ExcludedContainers}
 }
 
 // selfContainerIDInternal resolves and caches the ID (full 64-char or short

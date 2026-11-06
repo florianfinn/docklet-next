@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -459,7 +459,10 @@ type Update struct {
 	// AutoHealRestartWindow is the time window in minutes for counting auto-heal restarts.
 	//
 	// Required: false
-	AutoHealRestartWindow *string `json:"autoHealRestartWindow,omitzero"`
+	AutoHealCooldownMinutes *string `json:"autoHealCooldownMinutes,omitzero"`
+	ActivityEventLimit      *string `json:"activityEventLimit,omitzero"`
+	ActivityRunLimit        *string `json:"activityRunLimit,omitzero"`
+	AutoHealRestartWindow   *string `json:"autoHealRestartWindow,omitzero"`
 
 	// VolumeHelperIdleTimeout is the number of minutes a volume helper
 	// container may sit idle before it is automatically removed (0 disables).

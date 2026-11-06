@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original real producer and Direct/Edge refusal boundary tests.
+// Deviations: Original real producer and Direct/Edge refusal boundary tests; M19 backend contracts and target identity integration.
 
 package environment_test
 
@@ -61,7 +61,7 @@ func TestHostRefusalsRealProducersDirectAndEdge(t *testing.T) {
 	api := humaecho.NewWithGroup(agentRouter, agentRouter.Group("/api"), apiConfig)
 	api.UseMiddleware(auth.NewHumaMiddleware(api, authService, nil, nil, nil, cfg))
 	autoheal.New(settingService, &environment.EnvironmentService{}, cfg).RegisterRoutes(api)
-	settings.RegisterSettings(api, settingService, nil, nil, cfg)
+	settings.RegisterSettings(api, settingService, nil, cfg)
 	huma.Get(api, "/app-version", func(context.Context, *struct{}) (*struct{ Body version.Info }, error) {
 		return &struct{ Body version.Info }{Body: version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}}, nil
 	})
@@ -149,7 +149,7 @@ func TestHostRefusalsRealProducersDirectAndEdge(t *testing.T) {
 				next(huma.WithContext(ctx, context.WithValue(ctx.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())))
 			})
 			autoheal.New(settingService, envService, &config.Config{}).RegisterRoutes(hubAPI)
-			settings.RegisterSettings(hubAPI, settingService, nil, envService.ProxyJSONRequest, &config.Config{})
+			settings.RegisterSettings(hubAPI, settingService, envService.ProxyJSONRequest, &config.Config{})
 			hub.Any("/api/environments/:id/*", func(c *echo.Context) error { return c.NoContent(418) })
 			for _, tc := range []struct{ suffix, body string }{{"auto-heal", `{"maxRestarts":3,"windowMinutes":30}`}, {"settings", `{}`}} {
 				refusalMode.Store("")

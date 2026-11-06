@@ -13,6 +13,7 @@ import { widgetErrorKey } from "@/features/dashboard/services/widget-meta";
 import { BackupError, backupErrorMessage } from "./backup-error";
 import { AdapterOutcomeError } from "./capability";
 import { SettingsProblemError, settingsErrorMessage } from "./settings-error";
+import { importProblemMessage } from "./wire-catalogue-import";
 import { mapActivityDetail } from "./http/map-dto";
 import { renderMessage, renderRun } from "./message-code";
 import { simulationStore } from "./demo/simulation";
@@ -49,6 +50,8 @@ const proofs = [
   { property: "NetworkError.code", member: "network.overlap", key: "networks.errors.overlap", render: () => volumeOrNetworkError("network", "overlap") },
   { property: "WidgetProblem.code", member: "widget.disabled", key: "dashboard.services.errors.disabled", render: () => de(`dashboard.services.${widgetErrorKey({ code: "widget.disabled" })}`) },
   { property: "NotificationProblem.code", member: "notification.config-invalid", key: "settings.codes.notification.config-invalid", render: () => settingsErrorMessage(new SettingsProblemError("notification.config-invalid", 422), de) },
+  { property: "SettingsProblem.code", member: "settings.activity-limit-invalid", key: "settings.codes.settings.activity-limit-invalid", render: () => settingsErrorMessage(new SettingsProblemError("settings.activity-limit-invalid", 422), de) },
+  { property: "StackimportProblem.code", member: "import.registry-not-configured", key: "stacks.import.errors.registry-not-configured", render: () => importProblemMessage("import.registry-not-configured", de) },
   { property: "AutohealProblem.code", member: "autoheal.settings-invalid", key: "settings.codes.autoheal.settings-invalid", render: () => settingsErrorMessage(new SettingsProblemError("autoheal.settings-invalid", 422), de) },
   { property: "NotificationTestResponse.code", member: "notification.test-failed", key: "settings.codes.notification.test-failed", render: () => notificationResult() },
   { property: "NotificationTestResponse.reason", member: "delivery-auth", key: "settings.codes.delivery-auth", render: () => notificationResult() },

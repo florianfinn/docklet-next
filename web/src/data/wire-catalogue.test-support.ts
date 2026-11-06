@@ -6,7 +6,8 @@
 
 import { IMAGE_ERROR_KEYS, CONTAINER_CODE_KEYS, HOST_CODE_KEYS, ACCESS_CODE_KEYS, NETWORK_CODE_KEYS, WIDGET_CODE_KEYS } from "./wire-catalogue-errors";
 import { BACKUP_CODE_KEYS, BACKUP_REASON_KEYS, VOLUME_COMMAND_KEYS } from "./wire-catalogue-backup";
-import { NOTIFICATION_CODE_KEYS, AUTOHEAL_CODE_KEYS, NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS } from "./wire-catalogue-settings";
+import { NOTIFICATION_CODE_KEYS, AUTOHEAL_CODE_KEYS, NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS, SETTINGS_CODE_KEYS } from "./wire-catalogue-settings";
+import { IMPORT_PROBLEM_KEYS } from "./wire-catalogue-import";
 import { MESSAGE_CODE_KEYS } from "./wire-catalogue-messages";
 import { BACKUP_STATUS_KEYS, BACKUP_TARGET_KIND_KEYS, MAINTENANCE_PHASE_KEYS, HUB_BACKUP_STATUS_KEYS, BACKUP_DELIVERY_STATE_KEYS, RESTART_STATE_KEYS, HISTORY_STATE_KEYS, PRUNE_FAILURE_KEYS, PRUNE_CANDIDATE_KEYS, PRUNE_SKIP_KEYS, SCAN_STATUS_KEYS, SYSTEM_HINT_STATE_KEYS, SYSTEM_HINT_KIND_KEYS } from "./wire-catalogue-states";
 
@@ -22,6 +23,8 @@ export const GUARDED_WIRE_ENUMS = [
   { name: "WIDGET_CODE_KEYS", keys: WIDGET_CODE_KEYS, properties: ["WidgetProblem.code"] },
   { name: "NOTIFICATION_CODE_KEYS", keys: NOTIFICATION_CODE_KEYS, properties: ["NotificationProblem.code"] },
   { name: "AUTOHEAL_CODE_KEYS", keys: AUTOHEAL_CODE_KEYS, properties: ["AutohealProblem.code"] },
+  { name: "SETTINGS_CODE_KEYS", keys: SETTINGS_CODE_KEYS, properties: ["SettingsProblem.code"] },
+  { name: "IMPORT_PROBLEM_KEYS", keys: IMPORT_PROBLEM_KEYS, properties: ["StackimportProblem.code"] },
   { name: "NOTIFICATION_TEST_KEYS", keys: NOTIFICATION_TEST_KEYS, properties: ["NotificationTestResponse.code"] },
   { name: "DELIVERY_REASON_KEYS", keys: DELIVERY_REASON_KEYS, properties: ["NotificationTestResponse.reason"] },
   { name: "MESSAGE_CODE_KEYS", keys: MESSAGE_CODE_KEYS, properties: ["ActivityActivity.messageCode", "ActivityActivitySummary.messageCode", "ActivityMessage.code", "ActivityRuntimeAdmission.code", "ActivityRuntimeConflict.code", "ActivityRuntimeExecutionRefusal.code", "ActivityRuntimeHTTPError.code", "ActivityRuntimeSnapshot.messageCode", "ActivityStepTraceEntry.code", "EventEvent.messageCode"] },
@@ -65,5 +68,7 @@ export const EXEMPT_WIRE_ENUMS = [
   { property: "WidgetConfig.kind", reason: "Mapped to a domain service kind before display: web/src/data/http/service-widgets.ts." },
   { property: "WidgetResult.kind", reason: "Mapped to a domain service kind before display: web/src/data/http/service-widgets.ts." },
   { property: "WidgetSummary.kind", reason: "Mapped to a domain service kind before display: web/src/data/http/service-widgets.ts." },
+  { property: "StackimportRequest.kind", reason: "Request input chosen by the import dialog tab, never rendered from the wire." },
+  { property: "StackimportSource.kind", reason: "Provenance echo of the request; the import dialog labels sources from its own tab selection." },
   { property: "BackupSystemBackupOperation.status", reason: "Transport receipt for activity following, never rendered: web/src/data/http/hub-backups.ts." },
 ] as const;

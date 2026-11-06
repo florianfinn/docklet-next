@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 	"gorm.io/gorm"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -92,7 +93,11 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatHTML, notifications.MessageFormatSlack} {
 		content.Text[f] = text
 	}
-	content.RenderEmail = func() (string, string, error) { return row.Event, "<p>" + html.EscapeString(text) + "</p>", nil }
+	if row.Event == "container_unhealthy" {
+		content.Title = strings.SplitN(text, "\n", 2)[0]
+		content.DefaultTitle = content.Title
+	}
+	content.RenderEmail = func() (string, string, error) { return content.Title, "<p>" + html.EscapeString(text) + "</p>", nil }
 	return s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventType(row.Event), row.Event, database.JSON{"eventType": row.Event, "notificationId": row.ID}, func(ctx context.Context, p notifications.NotificationProvider, c database.JSON) (bool, error) {
 		return notifications.Deliver(ctx, p, c, content)
 	})
@@ -100,6 +105,17 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 
 // outboxText is the plain message of one outbox event; load alerts name metric, value and threshold.
 func outboxText(eventType, host string, payload database.JSON, appURL string) string {
+	if eventType == "container_unhealthy" {
+		container, _ := payload["container"].(string)
+		text := fmt.Sprintf("Container %s on %s is unhealthy (healthcheck failing for %v min)", container, host, payload["minutes"])
+		if payload["reason"] == "restart-loop" {
+			text = fmt.Sprintf("Container %s on %s keeps restarting (%v restarts in 10 min)", container, host, payload["restarts"])
+		}
+		if appURL != "" {
+			text += "\n" + appURL
+		}
+		return text
+	}
 	text := fmt.Sprintf("%s on %s", eventType, host)
 	for _, f := range []string{"stack", "container", "volume", "operation", "outcome", "reason"} {
 		if v, ok := payload[f].(string); ok && v != "" {
