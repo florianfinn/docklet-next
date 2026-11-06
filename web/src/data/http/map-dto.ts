@@ -81,6 +81,15 @@ function message(code: string | undefined, sourceText: string): MessageCode {
   return code ? { code, params: {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
 }
 
+// Run messages with these codes carry producer detail (image, job outcome, event subject); their text stays as data.
+function carrierText(code: string | undefined, sourceText: string): MessageCode | undefined {
+  if (!code || !sourceText) return undefined;
+  if (code === "activity.message") return { code, params: { message: sourceText }, sourceText };
+  const key = wireKey(MESSAGE_CODE_KEYS, code);
+  const carrier = code === "deploy.pull" || code.startsWith("job.") || !!key?.startsWith("runMessages.events.labels.");
+  return key && carrier ? { code: "runMessages.value", params: { value: sourceText } } : undefined;
+}
+
 const CONDITION_CODES = ["down", "unhealthy", "restart-loop", "running-again"] as const;
 const count = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0);
 
@@ -199,6 +208,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     }
     const operationReason = operationReasonKey(code ?? source);
     if (operationReason) return { code: `containers.operationReasons.${operationReason}`, params: {} };
+    const carried = (field === "progress" || !m10) ? carrierText(code, source) : undefined;
+    if (carried) return carried;
     if (!m10) return message(code, source);
     const safe = reason(code);
     const safeKey = wireKey(UPDATE_REASON_KEYS, safe);
