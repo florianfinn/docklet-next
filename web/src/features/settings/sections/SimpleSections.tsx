@@ -1,3 +1,4 @@
+import { HISTORY_LIMITS, validateHistoryLimit } from "@/domain/activity-history";
 import { useQuery } from "@tanstack/react-query";
 import { useAdapter } from "@/data/use-adapter";
 import { queryKeys } from "@/data/query-keys";
@@ -93,6 +94,7 @@ export function ActivitySection({ settings }: { settings: Pick<HubSettings, "act
   const ta = useTranslations("settings.activity");
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.activity);
+  const capability = useCapability("saveSettings");
   if (!draft) return null;
   const load = draft.loadAlerts;
   const loadValid = loadAlertValueValid("percent", load.cpuPercent) && loadAlertValueValid("percent", load.memoryPercent) && loadAlertValueValid("minutes", load.minutes);
@@ -100,7 +102,8 @@ export function ActivitySection({ settings }: { settings: Pick<HubSettings, "act
     <SettingsForm
       title={t("sections.activity")}
       dirty={dirty}
-      valid={loadValid}
+      note={capability.reason}
+      valid={capability.available && loadValid && !validateHistoryLimit("events", draft.maxEvents) && !validateHistoryLimit("actions", draft.maxFinishedActions)}
       onDiscard={reset}
       onSave={async () => {
         await save("activity", draft);
@@ -109,6 +112,12 @@ export function ActivitySection({ settings }: { settings: Pick<HubSettings, "act
     >
       <FieldGroup>
         <p className="text-xs text-muted-foreground">{ta("historyNote")}</p>
+        <div className="grid gap-4 sm:grid-cols-2">{(["events", "actions"] as const).map((kind) => {
+          const key = kind === "events" ? "maxEvents" : "maxFinishedActions";
+          const limits = HISTORY_LIMITS[kind];
+          const error = validateHistoryLimit(kind, draft[key]);
+          return <TextField key={kind} id={`act-${kind}`} type="number" disabled={!capability.available} label={ta(kind)} value={Number.isNaN(draft[key]) ? "" : String(draft[key])} onChange={(text) => patch({ [key]: text.trim() ? Number(text) : NaN })} description={ta(`${kind}Hint`, { ...limits, fallback: limits.default })} error={error ? ta(`errors.${error}`, limits) : undefined} />;
+        })}</div>
         <Field orientation="horizontal">
           <Switch id="act-output" checked={draft.keepActionOutput} onCheckedChange={(keepActionOutput) => patch({ keepActionOutput })} />
           <FieldContent>

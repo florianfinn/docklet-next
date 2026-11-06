@@ -40,8 +40,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const cmd = useStackCommands();
   const command = useStackCapability(stack.id, stack.hostId);
   const user = useIsUser();
-  const full = useCapability("saveStackFiles", { kind: "stack", id: stack.id });
-  const redeploy = user ? full : command;
+  const redeploy = useCapability("redeployStack", { kind: "stack", id: stack.id });
   const check = useCapability("checkUpdates", { kind: "stack", id: stack.id });
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
   const stopMode = useStackStopMode();

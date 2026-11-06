@@ -1,179 +1,55 @@
-import { useCapability } from "@/data/use-capability";
-import { CheckCircle2, CircleAlert, Container, GitBranch, Import } from "lucide-react";
-import { useState } from "react";
-import { useTranslations } from "use-intl";
+// Source: docklet-next/issues/348
+// Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
+// Retrieved: 2026-11-06
+// License: Apache-2.0
+// Deviations: Original one-time import consumer with identity and draft ownership.
 
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useTranslations } from "use-intl";
 import type { ImportRequest, ImportResult } from "@/data/adapter";
+import { AdapterOutcomeError } from "@/data/capability";
+import { identityLifetime } from "@/data/identity-lifetime";
 import { useAdapter } from "@/data/use-adapter";
-import { ToneBadge } from "@/shared/components/tone";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCapability } from "@/data/use-capability";
+import { IMPORT_FOUND_KEYS, IMPORT_MISSING_KEYS, importProblemMessage } from "@/data/wire-catalogue-import";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Field, FieldDescription, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
-import { Spinner } from "@/shared/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
-const EXAMPLES: Record<ImportRequest["kind"], string[]> = {
-  github: ["github.com/example/notes-app", "github.com/example/tool"],
-  dockerhub: ["traefik/whoami", "linuxserver/syncthing"],
-};
-
-interface ImportSourceDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onApply: (result: ImportResult) => void;
-}
-
-/** One-time import through the adapter. */
-export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSourceDialogProps) {
-  const t = useTranslations("editor.source");
-  const tc = useTranslations("common.actions");
-  const dt = useAdapterText();
-  const adapter = useAdapter();
-  const capability = useCapability("importSource");
-  const [kind, setKind] = useState<ImportRequest["kind"]>("github");
-  const [ref, setRef] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
-  const [error, setError] = useState<"missing" | "unavailable" | null>(null);
-
-  const fetchSource = async (value = ref) => {
+interface Props { open: boolean; draftKey?: string; onOpenChange: (open: boolean) => void; onApply: (result: ImportResult) => void }
+export function ImportSourceDialog({ open, draftKey = "new", onOpenChange, onApply }: Props) {
+  const t = useTranslations("editor.source"), all = useTranslations(), tc = useTranslations("common.actions");
+  const adapter = useAdapter(), capability = useCapability("importSource");
+  const [kind, setKind] = useState<ImportRequest["kind"]>("github"), [ref, setRef] = useState("");
+  const [pending, setPending] = useState(false), [result, setResult] = useState<ImportResult>(), [error, setError] = useState<string>();
+  const generation = useRef(0);
+  const closeRef = useRef(onOpenChange);
+  useLayoutEffect(() => { closeRef.current = onOpenChange; });
+  const clear = useCallback(() => { ++generation.current; setPending(false); setResult(undefined); setError(undefined); }, []);
+  const [owner, setOwner] = useState({ open, draftKey, adapter });
+  if (owner.open !== open || owner.draftKey !== draftKey || owner.adapter !== adapter) {
+    setOwner({ open, draftKey, adapter }); setPending(false); setResult(undefined); setError(undefined);
+  }
+  // Layout cleanup fences a promise before it can publish into a different workspace.
+  useLayoutEffect(() => { const fence = generation; ++fence.current; return () => { ++fence.current; }; }, [open, draftKey, adapter]);
+  useEffect(() => identityLifetime(adapter).listen(() => { clear(); closeRef.current(false); }), [adapter, clear]);
+  const fetchSource = async () => {
+    clear();
+    if (!ref.trim()) { setError(t("refMissing")); return; }
     if (!capability.available) return;
-    if (!value.trim()) {
-      setError("missing");
-      return;
-    }
-    setError(null);
-    setLoading(true);
-    try {
-      setResult(await adapter.importSource({ kind, ref: value }));
-    } catch {
-      setResult(null);
-      setError("unavailable");
-    } finally {
-      setLoading(false);
-    }
+    const owner = generation.current;
+    setPending(true);
+    try { const value = await adapter.importSource({ kind, ref }); if (generation.current === owner) setResult(value); }
+    catch (cause) { if (generation.current === owner) setError(importProblemMessage(cause instanceof AdapterOutcomeError && cause.outcome.kind === "error" ? cause.outcome.code : undefined, all)); }
+    finally { if (generation.current === owner) setPending(false); }
   };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        if (!o) setResult(null);
-      }}
-    >
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Import className="size-4 text-primary-text" /> {t("title")}
-          </DialogTitle>
-          <DialogDescription>{t("description")}</DialogDescription>
-        </DialogHeader>
-        {!capability.available && <p role="status" className="text-sm text-muted-foreground">{capability.reason}</p>}
-        <Tabs
-          value={kind}
-          onValueChange={(v) => {
-            setKind(v as ImportRequest["kind"]);
-            setResult(null);
-            setRef("");
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="github" className="gap-1.5">
-              <GitBranch /> {t("github")}
-            </TabsTrigger>
-            <TabsTrigger value="dockerhub" className="gap-1.5">
-              <Container /> {t("dockerhub")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void fetchSource();
-          }}
-        >
-          <Field data-invalid={Boolean(error) || undefined}>
-            <FieldLabel htmlFor="import-ref">{t("ref")}</FieldLabel>
-            <div className="flex gap-2">
-              <Input id="import-ref" className="font-mono" aria-invalid={Boolean(error) || undefined} placeholder={kind === "github" ? t("githubPlaceholder") : t("dockerhubPlaceholder")} value={ref} onChange={(e) => setRef(e.target.value)} />
-              <Button type="submit" disabled={loading || !capability.available} title={capability.reason}>
-                {loading && <Spinner data-icon="inline-start" />}
-                {t("fetch")}
-              </Button>
-            </div>
-            <FieldDescription className={error ? "text-destructive" : undefined}>{error === "missing" ? t("refMissing") : error === "unavailable" ? t("fetchFailed") : t("simulated")}</FieldDescription>
-          </Field>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            {t("examples")}:
-            {EXAMPLES[kind].map((ex) => (
-              <button
-                key={ex}
-                disabled={!capability.available}
-                title={capability.reason}
-                type="button"
-                className="rounded-md border border-dashed px-2 py-0.5 font-mono hover:border-primary/50 hover:text-foreground"
-                onClick={() => {
-                  setRef(ex);
-                  void fetchSource(ex);
-                }}
-              >
-                {ex}
-              </button>
-            ))}
-          </div>
-        </form>
-        {result && (
-          <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              {dt(result.title)}
-              {import.meta.env.DEV && adapter.kind === "demo" && <ToneBadge tone="violet">Simulation</ToneBadge>}
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <div className="mb-1 text-xs font-medium text-success">{t("found")}</div>
-                <ul className="flex flex-col gap-1 text-xs">
-                  {result.found.map((f) => (
-                    <li key={f} className="flex gap-1.5">
-                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden /> {dt(f)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-medium text-warning">{t("missing")}</div>
-                <ul className="flex flex-col gap-1 text-xs">
-                  {result.missing.map((f) => (
-                    <li key={f} className="flex gap-1.5">
-                      <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden /> {dt(f)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {tc("cancel")}
-          </Button>
-          <Button
-            disabled={!result}
-            onClick={() => {
-              if (!result) return;
-              onApply(result);
-              onOpenChange(false);
-              setResult(null);
-              setRef("");
-            }}
-          >
-            {t("apply")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+  return <Dialog open={open} onOpenChange={(next) => { clear(); onOpenChange(next); }}><DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>{t("title")}</DialogTitle><DialogDescription>{t("description")}</DialogDescription></DialogHeader>
+    <Tabs value={kind} onValueChange={(value) => { clear(); setRef(""); setKind(value as ImportRequest["kind"]); }}><TabsList><TabsTrigger value="github">{t("github")}</TabsTrigger><TabsTrigger value="dockerhub">{t("dockerhub")}</TabsTrigger></TabsList></Tabs>
+    <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); void fetchSource(); }}><Field><FieldLabel htmlFor="import-ref">{t("ref")}</FieldLabel><Input id="import-ref" value={ref} onChange={(event) => { clear(); setRef(event.target.value); }} placeholder={t(kind === "github" ? "githubPlaceholder" : "dockerhubPlaceholder")} />{kind === "dockerhub" && <FieldDescription>{t("registriesHint")}</FieldDescription>}</Field><Button type="submit" disabled={pending || !capability.available}>{t("fetch")}</Button></form>
+    {!capability.available && <p role="status">{capability.reason}</p>}{error && <p role="alert">{error}</p>}
+    {result && <div className="flex flex-col gap-3"><p className="font-medium">{result.title}</p><p>{t("found")}</p><ul>{result.found.map((code) => <li key={code}>{all(IMPORT_FOUND_KEYS[code])}</li>)}</ul><p>{t("missing")}</p><ul>{result.missing.map((code) => <li key={code}>{all(IMPORT_MISSING_KEYS[code])}</li>)}</ul></div>}
+    <DialogFooter><Button variant="ghost" onClick={() => { clear(); onOpenChange(false); }}>{tc("cancel")}</Button><Button disabled={pending || !result} onClick={() => { if (!result || pending) return; onApply(result); clear(); onOpenChange(false); }}>{t("apply")}</Button></DialogFooter>
+  </DialogContent></Dialog>;
 }

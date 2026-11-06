@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums.
+// Deviations: Original total catalogue maps for rendered contract enums. M19 web consumer integration.
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -52,3 +52,7 @@ export const DELIVERY_REASON_KEYS = {
 } satisfies Record<NonNullable<
   | Schema["NotificationTestResponse"]["reason"]
 >, CatalogueKey>;
+
+export const NOTIFICATION_WARNING_KEYS = {
+  "notification.target-disabled": "settings.codes.notification.target-disabled",
+} satisfies Record<NonNullable<Schema["NotificationTestResponse"]["warning"]>, CatalogueKey>;

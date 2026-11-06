@@ -8,6 +8,7 @@
 import type { enShell } from "./en";
 
 export const deShell: typeof enShell = {
+  search: { title: "Suchen", hint: "Seiten, Ressourcen und Schnellaktionen finden.", placeholder: "Suchen …", empty: "Keine Ergebnisse", pages: "Seiten", settings: "Einstellungen", actions: "Schnellaktionen", loading: "Wird geladen …", showAll: "Alle in {list} anzeigen", theme: "Design wechseln", signOut: "Abmelden", newStack: "Neuer Stack", checkUpdates: "Alle Updates prüfen", activity: "Aktivitätszentrum" },
   brand: "Docklet",
   brandSub: (import.meta.env.DEV ? "React-Prototyp · Demo-Daten" : "Hub-Oberfläche"),
   skip: "Zum Inhalt springen",

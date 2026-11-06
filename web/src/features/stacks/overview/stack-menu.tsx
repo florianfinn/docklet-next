@@ -30,6 +30,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
   const edit = useCapability("saveStackFiles", { kind: "stack", id: stack.id });
   const update = useCapability("installStackUpdates", ref);
   const check = useCapability("checkUpdates", ref);
+  const redeploy = useCapability("redeployStack", { kind: "stack", id: stack.id });
   const command = useStackCapability(stack.id, stack.hostId);
   const hide = useHideAction("stacks");
   const allStopped = user && stack.runningCount !== undefined ? stack.runningCount === 0 : stack.services.every((s) => s.state === "stopped");
@@ -53,7 +54,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
     [
       ...run,
       ...stopMode.alternates.map((alternate): MenuAction => ({ id: alternate, label: stopText(alternate), icon: <Square />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, alternate) })),
-      { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !command.available || (user && !edit.available) || !!stack.inventory?.stale, title: user ? edit.reason : command.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
+      { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !redeploy.available || !!stack.inventory?.stale, title: redeploy.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
       ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy || ((!live || user) && !update.available), title: update.reason, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
       { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy || ((!live || user) && !check.available), title: check.reason, onSelect: () => live ? navigate(href) : void cmd.checkUpdates(stack.id) },
     ],

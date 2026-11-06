@@ -66,6 +66,9 @@ export class StackCreatedError extends Error {
 
 export type RecreateInput = components["schemas"]["ContainerRecreateRequest"]["edit"];
 
+export interface RuntimeAdmission { outcome: "started" | "joined"; runId: string }
+export interface RuntimeCommandRequest { kind: "stack" | "container"; id: string; command: StackCommand | ContainerCommand | "update"; input?: import("@/domain/stack-updates").LifecycleInput }
+
 export interface ImportRequest {
   kind: "github" | "dockerhub";
   ref: string;
@@ -74,9 +77,10 @@ export interface ImportRequest {
 /** One-time import result; values the source does not provide stay empty. */
 export interface ImportResult {
   title: string;
-  found: string[];
-  missing: string[];
-  services: { key: string; body: Record<string, unknown> }[];
+  composeContent: string;
+  envNames: string[];
+  found: components["schemas"]["StackimportResult"]["found"];
+  missing: components["schemas"]["StackimportResult"]["missing"];
 }
 
 /** Query topics used to invalidate cached reads after server-side changes. */
@@ -135,6 +139,8 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, UsersApi, HostsApi,
   setAutoUpdate(stackId: string, policy: AutoUpdatePolicy): Promise<void>;
   restartService(stackId: string, service: string): Promise<string>;
   importSource(request: ImportRequest): Promise<ImportResult>;
+  getImageMetadata?(id: string): Promise<{ architecture: string; os: string; layers: number }>;
+  admitRuntimeCommand?(request: RuntimeCommandRequest, options?: { quiet?: boolean }): Promise<RuntimeAdmission>;
   convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
 
   openContainerShell: OpenShell;

@@ -1,3 +1,5 @@
+import { BulkResultController } from "@/shared/components/bulk-result-dialog";
+import { GlobalSearch } from "./GlobalSearch";
 // Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/AppShell.tsx
 // Revision: 456cdcb0ad7dee6695b8162d0c9f779b26842f736c418f31b877c9caa5f20d91
 // Retrieved: 2026-10-13
@@ -132,6 +134,7 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="ml-auto flex items-center gap-1">
+            <GlobalSearch />
             <LiveToggle />
             <Button variant="ghost" size="sm" className="relative h-8 gap-1.5" onClick={() => openActivity()} aria-label={running ? ta("openWithCount", { count: running }) : ta("open")}>
               <Activity className={running ? "text-primary-text" : undefined} />
@@ -157,7 +160,7 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
       <ActivityCenter />
       <ActionToasts />
       <ActionDialog />
-      <AppToaster />
+      <BulkResultController /><AppToaster />
       <ServiceRestartDialog />
       <DesignLabPanel />
     </SidebarProvider>

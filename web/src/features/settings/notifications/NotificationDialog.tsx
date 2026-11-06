@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original per-channel target form; secrets stay in component state only.
+// Deviations: Original per-channel target form; secrets stay in component state only. M19 web consumer integration.
 
 import { CancelledError } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
@@ -18,7 +18,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Field, FieldContent, FieldLabel, FieldSet } from "@/shared/ui/field";
 import { Label } from "@/shared/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Spinner } from "@/shared/ui/spinner";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
@@ -27,13 +27,14 @@ import { DEFAULTS, FIELDS, TARGET_FIELD, fromText, toText, type FieldSpec } from
 import { ProviderIcon } from "./ProviderIcon";
 
 /**
- * Edits one channel. The parent owns the dialog generation and the per-provider write:
+ * Edits one channel. The parent owns the dialog generation and the per-target write:
  * `onSaved` and `onClose` carry no state of their own, so a late result cannot reach a
- * replaced dialog, and `save` keeps the provider busy beyond this dialog's lifetime.
+ * replaced dialog, and `save` keeps the target busy beyond this dialog's lifetime.
  */
-export function NotificationDialog({ target, available, save, onClose, onSaved }: {
+export function NotificationDialog({ target, available, names = [], save, onClose, onSaved }: {
   target?: NotificationTarget;
-  /** Providers without a stored target or pending write, offered when adding. */
+  names?: readonly string[];
+  /** Providers offered when adding a target. */
   available: readonly NotificationProvider[];
   save: (input: NotificationTargetInput) => Promise<unknown>;
   onClose: () => void;
@@ -42,6 +43,7 @@ export function NotificationDialog({ target, available, save, onClose, onSaved }
   const t = useTranslations("settings.notifications");
   const all = useTranslations();
   const [provider, setProvider] = useState<NotificationProvider | undefined>(target?.provider);
+  const [name, setName] = useState(target?.name ?? "");
   const [config, setConfig] = useState<NotificationConfig>(() => (target ? structuredClone(target.config) : {}));
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [events, setEvents] = useState<readonly NotificationEvent[]>(target?.events ?? DEFAULT_EVENTS);
@@ -51,6 +53,13 @@ export function NotificationDialog({ target, available, save, onClose, onSaved }
   // Display text, values and errors belong to one provider choice; a new choice starts clean.
   const choose = (p: NotificationProvider | undefined) => {
     setProvider(p);
+    if (p) {
+      const base = t(`kinds.${p}`);
+      const taken = new Set(names.map((n) => n.toLocaleLowerCase()));
+      let candidate = base, number = 2;
+      while (taken.has(candidate.toLocaleLowerCase())) candidate = `${base} ${number++}`;
+      setName(candidate);
+    }
     setConfig(p ? structuredClone(DEFAULTS[p]) : {});
     setTexts({});
     setError(undefined);
@@ -89,11 +98,11 @@ export function NotificationDialog({ target, available, save, onClose, onSaved }
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {spec.options!.map((o) => (
+              <SelectGroup>{spec.options!.map((o) => (
                 <SelectItem key={o} value={o}>
                   {spec.key === "tlsMode" ? t(`tlsModes.${o}` as never) : o}
                 </SelectItem>
-              ))}
+              ))}</SelectGroup>
             </SelectContent>
           </Select>
           {fieldError(spec.key) && <p className="text-sm text-destructive">{fieldError(spec.key)}</p>}
@@ -150,7 +159,7 @@ export function NotificationDialog({ target, available, save, onClose, onSaved }
               setBusy(true);
               setError(undefined);
               try {
-                await save({ provider, enabled: target?.enabled ?? true, config, events });
+                await save({ name: name.trim(), provider, enabled: target?.enabled ?? true, config, events });
                 onSaved();
               } catch (cause) {
                 if (cause instanceof CancelledError) return;
@@ -161,6 +170,7 @@ export function NotificationDialog({ target, available, save, onClose, onSaved }
               }
             }}
           >
+            <TextField id="nt-name" label={t("name")} value={name} onChange={setName} error={fieldError("name")} />
             {provider === "generic" && <p className="rounded-lg border bg-card/40 p-3 text-xs text-muted-foreground">{t("genericVisible")}</p>}
             {FIELDS[provider].map(field)}
             {secretsMissing && <p className="text-xs text-warning">{t("addressNeedsSecret")}</p>}
@@ -186,7 +196,7 @@ export function NotificationDialog({ target, available, save, onClose, onSaved }
                   {t("back")}
                 </Button>
               ) : <span />}
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || !name.trim() || [...name.trim()].length > 64}>
                 {busy && <Spinner data-icon="inline-start" />}
                 {t("save")}
               </Button>

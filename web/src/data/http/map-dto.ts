@@ -152,13 +152,14 @@ function eventTitle(event: Event): MessageCode {
   const condition = conditionTitle(event, meta);
   if (condition) return condition;
   const provider = meta?.provider;
+  const targetChannel = (channel: MessageCode | string): MessageCode | string => typeof meta?.targetName === "string" && meta.targetName.trim() ? { code: "runMessages.codes.notification.target", params: { provider: channel, name: meta.targetName } } : channel;
   // A sent notification names its channel; the hub's English title is only the fallback.
   if (event.messageCode === "notification.send") {
     const channel = isProvider(provider) ? { code: `settings.notifications.kinds.${provider}`, params: {} } : String(provider ?? event.resourceName ?? "");
-    return { code: "runMessages.codes.notification.send", params: { provider: channel }, sourceText: event.title };
+    return { code: "runMessages.codes.notification.send", params: { provider: targetChannel(channel) }, sourceText: event.title };
   }
   if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return hubEventTitle(event) ?? message(event.messageCode, event.title);
-  const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
+  const via = targetChannel({ code: `settings.notifications.kinds.${provider}`, params: {} });
   const reason = meta?.reason;
   return typeof reason === "string" && (DELIVERY_REASONS as readonly string[]).includes(reason)
     ? { code: "runMessages.codes.notification.delivery-failed-reason", params: { provider: via, reason: { code: DELIVERY_REASON_KEYS[reason as keyof typeof DELIVERY_REASON_KEYS], params: {} } }, sourceText: event.title }

@@ -1,3 +1,4 @@
+import { IDS } from "./settings-sections";
 import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, LayoutGrid, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
 import { NavLink, Navigate, useParams } from "react-router";
 import { useTranslations } from "use-intl";
@@ -30,14 +31,13 @@ const GROUPS = [
 ] as const;
 
 type SectionId = (typeof GROUPS)[number]["items"][number]["id"];
-const IDS = GROUPS.flatMap((g) => g.items.map((i) => i.id)) as SectionId[];
 
 /** Hub settings with grouped sub-navigation; each section saves on its own. */
 export default function SettingsPage() {
   const { section } = useParams();
   const t = useTranslations("settings");
   const adapter = useAdapter();
-  const validSection = !!section && IDS.includes(section as SectionId);
+  const validSection = !!section && (IDS as readonly string[]).includes(section);
   const id = validSection ? section as SectionId : "general";
   const connected = adapter.kind === "http" && (id === "general" || id === "auth" || id === "activity");
   const liveHosts = adapter.kind === "http" && id === "hosts";

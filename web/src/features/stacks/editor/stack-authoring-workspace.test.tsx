@@ -2,7 +2,7 @@
 // Revision: e1fda6eb0c13b6b5cd95a59f65836bf68339de61
 // Retrieved: 2026-10-21
 // License: Apache-2.0
-// Deviations: Original stack authoring workspace tests for issues #138 and #139.
+// Deviations: Original stack authoring workspace tests for issues #138 and #139. M19 web consumer integration.
 
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,10 +29,10 @@ const routes = [{ path: "/stacks/new", element: <StackPage /> }, { path: "/stack
 const asHttp = (overrides: Partial<DockletAdapter>): DockletAdapter => ({ ...createDemoAdapter(), kind: "http", ...overrides });
 
 describe("stack authoring in production mode", () => {
-  it("offers docker run conversion but no one-time import", async () => {
+  it("offers docker run conversion and capability-gated one-time import", async () => {
     renderRoutes(routes, ["/stacks/new"], asHttp({}));
     expect(await screen.findByRole("button", { name: /docker run/ }) !== null).toBe(true);
-    expect(screen.queryByRole("button", { name: /GitHub \/ Docker Hub/ }) === null).toBe(true);
+    expect(await screen.findByRole("button", { name: /GitHub \/ Docker Hub/ }) !== null).toBe(true);
   });
 
   it("opens the created stack when its first deploy was not admitted", async () => {

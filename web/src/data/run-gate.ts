@@ -4,7 +4,7 @@ import type { ActionRun } from "@/domain/model";
 import type { CodedActionRun, MessageCode } from "./message-code";
 
 import { AdapterOutcomeError } from "./capability";
-import type { DockletAdapter } from "./adapter";
+import type { DockletAdapter, RuntimeCommandRequest, RuntimeAdmission } from "./adapter";
 
 /**
  * A repeat of a check that succeeded within this window returns that result.
@@ -227,7 +227,7 @@ export class RunGate {
     this.listeners.forEach((l) => l(notice));
   }
 
-  private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>): Promise<unknown> {
+  private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>, quiet = false): Promise<unknown> {
     const run = entry.runId ? this.runs.get(entry.runId) : undefined;
     const generation = this.generation;
     const guardedRetry = retry ? () => generation === this.generation ? retry() : Promise.reject(new CancelledError()) : undefined;
@@ -235,7 +235,7 @@ export class RunGate {
       entry.refreshedAt = this.now();
       void this.inner.getRuntimeRun?.(entry.hostId, entry.runId).catch(() => undefined);
     }
-    this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry: guardedRetry });
+    if (!quiet) this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry: guardedRetry });
     if (entry.error) return Promise.reject(entry.error);
     return entry.settled ? Promise.resolve(entry.value) : entry.promise;
   }
@@ -259,12 +259,23 @@ export class RunGate {
     return false;
   }
 
+  async admit(request: RuntimeCommandRequest, options: { quiet?: boolean } = {}): Promise<RuntimeAdmission> {
+    const method = request.kind === "container" ? "runContainerCommand" : request.command === "update" ? "installStackUpdates" : "runStackCommand";
+    const args = request.command === "update" ? [request.id, request.input] : [request.id, request.command];
+    let outcome: RuntimeAdmission["outcome"] = "started";
+    const send = this.inner.admitRuntimeCommand ? async () => {
+      const result = await this.inner.admitRuntimeCommand!(request, options); outcome = result.outcome; return result.runId;
+    } : undefined;
+    const runId = await this.run(method, args, { ...options, send, joined: () => { outcome = "joined"; } });
+    return { outcome, runId: runId as string };
+  }
+
   /** Starts through the gate; `fresh: false` skips the freshness answer (explicit recheck). */
-  run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean } = {}): Promise<unknown> {
+  run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean; quiet?: boolean; send?: () => Promise<string>; joined?: () => void } = {}): Promise<unknown> {
     const generation = this.generation;
     const check = () => { if (generation !== this.generation) throw new CancelledError(); };
     const ruleOf = GATE_RULES[method];
-    const start = () => (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
+    const start = () => options.send ? options.send() : (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
     // Live scan admission belongs to the host; each request re-scans or returns its busy activity.
     if (this.inner.kind === "http" && method === "runScan") return start();
     if (this.inner.kind === "http" && !this.inner.mappedOperations?.has(method)) return start();
@@ -276,20 +287,20 @@ export class RunGate {
     const same = this.entries.get(rule.key);
     if (same) {
       const st = this.status(same);
-      if (active(st)) return this.answer(same, "inflight");
+      if (active(st)) { options.joined?.(); return this.answer(same, "inflight", undefined, options.quiet); }
       if (options.fresh !== false && st === "succeeded" && this.freshAt(same) !== undefined) {
-        return this.answer(same, "fresh", () => this.run(method, args, { fresh: false }));
+        options.joined?.(); return this.answer(same, "fresh", () => this.run(method, args, { fresh: false }), options.quiet);
       }
     }
     for (const cover of rule.coveredBy ?? []) {
       const other = this.entries.get(cover);
-      if (other && active(this.status(other))) return this.answer(other, "inflight");
+      if (other && active(this.status(other))) { options.joined?.(); return this.answer(other, "inflight", undefined, options.quiet); }
     }
     const parent = rule.scope ? this.parentOf(rule.scope) : undefined;
     if (rule.scope) {
       const blocker = this.blockerOf(rule, parent);
       if (blocker !== false) {
-        this.notify({ reason: "busy", key: rule.key, runId: blocker, title: blocker ? this.runs.get(blocker)?.title : undefined });
+        if (!options.quiet) this.notify({ reason: "busy", key: rule.key, runId: blocker, title: blocker ? this.runs.get(blocker)?.title : undefined });
         return Promise.reject(new RunBusyError(blocker));
       }
     }
@@ -332,6 +343,7 @@ export function withRunGate(inner: DockletAdapter, now?: () => number): DockletA
   const gate = new RunGate(inner, now);
   const proxy = new Proxy(inner, {
     get(target, prop, receiver) {
+      if (prop === "admitRuntimeCommand") return (request: RuntimeCommandRequest, options?: { quiet?: boolean }) => gate.admit(request, options);
       if (typeof prop === "string" && prop in GATE_RULES) return (...args: unknown[]) => gate.run(prop as keyof DockletAdapter, args);
       return Reflect.get(target, prop, receiver) as unknown;
     },

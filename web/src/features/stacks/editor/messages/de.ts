@@ -227,6 +227,9 @@ export const deEditor: typeof enEditor = {
     },
   },
   source: {
+    registriesHint: "Docker Hub und in den Einstellungen aktivierte Registries werden unterstützt.",
+    replaceTitle: "Bearbeitete Compose-Datei ersetzen?",
+    replaceHint: "Der importierte Vorschlag ersetzt den Compose-Inhalt. Bestehende Umgebungswerte bleiben erhalten.",
     title: "Einmaliger Import",
     description: "Übernimmt Werte einmalig aus einem Repository oder einem Docker-Hub-Image. Keine dauerhafte Git-Verbindung, kein Git Sync.",
     github: "GitHub",

@@ -3,7 +3,7 @@ import { isHostAvailable } from "@/domain/hosts";
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original per-host Auto Heal overview with read-only and unavailable states. M14 host maintenance and availability.
+// Deviations: Original per-host Auto Heal overview with read-only and unavailable states. M14 host maintenance and availability. M19 web consumer integration.
 
 import { HeartPulse, Pencil } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -103,7 +103,8 @@ function HostRow({ host, edit }: { host: Host; edit: (settings: AutoHealSettings
           <p role="status" className="text-xs text-muted-foreground">{t("loading")}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {t("summary", { count: s.maxRestarts, minutes: s.windowMinutes, stacks: s.excludedStacks.length, containers: s.excludedContainers.length })}
+            {s.invalidFields.length > 0 ? t("invalidHint", { fields: s.invalidFields.map((field) => t(`fieldNames.${field}`)).join(", ") }) : t("summary", { count: s.maxRestarts, minutes: s.windowMinutes, stacks: s.excludedStacks.length, containers: s.excludedContainers.length })}
+            {` · ${t("cooldownSummary", { minutes: s.cooldownMinutes })}`}
             {readOnly && ` · ${readOnly}`}
           </p>
         )}

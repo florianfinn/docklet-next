@@ -2,6 +2,15 @@
 import type { enCommon } from "./en";
 
 export const deCommon: typeof enCommon = {
+  bulkRun: {
+    summary: "{action}: {started} gestartet, {joined} verbunden, {skipped} übersprungen, {failed} fehlgeschlagen",
+    details: "Details der Sammelaktion", admissionHint: "Annahme der Aufträge. Der Fortschritt steht im Aktivitätszentrum.",
+    skipCount: "{count} ausgewählte Einträge werden übersprungen", sessionEnded: "Sitzung beendet", upToDate: "Aktuell", notChecked: "Nicht geprüft", stale: "Inventar ist veraltet", busy: "Ein anderer Ablauf läuft",
+    actions: { start: "Starten", stop: "Stoppen", restart: "Neustarten", redeploy: "Neu bereitstellen", update: "Updates" },
+    outcomes: { started: "Gestartet", joined: "Verbunden", skipped: "Übersprungen", failed: "Fehlgeschlagen" },
+    updateHint: "Updates für geeignete Stacks installieren. Jeder Stack wird einzeln angenommen.",
+    loading: "Updates werden geprüft …", candidates: "{count} Update-Kandidaten", install: "Updates installieren",
+  },
   stackUpdates: {
     deletePoint: "Wiederherstellungspunkt löschen",
     deleteHelp: "Gespeicherte Konfiguration und Image-Verweise dieses Punkts dauerhaft freigeben. Auch ein Aufbewahrungsanker kann gelöscht werden. Volume- und Bind-Daten bleiben unverändert.",

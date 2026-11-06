@@ -2,7 +2,7 @@
 // Revision: 531ec931838ed09c311ebb29a4624f211bb3a7a1
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original hub event title localisation tests from persisted producer shapes (M17 acceptance review M17-AR8 to AR11).
+// Deviations: Original hub event title localisation tests from persisted producer shapes (M17 acceptance review M17-AR8 to AR11). M19 web consumer integration.
 
 import { expect, it, vi } from "vitest";
 
@@ -73,4 +73,12 @@ it.each([
 ] as const)("keeps the producer's phase or outcome for %s: %s", (code, title, extra, de, en) => {
   const mapped = mapEvent(event(code, title, extra));
   expect([renderEvent(mapped, "de").title, renderEvent(mapped, "en-US").title]).toEqual([de, en]);
+});
+
+it.each(["notification.send", "notification.delivery-failed"])("delivery title names the exact named target and keeps old-event fallback (%s)", (code) => {
+  const named = mapEvent(event(code, "English producer title", { metadata: { provider: "ntfy", targetId: 8, targetName: "Operations room", reason: "delivery-auth" } }));
+  expect(renderEvent(named, "de").title).toContain("ntfy (Operations room)");
+  expect(renderEvent(named, "en-US").title).toContain("ntfy (Operations room)");
+  const older = mapEvent(event(code, "English producer title", { metadata: { provider: "ntfy" } }));
+  expect(renderEvent(older, "de").title.includes("Operations room")).toBe(false);
 });

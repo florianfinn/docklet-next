@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 web consumer integration.
 
 import { vi } from "vitest";
 import type { components } from "@/api/generated/schema";
@@ -35,7 +35,7 @@ export function runtimeFixture() {
   const calls: { url: URL; init: RequestInit }[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input), "https://hub.example.com"); calls.push({ url, init });
-    if (url.pathname.endsWith("/capabilities")) return envelope(["runStackCommand", "runContainerCommand", "recreateContainer", "restartService", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
+    if (url.pathname.endsWith("/capabilities")) return envelope(["redeployStack", "runStackCommand", "runContainerCommand", "recreateContainer", "restartService", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
     if (url.pathname.includes("/auth/") && state.auth) return state.auth(url, init);
     if (url.pathname.includes("/activities") && state.activity) return state.activity(url, init);
     if (url.pathname.endsWith("/auth/mode")) return envelope({ mode: "local" });

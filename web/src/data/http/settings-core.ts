@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability.
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration.
 
 import { settingsProblem, SettingsProblemError } from "../settings-error";
 import { discardResponse, drainResponse } from "./identity-reads";
@@ -110,7 +110,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       return {
         general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, configuredTimeZone: values.timeZone ?? "", stackStopMode: stackStopMode(values) },
         hostDefaults,
-        activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation, loadAlerts: loadAlerts(values) },
+        activity: { maxEvents: Number(values.activityEventLimit ?? HISTORY_LIMITS.events.default), maxFinishedActions: Number(values.activityRunLimit ?? HISTORY_LIMITS.actions.default), keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation, loadAlerts: loadAlerts(values) },
       };
     }) as SettingsApi["getConnectedSettings"],
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
@@ -131,7 +131,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       if (section === "activity") {
         const activity = value as HubSettings["activity"];
         const load = activity.loadAlerts;
-        await write({ keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation, loadAlertsEnabled: String(load.enabled), loadAlertCpuPercent: String(load.cpuPercent), loadAlertMemoryPercent: String(load.memoryPercent), loadAlertMinutes: String(load.minutes) });
+        await write({ activityEventLimit: String(activity.maxEvents), activityRunLimit: String(activity.maxFinishedActions), keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation, loadAlertsEnabled: String(load.enabled), loadAlertCpuPercent: String(load.cpuPercent), loadAlertMemoryPercent: String(load.memoryPercent), loadAlertMinutes: String(load.minutes) });
         return;
       }
       throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");

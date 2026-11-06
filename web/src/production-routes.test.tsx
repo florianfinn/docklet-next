@@ -79,12 +79,12 @@ it("keeps protected navigation hidden while the sign-in policy is unavailable", 
   }
 });
 
-it("keeps unmapped source imports unavailable with the product HTTP adapter", async () => {
+it("keeps source import unavailable while the backend capability cannot be read", async () => {
   const errors: string[] = [];
   const error = vi.spyOn(console, "error").mockImplementation((...args) => errors.push(args.map(String).join(" ")));
   try {
     renderProductComponent(<ProductImportSourceDialog open onOpenChange={() => undefined} onApply={() => undefined} />, productAdapter());
-    const example = await screen.findByRole("button", { name: "github.com/example/notes-app" });
+    const example = await screen.findByRole("button", { name: "Quelle auswerten" });
     expect(example.hasAttribute("disabled")).toBe(true);
     fireEvent.click(example);
     expect(await screen.findByRole("status")).toBeTruthy();
