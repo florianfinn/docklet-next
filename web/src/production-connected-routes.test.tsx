@@ -155,7 +155,7 @@ it("connects notification targets and per-host Auto Heal to HTTP producers witho
   const { default: targets } = await import("./data/http/testdata/notification-targets.json");
   const f = securityFixture();
   const base = f.fetcher.getMockImplementation()!;
-  const heal = { enabled: true, maxRestarts: 4, windowMinutes: 45, excludedStacks: ["web"], excludedContainers: [], managedByEnvironment: false };
+  const heal = { enabled: true, maxRestarts: 4, windowMinutes: 45, cooldownMinutes: 10, invalidFields: [], excludedStacks: ["web"], excludedContainers: [], managedByEnvironment: false };
   const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
   f.fetcher.mockImplementation(async (input, init) => {
     const url = new URL(String(input), "https://hub.example.com");
