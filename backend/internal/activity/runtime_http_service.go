@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Legacy and stack image routes share durable admission and application-owned execution; a restarting host is refused before remote preparation.
+// Deviations: Legacy and stack image routes share durable admission and application-owned execution; a restarting host is refused before remote preparation. M19 #349 an unreachable agent is refused as agent.unavailable before admission.
 
 package activity
 
@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
@@ -155,6 +156,10 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		}
 		command.Store, err = h.ports.Store(ctx, environmentID)
 		if err != nil {
+			// Nothing is admitted yet: an unreachable agent answers agent.unavailable like other agent routes.
+			if access := handlerutil.AgentAccess(err); access != nil {
+				return empty, noRef, access
+			}
 			return empty, noRef, err
 		}
 		resolved, err := h.ports.PrepareTarget(ctx, environmentID, target)

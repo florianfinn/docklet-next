@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety.
+// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety. M19 #349 unreachable agent refused before admission.
 
 package activity
 
@@ -21,6 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
@@ -138,6 +139,7 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		var mismatch *runtimeConflictInternal
 		var targetErr *RuntimeTargetError
 		var containerErr *containerDTO.Problem
+		var access *handlerutil.AgentAccessError
 		switch {
 		case errors.As(err, &imageErr):
 			return runtimeJSONResponse(imageErr.Status, imageErr), nil
@@ -161,6 +163,9 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 			return runtimeJSONResponse(503, common.NewAPIError("Remote runtime outcome unavailable", common.APIErrorCode(activitytypes.CodeRuntimeOutcomeUnknown), 503)), nil
 		case errors.Is(err, remenv.ErrAgentUpdateRequired):
 			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
+		case errors.As(err, &access) && access.Code == "agent.unavailable":
+			// Refused before admission; 503 keeps it apart from a 502 lost after an image operation was sent.
+			return runtimeJSONResponse(503, common.NewAPIError("Agent unavailable", "agent.unavailable", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):
 			return runtimeJSONResponse(410, common.NewAPIError("Runtime target removed", common.APIErrorCode(activitytypes.CodeRuntimeTargetRemoved), 410)), nil
 		default:
