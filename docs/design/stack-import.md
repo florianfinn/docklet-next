@@ -76,6 +76,8 @@ includes and extends from disk, so it is not used. `internal/stackimport/proposa
 
 Malformed YAML → `import.invalid-compose`; a valid file with missing requirements is a proposal, not
 an error. The original bytes are returned, so unknown fields survive. Deploy keeps the strict loader.
+Known limit: `configs` and `secrets` entries with a relative `file` path and absolute `build` contexts get no
+`missing` code (the contract has none for them); deploy reports the absent host file.
 
 ### Docker Hub and configured registries
 
@@ -93,13 +95,17 @@ an error. The original bytes are returned, so unknown fields survive. Deploy kee
 
 ### Egress limits (`backend/internal/stackimport/egress.go`)
 
-- 10 s total budget per import, 5 s per request, at most 6 requests; 256 KiB per file.
+- 10 s total budget per import, 5 s per request, at most 6 requests; 256 KiB per file. Auth and
+  redirect hops count: the Docker Hub flow (ping, token, index, manifest, config blob, CDN redirect)
+  uses all six and is pinned by a test. Flows that need more (an uncached ECR token with a
+  multi-arch image, an insecure registry with token auth, nested indexes) fail with
+  `import.source-unavailable` (known limit).
 - GitHub client: HTTPS only (a validated mirror may be http on loopback or private addresses),
   redirects only to the same scheme and host and at most three, userinfo refused, proxy environment
   ignored. The registry path keeps its own transport and its legitimate auth and blob redirects.
 - Hosts never come from user input except by matching a configured registry, so no private-address
   check is needed. The mirror variable changes only the base of the same request shape and is not a
-  simulation switch; it is read at startup.
+  simulation switch; the hub reads and validates it at startup (agents ignore it).
 - One import per user at a time (in-memory per-principal gate); a concurrent request gets 409
   `import.busy`.
 
