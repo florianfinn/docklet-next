@@ -2,8 +2,10 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original Hub backup page for issue #32, using free UI primitives; M16 archive copy target, copy state and manual policy run (#286).
+// Deviations: Original Hub backup page for issue #32, using free UI primitives; M16 archive copy target, copy state and manual policy run (#286). M19: total contract-code catalogue maps.
 
+import { MAINTENANCE_PHASE_KEYS, HUB_BACKUP_STATUS_KEYS } from "@/data/wire-catalogue-states";
+import { scopedKey } from "@/data/wire-catalogue";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Download, HardDrive, RotateCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -291,7 +293,7 @@ export default function HubBackupsPage() {
     return <section role="status" className="mx-auto max-w-2xl space-y-4 rounded-xl border bg-card p-6">
       <h1 className="text-2xl font-semibold">{t(maintenance.data?.operation === "backup" ? "snapshotTitle" : "maintenanceTitle")}</h1>
       <p className="text-sm text-muted-foreground">{t(maintenance.data?.operation === "backup" ? "snapshotHint" : "maintenanceHint")}</p>
-      <p className="font-medium">{maintenance.data?.operation === "backup" ? t("snapshotProgress") : t(`maintenancePhase.${phase}`)}</p>
+      <p className="font-medium">{maintenance.data?.operation === "backup" ? t("snapshotProgress") : t(scopedKey(MAINTENANCE_PHASE_KEYS[phase], "hubBackups."))}</p>
       <Progress value={phase === "draining" ? 33 : phase === "applying" ? 67 : 100} aria-label={t("maintenanceProgress")} />
       {phase === "blocked" && <p className="text-sm text-destructive">{t("maintenancePhase.blocked")}</p>}
     </section>;
@@ -312,7 +314,7 @@ export default function HubBackupsPage() {
         <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("created")}</TableHead><TableHead>{t("size")}</TableHead><TableHead>{t("trigger")}</TableHead><TableHead>{t("status")}</TableHead><TableHead>{t("copy")}</TableHead><TableHead>{t("actions")}</TableHead></TableRow></TableHeader><TableBody>{runs.data.map((run) => {
           const state = run.activityId ? activity.data?.[run.activityId] : "";
           const status = state === "queued" ? "queued" : state === "cancelled" || state === "canceled" ? "cancelled" : run.status;
-          return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><CopyState run={run} /></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
+          return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(status === "queued" || status === "cancelled" ? `statusValues.${status}` : scopedKey(HUB_BACKUP_STATUS_KEYS[status], "hubBackups."))}</ToneBadge></TableCell><TableCell><CopyState run={run} /></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
         })}</TableBody></Table></div>}
     </CardContent></Card>
     {policies.isError ? <QueryError error={policies.error} onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} creating={creating} onSave={savePolicy} onRun={(policyId) => void create(policyId)} />)}

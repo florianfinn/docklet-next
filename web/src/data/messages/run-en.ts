@@ -233,7 +233,12 @@ export const enRunMessages = {
       "shell-orphaned": "Shell process may still be running",
       "shell-not-running": "Container is not running",
     },
+    run: { fresh: "The result is current" },
     runtime: {
+      "wait-timeout": "Waiting for the operation timed out",
+      "waiter-disconnected": "The connection was lost while waiting for the operation",
+      "target-removed": "The operation target was removed",
+
       "idempotency-mismatch": "This request key belongs to a different edit",
     },
     update: {

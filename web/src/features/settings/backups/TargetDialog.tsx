@@ -2,8 +2,9 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original target form with immutable locations and volatile credentials; M16 draft connection test (#329).
+// Deviations: Original target form with immutable locations and volatile credentials; M16 draft connection test (#329). M19: total contract-code catalogue maps.
 
+import { BACKUP_TARGET_KIND_KEYS } from "@/data/wire-catalogue-states";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
@@ -121,7 +122,7 @@ export function TargetDialog({
                 <SelectContent>
                   {(["local", "mount", "smb", "nfs"] as const).map((kind) => (
                     <SelectItem key={kind} value={kind}>
-                      {t(`kinds.${kind}`)}
+                      {all(BACKUP_TARGET_KIND_KEYS[kind])}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,3 +1,5 @@
+import { SCAN_STATUS_KEYS } from "@/data/wire-catalogue-states";
+import { scopedKey } from "@/data/wire-catalogue";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useTranslations } from "use-intl";
 
@@ -58,7 +60,7 @@ const trendConfig = Object.fromEntries(SEVERITIES.map((s) => [s.key, { label: s.
 
 export function TrendChart({ history, animate, hosts }: { history: ScanRun[]; animate: boolean; hosts?: Map<string, Host> }) {
   const t = useTranslations("security");
-  const data = history.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at)).filter((h) => h.sampled !== false).map((h) => ({ when: `${hosts?.get(h.hostId ?? "")?.name ?? h.hostId ?? ""} ${formatDate(h.at)} ${h.status ? t(`historyStatus.${h.status}`) : ""}`, manual: h.trigger === "manual", ...h.counts }));
+  const data = history.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at)).filter((h) => h.sampled !== false).map((h) => ({ when: `${hosts?.get(h.hostId ?? "")?.name ?? h.hostId ?? ""} ${formatDate(h.at)} ${h.status ? t(scopedKey(SCAN_STATUS_KEYS[h.status], "security.")) : ""}`, manual: h.trigger === "manual", ...h.counts }));
   const config = Object.fromEntries(SEVERITIES.map((s) => [s.key, { label: t(`severities.${s.key}`), color: s.color }])) satisfies ChartConfig;
   if (!data.length) return <p className="text-sm text-muted-foreground">{t("historyEmpty")}</p>;
   return (

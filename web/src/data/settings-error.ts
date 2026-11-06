@@ -2,9 +2,11 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability.
+// Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability. M19: total contract-code catalogue maps.
 
 import type { useTranslations } from "use-intl";
+import { AUTOHEAL_CODE_KEYS, NOTIFICATION_CODE_KEYS } from "./wire-catalogue-settings";
+import type { CatalogueKey } from "./wire-catalogue";
 import { AdapterOutcomeError } from "./capability";
 
 /** Producer codes the settings UI translates; anything else stays generic. */
@@ -36,20 +38,16 @@ export function settingsProblem(body: unknown, status: number): AdapterOutcomeEr
   return new AdapterOutcomeError({ kind: "error", code: "http.error", status });
 }
 
-const KEYS: Record<SettingsProblemCode, string> = {
-  "notification.config-invalid": "settings.codes.notification.config-invalid",
-  "notification.hub-only": "settings.codes.notification.hub-only",
-  "notification.test-busy": "settings.codes.notification.test-busy",
-  "autoheal.settings-invalid": "settings.codes.autoheal.settings-invalid",
-  "autoheal.settings-env-managed": "settings.codes.autoheal.settings-env-managed",
+const KEYS = {
+  ...AUTOHEAL_CODE_KEYS,
+  ...NOTIFICATION_CODE_KEYS,
   "settings.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
   "agent.ui-configuration-disabled": "hosts.errors.uiConfigurationDisabled",
-  "settings.key-managed": "settings.codes.settings.key-managed",
   "settings.invalid-time-zone": "settings.codes.settings.invalid-time-zone",
   "agent.unavailable": "common.commandErrors.unreachable",
   "agent.invalid-token": "common.commandErrors.credentialRejected",
   "agent.update-required": "common.commandErrors.updateRequired",
-};
+} satisfies Record<SettingsProblemCode, CatalogueKey>;
 
 /** Server detail and title never reach user feedback; a refused write reads as a refusal. */
 export function settingsErrorMessage(error: unknown, translate: ReturnType<typeof useTranslations>): string {

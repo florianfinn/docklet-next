@@ -7,6 +7,8 @@ import { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "@/data/capability";
 import { errorCode, type ConnectNetworkInput, type CreateNetworkInput } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
+import { NETWORK_CODE_KEYS } from "@/data/wire-catalogue-errors";
+import { wireKey } from "@/data/wire-catalogue";
 import { useCommandError } from "@/data/use-command-error";
 
 const KNOWN = ["not-found", "exists", "invalid-network", "builtin-network", "compose-managed", "in-use", "host-offline", "host-mismatch", "network-mode", "already-connected", "not-connected", "invalid-ip", "overlap"] as const;
@@ -21,7 +23,7 @@ export function useNetworkCommands(owner?: string, active = true) {
     scope.version++;
     return () => { scope.version++; };
   }, [adapter, owner, active]);
-  const t = useTranslations("networks.errors");
+  const t = useTranslations("networks.errors"), all = useTranslations();
   const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -37,11 +39,12 @@ export function useNetworkCommands(owner?: string, active = true) {
         if ((!current() && !failure.closed()) || isCancelledError(e)) return undefined;
         if (e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "network.outcome-unknown") { failure.error(t("outcome-unknown")); return undefined; }
         const code = errorCode(e);
-        failure.error(code && (KNOWN as readonly string[]).includes(code) ? t(code as Known) : commandError(e));
+        const key = wireKey(NETWORK_CODE_KEYS, code?.startsWith("network.") ? code : `network.${code}`);
+        failure.error(key ? all(key) : code && (KNOWN as readonly string[]).includes(code) ? t(code as Known) : commandError(e));
         return undefined;
       }
     },
-    [t, commandError, adapter, active],
+    [t, commandError, adapter, active, all],
   );
   return {
     create: (input: CreateNetworkInput) => guard(() => adapter.createNetwork(input)),

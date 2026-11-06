@@ -2,8 +2,9 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live host schedule and count retention editor; manual mode is the only disabled-plan control (#291). M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
+// Deviations: Original live host schedule and count retention editor; manual mode is the only disabled-plan control (#291). M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19: total contract-code catalogue maps.
 
+import { BACKUP_TARGET_KIND_KEYS } from "@/data/wire-catalogue-states";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -86,7 +87,7 @@ export function BackupPolicyCard({
           <SelectTrigger id="bk-target" className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
             {targets.map((target) => <SelectItem key={target.id} value={target.id}>
-              {target.name} · {t(`targetKinds.${target.kind}`)}
+              {target.name} · {all(BACKUP_TARGET_KIND_KEYS[target.kind])}
             </SelectItem>)}
           </SelectContent>
         </Select>

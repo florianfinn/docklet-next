@@ -2,18 +2,12 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original phase 2a stack update consumer for issue #231; M16 typed busy and copy reason codes.
+// Deviations: Original phase 2a stack update consumer for issue #231; M16 typed busy and copy reason codes. M19: total contract-code catalogue maps.
 
 import { AdapterOutcomeError } from "../capability";
 import type { components } from "@/api/generated/schema";
-import { enBackend } from "../messages/en";
-export const updateReasons = new Set(Object.entries(enBackend.errors).flatMap(([prefix, entries]) => typeof entries === "string" ? [prefix] : Object.keys(entries).map((key) => `${prefix}.${key}`)));
-
-updateReasons.add("host.restarting");
-updateReasons.add("volume.workspace-busy");
-updateReasons.add("backup.copy.mount-failed");
-updateReasons.add("backup.copy.write-failed");
-updateReasons.add("backup.copy.insufficient-space");
+import { UPDATE_REASON_KEYS } from "../wire-catalogue-update";
+export const updateReasons = new Set<string>(Object.keys(UPDATE_REASON_KEYS));
 
 export const invalidUpdate = () => new AdapterOutcomeError({ kind: "error", code: "http.error" });
 export function record(value: unknown): Record<string, unknown> {

@@ -2,8 +2,9 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live snapshot actions and outcome presentation.
+// Deviations: Original live snapshot actions and outcome presentation. M19: total contract-code catalogue maps.
 
+import { BACKUP_STATUS_KEYS } from "@/data/wire-catalogue-states";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
@@ -63,7 +64,7 @@ export function BackupHistory({
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm">{formatDateTime(run.startedAt)}</span>
-            <ToneBadge tone={STATUS_TONE[run.status]}>{t(`status.${run.status}`)}</ToneBadge>
+            <ToneBadge tone={STATUS_TONE[run.status]}>{all(BACKUP_STATUS_KEYS[run.status])}</ToneBadge>
           </div>
           <p className="text-xs text-muted-foreground">
             {t(`trigger.${run.trigger}`)} · {targets.find((target) => target.id === run.targetId)?.name
