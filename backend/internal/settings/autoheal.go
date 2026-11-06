@@ -21,7 +21,7 @@ var AutoHealKeys = []string{"autoHealEnabled", "autoHealInterval", "autoHealExcl
 
 // AutoHealManagedByEnvironment uses the same presence semantics as the effective loader.
 func AutoHealManagedByEnvironment() bool {
-	cfg := config.Load()
+	cfg := config.LoadRole()
 	if !cfg.AgentMode && !cfg.EdgeAgent && !cfg.UIConfigurationDisabled {
 		return false
 	}

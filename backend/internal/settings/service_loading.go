@@ -24,16 +24,16 @@ import (
 )
 
 func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *database.DB) (*Settings, error) {
-	if config.Load().UIConfigurationDisabled || config.Load().AgentMode || config.Load().EdgeAgent {
+	if role := config.LoadRole(); role.UIConfigurationDisabled || role.AgentMode || role.EdgeAgent {
 		slog.DebugContext(
 			ctx,
 			"loadDatabaseSettingsInternal: using env path",
 			"uiConfigurationDisabled",
-			config.Load().UIConfigurationDisabled,
+			role.UIConfigurationDisabled,
 			"agentMode",
-			config.Load().AgentMode,
+			role.AgentMode,
 			"environment",
-			config.Load().Environment,
+			role.Environment,
 		)
 		return s.loadDatabaseConfigFromEnv(ctx, db)
 	}

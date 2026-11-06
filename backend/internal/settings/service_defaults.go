@@ -218,7 +218,7 @@ func (s *SettingsService) PersistEnvSettingsIfMissing(ctx context.Context) error
 	}
 
 	rt := reflect.TypeFor[Settings]()
-	appCfg := config.Load()
+	appCfg := config.LoadRole()
 	isEnvOnlyMode := appCfg.AgentMode || appCfg.UIConfigurationDisabled
 
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
