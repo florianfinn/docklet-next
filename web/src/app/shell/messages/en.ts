@@ -7,7 +7,7 @@
 // American English texts of the application shell (navigation, host filter, profile menu).
 
 export const enShell = {
-  search: { title: "Search", shortcutMac: "⌘+K", shortcutOther: "Ctrl+K", hint: "Find pages, resources and quick actions.", placeholder: "Search …", empty: "No results", pages: "Pages", settings: "Settings", actions: "Quick actions", loading: "Loading …", showAll: "Show all in {list}", theme: "Toggle theme", signOut: "Sign out", newStack: "New stack", checkUpdates: "Check all updates", activity: "Activity centre" },
+  search: { title: "Search", shortcutMac: "⌘+K", shortcutOther: "Ctrl+K", hint: "Find pages, resources and quick actions.", placeholder: "Search …", empty: "No results", results: "Results", pages: "Pages", settings: "Settings", actions: "Quick actions", loading: "Loading …", showAll: "Show all in {list}", theme: "Toggle theme", signOut: "Sign out", newStack: "New stack", checkUpdates: "Check all updates", activity: "Activity centre" },
   brand: "Docklet",
   brandSub: (import.meta.env.DEV ? "React prototype · Demo data" : "Hub interface"),
   skip: "Skip to content",

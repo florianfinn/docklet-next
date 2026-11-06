@@ -30,7 +30,7 @@ import (
 // writer or a changed status reference count inside a writer needs classification here.
 var hostTableWriters = map[string]int{
 	"internal/environment/agent_access.go:EnvironmentService.agentCompatibilityFailure":          1,  // Direct credential rejection, credential-fenced
-	"internal/environment/agent_access.go:EnvironmentService.runAgentCompatibility":              1,  // compatibility verdict, credential-fenced
+	"internal/environment/agent_access.go:EnvironmentService.runAgentCompatibility":              2,  // compatibility verdict, credential-fenced; reads the prior status to announce coming online
 	"internal/environment/service.go:EnvironmentService.CreateEnvironment":                       2,  // new row insert (pending/offline), cannot replace a verdict
 	"internal/environment/service.go:EnvironmentService.EnsureLocalEnvironment":                  1,  // local host insert and api_url/credential revision only
 	"internal/environment/service.go:EnvironmentService.UpdateEnvironment":                       0,  // editable columns only (allowlist + Select)

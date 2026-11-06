@@ -47,7 +47,7 @@ function SearchContents({ close, signOut }: { close: () => void; signOut: () => 
   const hostName = (id: string) => hosts.data?.find((host) => host.id === id)?.name ?? id;
   const pages = [{ id: "dashboard", label: nav("dashboard"), to: "/dashboard" }, { id: "stacks", label: nav("stacks"), to: "/stacks" }, { id: "profile", label: nav("profile"), to: "/profile" }];
   const actions = [{ id: "theme", label: t("theme"), run: () => setTokens({ theme: tokens.theme === "dark" ? "light" : "dark" }) }, ...(["local", "proxy"].includes(mode.data ?? "") ? [{ id: "logout", label: t("signOut"), run: signOut }] : [])];
-  return <Command shouldFilter={false}><CommandInput aria-label={t("title")} placeholder={t("placeholder")} value={query} onValueChange={setQuery} /><CommandList><CommandEmpty>{t("empty")}</CommandEmpty>
+  return <Command label={t("title")} shouldFilter={false}><CommandInput aria-label={t("title")} placeholder={t("placeholder")} value={query} onValueChange={setQuery} /><CommandList label={t("results")}><CommandEmpty>{t("empty")}</CommandEmpty>
     {user ? <>
       <SearchGroup name={t("pages")} entries={pages} query={query} select={select} />
       <SearchGroup name={nav("stacks")} entries={stacks.data?.map((stack) => ({ id: stack.id, label: stack.name, host: hostName(stack.hostId), keywords: stack.labels, to: `/stacks/${encodeURIComponent(stack.id)}` })) ?? []} query={query} select={select} loading={stacks.isPending} list="/stacks" />

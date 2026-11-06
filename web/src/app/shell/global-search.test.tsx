@@ -67,3 +67,13 @@ it("simple-user search sends zero administrator inventory requests", async () =>
   await screen.findByRole("option", { name: "Profile" });
   forbidden.forEach((spy) => expect(spy).toHaveBeenCalledTimes(0));
 });
+
+// cmdk falls back to an English "Suggestions" list label; both accessible names come from the catalogue.
+it("labels the input and the result list from the active catalogue", async () => {
+  setAppLocale("de");
+  renderWithApp(<GlobalSearch />); await userEvent.click(screen.getByRole("button", { name: "Suchen" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("listbox").getAttribute("aria-label")).toBe("Ergebnisse");
+  expect(within(dialog).queryByRole("combobox", { name: "Suchen" }) !== null).toBe(true);
+  expect(dialog.innerHTML.includes("Suggestions")).toBe(false);
+});
