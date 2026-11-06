@@ -1,12 +1,12 @@
-import { identityLifetime } from "@/data/identity-lifetime";
-import type { ImportResult } from "@/data/adapter";
-import { applyImportProposal } from "./import-proposal";
 // Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/editor/StackWorkspace.tsx
 // Revision: 8dc34a900c94d090a1c5ae85199143f6816fe69d3e3689e6fd22806a54d8505f
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. #182 workspace editing, ordering and lifecycle. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. #182 workspace editing, ordering and lifecycle. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
+import { identityLifetime } from "@/data/identity-lifetime";
+import type { ImportResult } from "@/data/adapter";
+import { applyImportProposal } from "./import-proposal";
 import { useIsUser } from "@/data/use-principal";
 import { AlertTriangle, CheckCircle2, ChevronDown, Code2, FlaskConical, Import, Play, Save, Terminal, Wand2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

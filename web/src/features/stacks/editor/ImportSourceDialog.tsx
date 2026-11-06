@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original one-time import consumer with identity and draft ownership.
+// Deviations: Original one-time import consumer with identity and draft ownership. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "use-intl";

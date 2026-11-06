@@ -305,7 +305,7 @@ export const enSettings = {
     linkHint: "Links in messages point to {url}.",
     linkFallback: "Without an internal hub address, links use APP_URL.",
     linkGeneral: "Change in General settings",
-    onlyConfigured: "One target per channel. Only configured channels are listed; add more with “Add target”.",
+    onlyConfigured: "Each target has its own name; a channel can have several targets. Add more with “Add target”.",
     loading: "Loading notification targets …",
     empty: "No notification targets yet.",
     add: "Add target",

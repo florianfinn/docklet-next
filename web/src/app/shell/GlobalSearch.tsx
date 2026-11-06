@@ -34,7 +34,7 @@ export function GlobalSearch() {
   const close = useCallback(() => setOpen(false), []);
   const signOut = useCallback(() => { setOpen(false); setLogout(true); }, []);
   const apple = /Mac|iPhone|iPad/.test(navigator.platform);
-  return <><Button size="sm" variant="ghost" aria-label={t("title")} onClick={() => setOpen(true)}><Search data-icon="inline-start" /><kbd className="hidden text-xs text-muted-foreground sm:inline">{apple ? "⌘" : "Ctrl"}+K</kbd></Button>
+  return <><Button size="sm" variant="ghost" aria-label={t("title")} onClick={() => setOpen(true)}><Search data-icon="inline-start" /><kbd className="hidden text-xs text-muted-foreground sm:inline">{t(apple ? "shortcutMac" : "shortcutOther")}</kbd></Button>
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="overflow-hidden p-0 sm:max-w-xl"><DialogHeader className="sr-only"><DialogTitle>{t("title")}</DialogTitle><DialogDescription>{t("hint")}</DialogDescription></DialogHeader>{open && <SearchContents close={close} signOut={signOut} />}</DialogContent></Dialog>
     {logout && <LogoutDialog open onOpenChange={setLogout} />}</>;
 }

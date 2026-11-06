@@ -1,5 +1,3 @@
-import { captureCommandFailure } from "@/shared/components/command-failure";
-import { useCommandError } from "@/data/use-command-error";
 // Source: docklet-next/issues/356
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
@@ -7,6 +5,8 @@ import { useCommandError } from "@/data/use-command-error";
 // Deviations: Original role-scoped command palette using existing query consumers. M19 web consumer integration.
 
 import { useTranslations } from "use-intl";
+import { captureCommandFailure } from "@/shared/components/command-failure";
+import { useCommandError } from "@/data/use-command-error";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { useContainers, useHosts, useImages, useTopology, useVolumes } from "@/data/queries";
@@ -30,7 +30,7 @@ export function AdminSearchGroups({ query, select, hostName, pages, actions: sha
     ...(activity.available ? [{ id: "activity", label: t("activity"), run: () => openActivity() }] : []),
   ];
   return <><SearchGroup name={t("pages")} entries={[...pages, ...NAV.flatMap((group) => group.items).filter((item) => !item.preview && !["dashboard", "stacks"].includes(item.key)).map((item) => ({ id: item.key, label: nav(item.key), to: item.to }))]} query={query} select={select} /><SearchGroup name={t("settings")} entries={IDS.map((id) => ({ id, label: settings(id), keywords: [id], to: `/settings/${id}` }))} query={query} select={select} />
-    <SearchGroup name={nav("hosts")} entries={hosts.data?.map((host) => ({ id: host.id, label: host.name, to: `/hosts/${encodeURIComponent(host.id)}` })) ?? []} query={query} select={select} loading={hosts.isPending} list="/hosts" />
+    <SearchGroup name={nav("hosts")} entries={hosts.data?.map((host) => ({ id: host.id, label: host.name, to: "/hosts" })) ?? []} query={query} select={select} loading={hosts.isPending} list="/hosts" />
     <SearchGroup name={nav("stacks")} entries={stacks.map((item) => ({ id: item.id, label: item.name, host: hostName(item.hostId), keywords: item.labels, to: `/stacks/${encodeURIComponent(item.id)}` }))} query={query} select={select} loading={stacksLoading} list="/stacks" />
     <SearchGroup name={nav("containers")} entries={containers.data?.map((item) => ({ id: item.id, label: item.name, keywords: Object.entries(item.dockerLabels ?? {}).flat(), host: hostName(item.hostId), to: `/containers?c=${encodeURIComponent(item.id)}` })) ?? []} query={query} select={select} loading={containers.isPending} list="/containers" />
     <SearchGroup name={nav("images")} entries={images.data?.map((item) => ({ id: item.id, label: `${item.repository}:${item.tag ?? ""}`, host: hostName(item.hostId), to: `/images?image=${encodeURIComponent(item.id)}` })) ?? []} query={query} select={select} loading={images.isPending} list="/images" />

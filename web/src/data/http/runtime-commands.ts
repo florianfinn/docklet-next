@@ -130,7 +130,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   async function detail(host: string, id: string, refresh = false, notify = true, signal?: AbortSignal): Promise<RuntimeRun> {
     if (signal && !signalKeys.has(signal)) signalKeys.set(signal, ++signalKey);
     const key = `${host}~${id}:${refresh}:${notify}:${signal ? signalKeys.get(signal) : "shared"}`;
-    const existing = reads.get(key); if (existing) return existing.then((result) => ({ ...result, outcome: "joined" }));
+    const existing = reads.get(key); if (existing) return existing;
     const version = generation, started = ++sequence;
     const task = (async () => {
       const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`, { signal }), access(host).catch((error: unknown) => {

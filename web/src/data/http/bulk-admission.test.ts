@@ -32,3 +32,16 @@ it("real runtime refuses busy admission without manufacturing a started outcome"
   const f = runtimeFixture(); f.state.command = () => response({ success: false, data: { code: "run.busy", activeRunId: RUN_ID } }, 409);
   await expect(f.helper.admitRuntimeCommand({ kind: "container", id: "0~canonical-id", command: "start" })).rejects.toMatchObject({ outcome: { code: "run.busy" } });
 });
+// The composed HTTP adapter passes the hub's join through the run gate (M19 review S4R1-3).
+it("hub 200 run.joined reaches bulk admission through the composed HTTP adapter", async () => {
+  const f = runtimeFixture();
+  f.state.command = () => envelope({ code: "run.joined", activityId: RUN_ID, activity: f.state.run }, 200);
+  expect(await withRunGate(f.adapter).admitRuntimeCommand!({ kind: "container", id: "0~canonical-id", command: "start" }, { quiet: true })).toEqual({ outcome: "joined", runId: RUN_ID });
+});
+// Concurrent shared detail reads share one result object without admission fields (M19 review S4R1-5).
+it("concurrent shared runtime detail reads return the same result", async () => {
+  const f = runtimeFixture();
+  const [first, second] = await Promise.all([f.adapter.getRuntimeRun!("0", RUN_ID), f.adapter.getRuntimeRun!("0", RUN_ID)]);
+  expect(second === first).toBe(true);
+  expect("outcome" in second).toBe(false);
+});

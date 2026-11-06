@@ -53,6 +53,22 @@ it("Direct and Edge producer shapes render an invalid cooldown hint instead of u
   await act(async () => {});
 });
 
+// A stored invalid cooldown names the field on its control and leaves the pause out of the row summary (M19 review S4R1-8).
+it("stored invalid cooldown shows its field error in the dialog", async () => {
+  const adapter = createDemoAdapter(), fetcher = vi.fn(async () => new Response(JSON.stringify(invalid)));
+  const settings = createNotificationSettings({ baseUrl: "/api", client: { fetch: fetcher, token: async () => "" }, generation: () => 0, capability: adapter.getCapability });
+  adapter.getAutoHealSettings = settings.getAutoHealSettings;
+  renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/autoHeal"], adapter);
+  const edit = await screen.findByRole("button", { name: "Bearbeiten: Atlas" });
+  const row = edit.closest("li") ?? edit.parentElement!.parentElement!;
+  await waitFor(() => expect(within(row).queryAllByText(/Auto Heal ist auf diesem Host pausiert/).length).toBe(1));
+  expect(/Min\. Pause/.test(row.textContent ?? "")).toBe(false);
+  await userEvent.click(edit);
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).queryAllByText("Bitte diesen Wert prüfen.").length).toBe(1);
+  expect((within(dialog).getByRole("button", { name: "Speichern" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
 it("cooldown slider keeps the ten-minute default and saves the sixty-minute boundary", async () => {
   const adapter = createDemoAdapter(), save = vi.spyOn(adapter, "saveAutoHealSettings");
   renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/autoHeal"], adapter);

@@ -1,11 +1,11 @@
-import { BulkResultController } from "@/shared/components/bulk-result-dialog";
-import { GlobalSearch } from "./GlobalSearch";
 // Source: docklet-next/issues/323
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
 // Deviations: Original reduced shell using the approved free sidebar primitives. M19 web consumer integration.
 
+import { BulkResultController } from "@/shared/components/bulk-result-dialog";
+import { GlobalSearch } from "./GlobalSearch";
 import { LayoutDashboard, Layers } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { Suspense } from "react";

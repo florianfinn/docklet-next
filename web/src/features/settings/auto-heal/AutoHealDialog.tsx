@@ -105,10 +105,11 @@ export function AutoHealDialog({ host, settings, onClose, onSaved }: { host: Hos
               {fieldError("windowMinutes") && <p className="text-sm text-destructive">{fieldError("windowMinutes")}</p>}
             </Field>
           </div>
-          <Field>
+          <Field data-invalid={fieldError("cooldownMinutes") ? true : undefined}>
             <FieldLegend>{t("cooldown")}</FieldLegend>
             <Slider aria-label={t("cooldown")} value={[draft.cooldownMinutes ?? 10]} min={1} max={60} step={1} onValueChange={([cooldownMinutes]) => patch({ cooldownMinutes })} />
             <FieldDescription>{t("windowValue", { minutes: draft.cooldownMinutes ?? 10 })}</FieldDescription>
+            {fieldError("cooldownMinutes") && <p className="text-sm text-destructive">{fieldError("cooldownMinutes")}</p>}
           </Field>
           {(["excludedStacks", "excludedContainers"] as const).map((key) => (
             <Exclusions key={key} id={key} names={draft[key]} known={known[key]} error={fieldError(key)} onChange={(names) => patch({ [key]: names })} />

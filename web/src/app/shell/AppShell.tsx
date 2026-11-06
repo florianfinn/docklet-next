@@ -1,11 +1,11 @@
-import { BulkResultController } from "@/shared/components/bulk-result-dialog";
-import { GlobalSearch } from "./GlobalSearch";
 // Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/AppShell.tsx
 // Revision: 456cdcb0ad7dee6695b8162d0c9f779b26842f736c418f31b877c9caa5f20d91
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Product preference/demo boundary after the historical L4 import: build-selected runtime, shared preference modules and regression coverage; existing UI catalogue bytes and storage contracts preserved; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Product preference/demo boundary after the historical L4 import: build-selected runtime, shared preference modules and regression coverage; existing UI catalogue bytes and storage contracts preserved; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
+import { BulkResultController } from "@/shared/components/bulk-result-dialog";
+import { GlobalSearch } from "./GlobalSearch";
 import { useIsUser } from "@/data/use-principal";
 import { UserShell } from "./UserShell";
 import { StackUpdateDialogController } from "@/shared/components/updates/stack-update-dialog";

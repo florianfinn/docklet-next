@@ -4,11 +4,11 @@ export const enCommon = {
   bulkRun: {
     summary: "{action}: {started} started, {joined} joined, {skipped} skipped, {failed} failed",
     details: "Bulk action details", admissionHint: "Admission results. Follow progress in the activity centre.",
-    skipCount: "{count} selected items will be skipped", sessionEnded: "Session ended", upToDate: "Up to date", notChecked: "Not checked", stale: "Inventory is out of date", busy: "Another action is running",
+    skipCount: "{count, plural, one {# selected item will be skipped} other {# selected items will be skipped}}", sessionEnded: "Session ended", upToDate: "Up to date", notChecked: "Not checked", stale: "Inventory is out of date", busy: "Another action is running",
     actions: { start: "Start", stop: "Stop", restart: "Restart", redeploy: "Redeploy", update: "Updates" },
     outcomes: { started: "Started", joined: "Joined", skipped: "Skipped", failed: "Failed" },
     updateHint: "Install whole-stack updates for eligible stacks. Each stack is admitted separately.",
-    loading: "Checking updates …", candidates: "{count} update candidates", install: "Install updates",
+    loading: "Checking updates …", candidates: "{count, plural, one {# update candidate} other {# update candidates}}", install: "Install updates",
   },
   stackUpdates: {
     deletePoint: "Delete restore point",

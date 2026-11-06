@@ -50,3 +50,16 @@ it("a later request owns Apply and renders contract found and missing codes in G
   expect(screen.queryByText("late-proposal") === null).toBe(true);
   await userEvent.click(screen.getByRole("button", { name: "Übernehmen" })); expect(apply.mock.calls[0]?.[0].title).toBe("owned-proposal");
 });
+// A proposal already shown belongs to its draft; switching drafts drops it (M19 review S4R1-2).
+it("shown proposal is dropped when the owning draft changes", async () => {
+  const adapter = createDemoAdapter(), apply = vi.fn();
+  adapter.importSource = async () => ({ ...proposal, title: "shown-proposal" });
+  function Harness() { const [key, setKey] = useState("draft-a"); return <><button onClick={() => setKey("draft-b")}>change draft</button><ImportSourceDialog open draftKey={key} onOpenChange={() => {}} onApply={apply} /></>; }
+  renderWithApp(<Harness />, adapter);
+  await userEvent.type(await screen.findByLabelText("Quelle"), "example/app");
+  await userEvent.click(screen.getByRole("button", { name: "Quelle auswerten" }));
+  await screen.findByText("shown-proposal");
+  await act(() => { screen.getByText("change draft").click(); });
+  expect(screen.queryByText("shown-proposal") === null).toBe(true);
+  expect((screen.getByRole("button", { name: "Übernehmen" }) as HTMLButtonElement).disabled).toBe(true);
+});

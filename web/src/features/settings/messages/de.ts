@@ -306,7 +306,7 @@ export const deSettings: typeof enSettings = {
     linkHint: "Links in Nachrichten zeigen auf {url}.",
     linkFallback: "Ohne interne Hub-Adresse verwenden Links APP_URL.",
     linkGeneral: "In den allgemeinen Einstellungen ändern",
-    onlyConfigured: "Ein Ziel je Kanal. Nur eingerichtete Kanäle werden gelistet; weitere über „Ziel hinzufügen“.",
+    onlyConfigured: "Jedes Ziel hat einen eigenen Namen; ein Kanal kann mehrere Ziele haben. Weitere über „Ziel hinzufügen“.",
     loading: "Benachrichtigungsziele werden geladen …",
     empty: "Noch keine Benachrichtigungsziele.",
     add: "Ziel hinzufügen",

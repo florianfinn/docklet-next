@@ -1,5 +1,3 @@
-import { bulkResultStore } from "@/shared/components/bulk-result-store";
-import { identityLifetime } from "@/data/identity-lifetime";
 // Source: docklet-next/issues/349
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
@@ -11,13 +9,21 @@ import { useTranslations } from "use-intl";
 import { toast } from "sonner";
 import { useQueries } from "@tanstack/react-query";
 import { useAdapter } from "@/data/use-adapter";
+import { operationReasonKey } from "@/data/operation-reason";
+import { bulkResultStore } from "@/shared/components/bulk-result-store";
+import { identityLifetime } from "@/data/identity-lifetime";
 import { bulkOperation, runBulk, type BulkAction, type BulkItem, type BulkResult } from "./bulk-run";
 
 export function useBulkCapabilities(items: readonly BulkItem[], action: BulkAction) {
-  const adapter = useAdapter(), t = useTranslations("common.bulkRun");
+  const adapter = useAdapter(), t = useTranslations("common.bulkRun"), operation = useTranslations("containers.operationReasons"), capability = useTranslations("activity.capability");
   const results = useQueries({ queries: items.map((item) => ({ queryKey: ["capability", bulkOperation(item.kind, action), item.kind, item.id], queryFn: () => adapter.getCapability(bulkOperation(item.kind, action), { kind: item.kind, id: item.id }) })) });
   const allowed = items.filter((item, index) => !item.stale && results[index]?.data?.available === true).length;
-  return { available: allowed > 0, reason: t("skipCount", { count: items.length - allowed }) };
+  if (allowed === 0) {
+    // Nothing is allowed: show the first refusal as the single-item buttons do.
+    const key = operationReasonKey(results.find((result) => result.data && !result.data.available)?.data?.disabledReasonCode ?? "");
+    return { available: false, reason: key ? operation(key) : capability("unavailable") };
+  }
+  return { available: true, reason: allowed < items.length ? t("skipCount", { count: items.length - allowed }) : undefined };
 }
 export function useBulkRun() {
   const adapter = useAdapter(), t = useTranslations("common.bulkRun");

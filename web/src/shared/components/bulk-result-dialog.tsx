@@ -1,15 +1,15 @@
-import { useEffect } from "react";
-import { identityLifetime } from "@/data/identity-lifetime";
-import { useAdapter } from "@/data/use-adapter";
-import { useStore } from "@/shared/lib/store";
-import { bulkResultStore } from "./bulk-result-store";
-import { useBulkReason } from "@/shared/hooks/use-bulk-reason";
 // Source: docklet-next/issues/349
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
 // Deviations: Original bounded bulk admission and captured result ownership. M19 web consumer integration.
 
+import { useEffect } from "react";
+import { identityLifetime } from "@/data/identity-lifetime";
+import { useAdapter } from "@/data/use-adapter";
+import { useStore } from "@/shared/lib/store";
+import { bulkResultStore } from "./bulk-result-store";
+import { useBulkReason } from "@/shared/hooks/use-bulk-reason";
 import { useTranslations } from "use-intl";
 import type { BulkResult } from "@/shared/hooks/bulk-run";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";

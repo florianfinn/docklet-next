@@ -104,7 +104,7 @@ function HostRow({ host, edit }: { host: Host; edit: (settings: AutoHealSettings
         ) : (
           <p className="text-xs text-muted-foreground">
             {s.invalidFields.length > 0 ? t("invalidHint", { fields: s.invalidFields.map((field) => t(`fieldNames.${field}`)).join(", ") }) : t("summary", { count: s.maxRestarts, minutes: s.windowMinutes, stacks: s.excludedStacks.length, containers: s.excludedContainers.length })}
-            {` · ${t("cooldownSummary", { minutes: s.cooldownMinutes })}`}
+            {!s.invalidFields.includes("cooldownMinutes") && ` · ${t("cooldownSummary", { minutes: s.cooldownMinutes })}`}
             {readOnly && ` · ${readOnly}`}
           </p>
         )}
