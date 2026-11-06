@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration.
 
 package config
 
@@ -39,7 +39,8 @@ const (
 // Fields with `options:"file"` support Docker secrets via the _FILE suffix.
 // Available options: file, toLower, trimTrailingSlash, deprecated
 type Config struct {
-	ZoneProvider schedule.ZoneProvider
+	StackImportGitHubRawURL string `env:"STACK_IMPORT_GITHUB_RAW_URL" default:"https://raw.githubusercontent.com" options:"file"`
+	ZoneProvider            schedule.ZoneProvider
 	BuildablesConfig
 
 	AgentImage             string         `env:"DOCKLET_AGENT_IMAGE" default:""`
