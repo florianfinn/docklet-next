@@ -1,8 +1,8 @@
-// Source: docklet-next/issues/348
+// Source: docklet-next/issues/355
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original hub import contract and resolver boundary.
+// Deviations: Original activity retention settings problem.
 
 package settings
 

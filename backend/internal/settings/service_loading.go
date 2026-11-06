@@ -198,7 +198,7 @@ func (s *SettingsService) IsEnvOverrideActive(key string) bool {
 // validEnvSettingInternal keeps an invalid stop mode from the environment out of
 // effective and persisted settings; the stored or default value applies instead.
 func validEnvSettingInternal(ctx context.Context, key, envVarName, value string) bool {
-	if key != "stackStopMode" && key != "backupDefaultRetentionCount" {
+	if key != "stackStopMode" && key != "backupDefaultRetentionCount" && key != "activityEventLimit" && key != "activityRunLimit" {
 		return true
 	}
 	if err := validateSettingValueInternal(key, kit.TrimQuotes(value)); err != nil {

@@ -105,7 +105,9 @@ func persistConditions(tx *gorm.DB, host environment.Environment, now time.Time,
 				since = *prior.UnhealthySince
 			}
 			row.UnhealthySince = &since
-			if now.Unix()-since >= int64(10*time.Minute/time.Second) && (prior.UnhealthyNotifiedAt == nil || now.Unix()-*prior.UnhealthyNotifiedAt >= int64(time.Hour/time.Second)) {
+			// One notice per unhealthy period; a notice of an earlier period starts the 60-minute quiet time.
+			earlier := prior.UnhealthyNotifiedAt == nil || (*prior.UnhealthyNotifiedAt < since && now.Unix()-*prior.UnhealthyNotifiedAt >= int64(time.Hour/time.Second))
+			if now.Unix()-since >= int64(10*time.Minute/time.Second) && earlier {
 				payload := database.JSON{"host": host.Name, "container": c.Name, "stack": c.ProjectID, "reason": c.Reason, "minutes": (now.Unix() - since) / 60, "restarts": c.Restarts10m}
 				if err := notificationoutbox.Insert(tx, notificationoutbox.Row{Event: "container_unhealthy", EnvironmentID: host.ID, DedupKey: fmt.Sprintf("unhealthy:%s:%s:%d", host.ID, id, since), Payload: payload, CreatedAt: now}); err != nil {
 					return err

@@ -72,3 +72,20 @@ func TestM19RetentionAgentEnvironmentOverrideWins(t *testing.T) {
 	require.NoError(t, s.db.Where("key='activityEventLimit'").First(&stored).Error)
 	require.Equal(t, "50", stored.Value)
 }
+
+// Environment-managed limits use the write range; 0 would prune every event (#357 S1R1-3).
+func TestM19ActivityLimitEnvironmentValuesAreValidated(t *testing.T) {
+	ctx := t.Context()
+	svc, err := newSettingsServiceForTestInternal(t, ctx, setupSettingsTestDB(t))
+	require.NoError(t, err)
+	t.Setenv("ACTIVITY_EVENT_LIMIT", "0")
+	t.Setenv("ACTIVITY_RUN_LIMIT", "-1")
+	loaded, err := svc.loadDatabaseConfigFromEnv(ctx, svc.db)
+	require.NoError(t, err)
+	require.Equal(t, []string{"500", "100"}, []string{loaded.ActivityEventLimit.Value, loaded.ActivityRunLimit.Value})
+	t.Setenv("ACTIVITY_EVENT_LIMIT", "800")
+	t.Setenv("ACTIVITY_RUN_LIMIT", "20")
+	loaded, err = svc.loadDatabaseConfigFromEnv(ctx, svc.db)
+	require.NoError(t, err)
+	require.Equal(t, []string{"800", "20"}, []string{loaded.ActivityEventLimit.Value, loaded.ActivityRunLimit.Value})
+}

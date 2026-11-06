@@ -106,6 +106,22 @@ func TestM19QuietTimestampSurvivesHealthySampleAndRestart(t *testing.T) {
 	require.NoError(t, s.commit(t.Context(), host, now.Add(70*time.Minute), sample, nil))
 	require.EqualValues(t, 2, noticeCount(t, s))
 }
+
+// A retried notice of the same period hits its dedup key; it must not move the quiet time (#357 S1R1-1).
+func TestM19SamePeriodRetryKeepsQuietTimestamp(t *testing.T) {
+	s, host, now := samplerFixture(t)
+	sample := fixtureSample()
+	sample.Containers[0].Health = "unhealthy"
+	for _, minute := range []int{0, 10, 70} {
+		require.NoError(t, s.commit(t.Context(), host, now.Add(time.Duration(minute)*time.Minute), sample, nil))
+	}
+	require.EqualValues(t, 1, noticeCount(t, s))
+	require.NoError(t, s.commit(t.Context(), host, now.Add(71*time.Minute), fixtureSample(), nil))
+	for _, minute := range []int{72, 82} {
+		require.NoError(t, s.commit(t.Context(), host, now.Add(time.Duration(minute)*time.Minute), sample, nil))
+	}
+	require.EqualValues(t, 2, noticeCount(t, s))
+}
 func TestM19CounterDerivedRestartLoopSurvivesProcessRestart(t *testing.T) {
 	s, host, now := samplerFixture(t)
 	sample := fixtureSample()
@@ -134,6 +150,9 @@ func TestM19RevisionResetsEvidenceButKeepsQuietTimestamp(t *testing.T) {
 	for _, c := range s.snapshots.read(host.ID).Items {
 		require.Equal(t, now.Add(11*time.Minute), c.Since)
 	}
+	var reset conditionRow
+	require.NoError(t, s.db.Where("kind='container'").First(&reset).Error)
+	require.Equal(t, now.Add(11*time.Minute).Unix(), *reset.UnhealthySince)
 	require.NoError(t, s.commit(t.Context(), host, now.Add(21*time.Minute), sample, nil))
 	require.EqualValues(t, 1, noticeCount(t, s))
 	var row conditionRow
