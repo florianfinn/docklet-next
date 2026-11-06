@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original per-host Auto Heal form with stack and container exceptions.
+// Deviations: Original per-host Auto Heal form with stack and container exceptions. M19 web consumer integration.
 
 import { X } from "lucide-react";
 import { useState } from "react";
@@ -32,7 +32,7 @@ export function AutoHealDialog({ host, settings, onClose, onSaved }: { host: Hos
   const adapter = useAdapter();
   const stacks = useStacks();
   const containers = useContainers();
-  const [draft, setDraft] = useState<AutoHealInput>(() => ({ enabled: settings.enabled, maxRestarts: settings.maxRestarts, windowMinutes: settings.windowMinutes, excludedStacks: [...settings.excludedStacks], excludedContainers: [...settings.excludedContainers] }));
+  const [draft, setDraft] = useState<AutoHealInput>(() => ({ enabled: settings.enabled, maxRestarts: settings.maxRestarts, cooldownMinutes: settings.cooldownMinutes, windowMinutes: settings.windowMinutes, excludedStacks: [...settings.excludedStacks], excludedContainers: [...settings.excludedContainers] }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; field?: string }>();
   const invalid = autoHealFieldError(draft);
@@ -105,6 +105,11 @@ export function AutoHealDialog({ host, settings, onClose, onSaved }: { host: Hos
               {fieldError("windowMinutes") && <p className="text-sm text-destructive">{fieldError("windowMinutes")}</p>}
             </Field>
           </div>
+          <Field>
+            <FieldLegend>{t("cooldown")}</FieldLegend>
+            <Slider aria-label={t("cooldown")} value={[draft.cooldownMinutes ?? 10]} min={1} max={60} step={1} onValueChange={([cooldownMinutes]) => patch({ cooldownMinutes })} />
+            <FieldDescription>{t("windowValue", { minutes: draft.cooldownMinutes ?? 10 })}</FieldDescription>
+          </Field>
           {(["excludedStacks", "excludedContainers"] as const).map((key) => (
             <Exclusions key={key} id={key} names={draft[key]} known={known[key]} error={fieldError(key)} onChange={(names) => patch({ [key]: names })} />
           ))}

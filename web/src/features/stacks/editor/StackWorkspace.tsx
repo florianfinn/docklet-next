@@ -1,3 +1,5 @@
+import type { ImportResult } from "@/data/adapter";
+import { applyImportProposal } from "./import-proposal";
 // Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/editor/StackWorkspace.tsx
 // Revision: 8dc34a900c94d090a1c5ae85199143f6816fe69d3e3689e6fd22806a54d8505f
 // Retrieved: 2026-10-13
@@ -113,17 +115,12 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
     if (err) toast.error(text.editError(err));
   };
 
-  const addServices = (list: { key: string; body: Record<string, unknown> }[]) => {
-    const existing = model?.services.map((s) => s.key) ?? [];
-    let last = "";
-    for (const s of list) {
-      const key = uniqueKey(existing, s.key);
-      existing.push(key);
-      edit(ops.addService(key, s.body));
-      last = key;
-      toast.success(t("added", { name: key }));
-    }
-    setWizard({ step: 2, service: last || null, section: "general" });
+  const importCapability = useCapability("importSource");
+  const [proposal, setProposal] = useState<ImportResult>();
+  const applyProposal = (result: ImportResult) => {
+    const next = applyImportProposal(result, model?.name ?? "", draft.env);
+    draft.setCompose(next.compose); draft.setEnv(next.env);
+    setProposal(undefined); setWizard({ step: 2, service: null, section: "general" });
   };
 
   /** Shows authoring failures; the draft always stays for a later retry. */
@@ -253,7 +250,7 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
                 <Terminal data-icon="inline-start" /> {t("importRun")}
               </Button>
             </HelpTarget>
-            {adapter.kind === "demo" && (
+            {isNew && importCapability.available && (
               <HelpTarget topic="stack.importSource">
                 <Button size="sm" variant="outline" disabled={!model} onClick={() => setDialog("import")}>
                   <Import data-icon="inline-start" /> {t("importSource")}
@@ -347,7 +344,8 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
       <ConfirmDialog open={blocker.state === "blocked"} onOpenChange={(on) => { if (!on && blocker.state === "blocked" && !proceeding.current) blocker.reset(); }} title={t("extraFiles.leaveTitle")} description={t("extraFiles.leaveBody")} confirmLabel={t("extraFiles.leave")} destructive onConfirm={() => { if (blocker.state === "blocked") { proceeding.current = true; blocker.proceed(); } }} />
       <DockerRunDialog open={dialog === "run"} onOpenChange={(o) => setDialog(o ? "run" : null)} existing={model?.services.map((s) => s.key) ?? []} hostId={draft.hostId}
         onAdd={(key, body, env, declarations) => importRun(key, body, env, declarations)} />
-      <ImportSourceDialog open={dialog === "import"} onOpenChange={(o) => setDialog(o ? "import" : null)} onApply={(r) => addServices(r.services)} />
+      {dialog === "import" && isNew && <ImportSourceDialog open draftKey={`new:${draft.hostId}`} onOpenChange={(o) => setDialog(o ? "import" : null)} onApply={(result) => { if (draft.composeDirty) setProposal(result); else applyProposal(result); }} />}
+      <ConfirmDialog open={!!proposal} onOpenChange={(open) => !open && setProposal(undefined)} title={t("source.replaceTitle")} description={t("source.replaceHint")} confirmLabel={t("source.apply")} onConfirm={() => { if (proposal) applyProposal(proposal); }} />
     </WorkspaceFrame>
   );
 }

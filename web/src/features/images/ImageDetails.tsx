@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { useAdapter } from "@/data/use-adapter";
+import { QueryError } from "@/shared/components/page";
 import { isHostAvailable } from "@/domain/hosts";
 import { ScanImageButton } from "./ImageSecurity";
 import { useImageSecurity } from "./use-image-security";
@@ -59,6 +62,10 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
   const pull = useCapability("pullImage", { kind: "host", id: image?.hostId ?? "" });
   const remove = useCapability("removeImage", { kind: "image", id: image?.id ?? "" });
   const online = isHostAvailable(host);
+  const adapter = useAdapter();
+  const metadata = useQuery({ queryKey: ["image-metadata", id], queryFn: () => adapter.getImageMetadata!(id!), enabled: !!id && !!image && online && !!adapter.getImageMetadata });
+  const detail = adapter.getImageMetadata ? metadata.data : image?.metadataUnavailable ? undefined : image;
+  const metadataText = (value: string | number | undefined) => metadata.isFetching && !detail ? td("metadataLoading") : metadata.isError ? td("metadataError") : value ?? td("unknown");
   // Where an update is installed: the first user workload of this image (never the agent).
   const user = image?.consumers.find((c) => !c.system);
   return (
@@ -104,14 +111,14 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                       <HostChip host={host} />
                     </Row>
                     <Row label={td("architecture")} mono>
-                      {image.metadataUnavailable ? td("unknown") : `${image.os}/${image.architecture}`}
+                      {metadataText(detail ? `${detail.os}/${detail.architecture}` : undefined)}
                     </Row>
                     <Row label={td("created")}>
                       <span title={formatDateTime(image.createdAt)}>{formatRelative(image.createdAt)}</span>
                     </Row>
                     <Row label={td("pulled")}>{image.pulledAt ? formatRelative(image.pulledAt) : td("pulledNever")}</Row>
                     <Row label={td("size")}>{formatMem(image.sizeMb)}</Row>
-                    <Row label={td("layers")}>{image.metadataUnavailable ? td("unknown") : image.layers}</Row>
+                    <Row label={td("layers")}>{metadataText(detail?.layers)}</Row>
                     <Row label={td("digest")} mono>
                       <span className="flex flex-wrap items-center gap-2">
                         <span title={image.digest}>{shortDigest(image.digest)}…</span>
@@ -120,6 +127,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                     </Row>
                   </dl>
                 </Section>
+                {metadata.isError && <QueryError error={metadata.error} onRetry={() => void metadata.refetch()} />}
                 <Separator />
                 <Section title={td("consumers")}>
                   {image.consumers.length ? (

@@ -92,12 +92,12 @@ describe("activity history limits", () => {
     expect((await adapter.listActions()).filter((r) => r.status !== "running" && r.stackId === target.id).length).toBe(1);
   });
 
-  it("shows fixed history limits without editable controls", async () => {
+  it("shows configurable history limits with hub-wide events and per-host actions", async () => {
     const adapter = createDemoAdapter();
     renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/activity"], adapter);
-    await screen.findByText("Der Verlauf behält 500 Ereignisse und 100 abgeschlossene Abläufe je Umgebung. Aktive Abläufe bleiben erhalten.");
-    expect(screen.queryByLabelText("Höchstens Ereignisse") === null).toBe(true);
-    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") === null).toBe(true);
+    await screen.findByText("Ereignisse werden hubweit gezählt, abgeschlossene Abläufe je Host. Aktive Abläufe bleiben erhalten.");
+    expect(screen.queryByLabelText("Höchstens Ereignisse") !== null).toBe(true);
+    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") !== null).toBe(true);
     await expect(adapter.saveSettings("activity", { ...(await adapter.getSettings()).activity, maxFinishedActions: 5 })).rejects.toThrow("invalid-history");
   });
 });

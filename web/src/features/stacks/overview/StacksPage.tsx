@@ -1,6 +1,10 @@
+import { useBulkRun, useBulkCapabilities } from "@/shared/hooks/use-bulk-run";
+import type { BulkAction, BulkItem } from "@/shared/hooks/bulk-run";
+import { BulkResultDialog } from "@/shared/components/bulk-result-dialog";
+import { BulkUpdateDialog } from "@/shared/components/updates/BulkUpdateDialog";
 import { InventoryNotice } from "../InventoryNotice";
 import { AlertTriangle, Download, Layers, Play, Plus, RefreshCw, RotateCw, Square } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -28,7 +32,6 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import type { Stack } from "@/domain/model";
 import { HiddenSection, type HiddenEntry } from "@/shared/components/hidden-items";
 import { HostChip } from "@/shared/components/host-chip";
-import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 import { splitHidden, useHiddenIds } from "@/shared/preferences/hidden-store";
 
 import { StackStatusBadge } from "../StackStatusBadge";
@@ -46,12 +49,9 @@ export default function StacksPage() {
   const hosts = useHostScope();
   const mode = usePreference("stacksMode");
   const layout = usePreference("stacksLayout");
-  const cmd = useStackCommands();
   const deployCapability = useCapability("deployStack");
   // Administrator-only actions are hidden for users (simple-users §4).
   const isUser = useIsUser();
-  const commandCapability = useCapability("runStackCommand");
-  const update = useCapability("installStackUpdates");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<StackSort>(DEFAULT_STACK_SORT);
@@ -116,9 +116,15 @@ export default function StacksPage() {
     );
   };
   const filtersActive = !!query.trim() || status !== "all" || labels.length > 0;
-  const bulk = (fn: (id: string) => unknown) => {
-    visibleSelected.forEach((id) => void fn(id));
-    setSelected([]);
+  const bulkRun = useBulkRun();
+  const items: BulkItem[] = rows.filter((row) => visibleSelected.includes(row.id)).map((row) => ({ kind: "stack", id: row.id, name: row.name, host: hosts.byId.get(row.hostId)?.name ?? row.hostId, stale: row.inventory?.stale }));
+  const commandCapability = useBulkCapabilities(items, "start"), redeploy = useBulkCapabilities(items, "redeploy"), update = useBulkCapabilities(items, "update");
+  const [updateItems, setUpdateItems] = useState<BulkItem[]>();
+  const closeUpdates = useCallback(() => setUpdateItems(undefined), []);
+  const bulk = (action: BulkAction) => {
+    const captured = items.map((item) => ({ ...item }));
+    if (action === "update") setUpdateItems(captured);
+    else { clearSelection(); void bulkRun.run(captured, action); }
   };
 
   const scope = hosts.filtered ? t("scopeSome", { hosts: hosts.visible.map((h) => h.name).join(", ") }) : t("scopeAll");
@@ -263,24 +269,26 @@ export default function StacksPage() {
           <p className="px-1 text-xs text-muted-foreground">{t("footer", { shown: rows.length, total: stacks.visible.length, hidden: hiddenTotal })}</p>
         )}
       </Card>
+      <BulkResultDialog results={bulkRun.results} open={bulkRun.open} onOpenChange={bulkRun.setOpen} />
+      {updateItems && <BulkUpdateDialog items={updateItems} onClose={closeUpdates} install={(eligible, revisions, skipped) => { clearSelection(); return bulkRun.run(eligible, "update", revisions, skipped); }} />}
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "start"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !commandCapability.available} title={commandCapability.reason} onClick={() => bulk("start")}>
           <Play data-icon="inline-start" />
           {t("bulk.start")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "stop"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !commandCapability.available} title={commandCapability.reason} onClick={() => bulk("stop")}>
           <Square data-icon="inline-start" />
           {t("bulk.stop")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "restart"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !commandCapability.available} title={commandCapability.reason} onClick={() => bulk("restart")}>
           <RotateCw data-icon="inline-start" />
           {t("bulk.restart")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "redeploy"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={bulkRun.running || !redeploy.available} title={redeploy.reason} onClick={() => bulk("redeploy")}>
           <RefreshCw data-icon="inline-start" />
           {t("bulk.redeploy")}
         </Button>
-        <Button size="sm" className="h-8" disabled={!update.available} title={update.reason} onClick={() => bulk((id) => cmd.installUpdates(id))}>
+        <Button size="sm" className="h-8" disabled={bulkRun.running || !update.available} title={update.reason} onClick={() => bulk("update")}>
           <Download data-icon="inline-start" />
           {t("bulk.update")}
         </Button>

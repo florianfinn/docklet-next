@@ -1,3 +1,4 @@
+import { createDemoBulkUpdates } from "./demo-bulk-updates";
 // Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/data/demo/demo-adapter.ts
 // Revision: 93a1bd85562f9c156a80280dc7b450877d71881b45f83cf5b901d6ac993ffd71
 // Retrieved: 2026-10-13
@@ -178,6 +179,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     ...createNetworksApi(ctx),
     ...createSettingsApi(ctx),
     ...createDemoNotifications(ctx),
+    ...createDemoBulkUpdates(ctx),
 
     async listHosts() {
       const latency = simulationStore.get().latency;
@@ -463,6 +465,11 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       return { compose: stringify({ services: { [conv.key]: conv.body } }, { lineWidth: 0 }), env: "", serviceName: conv.key };
     },
 
+    async admitRuntimeCommand(request) {
+      const runId = request.kind === "container" ? await this.runContainerCommand(request.id, request.command as "start" | "stop" | "restart") : request.command === "update" ? await this.installStackUpdates(request.id, request.input) : await this.runStackCommand(request.id, request.command);
+      return { outcome: "started", runId };
+    },
+
     async importSource(request) {
       await new Promise((r) => setTimeout(r, 700));
       return simulateImport(request);
@@ -632,6 +639,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     if (operationId !== "getCapability" && typeof value === "function") supportedOperations.add(operationId);
   }
   supportedOperations.add("clearContainerRegistryCredential");
+  supportedOperations.add("redeployStack");
   for (const operationId of options.missingCapabilities ?? []) supportedOperations.delete(operationId);
   registerDemoOptions(adapter, options);
   return adapter;

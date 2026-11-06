@@ -27,6 +27,9 @@ export function createDemoNotifications({ db }: DemoContext): NotificationsApi &
       const unknown = Object.keys(input.config).find((key) => !configKind(input.provider, key));
       if (unknown) throw new SettingsProblemError("notification.config-invalid", 400, `/config/${unknown}`);
       const previous = db.notificationTargets.find((t) => t.id === input.id);
+      const name = (input.name ?? previous?.name ?? input.provider).trim();
+      if (!name || name.length > 64) throw new SettingsProblemError("notification.name-invalid", 400, "/name");
+      if (db.notificationTargets.some((t) => t.id !== input.id && t.name.toLowerCase() === name.toLowerCase())) throw new SettingsProblemError("notification.name-taken", 409, "/name");
       const secrets = SECRETS[input.provider] ?? [];
       const stored = new Set(previous?.credentialsSet ?? []);
       for (const field of secrets) if (typeof input.config[field] === "string" && input.config[field] !== "") stored.add(field);

@@ -1,4 +1,6 @@
-import { NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS } from "@/data/wire-catalogue-settings";
+import { Link } from "react-router";
+import { notificationBaseUrl, type GeneralSettings } from "@/domain/settings";
+import { NOTIFICATION_WARNING_KEYS, NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS } from "@/data/wire-catalogue-settings";
 import { Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { CancelledError } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -10,7 +12,7 @@ import { useNotificationWrites } from "@/data/notification-writes";
 import { useConnectedSettings } from "@/data/queries";
 import { settingsErrorMessage } from "@/data/settings-error";
 import { useAdapter } from "@/data/use-adapter";
-import { isProvider, NOTIFICATION_PROVIDERS, type NotificationProvider, type NotificationTarget, type NotificationTargetInput, type NotificationTargetRow } from "@/domain/notifications";
+import { isProvider, NOTIFICATION_PROVIDERS, type NotificationTarget, type NotificationTargetInput, type NotificationTargetRow } from "@/domain/notifications";
 import { ActionPresentationPointer } from "@/features/activity/ActionPresentationSetting";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
@@ -33,6 +35,7 @@ export function NotificationsSection() {
       <CapabilityGate operation="listNotificationTargets">
         <Targets />
       </CapabilityGate>
+      {presentation.data && <NotificationLinkHint general={presentation.data.general} />}
       {presentation.data && <ActionPresentationPointer value={presentation.data.activity.actionPresentation} />}
     </div>
   );
@@ -54,7 +57,7 @@ function Targets() {
   const generations = useRef(0);
   const [dialog, setDialog] = useState<DialogState>();
   const [remove, setRemove] = useState<NotificationTargetRow>();
-  const [testing, setTesting] = useState<ReadonlySet<NotificationProvider>>(new Set());
+  const [testing, setTesting] = useState<ReadonlySet<number>>(new Set());
   const [error, setError] = useState<string>();
   const rows = targets.data ?? [];
   // Test feedback is owned by the mounted section and the target identity it was started for.
@@ -68,30 +71,29 @@ function Targets() {
 
   const open = (target?: NotificationTarget) => setDialog({ generation: ++generations.current, target });
   const close = (generation: number) => setDialog((current) => (current?.generation === generation ? undefined : current));
-  const busy = (provider: NotificationProvider, on: boolean) => setTesting((old) => { const next = new Set(old); if (on) next.add(provider); else next.delete(provider); return next; });
+  const busy = (id: number, on: boolean) => setTesting((old) => { const next = new Set(old); if (on) next.add(id); else next.delete(id); return next; });
 
-  const used = new Set(rows.map((r) => r.provider));
-  const available = NOTIFICATION_PROVIDERS.filter((p) => !used.has(p) && !pending.has(p));
+  const available = NOTIFICATION_PROVIDERS;
 
   const toggle = async (target: NotificationTarget, enabled: boolean) => {
     setError(undefined);
     try {
-      await write(target.provider, () => adapter.saveNotificationTarget({ id: target.id, name: target.name, provider: target.provider, enabled, config: target.config, events: target.events }));
+      await write(target.id, () => adapter.saveNotificationTarget({ id: target.id, name: target.name, provider: target.provider, enabled, config: target.config, events: target.events }));
     } catch (cause) {
       if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
     }
   };
   const test = async (target: NotificationTarget) => {
     const { provider, id } = target;
-    busy(provider, true);
-    const kind = t(`kinds.${provider}`);
+    busy(id, true);
+    const kind = target.name;
     const current = () => live.current.mounted && live.current.rows.some((r) => r.id === id && r.provider === provider);
     try {
       const result = await adapter.testNotificationTarget(id);
       if (!current()) return;
       if (result.code === "notification.test-sent") {
         toast.success(`${kind}: ${all(NOTIFICATION_TEST_KEYS["notification.test-sent"])}`);
-        if (result.warning) toast.warning(`${kind}: ${all("settings.codes.notification.target-disabled")}`);
+        if (result.warning) toast.warning(`${kind}: ${all(NOTIFICATION_WARNING_KEYS[result.warning])}`);
       } else {
         const reason = result.reason ? all(DELIVERY_REASON_KEYS[result.reason]) : "";
         toast.error(`${kind}: ${all(NOTIFICATION_TEST_KEYS["notification.test-failed"])}${reason ? ` – ${reason}` : ""}`);
@@ -99,7 +101,7 @@ function Targets() {
     } catch (cause) {
       if (current() && !(cause instanceof CancelledError)) toast.error(settingsErrorMessage(cause, all));
     } finally {
-      busy(provider, false);
+      busy(id, false);
     }
   };
 
@@ -110,7 +112,7 @@ function Targets() {
           <h2 id="notifications-title" className="text-lg font-semibold">{ts("sections.notifications")}</h2>
           <p className="text-sm text-muted-foreground">{t("onlyConfigured")}</p>
         </div>
-        <Button type="button" variant="outline" disabled={!targets.data || available.length === 0} onClick={() => open()}>
+        <Button type="button" variant="outline" disabled={!targets.data || pending.has("new")} onClick={() => open()}>
           <Plus data-icon="inline-start" />
           {t("add")}
         </Button>
@@ -135,21 +137,22 @@ function Targets() {
                     <p className="text-xs text-muted-foreground">{t("unsupported")}</p>
                   </div>
                   {isProvider(row.provider) && (
-                    <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => setRemove(row)}>
+                    <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.id)} onClick={() => setRemove(row)}>
                       <Trash2 />
                     </Button>
                   )}
                 </li>
               );
             }
-            const label = t(`kinds.${row.provider}`);
-            const sending = testing.has(row.provider);
+            const label = row.name;
+            const sending = testing.has(row.id);
             return (
               <li key={row.id} className={cn("flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3", !row.enabled && "opacity-70")}>
                 <span className="grid size-9 place-items-center rounded-xl bg-primary/12 text-primary-text [&_svg]:size-4"><ProviderIcon provider={row.provider} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{label}</span>
+                    <ToneBadge tone="gray">{t(`kinds.${row.provider}`)}</ToneBadge>
                     {!row.enabled && <ToneBadge tone="gray" className="h-5 px-1.5 text-[10.5px]">{t("disabled")}</ToneBadge>}
                   </div>
                   <div className="truncate font-mono text-[11.5px] text-muted-foreground">{summary(row.provider, row.config)}</div>
@@ -163,17 +166,17 @@ function Targets() {
                 </div>
                 {/* Narrow screens give the actions their own row so the summary and event badges keep the full width. */}
                 <div className="flex w-full items-center justify-end gap-1.5 sm:w-auto">
-                  <Switch aria-label={`${t("enabled")}: ${label}`} checked={row.enabled} disabled={pending.has(row.provider)} onCheckedChange={(enabled) => void toggle(row, enabled)} />
+                  <Switch aria-label={`${t("enabled")}: ${label}`} checked={row.enabled} disabled={pending.has(row.id)} onCheckedChange={(enabled) => void toggle(row, enabled)} />
                   <HelpTarget topic="settingsNotifications.test">
                     <Button type="button" size="sm" variant="ghost" disabled={sending} onClick={() => void test(row)}>
                       {sending ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
                       {sending ? t("testing") : t("test")}
                     </Button>
                   </HelpTarget>
-                  <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${t("edit")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => open(row)}>
+                  <Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`${t("edit")}: ${label}`} disabled={pending.has(row.id)} onClick={() => open(row)}>
                     <Pencil />
                   </Button>
-                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.provider)} onClick={() => setRemove(row)}>
+                  <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" aria-label={`${t("remove")}: ${label}`} disabled={pending.has(row.id)} onClick={() => setRemove(row)}>
                     <Trash2 />
                   </Button>
                 </div>
@@ -187,7 +190,8 @@ function Targets() {
           key={dialog.generation}
           target={dialog.target}
           available={available}
-          save={(input: NotificationTargetInput) => write(input.provider, () => adapter.saveNotificationTarget({ ...input, ...(dialog.target ? { id: dialog.target.id, name: dialog.target.name } : {}) }))}
+          names={rows.flatMap((row) => row.kind === "target" ? [row.name] : [])}
+          save={(input: NotificationTargetInput) => write(dialog.target?.id ?? "new", () => adapter.saveNotificationTarget({ ...input, ...(dialog.target ? { id: dialog.target.id } : {}) }))}
           onClose={() => close(dialog.generation)}
           onSaved={() => close(dialog.generation)}
         />
@@ -203,7 +207,7 @@ function Targets() {
           if (!remove || !isProvider(provider)) return;
           try {
             const targetId = remove.id;
-            await write(provider, () => adapter.deleteNotificationTarget(targetId));
+            await write(targetId, () => adapter.deleteNotificationTarget(targetId));
           } catch (cause) {
             if (!(cause instanceof CancelledError)) setError(settingsErrorMessage(cause, all));
             return false;
@@ -212,4 +216,11 @@ function Targets() {
       />
     </section>
   );
+}
+
+function NotificationLinkHint({ general }: { general: GeneralSettings }) {
+  const t = useTranslations("settings.notifications");
+  const resolved = notificationBaseUrl(general);
+  const url = resolved.source === "internal" && !general.hubAddress.trim() ? "" : resolved.url;
+  return <p className="text-sm text-muted-foreground">{url ? t("linkHint", { url }) : t("linkFallback")} {<Link className="underline" to="/settings/general">{t("linkGeneral")}</Link>}</p>;
 }

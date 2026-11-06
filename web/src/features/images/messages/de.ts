@@ -39,6 +39,8 @@ export const deImages: typeof enImages = {
   offlineNote: "Host getrennt – letzter bekannter Stand, Aktionen gesperrt.",
   menu: { details: "Details", pullAgain: "Erneut ziehen", remove: "Entfernen", openUpdate: "Update öffnen", security: "Befunde ansehen" },
   details: {
+    metadataLoading: "Metadaten werden geladen …",
+    metadataError: "Metadaten nicht verfügbar",
     unknown: "Unbekannt",
     title: "Image {name}",
     overview: "Übersicht",
