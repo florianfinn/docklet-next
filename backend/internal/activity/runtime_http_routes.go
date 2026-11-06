@@ -165,6 +165,10 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
 		case errors.As(err, &access) && access.Code == "agent.unavailable":
 			// Refused before admission; 503 keeps it apart from a 502 lost after an image operation was sent.
+			// The update and restore-point routes declare only the image error envelope.
+			if runtimeImageOperation(operation) || operation == RuntimeUpdateContainer {
+				return runtimeJSONResponse(503, imageDTO.Failure(access.Code, 503)), nil
+			}
 			return runtimeJSONResponse(503, common.NewAPIError("Agent unavailable", "agent.unavailable", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):
 			return runtimeJSONResponse(410, common.NewAPIError("Runtime target removed", common.APIErrorCode(activitytypes.CodeRuntimeTargetRemoved), 410)), nil
