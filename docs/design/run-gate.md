@@ -219,7 +219,7 @@ migrations remain immutable.
 | One clock for gated start, terminal time and 30-second freshness | Keep with SQLite | Bind UTC Unix microseconds from the single hub clock; use the same sample per transaction. Cross-hub clock-skew tests are unnecessary. |
 | Atomic terminal status transition and `activity_sync_receipts` | Keep | They prevent duplicate final messages and duplicate job projection on replay or restart. |
 | Receipt `synced_at` grace | Keep | It protects a newly synced receipt from pruning against an older coordinator snapshot. |
-| Configurable event and activity count limits | Remove | Cleanup keeps 500 events and 100 finished activities per environment. |
+| Configurable event and activity count limits | Remove (reversed in M19) | Cleanup kept 500 events and 100 finished activities. M19 makes both limits configurable and hub-wide, see [activity retention](activity-retention.md). |
 | Job run age retention | Keep | Finished job history is limited to 100 runs and seven days. |
 
 For generic gated work a scope stays occupied until its local worker returns

@@ -1,7 +1,8 @@
 # Notification delivery
 
-The hub owns one configuration per supported channel. All settings and test
-routes require a global administrator and environment `0`. Agents send host
+The hub owns named notification targets, several per supported channel, each with
+its own credentials and event subscription ([notification targets](notification-targets.md)).
+All settings and test routes require a global administrator and environment `0`. Agents send host
 events to the hub over authenticated HTTP or the existing Edge event transport;
 they expose no notification configuration routes or Edge notification commands.
 
@@ -17,7 +18,7 @@ The event map includes image updates, vulnerabilities, Auto Heal, backup and
 restore failures, deployment failures, host availability and cleanup. New outcome
 and refusal codes are shared by OpenAPI, generated DTOs and the English and German
 catalogues. Test results classify failures without returning provider text or
-credential-bearing URLs. One test per provider can be active at a time.
+credential-bearing URLs. One test per target can be active at a time.
 
 ## Durable hub delivery
 

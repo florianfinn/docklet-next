@@ -255,7 +255,8 @@ dispatch commit time/state, executor state, cancel intent, result/error and last
 reconciliation time. Key bindings contain caller, digest and hub first-seen time.
 Storage failure refuses admission before effects.
 
-Keep full activity/output retention at **100 finished activities per environment**;
+Keep full activity/output retention at **`activityRunLimit` finished activities per environment**
+(default 100, [activity retention](activity-retention.md));
 clearing history may remove terminal output immediately. Separate compact
 receipts/key bindings/refusal tombstones survive either operation without a
 cascading activity FK. Unresolved active and unknown receipts never expire or

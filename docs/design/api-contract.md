@@ -200,8 +200,9 @@ last step is reported as `success` when the next step starts, even if that step
 logged warning or error messages; the last step inherits the run's terminal
 status. Clients should use message levels for per-step warnings and errors.
 
-Event history is capped at 500 entries. Completed activity history is capped
-at 100 entries per environment. Environment overrides follow Arcane settings
+Event history keeps the newest `activityEventLimit` entries hub-wide (default 500).
+Completed activity history keeps `activityRunLimit` entries per environment
+(default 100); active runs are never pruned ([activity retention](activity-retention.md)). Environment overrides follow Arcane settings
 initialization and do not fail startup on invalid values. Generic cancellation
 resolves runtime receipt ownership before falling back to a legacy worker signal.
 Receipt-backed cancellation and outcome knowledge do not introduce new terminal

@@ -29,6 +29,13 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Schedule rule and hub time zone](schedule-rule.md) | M18 decision: one wall-clock rule with spring gap and autumn fold, selectable hub zone and manual scans |
 | [Restore points before deploy](deploy-restore-points.md) | M18 decision: points before deploy and redeploy, durable point evidence, recovery offer and startup cleanup |
 | [Container and single service updates](container-service-updates.md) | M18 decision: standalone container update by recreate, previous-image restore and single-service updates |
+| [Wire codes in the web catalogue](wire-code-catalogue.md) | M19 decision: total compiler-checked maps from contract enums to EN/DE catalogue keys and the closed completeness criterion |
+| [Stack import](stack-import.md) | M19 decision: one-time GitHub and Docker Hub import, content-only proposal pass, egress limits, mirror address and dialog fences |
+| [Bulk actions](bulk-actions.md) | M19 decision: client-side fan-out over single commands, per-action capability, admission outcomes and bulk update eligibility |
+| [Notification targets](notification-targets.md) | M19 decision: named targets per channel, migration 019, link base rule, readable notices and the vulnerability notice repair |
+| [Unhealthy notice and Auto Heal cooldown](unhealthy-cooldown.md) | M19 decision: persisted condition state, 10-minute minimum duration and hourly quiet period, cooldown, validity hint and agent v15 |
+| [Activity retention](activity-retention.md) | M19 decision: configurable hub-wide event and run limits, agent sync and event list order |
+| [Global search](global-search.md) | M19 decision: Ctrl/⌘+K palette, rights-bound destinations and quick actions, removal of the Arcane settings search |
 | [Network management](network-management.md) | Host-side validation, protected deletion, Direct/Edge writes and agent v6 |
 | [Storage and file workspace](storage-workspace.md) | Stateless prune selection and re-checks, helper image policy, workspace mapping and agent compatibility |
 | [Stack authoring and deployment](stack-authoring.md) | M7 create/save/label/deploy mapping, non-idempotent create, partial state and hub docker run conversion |

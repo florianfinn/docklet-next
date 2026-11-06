@@ -337,8 +337,9 @@ uses the stored Activity value. Profile language is stored per administrator via
 `PUT /auth/me/profile` and applied on load. Other settings sections retain their
 existing boundaries.
 
-The UI exposes no editable history limits. Retention stays at 500 events and
-100 finished runs per environment; active runs remain. Host onboarding and its
+From M19 the event and finished-run limits are editable hub-wide settings
+(defaults 500 events and 100 finished runs per host); active runs remain, see
+[activity retention](activity-retention.md). Host onboarding and its
 installer use the connected M5 routes and catalogues.
 
 Unsupported reads preserve their typed error through `QueryError`: missing
