@@ -12,7 +12,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/stackimport"
 )
 
+// The import route is hub-only, so agents never validate or use the GitHub mirror setting.
 func provideStackImportModuleInternal(cfg *config.Config, registries *registry.ContainerRegistryService) (*stackimport.Module, error) {
+	if cfg.AgentMode || cfg.EdgeAgent {
+		return stackimport.New(), nil
+	}
 	resolver, err := stackimport.NewResolver(registries, cfg.StackImportGitHubRawURL)
 	if err != nil {
 		return nil, err

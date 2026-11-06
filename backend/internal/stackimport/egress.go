@@ -29,9 +29,6 @@ type budgetTransport struct {
 }
 
 func (b *budgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL.User != nil {
-		return nil, dto.Failure("import.invalid-reference", 400)
-	}
 	if b.count.Add(1) > requestLimit {
 		return nil, dto.Failure("import.source-unavailable", 502)
 	}

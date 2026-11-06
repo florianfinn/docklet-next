@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Stack import mirror startup validation;  Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown.
 
 package bootstrap
 
@@ -54,9 +54,6 @@ func Bootstrap(ctx context.Context) error {
 		return fmt.Errorf("load .env: %w", err)
 	}
 	cfg := config.Load()
-	if err := cfg.ValidateStackImport(); err != nil {
-		return err
-	}
 	if err := cfg.ValidateSignIn(); err != nil {
 		return err
 	}

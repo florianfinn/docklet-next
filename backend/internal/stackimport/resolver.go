@@ -117,7 +117,7 @@ func (r *SourceResolver) github(ctx context.Context, raw string, budget *budgetT
 		result.EnvNames = uniqueSorted(append(result.EnvNames, envExampleNames(env)...))
 		result.Found = append(result.Found, "import.found.env-example")
 	}
-	result.Title = ref.repo
+	result.Title = stackTitle(ref.repo)
 	result.Source = dto.Source{Kind: "github", CanonicalRef: ref.canonical()}
 	return result, nil
 }

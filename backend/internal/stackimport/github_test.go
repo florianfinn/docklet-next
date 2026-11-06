@@ -45,12 +45,13 @@ func importGitHub(r *SourceResolver) (dto.Result, error) {
 } //nolint:forbidigo // Test helper supplies a root context to the request budget.
 
 func TestGitHubAcceptedReferencesAndCandidates(t *testing.T) {
-	for _, test := range []struct{ ref, relative string }{
-		{"owner/repo", "owner/repo/HEAD"},
-		{"owner/repo/path/to dir", "owner/repo/HEAD/path/to%20dir"},
-		{"owner/repo/config:release@1", "owner/repo/HEAD/config:release@1"},
-		{"https://github.com/owner/repo", "owner/repo/HEAD"},
-		{"https://github.com/owner/repo/tree/release-1/path", "owner/repo/release-1/path"},
+	for _, test := range []struct{ ref, relative, title string }{
+		{"owner/repo", "owner/repo/HEAD", "repo"},
+		{"owner/repo/path/to dir", "owner/repo/HEAD/path/to%20dir", "repo"},
+		{"owner/repo/config:release@1", "owner/repo/HEAD/config:release@1", "repo"},
+		{"https://github.com/owner/repo", "owner/repo/HEAD", "repo"},
+		{"https://github.com/owner/repo/tree/release-1/path", "owner/repo/release-1/path", "repo"},
+		{"owner/My.Repo", "owner/My.Repo/HEAD", "my-repo"},
 	} {
 		t.Run(test.ref, func(t *testing.T) {
 			requests := []string{}
@@ -75,7 +76,7 @@ func TestGitHubAcceptedReferencesAndCandidates(t *testing.T) {
 				require.Equal(t, "/"+test.relative+"/"+file, requests[i])
 			}
 			require.NotContains(t, fmt.Sprint(result), "private-value")
-			require.Equal(t, "repo", result.Title)
+			require.Equal(t, test.title, result.Title)
 			require.Equal(t, "github", result.Source.Kind)
 		})
 	}

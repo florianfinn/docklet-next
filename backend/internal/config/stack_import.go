@@ -49,8 +49,3 @@ func StackImportBaseURL(raw string) (*url.URL, error) {
 	u.RawPath = ""
 	return u, nil
 }
-
-func (c *Config) ValidateStackImport() error {
-	_, err := StackImportBaseURL(c.StackImportGitHubRawURL)
-	return err
-}

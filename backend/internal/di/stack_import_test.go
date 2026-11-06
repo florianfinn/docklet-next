@@ -49,3 +49,12 @@ func TestStackImportProviderUsesConfiguredMirror(t *testing.T) {
 	_, err = provideStackImportModuleInternal(&config.Config{StackImportGitHubRawURL: "http://mirror.example.com"}, nil)
 	require.Error(t, err)
 }
+
+// Agents never serve the import route, so an invalid mirror setting does not stop them.
+func TestStackImportProviderSkipsMirrorOnAgents(t *testing.T) {
+	for _, cfg := range []*config.Config{{AgentMode: true, StackImportGitHubRawURL: "http://mirror.example.com"}, {EdgeAgent: true, StackImportGitHubRawURL: "http://mirror.example.com"}} {
+		module, err := provideStackImportModuleInternal(cfg, nil)
+		require.NoError(t, err)
+		require.NotNil(t, module)
+	}
+}

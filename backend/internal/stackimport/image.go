@@ -22,6 +22,19 @@ import (
 
 var serviceCharacters = regexp.MustCompile(`[^a-z0-9_-]+`)
 
+// stackTitle turns a source name into a default stack name that the stack name rule
+// `^[a-z0-9][a-z0-9_-]*$` and the 63-character exclusion limit accept.
+func stackTitle(name string) string {
+	title := strings.Trim(serviceCharacters.ReplaceAllString(strings.ToLower(name), "-"), "-_")
+	if len(title) > 63 {
+		title = strings.TrimRight(title[:63], "-_")
+	}
+	if title == "" {
+		return "app"
+	}
+	return title
+}
+
 func (r *SourceResolver) image(ctx context.Context, req dto.Request, budget *budgetTransport) (dto.Result, error) {
 	if r.registry == nil {
 		return dto.Result{}, dto.Failure("import.source-unavailable", 502)
@@ -36,11 +49,7 @@ func (r *SourceResolver) image(ctx context.Context, req dto.Request, budget *bud
 		imageRef += ":latest"
 	}
 	service := map[string]any{"image": imageRef, "restart": "unless-stopped"}
-	title := strings.SplitN(path.Base(strings.SplitN(resolved.Reference, "@", 2)[0]), ":", 2)[0]
-	title = strings.Trim(serviceCharacters.ReplaceAllString(strings.ToLower(title), "-"), "-_")
-	if title == "" {
-		title = "app"
-	}
+	title := stackTitle(strings.SplitN(path.Base(strings.SplitN(resolved.Reference, "@", 2)[0]), ":", 2)[0])
 	result := dto.Result{Title: title, EnvNames: []string{}, Found: []string{"import.found.image-config"}, Missing: []string{"import.missing.compose"}, Source: dto.Source{Kind: "registry", CanonicalRef: resolved.Reference, ResolvedDigest: resolved.Digest}}
 	ports := []string{}
 	for p := range cfg.ExposedPorts {

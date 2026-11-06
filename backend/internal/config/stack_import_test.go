@@ -23,7 +23,6 @@ func TestStackImportMirrorValidation(t *testing.T) {
 			_, err := StackImportBaseURL(value)
 			require.Error(t, err)
 			require.NotContains(t, err.Error(), "secret")
-			require.Error(t, (&Config{StackImportGitHubRawURL: value}).ValidateStackImport())
 		})
 	}
 }
