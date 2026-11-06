@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys; Complete helper image setting key; Auto Heal stack-exclusion setting inventory for #296; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 sustained-load setting environment inventory; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys; Complete helper image setting key; Auto Heal stack-exclusion setting inventory for #296; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 sustained-load setting environment inventory; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #348 stack import mirror variable.
 
 package schema
 
@@ -267,6 +267,7 @@ var expectedEnvConfigVars = []string{
 	"PROJECT_WORKSPACE_MAX_ENTRIES",
 	"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB",
 	"PUID",
+	"STACK_IMPORT_GITHUB_RAW_URL",
 	"TLS_CERT_FILE",
 	"TLS_ENABLED",
 	"TLS_KEY_FILE",
