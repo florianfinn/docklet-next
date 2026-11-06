@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 observed same-kind runs reach durable admission.
 
 import { expect, it, vi } from "vitest";
 import type { DockletAdapter } from "./adapter";
@@ -62,4 +62,14 @@ it("after the retry budget a known missing run gets targeted reads only, dedupli
   await f.gate.run("runStackCommand", ["edge~parent", "start"]);
   await f.gate.run("runStackCommand", ["edge~parent", "start"]);
   expect(f.inner.getRuntimeRun).toHaveBeenCalledExactlyOnceWith("edge", "stack-run"); expect(f.inner.runStackCommand).toHaveBeenCalledTimes(1);
+});
+
+it("a same-kind run started outside this browser reaches durable admission while other commands stay busy", async () => {
+  const f = fixture(); f.inner.admitRuntimeCommand = vi.fn(async () => ({ outcome: "joined" as const, runId: "external" }));
+  await f.gate.run("runContainerCommand", ["direct~x", "start"]);
+  f.emit([mapRuntime(snapshot("edge", { id: "external", type: "project_deploy", resourceType: "project", resourceId: "parent" }), "edge")]);
+  expect(await f.gate.admit({ kind: "stack", id: "edge~parent", command: "start" }, { quiet: true }).catch((e: unknown) => e)).toEqual({ outcome: "joined", runId: "external" });
+  for (const command of ["stop", "restart"]) expect(isRunBusy(await f.gate.run("runStackCommand", ["edge~parent", command]).catch((e: unknown) => e))).toBe(true);
+  expect(isRunBusy(await f.gate.run("runContainerCommand", ["edge~a", "start"]).catch((e: unknown) => e))).toBe(true);
+  expect(f.inner.admitRuntimeCommand).toHaveBeenCalledOnce(); expect(f.inner.runStackCommand).not.toHaveBeenCalled();
 });

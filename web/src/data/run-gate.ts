@@ -1,6 +1,6 @@
 import { CancelledError } from "@tanstack/react-query";
 import { identityLifetime } from "./identity-lifetime";
-import type { ActionRun } from "@/domain/model";
+import type { ActionKind, ActionRun } from "@/domain/model";
 import type { CodedActionRun, MessageCode } from "./message-code";
 
 import { AdapterOutcomeError } from "./capability";
@@ -48,6 +48,8 @@ export const isRunBusy = (e: unknown): e is RunBusyError => e instanceof RunBusy
 export interface GateRule {
   key: string;
   scope?: string;
+  /** Run kind this start produces; an observed run of that kind on the same target goes to durable admission. */
+  kind?: ActionKind;
   freshMs?: number;
   coveredBy?: string[];
 }
@@ -63,6 +65,10 @@ export function contentHash(text: string): string {
   return (h >>> 0).toString(36);
 }
 
+/** Run kinds of plain lifecycle commands as the hub reports them (stack start is a compose up, `project_deploy`). */
+const STACK_RUN_KINDS: Partial<Record<string, ActionKind>> = { start: "deploy", stop: "stop", restart: "restart", redeploy: "redeploy" };
+const CONTAINER_RUN_KINDS: Partial<Record<string, ActionKind>> = { start: "start", stop: "stop", restart: "restart", redeploy: "redeploy" };
+
 /** Gated adapter methods: every start of a run, from any page, passes here. */
 export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => GateRule>> = {
   checkUpdates: ([scope]) => {
@@ -72,7 +78,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
   },
   runScan: () => ({ key: "scan:all", freshMs: CHECK_FRESH_MS }),
   reconnectHost: ([hostId]) => ({ key: `reconnect:${str(hostId)}`, freshMs: CHECK_FRESH_MS }),
-  runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}` }),
+  runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}`, kind: STACK_RUN_KINDS[str(command)] }),
   installStackUpdates: ([stackId, input]) => ({ key: `stack:${str(stackId)}:update:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restoreRestorePoint: ([stackId, point, input]) => ({ key: `stack:${str(stackId)}:restore:${str(point)}:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restartService: ([stackId, service]) => ({ key: `stack:${str(stackId)}:restart:${str(service)}`, scope: `stack:${str(stackId)}` }),
@@ -81,7 +87,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
     const target = d.stackId ?? `new:${str(d.hostId)}:${str(d.name)}`;
     return { key: `deploy:${target}:${contentHash(JSON.stringify([d.compose, d.env, d.labels]))}`, scope: `stack:${target}` };
   },
-  runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}` }),
+  runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}`, kind: CONTAINER_RUN_KINDS[str(command)] }),
   recreateContainer: ([id, input]) => ({ key: `container:${str(id)}:recreate:${contentHash(JSON.stringify(input ?? null))}`, scope: `container:${str(id)}` }),
   restoreContainerImage: ([id]) => ({ key: `container:${str(id)}:restore-image`, scope: `container:${str(id)}` }),
   installContainerUpdate: ([id]) => ({ key: `container:${str(id)}:update`, scope: `container:${str(id)}` }),
@@ -132,6 +138,9 @@ function scopesOf(run: CodedActionRun): string[] {
   if (run.kind === "check-updates" || run.kind === "scan") return [];
   return [run.stackId && `stack:${run.stackId}`, run.containerId && `container:${run.containerId}`].filter((x): x is string => !!x);
 }
+
+/** The run's own target: its container when it has one, else its stack. */
+const targetOf = (run: CodedActionRun) => run.containerId ? `container:${run.containerId}` : run.stackId && `stack:${run.stackId}`;
 
 /** Resolves a container scope to its stack scope; the provider reads it from cached container data. */
 export type ParentResolver = (scope: string) => string | undefined;
@@ -254,6 +263,8 @@ export class RunGate {
     const ownRuns = new Set([...this.entries.values()].filter((e) => e.rule.key === rule.key).map((e) => e.runId));
     for (const r of this.runs.values()) {
       if (!active(r.status) || ownRuns.has(r.id)) continue;
+      // A same-kind run started elsewhere (API, other tab) on this target: the hub joins an identical command or answers busy.
+      if (this.inner.kind === "http" && rule.kind && r.kind === rule.kind && targetOf(r) === rule.scope) continue;
       if (scopesOf(r).some((scope) => this.conflicts(me, { scope, parent: this.parentOf(scope) }))) return r.id;
     }
     return false;
