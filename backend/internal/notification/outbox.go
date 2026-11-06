@@ -8,7 +8,6 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
@@ -84,58 +83,20 @@ func (s *NotificationService) deliverOutbox(ctx context.Context, row notificatio
 		}
 		target = t
 	}
-	appURL := ""
-	if s.config != nil {
-		appURL = s.config.GetAppURL()
+	text := outboxText(row.Event, target.EnvironmentName, row.Payload, s.LinkBase(ctx))
+	title := strings.SplitN(text, "\n", 2)[0]
+	vars := notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventType(row.Event))
+	if reason, ok := row.Payload["reason"].(string); ok && reason != "" {
+		vars["reason"] = reason
 	}
-	text := outboxText(row.Event, target.EnvironmentName, row.Payload, appURL)
-	content := notifications.Content{Title: row.Event, DefaultTitle: row.Event, Text: map[notifications.MessageFormat]string{}, Vars: notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventType(row.Event))}
-	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatHTML, notifications.MessageFormatSlack} {
+	content := notifications.Content{Title: title, DefaultTitle: title, Text: map[notifications.MessageFormat]string{}, Vars: vars}
+	for _, f := range []notifications.MessageFormat{notifications.MessageFormatPlain, notifications.MessageFormatMarkdown, notifications.MessageFormatSlack} {
 		content.Text[f] = text
 	}
-	if row.Event == "container_unhealthy" {
-		content.Title = strings.SplitN(text, "\n", 2)[0]
-		content.DefaultTitle = content.Title
-	}
-	content.RenderEmail = func() (string, string, error) { return content.Title, "<p>" + html.EscapeString(text) + "</p>", nil }
+	htmlText := strings.ReplaceAll(html.EscapeString(text), "\n", "<br>")
+	content.Text[notifications.MessageFormatHTML] = htmlText
+	content.RenderEmail = func() (string, string, error) { return title, "<p>" + htmlText + "</p>", nil }
 	return s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventType(row.Event), row.Event, database.JSON{"eventType": row.Event, "notificationId": row.ID}, func(ctx context.Context, p notifications.NotificationProvider, c database.JSON) (bool, error) {
 		return notifications.Deliver(ctx, p, c, content)
 	})
-}
-
-// outboxText is the plain message of one outbox event; load alerts name metric, value and threshold.
-func outboxText(eventType, host string, payload database.JSON, appURL string) string {
-	if eventType == "container_unhealthy" {
-		container, _ := payload["container"].(string)
-		text := fmt.Sprintf("Container %s on %s is unhealthy (healthcheck failing for %v min)", container, host, payload["minutes"])
-		if payload["reason"] == "restart-loop" {
-			text = fmt.Sprintf("Container %s on %s keeps restarting (%v restarts in 10 min)", container, host, payload["restarts"])
-		}
-		if appURL != "" {
-			text += "\n" + appURL
-		}
-		return text
-	}
-	text := fmt.Sprintf("%s on %s", eventType, host)
-	for _, f := range []string{"stack", "container", "volume", "operation", "outcome", "reason"} {
-		if v, ok := payload[f].(string); ok && v != "" {
-			text += fmt.Sprintf("\n%s: %s", f, v)
-		}
-	}
-	if metric, ok := payload["metric"].(string); ok && metric != "" {
-		number := func(key string) float64 {
-			switch v := payload[key].(type) {
-			case float64:
-				return v
-			case int:
-				return float64(v)
-			}
-			return 0
-		}
-		text += fmt.Sprintf("\nload: %s %.0f%% above %.0f%% for %.0f min", metric, number("percent"), number("threshold"), number("minutes"))
-	}
-	if appURL != "" {
-		text += "\n" + appURL
-	}
-	return text
 }

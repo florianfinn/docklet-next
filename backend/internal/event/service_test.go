@@ -889,7 +889,10 @@ func TestM19EventListsAreNewestFirst(t *testing.T) {
 	db := setupEventServiceTestDB(t)
 	svc := NewEventService(db, nil, nil)
 	base := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
-	rows := []struct{ id, title string; at time.Time }{
+	rows := []struct {
+		id, title string
+		at        time.Time
+	}{
 		{"ffffffff-0000-4000-8000-000000000001", "oldest", base},
 		{"00000000-0000-4000-8000-000000000002", "newest", base.Add(2 * time.Minute)},
 		{"88888888-0000-4000-8000-000000000003", "middle", base.Add(time.Minute)},

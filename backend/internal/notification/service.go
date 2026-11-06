@@ -86,6 +86,7 @@ type NotificationService struct {
 	dispatchSessionCurrent func(notification.DispatchOrigin) bool
 	dispatchBarrier        func()
 	beforeClaim            func()
+	linkSettings           LinkSettings
 }
 
 type NotificationTarget struct {
@@ -107,14 +108,9 @@ func (s *NotificationService) ResolveNotificationTarget(ctx context.Context, env
 }
 
 func NewNotificationService(db *database.DB, cfg *config.Config, environmentSvc *environment.EnvironmentService, eventSvc *event.EventService) *NotificationService {
-	return &NotificationService{
-		db:             db,
-		config:         cfg,
-		environmentSvc: environmentSvc,
-		eventSvc:       eventSvc,
-		templates:      templates.NewService(cfg.GetAppURL),
-		httpClient:     &http.Client{Timeout: 15 * time.Second},
-	}
+	s := &NotificationService{db: db, config: cfg, environmentSvc: environmentSvc, eventSvc: eventSvc, httpClient: &http.Client{Timeout: 15 * time.Second}}
+	s.templates = templates.NewService(func() string { return s.LinkBase(context.Background()) })
+	return s
 }
 
 func (s *NotificationService) resolveNotificationTargetInternal(ctx context.Context, environmentID string) (NotificationTarget, error) {
