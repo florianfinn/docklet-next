@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener; agents withhold server failures caused by their shutdown.
+// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener; agents withhold server failures caused by their shutdown; environment paths never enter tunnel gRPC dispatch.
 
 package bootstrap
 
@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -310,7 +311,9 @@ func isTunnelGRPCRequestInternal(r *http.Request) bool {
 		return false
 	}
 
-	if r.Method != http.MethodPost {
+	// Environment paths always reach the guarded Echo router, whatever their
+	// content type; tunnel dispatch and its path rewrite never see them (#264).
+	if r.Method != http.MethodPost || middleware.IsEnvironmentPath(r.URL.Path) {
 		return false
 	}
 

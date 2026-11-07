@@ -379,11 +379,12 @@ unchanged. The remote CLI is removed; hub commands (`generate`, `version`, `heal
 
 Paths under `/api/environments/` have one route identity before any check or forwarding,
 on hub-local, Direct and Edge hosts alike. An encoded unreserved byte (letters, digits,
-`- . _ ~`), an encoded `/ ? # % \` or a decoded whitespace or control character answers
+`- . _ ~`), an encoded `/ ? # % \`, a decoded whitespace or control character or malformed UTF-8 answers
 400 with the request problem `request.path-encoded` (`RequestProblem`, separate from
 activity codes). An empty segment, a trailing `/` or a literal `.` or `..` segment answers
 404 like an unmatched route. Other escapes (`%3A` in image IDs, non-ASCII names) and
-query strings are unchanged. Image routes are addressed by image ID; a reference
+query strings are unchanged. On the hub's shared HTTP/gRPC listener these paths always
+reach the API router, never the Edge tunnel gRPC endpoint. Image routes are addressed by image ID; a reference
 containing `/` cannot be used as a path segment. Every literal segment of a registered
 environment route and of the Edge command table uses unreserved characters only.
 

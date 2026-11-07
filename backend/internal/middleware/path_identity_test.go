@@ -28,12 +28,14 @@ type identityAgent struct {
 	calls atomic.Int32
 	mu    sync.Mutex
 	paths []string
+	query []string
 }
 
 func (a *identityAgent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.calls.Add(1)
 	a.mu.Lock()
 	a.paths = append(a.paths, r.URL.Path)
+	a.query = append(a.query, r.URL.RawQuery)
 	a.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
@@ -103,6 +105,9 @@ func TestPathIdentityGuardOverRealTransports(t *testing.T) {
 		"/api/environments/example/containers/counts%C2%A0",
 		"/api/environments/example/containers/abc%0A",
 		"/api/environments/example/containers/abc%09",
+		"/api/environments/example/volumes/abc%FF",
+		"/api/environments/example/volumes/abc%80",
+		"/api/environments/example/volumes/abc%C3%28",
 	}
 	unmatched := []string{
 		"/api/environments/example/containers/counts/",
@@ -134,23 +139,25 @@ func TestPathIdentityGuardOverRealTransports(t *testing.T) {
 			}
 			require.Zero(t, agent.calls.Load(), "no refused request reaches the agent")
 
-			allowed := []string{"/api/environments/example/containers/counts"}
-			if mode == "direct" {
-				allowed = append(allowed,
-					"/api/environments/example/images/sha256%3A"+strings.Repeat("a", 64),
-					"/api/environments/example/volumes/caf%C3%A9-data",
-					"/api/environments/example/containers/counts?name=%2F%20x")
-			}
-			for _, target := range allowed {
+			// Ordinary escapes reach the agent with the decoded identity the hub checked.
+			for _, tc := range []struct{ target, path, query string }{
+				{"/api/environments/example/containers/counts", "/api/environments/0/containers/counts", ""},
+				{"/api/environments/example/images/sha256%3A" + strings.Repeat("a", 64), "/api/environments/0/images/sha256:" + strings.Repeat("a", 64), ""},
+				{"/api/environments/example/volumes/caf%C3%A9-data", "/api/environments/0/volumes/caf\u00e9-data", ""},
+				{"/api/environments/example/volumes/%EF%BF%BD", "/api/environments/0/volumes/\uFFFD", ""},
+				{"/api/environments/example/containers/counts?name=%2F%20x", "/api/environments/0/containers/counts", "name=%2F%20x"},
+			} {
 				before := agent.calls.Load()
 				rec := httptest.NewRecorder()
-				hub.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
-				require.Equal(t, http.StatusOK, rec.Code, "%s: %s", target, rec.Body.String())
-				require.Equal(t, before+1, agent.calls.Load(), "%s reaches the agent", target)
+				hub.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.target, nil))
+				require.Equal(t, http.StatusOK, rec.Code, "%s: %s", tc.target, rec.Body.String())
+				require.Equal(t, before+1, agent.calls.Load(), "%s reaches the agent", tc.target)
+				agent.mu.Lock()
+				path, query := agent.paths[len(agent.paths)-1], agent.query[len(agent.query)-1]
+				agent.mu.Unlock()
+				require.Equal(t, tc.path, path, tc.target)
+				require.Equal(t, tc.query, query, tc.target)
 			}
-			agent.mu.Lock()
-			defer agent.mu.Unlock()
-			require.Contains(t, agent.paths, "/api/environments/0/containers/counts", "the served route is the checked one")
 		})
 	}
 }

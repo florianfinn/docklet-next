@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	requestDTO "github.com/florianfinn/docklet-next/types/request"
 	"github.com/labstack/echo/v5"
@@ -17,16 +18,22 @@ import (
 
 const environmentPathPrefix = "/api/environments/"
 
+// IsEnvironmentPath reports whether a decoded request path belongs to the
+// environment namespace that only the guarded Echo router may serve.
+func IsEnvironmentPath(decoded string) bool {
+	return strings.HasPrefix(decoded, environmentPathPrefix)
+}
+
 // PathIdentityGuard runs before every consumer of an environment path so the
 // router, hub checks and both agent rebuilds see the same segments (#264):
 // an encoded unreserved byte, an encoded `/ ? # % \` or decoded whitespace or
-// control characters answer 400 request.path-encoded; an empty, `.` or `..`
+// control characters or malformed UTF-8 answer 400 request.path-encoded; an empty, `.` or `..`
 // segment (including a trailing `/`) answers like an unmatched route.
 func PathIdentityGuard(notFound echo.HandlerFunc) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			decoded := c.Request().URL.Path
-			if !strings.HasPrefix(decoded, environmentPathPrefix) {
+			if !IsEnvironmentPath(decoded) {
 				return next(c)
 			}
 			if pathEncodingRefusedInternal(c.Request().URL.EscapedPath(), decoded) {
@@ -54,6 +61,9 @@ func pathEncodingRefusedInternal(escaped, decoded string) bool {
 		if b < 0x80 && (isUnreservedByteInternal(b) || strings.IndexByte(`/?#%\`, b) >= 0) {
 			return true
 		}
+	}
+	if !utf8.ValidString(decoded) {
+		return true
 	}
 	for _, r := range decoded {
 		if unicode.IsSpace(r) || unicode.IsControl(r) {
