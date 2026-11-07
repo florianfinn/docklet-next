@@ -91,8 +91,9 @@ hosts stays in [host onboarding](host-onboarding.md).
    `acknowledged_at`; its optional body is not required. A send
    error without a response commits `awaiting` without acknowledgement. The
    response instance is evidence only. A definitive 409
-   `agent.restart-unsupported` settles failed with that code; any other
-   response (for example 401, 404 or 5xx) is kept like a lost answer. A host
+   `agent.restart-unsupported` or `host.busy` received before the deadline
+   settles failed with that code; at or after the deadline it is kept like a
+   lost answer, as is any other response (for example 401, 404 or 5xx). A host
    disabled during the run is not observed and the run holds until its
    deadline. Each observation of an Edge run renews the tunnel demand until the
    deadline, so a poll-mode agent reconnects after a hub restart. A retry of a
@@ -191,7 +192,7 @@ and the `/health` `instanceId`.
 | HM12 | reservation versus runtime intakes | atomic, all intakes including policy jobs | admission transaction | race restart against ordinary and policy runs; one restart call, scope held (mutation: check only) |
 | HM13 | fencing | credential revision and registration, checked per observation and at settlement | run observer → settlement transaction | endpoint edit, key rotation, manual token replacement with unchanged key ID and endpoint, delete and re-register, delayed old 200 (mutation: compare registration, key and endpoint only) |
 | HM14 | installation sheet credentials | opening mutates nothing; explicit rotation once | sheet lifecycle → token route → file generator | open, close and switch → no rotation; rotate once; URL, IPv6 and Edge files valid (mutation: rotate on mount, or naive split) |
-| HM15 | agent-local backup work | busy check before the 202; hub maps a timely 409 `host.busy` to failed `host.busy` | agent route → restart run | running backup, bind snapshot or restore row, or a writer fence → 409 and zero restart calls; Direct and Edge run settles failed `host.busy` (mutation: drop the check) |
+| HM16 | agent-local backup work | busy check before the 202; hub maps a timely 409 `host.busy` to failed `host.busy` | agent route → restart run | running backup, bind snapshot or restore row, or a writer fence → 409 and zero restart calls; Direct and Edge run settles failed `host.busy` (mutation: drop the check) |
 | HM15 | no replay | hub restart, lost 202 | startup recovery | restart call count stays 1 (mutation: resend on resume) |
 
 ## Web consumers

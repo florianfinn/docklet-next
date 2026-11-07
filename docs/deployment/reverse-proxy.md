@@ -1,3 +1,11 @@
+<!--
+Source: docklet-next/issues/274
+Revision: 32e24a1b5260c98b6ce490ce2c1f6f50413c1e83
+Retrieved: 2026-11-07
+License: Apache-2.0
+Deviations: Original reverse-proxy requirements for the hub.
+-->
+
 # Running the hub behind a reverse proxy
 
 The hub listens on loopback (`LISTEN=127.0.0.1`, `PORT=3552`) and expects an operator reverse proxy
