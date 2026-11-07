@@ -182,6 +182,8 @@ func recreateInspect(ctx context.Context, c *client.Client, id string) (*dockerc
 	if id == "" {
 		return nil, nil
 	}
+	ctx, cancel := recreateCallContext(ctx)
+	defer cancel()
 	response, err := compat.ContainerInspectWithCompatibility(ctx, c, id, client.ContainerInspectOptions{})
 	if errdefs.IsNotFound(err) {
 		return nil, nil
@@ -354,34 +356,6 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	return s.compensateRecreate(ctx, c, j, old, replacement)
 }
 
-// RecoverRecreates runs before generic startup settlement and admission. Only
-// unresolved local receipts are recovered; a write failure leaves them excluded.
-func (s *ContainerService) RecoverRecreates(ctx context.Context) ([]dto.RecreateRecovery, error) {
-	if s.operations == nil || s.operations.db == nil {
-		return nil, nil
-	}
-	var journals []RecreateJournal
-	err := s.operations.db.WithContext(ctx).Table("container_recreate_journal").Where("run_id IN (SELECT run_id FROM runtime_receipts WHERE environment_id='0' AND settled_at IS NULL)").Order("run_id").Find(&journals).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(journals) == 0 {
-		return nil, nil
-	}
-	c, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	results := make([]dto.RecreateRecovery, 0, len(journals))
-	for i := range journals {
-		result, err := s.recoverRecreate(ctx, c, &journals[i])
-		if err != nil {
-			return nil, fmt.Errorf("recreate recovery: %w", err)
-		}
-		results = append(results, result)
-	}
-	return results, nil
-}
 func (s *ContainerService) PruneRecreateJournals(ctx context.Context) error {
 	if s.operations == nil || s.operations.db == nil {
 		return nil
