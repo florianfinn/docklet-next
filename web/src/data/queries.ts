@@ -44,7 +44,7 @@ export function useSystemComponents() {
 /** Each mounted inventory owns retries of its own omitted batches, independent of shared host observations. */
 function useInventoryRecovery() {
   const hosts = useHosts();
-  return { structuralSharing: inventoryStructuralSharing, refetchIntervalInBackground: true, refetchInterval: (query: { state: { data: unknown } }) => inventoryRecoveryInterval(query.state.data, hosts.data) };
+  return { structuralSharing: inventoryStructuralSharing, refetchInterval: (query: { state: { data: unknown } }) => inventoryRecoveryInterval(query.state.data, hosts.data) };
 }
 
 export function useStacks(enabled = true) {

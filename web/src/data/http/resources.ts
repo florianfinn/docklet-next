@@ -101,7 +101,6 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
         try {
           const [listed, contextual] = await Promise.allSettled([list("list-networks", h.id, "networks"), context(h.id)]);
           if (listed.status === "rejected") throw listed.reason;
-          if (contextual.status === "rejected") recovery.failed(h, contextual.reason);
           const networks = listed.value;
           const ctx = contextual.status === "fulfilled" ? contextual.value : { containers: [], projects: [], observations: [inventoryFailure(h.id, contextual.reason)] };
           const details = await Promise.all(networks.rows.map(async (summary) => {
@@ -112,7 +111,6 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
               mapTopology([detail.body.data], h.id, [], ctx.projects, detail.observation, [summary]);
               return { row: detail.body.data, observation: detail.observation, unavailable: false };
             } catch (error) {
-              recovery.failed(h, error);
               return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
             }
           }));

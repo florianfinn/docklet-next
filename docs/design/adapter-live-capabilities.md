@@ -588,16 +588,23 @@ response body. Hub capability, settings and host discovery share a separate
 image rows are unavailable and failed batches supply no findings or history.
 Identity and request generations fence late responses before the atomic merge.
 Inventory cancellation is opt-in for this path; other inventory readers retain
-their existing behavior. Over HTTP/2 a held host therefore leaves the other hosts
-visible. Over HTTP/1.1 the shell's unbounded inventory reads to a held host can
-occupy every per-origin connection and queue the healthy hosts' reads as well
-(#271). Pending and filtered hosts do not remove
+their existing behavior. The adapter admits at most two physical GETs per host
+under `/environments/<host>/` at a time, first come first served, until each body
+has been read, cancelled or aborted; the stream, writes, hub reads and downloads are
+not admitted (#271). Over HTTP/1.1 (six connections per origin) one held host
+therefore leaves connections for the healthy hosts. Known limits: the cap also
+applies over HTTP/2; two or more held hosts can still starve healthy hosts over
+HTTP/1.1; hub-local settings, jobs and notification reads under `/environments/0/`
+share host 0's two slots. Pending and filtered hosts do not remove
 retained inventory. A host batch is judged by the inventory observation of its own
 security-owned reads, not by an older host-catalogue snapshot. Host failures are
-successful query data, so while a host is unavailable for a recoverable reason
-(agent, transport, timeout, offline, pending or storage) the mounted security query
-re-reads every 10 seconds and stops once no such host remains; other codes wait for
-a change event. Transport loss is classified at each producer:
+successful query data. Every mounted inventory list (stacks, containers, images,
+volumes, network summaries, topology and security) whose last result omitted an
+online host because that host's batch failed transiently (agent, transport, timeout
+or storage) re-reads every 15 seconds and stops once every batch succeeds or the host
+leaves the online catalogue; a failed topology detail keeps its summary rows and does
+not re-read. Offline and pending hosts recover through the catalogue-change
+invalidation; other codes wait for a change event. Transport loss is classified at each producer:
 - The read-only summaries POST reports `agent.unavailable`, like the GET reads; only
   writes report `dispatch-unknown`.
 - A lost inventory body stream is `http.error`; only an unparsable body is an invalid

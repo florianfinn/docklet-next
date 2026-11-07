@@ -8,7 +8,6 @@ import { act, cleanup } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { INVENTORY_RECOVERY_MS } from "../inventory-recovery";
-import { securityRecoveryInterval, SECURITY_RECOVERY_MS } from "@/domain/security";
 import SecurityPage from "@/features/security/SecurityPage";
 import { renderWithApp } from "@/test/render";
 import { securityFixture } from "./vulnerabilities.test-support";
@@ -91,14 +90,6 @@ it.each(permanent)("keeps a %s unavailable without re-reading", async (_, fault)
   await act(() => vi.advanceTimersByTimeAsync(3 * INVENTORY_RECOVERY_MS));
   expect(document.body.textContent).toContain("Scan data unavailable for second");
   expect(reads()).toBe(before);
-});
-
-it("re-reads only for host failures that can recover without operator action", () => {
-  expect(securityRecoveryInterval({ unavailable: [{ code: "agent.unavailable" }] })).toBe(SECURITY_RECOVERY_MS);
-  expect(securityRecoveryInterval({ unavailable: [{ code: "vulnerability.read-timeout" }] })).toBe(SECURITY_RECOVERY_MS);
-  expect(securityRecoveryInterval({ unavailable: [{ code: "vulnerability.host-incompatible" }] })).toBe(false);
-  expect(securityRecoveryInterval({ unavailable: [] })).toBe(false);
-  expect(securityRecoveryInterval(undefined)).toBe(false);
 });
 
 it("judges a host by its fresh security batch rather than an older stale host snapshot", async () => {

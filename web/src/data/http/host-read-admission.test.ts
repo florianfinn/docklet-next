@@ -88,16 +88,34 @@ it("joined shared inventory reads occupy one physical slot", async () => {
   expect(await a.json()).toEqual({ ok: true }); expect(await b.json()).toEqual({ ok: true }); await c.text();
 });
 
-it("releases a body that errors before the caller starts reading it", async () => {
+it("releases a body that errors before the caller reads it once the read settles", async () => {
   let body!: ReadableStreamDefaultController<Uint8Array>;
   const physical = vi.fn(async (input: RequestInfo | URL) => String(input) === path(1)
     ? new Response(new ReadableStream({ start(controller) { body = controller; } })) : Response.json({ ok: true }));
   const fetch = createHostReadAdmission(physical);
   const first = await fetch(path(1)), second = await fetch(path(2));
   let started = false; const third = fetch(path(3)).then((response) => { started = true; return response; });
-  await flush(); expect(started).toBe(false);
-  body.error(new Error("lost unread body")); await flush(); expect(started).toBe(true);
-  await expect(first.text()).rejects.toThrow("lost unread body"); await second.text(); await (await third).text();
+  body.error(new Error("lost unread body")); await flush(); expect(started).toBe(false);
+  await expect(first.text()).rejects.toThrow("lost unread body"); await flush(); expect(started).toBe(true);
+  await second.text(); await (await third).text();
+});
+
+// Chromium records a completed no-store body drained by a JS stream reader as aborted (#326).
+it("reads method-consumed bodies natively without a stream reader on the physical response", async () => {
+  const responses: Response[] = [];
+  const physical = vi.fn(async () => { const response = Response.json({ ok: true }); responses.push(response); vi.spyOn(response.body!, "getReader"); return response; });
+  const fetch = createHostReadAdmission(physical);
+  expect(await (await fetch(path(1))).json()).toEqual({ ok: true });
+  const cloned = (await fetch(path(2))).clone(); expect(await cloned.text()).toBe('{"ok":true}');
+  expect(responses.map((response) => vi.mocked(response.body!.getReader).mock.calls.length)).toEqual([0, 0]);
+});
+
+it("does not admit downloads, so a transfer never holds a host slot", async () => {
+  const physical = vi.fn(async () => Response.json({ ok: true })); const fetch = createHostReadAdmission(physical);
+  const held = [await fetch(path(1)), await fetch(path(2))];
+  const downloads = [fetch("/api/environments/direct/backups/r1/download"), fetch("/api/environments/direct/volumes/v1/file/download?relativePath=a")];
+  await flush(); expect(physical.mock.calls.length).toBe(4);
+  await Promise.all(held.map((response) => response.text())); await Promise.all((await Promise.all(downloads)).map((response) => response.text()));
 });
 
 it("aborting an unanswered request releases its slot even when the transport ignores abort", async () => {

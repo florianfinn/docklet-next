@@ -9,6 +9,7 @@ import type { Host } from "@/domain/model";
 import { AdapterOutcomeError } from "./capability";
 import { inventoryRecovery, inventoryRecoveryInterval, inventoryStructuralSharing } from "./inventory-recovery";
 import { createResourceReader } from "./http/resources";
+import { createUserInventory } from "./http/user-inventory";
 import { resourceFixture } from "./http/resources.test-support";
 
 const host = { id: "direct", status: "online" } as Host;
@@ -53,4 +54,23 @@ it("keeps an unrelated successful inventory from clearing another list's recover
   const containers = failed.result([]); const images = inventoryRecovery().result([]);
   expect(inventoryRecoveryInterval(images, [host])).toBe(false);
   expect(inventoryRecoveryInterval(containers, [host])).toBe(15_000);
+});
+
+// A failed network detail keeps the host's summary rows, so only a failed host batch schedules a topology re-read.
+it.each([["batch", "/networks", 15_000], ["detail", "/networks/net", false]] as const)("topology recovers a failed %s only when the host batch failed", async (_, failing, interval) => {
+  const f = resourceFixture(); f.state.hostIds = ["first"];
+  const hosts = await f.adapter.listHosts();
+  const fetcher: typeof fetch = async (input) => new URL(String(input), "https://hub.example.com").pathname.endsWith(failing)
+    ? Response.json({ success: false, code: "agent.unavailable" }, { status: 502 }) : f.fetcher(input as string);
+  const reader = createResourceReader("/api", fetcher, async () => hosts, async () => {}, () => {});
+  expect(inventoryRecoveryInterval(await reader.getTopology(), hosts)).toBe(interval);
+});
+
+it("an assigned-stack list recovers a host whose project batch failed", async () => {
+  const f = resourceFixture(); f.state.hostIds = ["first"];
+  const hosts = await f.adapter.listHosts();
+  const fetcher: typeof fetch = async (input) => String(input).includes("/projects")
+    ? Response.json({ success: false, code: "agent.unavailable" }, { status: 502 }) : f.fetcher(input as string);
+  const reader = createUserInventory("/api", fetcher, async () => hosts, () => undefined, () => {}, async () => new Map());
+  expect(inventoryRecoveryInterval(await reader.listStacks(), hosts)).toBe(15_000);
 });
