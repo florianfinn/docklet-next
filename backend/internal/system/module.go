@@ -82,7 +82,7 @@ func (m *Module) RegisterAgentRoutes(api huma.API, appCtx handlerutil.ActivityAp
 	RegisterSystem(api, NewHandler(m.dockerService, m.service, appCtx.Context()))
 	prune.RegisterRoutes(api, prune.NewHandler(service.prune, appCtx.Context()))
 	upgrade.RegisterAgentRoutes(api, upgrade.NewHandler(service.upgrade, m.environmentService, m.cfg, appCtx.Context()))
-	registerAgentRestart(api, m.dockerService, appCtx.Context())
+	registerAgentRestart(api, m.dockerService, service.agentWork, appCtx.Context())
 }
 
 // RegisterSystem registers system management endpoints using Huma.

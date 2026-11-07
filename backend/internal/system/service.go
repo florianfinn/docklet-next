@@ -77,6 +77,8 @@ type SystemService struct {
 	prune   *prune.Service
 	upgrade *upgrade.Service
 	backup  *systembackup.Service
+	// agentWork reports local backup/restore work that refuses an agent restart.
+	agentWork func(context.Context) (bool, error)
 }
 
 func (s *SystemService) BackupMaintenanceGate() *systembackup.MaintenanceGate {
@@ -125,6 +127,9 @@ func NewSystemService(
 			Build(),
 		prune:   prune.NewService(nil, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
 		upgrade: upgrade.NewService(db, dockerService, versionService, eventService, settingsService, projectService, resolveUpgraderRuntimeOptionsInternal),
+	}
+	if volumeService != nil {
+		s.agentWork = volumeService.BackupWorkRunning
 	}
 	s.prune.SetZoneProvider(cfg)
 	s.backup = systembackup.NewService(systembackup.Dependencies{
