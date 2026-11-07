@@ -182,6 +182,13 @@ func (c *restartController) reserve(ctx context.Context, id string) (AgentRestar
 	return row, nil
 }
 
+// hasActive reports an unsettled restart of the host; a read-only check ahead of remote probes.
+func (c *restartController) hasActive(ctx context.Context, id string) (bool, error) {
+	var n int64
+	err := c.service.db.WithContext(ctx).Model(&AgentRestartRequest{}).Where("environment_id=? AND settled_at IS NULL", id).Count(&n).Error
+	return n > 0, err
+}
+
 func (c *restartController) bound(ctx context.Context, row AgentRestartRequest) (*Environment, error) {
 	var env Environment
 	err := c.service.db.WithContext(ctx).First(&env, "id=?", row.EnvironmentID).Error
