@@ -2,7 +2,7 @@
 // Revision: d03b817a6aa2286616ba32fc3b04a9d3f82422ed
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original DE consumer tests for typed network/volume outcomes and unknown exception text.
+// Deviations: Original DE consumer tests for typed network/volume outcomes and unknown exception text. M20 #264: guarded-path request problems on stack and container commands.
 
 import { screen, waitFor, renderHook } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
@@ -19,6 +19,8 @@ import { networkDraft, networkFixture } from "./http/network-commands.test-suppo
 import { useNetworkCommands } from "@/features/networks/use-network-commands";
 import { useVolumeCommands } from "@/features/volumes/use-volume-commands";
 import { useImageCommands } from "@/features/images/use-image-commands";
+import { useStackCommands } from "@/shared/hooks/use-stack-commands";
+import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { renderWithApp } from "@/test/render";
 
 const generic = "Die Anfrage konnte nicht abgeschlossen werden.";
@@ -47,6 +49,22 @@ it.each([
   const wrapper = ({ children }: { children: ReactNode }) => <IntlProvider locale={locale} messages={catalogs[locale]}>{children}</IntlProvider>;
   const { result } = renderHook(useCommandError, { wrapper });
   expect(result.current(error)).toBe(expected);
+});
+
+// Stack and container commands try the runtime formatter first; a request problem from the
+// hub path guard must still reach its catalogue text (M20 smoke D5).
+it.each(["stack", "container"] as const)("%s commands show the encoded-path text for a guarded 400", async (kind) => {
+  const f = networkFixture(); const error = vi.spyOn(toast, "error"); const settled = vi.fn();
+  const reject = vi.fn(async () => { throw runtimeResponseError(JSON.parse('{"code":"request.path-encoded","status":400}'), 400); });
+  const adapter = { ...f.adapter, runStackCommand: reject, runContainerCommand: reject };
+  function Probe() {
+    const stacks = useStackCommands(), containers = useContainerCommands();
+    return <button onClick={() => void (kind === "stack" ? stacks.run("host~example", "down") : containers.run("host~example", "stop")).then(settled)}>Run</button>;
+  }
+  renderWithApp(<Probe />, adapter);
+  await userEvent.click(screen.getByRole("button", { name: "Run" }));
+  await waitFor(() => expect(settled).toHaveBeenCalledOnce());
+  expect(error).toHaveBeenCalledWith("Diese Adresse enthält kodierte Zeichen, die Docklet in Pfaden nicht annimmt.");
 });
 
 // The actual consumer receives these AdapterOutcomeError shapes. Identity invalidation may suppress

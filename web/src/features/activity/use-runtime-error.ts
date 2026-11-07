@@ -2,13 +2,14 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110; translated volume name clash for #224.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110; translated volume name clash for #224. M20 #264: request problems fall through to the command formatter.
 
 import { operationReasonKey } from "@/data/operation-reason";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "@/data/capability";
+import { REQUEST_CODE_KEYS } from "@/data/wire-catalogue-errors";
 import type { CommandFailure } from "@/shared/components/command-failure";
 import { openActivity } from "./activity-store";
 
@@ -19,6 +20,8 @@ export function useRuntimeError() {
     if (!(error instanceof AdapterOutcomeError)) return false;
     const outcome = error.outcome;
     const code = outcome.kind === "conflict" || outcome.kind === "error" ? outcome.code : outcome.kind === "not-available" ? outcome.reasonCode : "unavailable";
+    // Request problems have their own catalogue text in the command formatter.
+    if (Object.hasOwn(REQUEST_CODE_KEYS, code)) return false;
     const specific = operationReasonKey(code);
     if (specific) { report(operation(specific)); return true; }
     const key = code === "run.busy" ? "busy" : code === "run.cancelling" ? "cancellingConflict" : code === "run.request-mismatch" ? "mismatch" :
