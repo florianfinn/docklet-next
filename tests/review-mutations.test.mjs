@@ -5,18 +5,18 @@ import { scratch, write, invoke, ok, ROOT } from "./helpers.mjs";
 
 const mutations = [
   {
-    name: "loosened scan budget",
+    name: "loosened scan growth limit",
     path: "tests/publication-performance.test.mjs",
-    mutate: (text) => text.replace("SCAN_BUDGET_MS = 2000", "SCAN_BUDGET_MS = 200000"),
+    mutate: (text) => text.replace("GROWTH_LIMIT = 32;", "GROWTH_LIMIT = 3200;"),
     tests: ["tests/publication-performance.test.mjs"],
-    pattern: "scan budget stays",
+    pattern: "scan guard keeps its growth limit",
   },
   {
-    name: "bypassed scan budget comparison",
+    name: "bypassed scan growth comparison",
     path: "tests/publication-performance.test.mjs",
-    mutate: (text) => text.replace("timing.ms < SCAN_BUDGET_MS,", "timing.ms < 200000,"),
+    mutate: (text) => text.replace("timing.full < GROWTH_LIMIT * timing.part;", "true;"),
     tests: ["tests/publication-performance.test.mjs"],
-    pattern: "scan budget stays",
+    pattern: "growth rule separates",
   },
   {
     name: "case-sensitive credential start",
