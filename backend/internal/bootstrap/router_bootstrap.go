@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; one environment route identity guard before every path consumer (#264).
 
 package bootstrap
 
@@ -259,8 +259,17 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		e.IPExtractor = echo.ExtractIPFromXFFHeader(opts...)
 	}
 
+	apiNotFound := func(c *echo.Context) error {
+		return c.JSON(http.StatusNotFound, map[string]any{
+			"success": false,
+			"error":   "API endpoint not found: " + c.Request().URL.Path,
+		})
+	}
+
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.RequestID())
+	// One route identity for environment paths before any path consumer (#264).
+	e.Use(middleware.PathIdentityGuard(apiNotFound))
 	e.Use(activity.RuntimeReceiverMiddleware(cfg.AgentMode || cfg.EdgeAgent, activity.RuntimeAdmissionLimit))
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
@@ -389,12 +398,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		}
 	}
 
-	apiNotFound := func(c *echo.Context) error {
-		return c.JSON(http.StatusNotFound, map[string]any{
-			"success": false,
-			"error":   "API endpoint not found: " + c.Request().URL.Path,
-		})
-	}
 	apiGroup.RouteNotFound("", apiNotFound)
 	apiGroup.RouteNotFound("/*", apiNotFound)
 

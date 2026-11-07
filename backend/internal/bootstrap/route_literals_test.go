@@ -7,6 +7,8 @@
 package bootstrap
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
@@ -73,4 +75,38 @@ func TestRouteLiteralSegmentsAreUnreserved(t *testing.T) {
 func TestRouteLiteralViolationsFindsReservedLiterals(t *testing.T) {
 	require.Empty(t, routeLiteralViolations("/api/environments/:id/containers/:containerId/start"))
 	require.Equal(t, []string{"a b", "x%2Fy", ".."}, routeLiteralViolations("/api/a b/x%2Fy/../{id}/*"))
+}
+
+// The production hub and agent routers mount the identity guard before every
+// path consumer: crafted forms never reach a handler, the proxy or a guard.
+func TestProductionRouterRefusesNonCanonicalEnvironmentPaths(t *testing.T) {
+	for _, mode := range []string{"hub", "agent", "edge-agent"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := &config.Config{AgentMode: mode == "agent", EdgeAgent: mode == "edge-agent", AppUrl: "http://localhost:3552", Environment: config.AppEnvironmentTest}
+			deps := api.HandlerDeps{
+				Project:   project.New(&project.ProjectService{}, nil),
+				Container: container.New(&container.ContainerService{}, nil, nil, nil),
+				System:    system.New(&system.SystemService{}, nil, nil, nil, nil),
+			}
+			if mode == "hub" {
+				deps.Environment = environment.New(&environment.EnvironmentService{}, nil, nil, nil, cfg, nil)
+			}
+			router, _ := newRouter(RouterParams{Context: t.Context(), Lifecycle: fxtest.NewLifecycle(t), Config: cfg, HandlerDeps: deps,
+				AuthMiddleware: auth.NewAuthMiddleware(nil, cfg), TunnelRegistry: edge.NewTunnelRegistry()})
+			for target, status := range map[string]int{
+				"/api/environments/0/containers/%63ounts":  http.StatusBadRequest,
+				"/api/environments/0/containers/counts%20": http.StatusBadRequest,
+				"/api/environments/0/containers/a%2Fb":     http.StatusBadRequest,
+				"/api/environments/0/containers/counts/":   http.StatusNotFound,
+				"/api/environments/0/containers/../images": http.StatusNotFound,
+			} {
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+				require.Equal(t, status, rec.Code, "%s: %s", target, rec.Body.String())
+				if status == http.StatusBadRequest {
+					require.Contains(t, rec.Body.String(), `"code":"request.path-encoded"`, target)
+				}
+			}
+		})
+	}
 }
