@@ -103,7 +103,16 @@ func (s *EnvironmentService) sendAgentRestart(parent context.Context, env Enviro
 	}
 	return s.proxy.ExecuteRestart(ctx, target)
 }
-func restartUnsupported(response *remenv.Response) bool {
+
+// restartRefusal returns the agent's terminal refusal code: unsupported setup,
+// or host.busy while agent-local backup or restore work runs.
+func restartRefusal(response *remenv.Response) string {
 	var p dto.HostProblem
-	return response.StatusCode == 409 && len(response.Body) <= 16<<10 && json.Unmarshal(response.Body, &p) == nil && p.Code == "agent.restart-unsupported"
+	if response.StatusCode != 409 || len(response.Body) > 16<<10 || json.Unmarshal(response.Body, &p) != nil {
+		return ""
+	}
+	if p.Code == "agent.restart-unsupported" || p.Code == "host.busy" {
+		return p.Code
+	}
+	return ""
 }

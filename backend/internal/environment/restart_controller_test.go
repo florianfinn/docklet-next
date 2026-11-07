@@ -33,6 +33,7 @@ type restartFixture struct {
 	calls        int
 	probes       int
 	sendStatus   int
+	sendCode     string // 409 refusal code; empty means agent.restart-unsupported
 	sendError    bool
 	unreachable  bool
 	incompatible bool
@@ -87,7 +88,11 @@ func (f *restartFixture) roundTrip(r *http.Request) (*http.Response, error) {
 			return nil, errors.New("synthetic lost acknowledgement")
 		}
 		if status == 409 {
-			body = []byte(`{"code":"agent.restart-unsupported","status":409}`)
+			code := f.sendCode
+			if code == "" {
+				code = "agent.restart-unsupported"
+			}
+			body = []byte(`{"code":"` + code + `","status":409}`)
 		} else {
 			body = []byte(`{"instanceId":"response-is-only-evidence"}`)
 		}
