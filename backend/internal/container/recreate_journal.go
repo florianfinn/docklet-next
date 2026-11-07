@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original durable recreate effects and exact-identity startup compensation; M18 standalone image update and restore safety.
+// Deviations: Original durable recreate effects and exact-identity startup compensation; M18 standalone image update and restore safety; a foreign claim on only the reserved new name compensates.
 
 package container
 
@@ -283,12 +283,19 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	if err != nil {
 		return dto.RecreateRecovery{}, err
 	}
+	// Without an observed create of our own, a foreign container that holds only
+	// the reserved new name means our create never happened; compensation never
+	// touches it. A foreign claim on the old or backup name stays ambiguous.
+	foreignNewNameOnly := func(name string, observed *dockercontainer.InspectResponse) bool {
+		return name == j.NewName && j.NewID == "" && j.NewName != j.OldName && j.NewName != j.BackupName &&
+			(observed.Config == nil || observed.Config.Labels["io.docklet.run"] != j.RunID)
+	}
 	if j.NewID == "" && (j.Phase == "intent-create" || j.Phase == "created") {
 		candidate, err := recreateInspect(ctx, c, j.NewName)
 		if err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if candidate != nil {
+		if candidate != nil && !foreignNewNameOnly(j.NewName, candidate) {
 			created, parseErr := time.Parse(time.RFC3339Nano, candidate.Created)
 			if candidate.Config == nil || candidate.Config.Labels["io.docklet.run"] != j.RunID || parseErr != nil || created.Before(j.UpdatedAt) {
 				return s.ambiguousRecreate(ctx, j)
@@ -316,14 +323,15 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	if replacement != nil && (replacement.ID != j.NewID || strings.TrimPrefix(replacement.Name, "/") != j.NewName || replacement.Config == nil || replacement.Config.Labels["io.docklet.run"] != j.RunID) {
 		return s.ambiguousRecreate(ctx, j)
 	}
-	// Every reserved name belongs only to these exact IDs. A foreign claim
-	// is ambiguous even when the expected replacement itself still exists.
+	// Every reserved name belongs only to these exact IDs. A foreign claim is
+	// ambiguous even when the expected replacement itself still exists, except
+	// the new-name-only claim above.
 	for _, name := range []string{j.OldName, j.BackupName, j.NewName} {
 		observed, err := recreateInspect(ctx, c, name)
 		if err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if observed != nil && observed.ID != j.OldID && observed.ID != j.NewID {
+		if observed != nil && observed.ID != j.OldID && observed.ID != j.NewID && !foreignNewNameOnly(name, observed) {
 			return s.ambiguousRecreate(ctx, j)
 		}
 	}
