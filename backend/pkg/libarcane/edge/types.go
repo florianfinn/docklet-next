@@ -26,6 +26,8 @@ type activeWSStream struct {
 	conn   TunnelConnection // tunnel connection the stream was opened on
 	cancel context.CancelFunc
 	dataCh chan wsPayload
+	// done closes with the stream; dataCh is never closed so a waiting sender cannot panic.
+	done   chan struct{}
 	mu     sync.Mutex
 	closed bool
 }
