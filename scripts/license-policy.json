@@ -40,10 +40,6 @@
       "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
     },
     {
-      "path": "third_party/arcane/sys/bytes/LICENSE",
-      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
-    },
-    {
       "path": "third_party/arcane/sys/cgroup/LICENSE",
       "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
     },

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package authz
 
@@ -54,7 +54,6 @@ var accessSurfacesInternal = []AccessSurface{
 		"settings.category.systembackups",
 		"settings.category.timeouts",
 		"settings.category.users",
-		"settings.category.webhooks",
 		"settings.category.diagnostics",
 	}, 120),
 
@@ -94,7 +93,6 @@ var accessSurfacesInternal = []AccessSurface{
 	routeSurfaceInternal("route.settings.roles.detail", "/settings/roles/{id}", "Role", AccessScopeModeGlobalOnly, []string{PermRolesList, PermRolesRead}, 0),
 	settingsCategorySurfaceInternal("timeouts", "/settings/timeouts", "Timeouts", AccessScopeModeGlobalOnly, []string{PermSettingsRead}),
 	settingsCategorySurfaceInternal("users", "/settings/users", "Users", AccessScopeModeGlobalOnly, []string{PermUsersList, PermUsersRead}),
-	settingsCategorySurfaceInternal("webhooks", "/settings/webhooks", "Webhooks", AccessScopeModeSelectedEnvPlusGlobal, []string{PermWebhooksList}),
 	settingsCategorySurfaceInternal("diagnostics", "/settings/diagnostics", "Diagnostics", AccessScopeModeGlobalOnly, []string{PermDiagnosticsRead}),
 
 	customizeCategorySurfaceInternal("registries", "/customize/registries", "Container Registries", []string{PermCustomizeManage, PermRegistriesList, PermRegistriesRead}),

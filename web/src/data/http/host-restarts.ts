@@ -45,7 +45,7 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       startedAt: row.createdAt, finishedAt: row.settledAt,
       progress: row.state === "connected" ? 100 : phase < 0 ? 0 : phase * 25,
       steps: phases.map((name, index) => ({ key: ["validate", "stop", "wait", "connect"][index] as "validate" | "stop" | "wait" | "connect", label: message(RESTART_STATE_KEYS[name]), state: row.state === "connected" ? "done" : done ? failedStep(index) : index < phase ? "done" : index === phase ? "running" : "pending" })),
-      ...(done && row.code ? { error: message(reason ? `containers.operationReasons.${reason}` : "hosts.errors.failed") } : {}),
+      ...(done && row.code ? { error: message(row.code === "host.busy" ? "runMessages.restartRefused" : reason ? `containers.operationReasons.${reason}` : "hosts.errors.failed") } : {}),
       log: [], output: [],
     };
     rows.set(row.runId, { host, row, run, reached, until });

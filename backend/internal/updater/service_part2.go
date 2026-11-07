@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M20 removes references to the retired inbound-webhook update helper.
 
 package updater
 
@@ -338,8 +338,7 @@ func imageUpdateRecordToModuleInternal(record imageupdate.ImageUpdateRecord) upd
 // what the engine acts on. Options.Type and Options.ResourceIds stay behind:
 // the engine never read them, and ApplyPending already routes a scoped request
 // through applyScopedUpdatesInternal before reaching the engine. Settings
-// exclusions always apply to these runs; only UpdateSingleContainer overrides
-// them for its explicitly requested container.
+// exclusions always apply to these runs.
 func moduleOptionsFromUpdaterOptionsInternal(options arcaneupdater.Options) updater.Options {
 	return updater.Options{
 		Force:  options.ForceUpdate,

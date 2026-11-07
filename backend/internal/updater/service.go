@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package updater
 
@@ -382,11 +382,6 @@ func (s *UpdaterService) containerIDsForImagesInternal(ctx context.Context, imag
 		}
 	}
 	return ids, nil
-}
-
-// UpdateSingleContainer refuses the retired standalone update path.
-func (s *UpdaterService) UpdateSingleContainer(ctx context.Context, containerID string) (out *arcaneupdater.Result, err error) {
-	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
 // AcceptSingleContainerUpdate refuses before persisting or dispatching work.

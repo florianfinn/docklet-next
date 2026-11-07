@@ -195,7 +195,7 @@ func work() error {
 			if strings.HasPrefix(f.Path, "repository:") {
 				source = filepath.Join("third_party/arcane", strings.TrimPrefix(f.Path, "repository:"))
 			}
-			if item.LocalPath == "backend" || item.LocalPath == "cli" || item.LocalPath == "types" {
+			if item.LocalPath == "backend" || item.LocalPath == "types" {
 				source = "LICENSES/BSD-3-Clause-Arcane.txt"
 			}
 			if err = copyFile(source, filepath.Join("go", item.Name, f.Path), f.SHA256); err != nil {

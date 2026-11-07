@@ -98,7 +98,6 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: |
             backend/go.sum
-            cli/go.sum
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum

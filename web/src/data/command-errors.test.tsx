@@ -4,7 +4,12 @@
 // License: Apache-2.0
 // Deviations: Original DE consumer tests for typed network/volume outcomes and unknown exception text.
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, renderHook } from "@testing-library/react";
+import { IntlProvider } from "use-intl";
+import type { ReactNode } from "react";
+import { catalogs } from "@/app/i18n/catalog";
+import { useCommandError } from "./use-command-error";
+import { runtimeResponseError } from "./http/runtime-mapping";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
@@ -18,6 +23,7 @@ import { renderWithApp } from "@/test/render";
 
 const generic = "Die Anfrage konnte nicht abgeschlossen werden.";
 const cases = [
+  ["encoded request path", () => new AdapterOutcomeError({ kind: "error", code: "request.path-encoded", status: 400 }), "Diese Adresse enthält kodierte Zeichen, die Docklet in Pfaden nicht annimmt."],
   ["unknown code", () => new AdapterOutcomeError({ kind: "error", code: "network.future-code", status: 400 }), generic],
   ["5xx", () => new AdapterOutcomeError({ kind: "error", code: "http.error", status: 500 }), generic],
   ["agent.unavailable", () => new AdapterOutcomeError({ kind: "error", code: "agent.unavailable", status: 502 }), "Der Host ist nicht erreichbar. Prüfe die Verbindung."],
@@ -32,6 +38,16 @@ const cases = [
   ["literal outcome kind", () => new Error("error"), generic],
 ] as const;
 afterEach(() => vi.restoreAllMocks());
+
+it.each([
+  ["en-US", "This address contains encoded characters that Docklet does not accept in paths."],
+  ["de", "Diese Adresse enthält kodierte Zeichen, die Docklet in Pfaden nicht annimmt."],
+] as const)("renders the serialized request problem in %s through the generic command path", (locale, expected) => {
+  const error = runtimeResponseError(JSON.parse('{"code":"request.path-encoded","status":400}'), 400);
+  const wrapper = ({ children }: { children: ReactNode }) => <IntlProvider locale={locale} messages={catalogs[locale]}>{children}</IntlProvider>;
+  const { result } = renderHook(useCommandError, { wrapper });
+  expect(result.current(error)).toBe(expected);
+});
 
 // The actual consumer receives these AdapterOutcomeError shapes. Identity invalidation may suppress
 // a real 401 earlier; rejection injection keeps that separate from the consumer's text contract.

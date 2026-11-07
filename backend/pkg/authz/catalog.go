@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package authz
 
@@ -145,12 +145,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"prune", PermNetworksPrune, "Prune", ""},
 		{"connect", PermNetworksConnect, "Connect container", ""},
 		{"disconnect", PermNetworksDisconnect, "Disconnect container", ""},
-	}},
-	{"webhooks", "Webhooks", PermissionScopeEnv, []PermissionCatalogAction{
-		{"list", PermWebhooksList, "List", ""},
-		{"create", PermWebhooksCreate, "Create", ""},
-		{"update", PermWebhooksUpdate, "Update", ""},
-		{"delete", PermWebhooksDelete, "Delete", ""},
 	}},
 	{"jobs", "Background Jobs", PermissionScopeEnv, []PermissionCatalogAction{
 		{"manage", PermJobsManage, "Manage", ""},

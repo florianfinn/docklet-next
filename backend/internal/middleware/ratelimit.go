@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package middleware
 
@@ -155,53 +155,6 @@ func PerAgentTokenRateLimit(perMinute, burst int) echo.MiddlewareFunc {
 				return next(c)
 			}
 			if !limiter.allow(kit.SHA256Hex(key)) {
-				c.Response().Header().Set("Retry-After", "60")
-				return c.JSON(http.StatusTooManyRequests, map[string]any{"error": "rate limit exceeded"})
-			}
-			return next(c)
-		}
-	}
-}
-
-// PerTokenRateLimitForPaths gives known tokens independent budgets and limits others per IP.
-// isKnown must be an in-memory lookup with bounded input, without request-driven cache fills.
-// A nil lookup falls back to the shared IP limiter.
-func PerTokenRateLimitForPaths(
-	paths []string,
-	perMinute int,
-	burst int,
-	isKnown func(token string) bool,
-) echo.MiddlewareFunc {
-	if perMinute <= 0 {
-		perMinute = 10
-	}
-	if burst <= 0 {
-		burst = perMinute
-	}
-	ipLimiter := newIPRateLimiterInternal(rate.Every(time.Minute/time.Duration(perMinute)), burst)
-	tokenLimiter := newIPRateLimiterInternal(rate.Every(time.Minute/time.Duration(perMinute)), burst)
-
-	pathSet := make(map[string]struct{}, len(paths))
-	for _, p := range paths {
-		pathSet[p] = struct{}{}
-	}
-
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c *echo.Context) error {
-			if _, ok := pathSet[c.Path()]; !ok {
-				return next(c)
-			}
-
-			token := c.Param("token")
-			if token != "" && isKnown != nil && isKnown(token) {
-				if !tokenLimiter.allow(kit.SHA256Hex(token)) {
-					c.Response().Header().Set("Retry-After", "60")
-					return c.JSON(http.StatusTooManyRequests, map[string]any{"error": "rate limit exceeded"})
-				}
-				return next(c)
-			}
-
-			if !ipLimiter.allow(clientIPForRateLimitInternal(c)) {
 				c.Response().Header().Set("Retry-After", "60")
 				return c.JSON(http.StatusTooManyRequests, map[string]any{"error": "rate limit exceeded"})
 			}

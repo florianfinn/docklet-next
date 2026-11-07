@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package bootstrap
 
@@ -287,13 +287,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 			"/api/auth/refresh",
 		}, 5, 5,
 	))
-	// Keyed per token for stored tokens, per source IP for everything else.
-	apiGroup.Use(middleware.PerTokenRateLimitForPaths(
-		[]string{"/api/webhooks/trigger/:token"}, 60, 10, deps.Webhook.Service().IsKnownToken,
-	))
 	// Only POST agent ingestion needs this brute-force ceiling outside session auth.
 	// Authenticated GET pagination consumes no ingestion budget. Other registrations:
-	// login/refresh per IP, webhook per token/IP, and edge_bootstrap.go per-route
+	// login/refresh per IP and edge_bootstrap.go per-route
 	// enroll POST and connect GET, each with separate IP and agent-token limits.
 	eventIngestionLimit := middleware.PerIPRateLimitForPaths([]string{"/api/events"}, 60, 30)
 	apiGroup.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -317,7 +313,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	if hubMode {
 		// These token ingress endpoints belong to the hub only.
-		api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
 		deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
 			env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(ctx, token)
 			if err != nil {

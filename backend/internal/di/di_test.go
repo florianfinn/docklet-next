@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package di
 
@@ -56,7 +56,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
-	"github.com/florianfinn/docklet-next/backend/internal/webhook"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler"
 )
 
@@ -91,7 +90,6 @@ type graphParams struct {
 	Version           *version.VersionService
 	Notification      *notification.NotificationService
 	ApiKey            *apikey.ApiKeyService
-	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.VulnerabilityService
 	Dashboard         *dashboard.Module
 	Role              *role.RoleService

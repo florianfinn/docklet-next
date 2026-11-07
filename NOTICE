@@ -70,10 +70,10 @@ Retain their original notices, including:
 - acfs: Copyright (c) 2026, Kyle Mendell
 - builds, streams, updater: Copyright (c) 2025, Kyle Mendell
 - kit, docker, docker/compat, docker/convert: Copyright (c) 2026, Arcane
-- sys/bytes, sys/cgroup, sys/crypto: retain both the module ZIP's notice,
+- sys/cgroup, sys/crypto: retain both the module ZIP's notice,
   Copyright (c) 2026, Arcane, and repository sys/LICENSE,
   Copyright (c) 2025, Kyle Mendell.
-Sibling backend, CLI and types use the Arcane root BSD notice above.
+Sibling backend and types use the Arcane root BSD notice above.
 
 Francis actor-runtime notices
 The locally adopted SQLite and memory-provider Francis subset retains its MIT licence in

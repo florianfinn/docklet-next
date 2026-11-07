@@ -27,7 +27,6 @@ it.each([
   ["user.login", "User logged in: operator", { resourceName: undefined, username: "operator" }, "Benutzer angemeldet: operator", "User signed in: operator"],
   ["environment.connect", "Edge Agent Connected", { resourceName: "edge-example" }, "Host verbunden: edge-example", "Host connected: edge-example"],
   ["system.prune", "System prune completed", { resourceName: undefined }, "Systembereinigung abgeschlossen", "System cleanup completed"],
-  ["webhook.create", "Webhook created: Example hook", { resourceName: "Example hook" }, "Webhook erstellt: Example hook", "Webhook created: Example hook"],
 ] as const)("renders the hub event %s from the catalogue", (code, title, extra, de, en) => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
@@ -42,7 +41,7 @@ it("gives every catalogued hub event a German title instead of the hub's English
   try {
     const english = "Hub generated English title";
     const untranslated = HUB_EVENT_CODES.filter((code) => renderEvent(mapEvent(event(code, english)), "de").title.includes(english));
-    expect(HUB_EVENT_CODES.length).toBe(75);
+    expect(HUB_EVENT_CODES.length).toBe(71);
     expect(untranslated).toEqual([]);
     // Each catalogue title belongs to an event code; none is left without a producer.
     expect(Object.keys(catalogs["en-US"].runMessages.events.labels).sort()).toEqual([...HUB_EVENT_CODES.map(eventTitleKey), ...EVENT_TITLE_VARIANTS].sort());
@@ -59,8 +58,6 @@ it.each([
   ["system.upgrade", "Update all environments failed", { severity: "error", resourceName: undefined, metadata: { action: "update_all_environments" } }, "Systemaktualisierung fehlgeschlagen", "System upgrade failed"],
   ["system.upgrade", "Update all environments completed with errors", { severity: "warning", resourceName: undefined, metadata: { failed: 1 } }, "Systemaktualisierung mit Fehlern abgeschlossen", "System upgrade completed with errors"],
   ["system.upgrade", "System upgrade completed", { resourceName: undefined }, "Systemaktualisierung abgeschlossen", "System upgrade completed"],
-  ["webhook.trigger", "Webhook trigger failed: Example hook", { severity: "error", resourceName: "Example hook" }, "Webhook-Auslösung fehlgeschlagen: Example hook", "Webhook trigger failed: Example hook"],
-  ["webhook.trigger", "Webhook triggered: Example hook", { severity: "success", resourceName: "Example hook" }, "Webhook ausgelöst: Example hook", "Webhook triggered: Example hook"],
   ["volume.prune", "Volume prune: bulk_prune", { resourceId: "", resourceName: "bulk_prune" }, "Volumes bereinigt", "Volumes pruned"],
   ["network.delete", "Network deleted: bulk_prune", { resourceId: "", resourceName: "bulk_prune", metadata: { action: "prune" } }, "Netzwerk gelöscht", "Network deleted"],
   ["image.prune", "Docker image prune: prune", { resourceId: "", resourceName: "prune" }, "Images bereinigt", "Images pruned"],

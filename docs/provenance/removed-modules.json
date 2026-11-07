@@ -2,7 +2,6 @@
   "baselineRevision": "7002a1006d0bc91f388e1679b922090935b69f0b",
   "comparedManifests": [
     "backend/go.mod",
-    "cli/go.mod",
     "third_party/arcane/acfs/go.mod",
     "third_party/arcane/builds/go.mod",
     "third_party/arcane/docker/compat/go.mod",
@@ -10,7 +9,6 @@
     "third_party/arcane/docker/go.mod",
     "third_party/arcane/kit/go.mod",
     "third_party/arcane/streams/go.mod",
-    "third_party/arcane/sys/bytes/go.mod",
     "third_party/arcane/sys/cgroup/go.mod",
     "third_party/arcane/sys/crypto/go.mod",
     "third_party/arcane/updater/go.mod",

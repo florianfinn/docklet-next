@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -142,11 +142,6 @@ const (
 	PermNetworksConnect    = "networks:connect"
 	PermNetworksDisconnect = "networks:disconnect"
 
-	PermWebhooksList   = "webhooks:list"
-	PermWebhooksCreate = "webhooks:create"
-	PermWebhooksUpdate = "webhooks:update"
-	PermWebhooksDelete = "webhooks:delete"
-
 	PermJobsManage    = "jobs:manage"
 	PermDashboardRead = "dashboard:read"
 
@@ -278,7 +273,6 @@ func BuiltInEditorPermissions() []string {
 		PermImagesList, PermImagesRead, PermImagesPull, PermImagesPush, PermImagesTag, PermImagesCommit, PermImagesPrune, PermImagesDelete, PermImagesUpload, PermImagesPatch,
 		PermVolumesList, PermVolumesRead, PermVolumesCreate, PermVolumesRename, PermVolumesDelete, PermVolumesPrune, PermVolumesUpload, PermVolumesBackup,
 		PermNetworksList, PermNetworksRead, PermNetworksCreate, PermNetworksDelete, PermNetworksPrune, PermNetworksConnect, PermNetworksDisconnect,
-		PermWebhooksList, PermWebhooksCreate, PermWebhooksUpdate, PermWebhooksDelete,
 		PermJobsManage, PermNotificationsManage, PermDashboardRead,
 		PermSystemRead, PermSystemPrune,
 		PermImageUpdatesRead, PermImageUpdatesCheck,
@@ -334,7 +328,6 @@ func BuiltInViewerPermissions() []string {
 		PermImagesList, PermImagesRead,
 		PermVolumesList, PermVolumesRead,
 		PermNetworksList, PermNetworksRead,
-		PermWebhooksList,
 		PermDashboardRead,
 		PermSystemRead,
 		PermImageUpdatesRead,

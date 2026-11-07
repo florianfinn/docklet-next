@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed OIDC and passkeys.
+// Deviations: functional cut: removed OIDC and passkeys; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 // Package role holds the public DTOs for Arcane's RBAC API: roles,
 // per-user role assignments and the permission manifest exposed to the frontend.
@@ -99,10 +99,10 @@ type PermissionPreset struct {
 // backend-owned RBAC metadata. It is advisory UX metadata; backend handlers and
 // middleware remain authoritative for actual enforcement.
 type AccessSurface struct {
-	ID            string   `json:"id" doc:"Stable surface identifier" example:"settings.category.webhooks"`
+	ID            string   `json:"id" doc:"Stable surface identifier" example:"settings.category.jobschedule"`
 	Kind          string   `json:"kind" enum:"route,settings-category,customize-category,landing" doc:"Surface type"`
-	URL           string   `json:"url,omitempty" doc:"Route URL or prefix represented by this surface" example:"/settings/webhooks"`
-	Label         string   `json:"label" doc:"Human-readable surface label" example:"Webhooks"`
+	URL           string   `json:"url,omitempty" doc:"Route URL or prefix represented by this surface" example:"/settings/jobs"`
+	Label         string   `json:"label" doc:"Human-readable surface label" example:"Job schedules"`
 	AccessMode    string   `json:"accessMode" enum:"permissions,any-child" doc:"How reachability is evaluated"`
 	MatchMode     string   `json:"matchMode" enum:"any-of,all-of" doc:"How permissions are combined when accessMode is permissions"`
 	ScopeMode     string   `json:"scopeMode" enum:"global-only,selected-env-plus-global,any-effective-scope" doc:"Which effective permission scope is considered"`
