@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live volume backup transport with host ownership and asynchronous admission.
+// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
@@ -119,9 +119,9 @@ export function createBackups(options: Options) {
     }
     return { result, check };
   }
-  async function request<T>(host: string, route: string, method = "GET", value?: object): Promise<T> {
+  async function request<T>(host: string, route: string, method = "GET", value?: object, signal?: AbortSignal): Promise<T> {
     const { result, check } = await response(host, route, {
-      method,
+      method, signal,
       ...(value ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) } : {}),
     });
     let body: { success?: boolean; data: T };
@@ -142,9 +142,9 @@ export function createBackups(options: Options) {
       });
     return body.data;
   }
-  async function overview(host: string) {
+  async function overview(host: string, signal?: AbortSignal) {
     return mapBackupOverview(
-      await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`),
+      await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`, "GET", undefined, signal),
       host,
     );
   }
@@ -438,15 +438,20 @@ export function createBackups(options: Options) {
         retained.delete(host);
       }
     },
-    async history(id: string) {
+    async readOverview(host: string, signal?: AbortSignal) {
+      await require("getBackupOverview", { kind: "host", id: host });
+      signal?.throwIfAborted(); return overview(host, signal);
+    },
+    async history(id: string, signal?: AbortSignal) {
       const { host, route } = context(id);
       const check = begin(host);
       const out = [];
       for (let start = 0; ; ) {
-        const { result } = await response(host, `${route}/backups?start=${start}&limit=100&order=desc`);
+        const { result } = await response(host, `${route}/backups?start=${start}&limit=100&order=desc`, { signal });
         const body = (await result.json()) as Schema["VolumeBackupPaginatedResponse"];
         check();
         if (!body.success || !body.pagination) throw problem(null, 200);
+        signal?.throwIfAborted();
         const rows = body.data ?? [];
         out.push(...rows.map((row) => mapBackup(row, host)));
         start += rows.length;
@@ -454,11 +459,12 @@ export function createBackups(options: Options) {
         if (!rows.length) throw problem(null, 200);
       }
     },
-    async decorate(host: string, volumes: Awaited<ReturnType<DockletAdapter["listVolumes"]>>) {
-      const ov = await api.getBackupOverview(host).catch((error) => {
+    async decorate(host: string, volumes: Awaited<ReturnType<DockletAdapter["listVolumes"]>>, signal?: AbortSignal) {
+      const ov = await (async () => { await require("getBackupOverview", { kind: "host", id: host }); signal?.throwIfAborted(); return overview(host, signal); })().catch((error) => {
         if (error instanceof CancelledError) throw error;
         return undefined;
       });
+      signal?.throwIfAborted();
       const byId = new Map(ov?.volumes.map((v) => [v.id, v]));
       // Binds keep their recorded outcomes whatever the current verdict; access is decided by the consumer (K3/K4).
       return volumes.map((v) => ({

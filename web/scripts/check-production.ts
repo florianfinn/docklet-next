@@ -15,9 +15,10 @@ async function inspect(injected?: string, mode = "production", target = "/src/ma
     enforce: "pre",
     resolveId(source) {
       if (source === NESTED_DEV) return nestedDevPath;
+      if (source === "virtual:boundary-proof/preview") return `${root}/src/app/preview/proof.ts`;
     },
     load(id) {
-      if (id === nestedDevPath) return "export const proof = true;";
+      if (id === nestedDevPath || id.endsWith("/src/app/preview/proof.ts")) return "export const proof = true;";
     },
     transform(code, id) {
       if (id.endsWith(target) && (injected || extraCode)) return `${injected ? `import ${JSON.stringify(injected)};\n` : ""}${code}\n${extraCode}`;
@@ -31,6 +32,7 @@ assert(!Array.isArray(result) && "output" in result);
 const evidence = result.output.find((entry) => entry.type === "asset" && entry.fileName === "production-modules.json");
 assert(evidence?.type === "asset", "Production graph evidence missing");
 const graph = JSON.parse(String(evidence.source)) as { graph: string[]; shipped: string[] };
+assert(graph.shipped.includes("src/app/coming-soon/ComingSoonPage.tsx"), "Production coming-soon routes missing");
 assert(graph.shipped.includes("src/data/http/http-adapter.ts"), "Production HTTP adapter missing");
 assert(graph.shipped.includes("src/features/hosts/onboarding/OnboardingPage.tsx"), "Production onboarding route missing");
 assert(graph.shipped.includes("src/features/setup/SetupPage.tsx"), "Production setup route missing");
@@ -50,6 +52,8 @@ if (process.argv.includes("--prove")) {
     await assert.rejects(inspect(injected, mode), /Production boundary: forbidden module/);
     console.log(`Red proof passed: injected ${injected} rejected in ${mode} build.`);
   }
+  await assert.rejects(inspect("@/data/demo/simulation", "production", "/src/app/coming-soon/ComingSoonPage.tsx"), /Production boundary: forbidden module/);
+  console.log("Red proof passed: demo import from coming-soon page rejected.");
   await assert.rejects(inspect("@/data/demo/demo-text", "production", "/src/shared/hooks/use-stack-commands.ts"), /Production boundary: forbidden module/);
   console.log("Red proof passed: shared hook import of demo text rejected in production build.");
   await assert.rejects(inspect("@/test/layout"), /Production boundary: forbidden module/);
@@ -58,7 +62,7 @@ if (process.argv.includes("--prove")) {
     "@/runtime.dev",
     NESTED_DEV,
     "@/features/auth/login/login-model",
-    "@/app/preview/PreviewPage",
+    "virtual:boundary-proof/preview",
   ]) {
     await assert.rejects(inspect(module), /Production boundary: forbidden module/);
     console.log(`Red proof passed: injected ${module} rejected in production build.`);

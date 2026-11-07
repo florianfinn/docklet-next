@@ -1,8 +1,9 @@
+import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/docs/design/vulnerability-scanning.md
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262.
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { DockletAdapter } from "../adapter";
@@ -33,20 +34,7 @@ function errorCode(error: unknown): string {
   return "vulnerability.read-unavailable";
 }
 
-/** One security budget includes headers, inventory, capability and every response body. */
-async function securityDeadline<T>(read: (signal: AbortSignal) => Promise<T>): Promise<T> {
-  const controller = new AbortController();
-  let reject!: (error: unknown) => void;
-  const stopped = new Promise<never>((_, fail) => { reject = fail; });
-  const timer = setTimeout(() => {
-    const error = new VulnerabilityFailure("vulnerability.read-timeout");
-    controller.abort(error); reject(error);
-  }, 30_000);
-  // A settled read has drained its responses; aborting it then would report finished reads as failed.
-  try { return await Promise.race([read(controller.signal), stopped]); }
-  catch (error) { controller.abort(); throw error; }
-  finally { clearTimeout(timer); }
-}
+const securityDeadline = hostReadDeadline(30_000, "vulnerability.read-timeout");
 
 /** Durable run counters are the scan progress producer; activity progress is not populated. */
 export async function readScanProgress(request: ReturnType<typeof vulnerabilityTransport>, host: string, activity: string, signal?: AbortSignal) {
@@ -108,7 +96,8 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
   }
   return {
     ...settings,
-    async getSecurity() {
+    async getSecurity(parent) {
+      const budget = inventoryReadBudget(parent, "vulnerability.read-timeout");
       const identity = o.generation(), sequence = ++latest;
       if (retainedIdentity !== identity) { retained.clear(); retainedIdentity = identity; }
       const check = () => { if (identity !== o.generation() || sequence !== latest) throw new CancelledError(); };
@@ -119,7 +108,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         if (!["true", "false"].includes(values.featureVulnerabilityManagementEnabled ?? "")) invalid();
         const enabled = values.featureVulnerabilityManagementEnabled === "true";
         return { enabled, hosts: enabled ? await o.hosts() : [] };
-      }).catch((error: unknown) => { check(); throw error; });
+      }, parent).catch((error: unknown) => { check(); throw error; });
       check();
       const result: SecurityOverview = { enabled, schedule: { mode: "manual" }, images: [], findings: [], history: [], unavailable: [] };
       if (!enabled) { retained.clear(); return result; }
@@ -127,7 +116,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const batches = await Promise.all(hosts.map(async (host) => {
         let known: DockerImage[] = [];
         try {
-          const { stale, ...batch } = await securityDeadline((signal) => hostImages(host, signal, (rows) => { known = rows; }));
+          const { stale, ...batch } = await budget((signal) => hostImages(host, signal, (rows) => { known = rows; }));
           check();
           // This batch's own inventory decides; the host catalogue may carry an older observation.
           const unavailable = stale || batch.images.some((i) => i.unavailable);

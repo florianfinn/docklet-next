@@ -342,7 +342,7 @@ export function NetworksSection({ service, edit }: SectionProps) {
       <HelpLabel htmlFor={`n-${service.key}`} topic="service.networks">
         {t("label")}
       </HelpLabel>
-      <CommitInput id={`n-${service.key}`} className="font-mono" value={service.networks.join(", ")} placeholder="web, internal" onCommit={(v) => edit(ops.setNetworks(service.key, v.split(",")))} />
+      <CommitInput id={`n-${service.key}`} className="font-mono" value={service.networks.join(", ")} placeholder="frontend, backend" onCommit={(v) => edit(ops.setNetworks(service.key, v.split(",")))} />
       <FieldDescription>{t("hint")}</FieldDescription>
     </Field>
   );

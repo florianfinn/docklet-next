@@ -2,7 +2,7 @@
 // Revision: 6971ede4f4f71ac095aa5de94c8b21f58dcc7a4bae8d0236ca7812b99cc46d26
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original product-boundary implementation and evidence after the historical L4 import. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #32 Hub backup delete mapping. #69 connected first-run identity flow. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. #181 live volume management and lifecycle checks. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Original product-boundary implementation and evidence after the historical L4 import. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #32 Hub backup delete mapping. #69 connected first-run identity flow. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. #181 live volume management and lifecycle checks. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import type { DockletAdapter } from "./adapter";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF } from "./capability";
@@ -61,6 +61,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     getCapability: async (operationId, resourceRef = HUB_REF) => ({ operationId, resourceRef, available: false, disabledReasonCode: GENERIC_REASON }),
     listHosts: unavailable,
     listStacks: unavailable,
+    listNetworkSummaries: unavailable,
     getStack: unavailable,
     listContainers: unavailable,
     getSecurity: unavailable,

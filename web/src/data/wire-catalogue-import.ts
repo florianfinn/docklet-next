@@ -2,7 +2,7 @@
 // Revision: 412ca6202d43c89db6e0b5b3947e86c7d2ab960d
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for the stack import contract.
+// Deviations: Original total catalogue maps for the stack import contract. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import type { useTranslations } from "use-intl";
 import type { components } from "@/api/generated/schema";
@@ -43,7 +43,7 @@ export const IMPORT_MISSING_KEYS = {
 } satisfies Record<Schema["StackimportResult"]["missing"][number], CatalogueKey>;
 
 /** Import refusals render from the contract code only; upstream text never reaches the UI. */
-export function importProblemMessage(code: string | undefined, translate: ReturnType<typeof useTranslations>): string {
+export function importProblemMessage(code: string | undefined, translate: ReturnType<typeof useTranslations<never>>): string {
   const key = code !== undefined && Object.hasOwn(IMPORT_PROBLEM_KEYS, code) ? IMPORT_PROBLEM_KEYS[code as keyof typeof IMPORT_PROBLEM_KEYS] : "common.commandErrors.failed";
   return translate(key as never);
 }

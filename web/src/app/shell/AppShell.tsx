@@ -2,7 +2,7 @@
 // Revision: 456cdcb0ad7dee6695b8162d0c9f779b26842f736c418f31b877c9caa5f20d91
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Product preference/demo boundary after the historical L4 import: build-selected runtime, shared preference modules and regression coverage; existing UI catalogue bytes and storage contracts preserved; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
+// Deviations: Product preference/demo boundary after the historical L4 import: build-selected runtime, shared preference modules and regression coverage; existing UI catalogue bytes and storage contracts preserved; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import { BulkResultController } from "@/shared/components/bulk-result-dialog";
 import { GlobalSearch } from "./GlobalSearch";
@@ -35,7 +35,7 @@ import { Skeleton } from "@/shared/ui/skeleton";
 import { useSidebarOpen } from "@/shared/preferences/sidebar-store";
 
 import { PAGE_MAX_WIDTH, pageWidth } from "./page-width";
-import { NAV, PREVIEW_ICONS, type NavGroup } from "./nav-items";
+import { NAV, type NavGroup } from "./nav-items";
 import { ShellEffects } from "./ShellEffects";
 import { ShellSidebar } from "./ShellSidebar";
 
@@ -57,14 +57,10 @@ function useCrumbs(): Crumb[] {
       return part;
     }
   });
-  const stacks = useStacks();
-  const containers = useContainers();
+  const stacks = useStacks(first === "stacks" && !!second && second !== "new");
+  const containers = useContainers(first === "containers" && !!second);
   const volume = useVolume(first === "volumes" && second ? second : undefined);
-  const known = ["dashboard", "stacks", "containers", "security", "networks", "images", "hosts", "volumes", "backups", "hub-backups", "settings", "profile"] as const;
-  if (import.meta.env.DEV && first === "preview" && second && Object.hasOwn(PREVIEW_ICONS, second)) {
-    const key = second as Parameters<typeof t>[0];
-    return [{ label: t(key) }];
-  }
+  const known = ["dashboard", "stacks", "containers", "security", "networks", "images", "hosts", "volumes", "backups", "hub-backups", "settings", "profile", "proxy", "games"] as const;
   if (!first || !known.includes(first as (typeof known)[number])) return [];
   const root: Crumb = { label: first === "hub-backups" ? t("hubBackups") : t(first as Exclude<(typeof known)[number], "hub-backups">), to: `/${first}` };
   if (!second) return [{ label: root.label }];

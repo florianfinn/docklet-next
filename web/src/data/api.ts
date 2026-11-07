@@ -2,7 +2,7 @@
 // Revision: 357dd6dee16118e0880ca694d222699556389d977c3d15d6148e23e2acee23d7
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration. M20 #360: shell list reads and target-specific terminal invalidation.
 
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
@@ -187,8 +187,8 @@ export interface ProjectWorkspaceApi {
 }
 
 export interface VolumesApi extends ProjectWorkspaceApi {
-  listVolumes(onPartial?: (rows: Volume[]) => void): Promise<Volume[]>;
-  getVolume(id: string): Promise<VolumeDetail & { scope?: string }>;
+  listVolumes(onPartial?: (rows: Volume[]) => void, signal?: AbortSignal): Promise<Volume[]>;
+  getVolume(id: string, signal?: AbortSignal): Promise<VolumeDetail & { scope?: string }>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
   renameVolume(id: string, name: string): Promise<Volume>;
@@ -282,7 +282,7 @@ export interface PullImageInput {
 
 export interface ImagesApi {
   /** Images of all connected and disconnected hosts with consumers derived from the containers. */
-  listImages(onPartial?: (rows: DockerImage[]) => void): Promise<DockerImage[]>;
+  listImages(onPartial?: (rows: DockerImage[]) => void, signal?: AbortSignal): Promise<DockerImage[]>;
   /** Resolves after stream completion; the activity frame is optional. */
   pullImage(input: PullImageInput): Promise<ImagePullResult>;
   /** Refused with "in-use" while any container (running or stopped) uses the image. */

@@ -2,6 +2,7 @@
 import type { enCommon } from "./en";
 
 export const deCommon: typeof enCommon = {
+  relativeTime: { justNow: "gerade eben", soon: "gleich", now: "jetzt", day: "Tag", days: "Tagen" },
   bulkRun: {
     summary: "{action}: {started} gestartet, {joined} verbunden, {skipped} übersprungen, {failed} fehlgeschlagen",
     details: "Details der Sammelaktion", admissionHint: "Annahme der Aufträge. Der Fortschritt steht im Aktivitätszentrum.",

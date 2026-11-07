@@ -1,8 +1,9 @@
+import { inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/issues/83
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource reader over the shared inventory transport.
+// Deviations: Original resource reader over the shared inventory transport. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -36,7 +37,7 @@ export function createObservedHostImageReader(baseUrl: string, fetcher: typeof f
   };
 }
 
-export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listImages" | "listVolumes" | "getVolume" | "getTopology"> {
+export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listImages" | "listVolumes" | "getVolume" | "getTopology" | "listNetworkSummaries"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
   const hostImages = createHostImageReader(baseUrl, fetcher, onState);
   async function context(hostId: string) {
@@ -48,12 +49,14 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     onState(hostId, inventory);
     return inventory;
   }
-  async function aggregate<T>(operation: string, load: (host: Host) => Promise<T[]>, onPartial?: (rows: T[]) => void): Promise<T[]> {
-    await requireCapability(operation);
+  async function aggregate<T>(operation: string, load: (host: Host, signal: AbortSignal) => Promise<T[]>, onPartial?: (rows: T[]) => void, parent?: AbortSignal): Promise<T[]> {
+    const budget = inventoryReadBudget(parent);
+    const scope = await budget(async () => { await requireCapability(operation); return hosts(); });
     const completed: T[] = [];
-    const batches = await Promise.all((await hosts()).map(async (host) => {
-      try { const rows = await load(host); completed.push(...rows); onPartial?.([...completed]); return rows; }
+    const batches = await Promise.all(scope.map(async (host) => {
+      try { const rows = await budget((signal) => load(host, signal)); completed.push(...rows); onPartial?.([...completed]); return rows; }
       catch (error) {
+        parent?.throwIfAborted();
         onState(host.id, inventoryFailure(host.id, error));
         return [];
       }
@@ -73,7 +76,8 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
       if (!volume) throw new AdapterOutcomeError({ kind: "error", code: "get-volume.not-found" });
       return { ...volume, backups: [] };
     },
-    listImages: (onPartial) => aggregate("listImages", (h) => hostImages(h.id), onPartial),
+    listImages: (onPartial, signal) => aggregate("listImages", (h, owned) => hostImages(h.id, owned), onPartial, signal),
+    listNetworkSummaries: (signal) => aggregate("getTopology", async (h, owned) => (await list("list-networks", h.id, "networks", undefined, owned)).rows.filter((n) => n.labels?.["io.docklet.system"] !== "agent").map((n) => ({ id: n.id, hostId: h.id })), undefined, signal),
     async getTopology(onPartial, retained) {
       await requireCapability("getTopology");
       const scope = await hosts();

@@ -2,7 +2,7 @@
 // Revision: 81be6ce24058459478dde21b11c6a5605fdb3e7b4d5fc409bc2aacce9a333cfd
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. Issue #102: optional classified activity source read-health subscription. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. List summaries and owned detail reads with bounded recovery (#225, #223). Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. M11 #262: live vulnerability reads, scan controls and security settings. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. Issue #102: optional classified activity source read-health subscription. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. List summaries and owned detail reads with bounded recovery (#225, #223). Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. M11 #262: live vulnerability reads, scan controls and security settings. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import type { components } from "@/api/generated/schema";
 import type {
@@ -115,10 +115,12 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, UsersApi, HostsApi,
   getCapability(operationId: string, resourceRef?: ResourceRef): Promise<CapabilityDescriptor>;
 
   listHosts(): Promise<Host[]>;
-  listStacks(onPartial?: (rows: Stack[]) => void): Promise<Stack[]>;
+  listNetworkSummaries(signal?: AbortSignal): Promise<{ id: string; hostId: string }[]>;
+  subscribeStackTerminals?(listener: (target: { stackId: string; hostId: string }) => void): Unsubscribe;
+  listStacks(onPartial?: (rows: Stack[]) => void, signal?: AbortSignal): Promise<Stack[]>;
   getStack(id: string): Promise<CodedStackDetail>;
-  listContainers(onPartial?: (rows: ContainerInfo[]) => void): Promise<ContainerInfo[]>;
-  getSecurity(): Promise<SecurityOverview>;
+  listContainers(onPartial?: (rows: ContainerInfo[]) => void, signal?: AbortSignal): Promise<ContainerInfo[]>;
+  getSecurity(signal?: AbortSignal): Promise<SecurityOverview>;
   listEvents(): Promise<CodedEvent[]>;
   listSchedule(hostIds?: readonly string[]): Promise<ScheduledJob[]>;
   listActions(): Promise<CodedActionRun[]>;

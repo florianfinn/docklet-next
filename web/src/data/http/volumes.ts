@@ -1,8 +1,9 @@
+import { inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/docs/design/storage-workspace.md
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original live volume mapping and regression coverage for issue #181.
+// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import { CancelledError } from "@tanstack/react-query";
 
@@ -20,7 +21,7 @@ type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 type Body<I extends Read> = operations[I]["responses"][200]["content"]["application/json"];
 type Schema = components["schemas"];
 
-export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (id: string, state: InventoryObservation) => void, generation: () => number): Pick<DockletAdapter, "listVolumes" | "getVolume"> {
+export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (id: string, state: InventoryObservation) => void, generation: () => number, decorate: (host: string, rows: Volume[], signal: AbortSignal) => Promise<Volume[]> = async (_host, rows) => rows): Pick<DockletAdapter, "listVolumes" | "getVolume"> {
   const transport = createInventoryTransport(baseUrl, fetcher, onState);
   const retained = new Map<string, Volume[]>();
   let owner = generation();
@@ -29,10 +30,11 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     if (owner !== version) { retained.clear(); owner = version; }
     return () => { if (generation() !== version) throw new CancelledError(); };
   }
-  async function read<I extends Read>(operation: I, hostId: string, suffix: string, observed?: (state: InventoryObservation) => void): Promise<Body<I>["data"]> {
-    const response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/volumes/${suffix}`, { credentials: "same-origin", headers: { Accept: "application/json" } });
+  async function read<I extends Read>(operation: I, hostId: string, suffix: string, observed?: (state: InventoryObservation) => void, signal?: AbortSignal): Promise<Body<I>["data"]> {
+    const response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/volumes/${suffix}`, { credentials: "same-origin", headers: { Accept: "application/json" }, signal });
     let body: Body<I> & { code?: string };
     try { body = await response.json(); } catch { throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    signal?.throwIfAborted();
     if (response.status === 404 && !body.code) throw new AdapterError("not-found");
     if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: body.code ?? "http.error", status: response.status });
     if (!body.success || !("data" in body)) throw new Error(`${operation}.invalid-response`);
@@ -40,8 +42,8 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     observed?.({ stale: !!reason, reason: reason || undefined, observedAt: response.headers.get("X-Docklet-Observed-At") ?? undefined });
     return body.data;
   }
-  async function context(hostId: string) {
-    const [containers, projects] = await Promise.allSettled([transport.list("list-containers", hostId, "containers"), transport.list("list-projects", hostId, "projects")]);
+  async function context(hostId: string, signal?: AbortSignal) {
+    const [containers, projects] = await Promise.allSettled([transport.list("list-containers", hostId, "containers", undefined, signal), transport.list("list-projects", hostId, "projects", undefined, signal)]);
     return { containers: containers.status === "fulfilled" ? containers.value.rows : [], projects: projects.status === "fulfilled" ? projects.value.rows : [] };
   }
   function supplement(volume: Volume, row: Schema["VolumeVolume"], hostId: string): Volume {
@@ -55,8 +57,8 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     return supplement(mapVolumes([row], hostId, ctx.containers, ctx.projects, inventory)[0]!, row, hostId);
   }
   /** Bind rows come from container mounts; the agent's bind list adds kind, path-rule verdict and sizes. */
-  async function bindList(hostId: string): Promise<Map<string, BindInfo> | undefined> {
-    const rows = await read("list-volume-binds", hostId, "binds").catch((error) => {
+  async function bindList(hostId: string, signal?: AbortSignal): Promise<Map<string, BindInfo> | undefined> {
+    const rows = await read("list-volume-binds", hostId, "binds", undefined, signal).catch((error) => {
       if (error instanceof CancelledError) throw error;
       return undefined;
     });
@@ -73,23 +75,29 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     return { ...volume, bind, fileBind: bind.kind === "file", sizeBytes: size?.bytes ?? 0, sizeUnavailable: !size };
   }
   const api: Pick<DockletAdapter, "listVolumes" | "getVolume"> = {
-    async listVolumes(onPartial) {
+    async listVolumes(onPartial, parent) {
+      const budget = inventoryReadBudget(parent);
       const check = begin();
-      await requireCapability("listVolumes");
-      const scope = await hosts();
+      const scope = await budget(async () => { await requireCapability("listVolumes"); return hosts(); });
       check();
       const batches = new Map([...retained].filter(([id]) => scope.some((h) => h.id === id)));
       await Promise.all(scope.map(async (host) => {
         try {
-          const [volumes, ctx, binds] = await Promise.all([transport.list("list-volumes", host.id, "volumes"), context(host.id), bindList(host.id)]);
+          const { combined, observation } = await budget(async (signal) => {
+            const [volumes, ctx, binds] = await Promise.all([transport.list("list-volumes", host.id, "volumes", undefined, signal), context(host.id, signal), bindList(host.id, signal)]);
+            signal.throwIfAborted(); check();
+            const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation);
+            const byName = new Map(volumes.rows.map((row) => [row.name, row]));
+            const mapped = rows.map((v) => v.kind === "volume" ? supplement(v, byName.get(v.name)!, host.id) : withBind(v, binds));
+            const combined = await decorate(host.id, mapped, signal);
+            signal.throwIfAborted(); check();
+            return { combined, observation: volumes.observation };
+          });
           check();
-          const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation);
-          const byName = new Map(volumes.rows.map((row) => [row.name, row]));
-          const combined = rows.map((v) => v.kind === "volume" ? supplement(v, byName.get(v.name)!, host.id) : withBind(v, binds));
           retained.set(host.id, combined); batches.set(host.id, combined);
-          onState(host.id, volumes.observation);
+          onState(host.id, observation);
         } catch (error) {
-          check();
+          parent?.throwIfAborted(); check();
           const state = inventoryFailure(host.id, error);
           onState(host.id, state);
           const old = retained.get(host.id);
@@ -100,22 +108,23 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
       check();
       return [...batches.values()].flat();
     },
-    async getVolume(id) {
+    async getVolume(id, signal) {
       const check = begin();
       await requireCapability("getVolume");
       const [hostId, name] = splitInventoryId(id);
       if (name.startsWith("bind:")) {
-        const volume = (await api.listVolumes()).find((v) => v.id === id);
+        const volume = (await api.listVolumes(undefined, signal)).find((v) => v.id === id);
         if (!volume) throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: 404 });
         return { ...volume, backups: [] };
       }
       let inventory: InventoryObservation = { stale: false };
       const [row, ctx, sizes] = await Promise.all([
-        read("get-volume", hostId, encodeURIComponent(name), (state) => { inventory = state; }),
-        context(hostId),
-        read("get-volume-sizes", hostId, "sizes").catch(() => null),
+        read("get-volume", hostId, encodeURIComponent(name), (state) => { inventory = state; }, signal),
+        context(hostId, signal),
+        read("get-volume-sizes", hostId, "sizes", undefined, signal).catch(() => null),
       ]);
       check();
+      signal?.throwIfAborted();
       const volume = map(row, hostId, ctx, inventory);
       onState(hostId, inventory);
       const size = sizes?.find((s) => s.name === name)?.size;

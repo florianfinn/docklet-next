@@ -2,7 +2,7 @@
 // Revision: 437b7e748319217bc87288adedb804637e03e74f20c0008b9ad08a5a411b5367
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: production coming-soon routes and catalogue boundary.
 
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from "react-router";
@@ -37,7 +37,7 @@ const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const ProfilePage = lazy(() => import("@/features/settings/ProfilePage"));
 const SetupPage = lazy(() => import("@/features/setup/SetupPage"));
 const DemoLoginPage = lazy(() => import("@/features/auth/login/LoginPage"));
-const PreviewPage = import.meta.env.DEV ? lazy(() => import("./preview/PreviewPage")) : null;
+const ComingSoonPage = lazy(() => import("./coming-soon/ComingSoonPage"));
 
 function HubRouteGate() {
   return useAdapter().kind === "http" ? <AuthGate /> : <Outlet />;
@@ -79,7 +79,8 @@ const shellRoutes: RouteObject[] = [
       { path: "settings", element: <Navigate to="/settings/general" replace /> },
       { path: "settings/:section", element: <SettingsPage /> },
       { path: "profile", element: <ProfilePage /> },
-      ...(PreviewPage ? [{ path: "preview/:section", element: <PreviewPage /> }] : []),
+      { path: "proxy", element: <ComingSoonPage area="proxy" /> },
+      { path: "games", element: <ComingSoonPage area="games" /> },
       { path: "*", element: <NotFound /> },
     ],
   },

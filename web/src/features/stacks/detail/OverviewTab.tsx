@@ -142,7 +142,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
                 labels={stack.labels}
                 onChange={(labels) => void cmd.setLabels(stack.id, labels)}
                 suggestions={allLabels(stacks.data ?? [])}
-                placeholder="produktiv"
+                placeholder="prod"
                 addLabel={t("labelsAdd")}
                 removeLabel={(label) => t("labelRemove", { label })}
                 emptyText={t("labelsNone")}

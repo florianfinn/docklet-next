@@ -2,7 +2,7 @@
 // Revision: 5a51f9750ef391f272321daf1b1234a7e110c7f1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original real app-query and route-consumer renewal regressions informed by independent R3 probes.
+// Deviations: Original real app-query and route-consumer renewal regressions informed by independent R3 probes. M20 #360: regression coverage for shell reads, stack targets and neutral labels.
 
 import { CancelledError, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { act, render, screen, waitFor as testingWaitFor } from "@testing-library/react";
@@ -47,7 +47,7 @@ it.each((["password", "login"] as const).flatMap((renewal) => (["shell", "setup"
   const held = deferred<Response>(); const reached = deferred<Response>();
   try {
     if (consumer === "shell") await screen.findByRole("heading", { name: "Profile" });
-    else await screen.findByRole("heading", { name: "New administrator password" });
+    else await screen.findByRole("heading", { name: "Set a new password" });
     const client = f.client();
     f.state.hold = async (path, response) => path.endsWith("/auth/me") ? (reached.resolve(response), held.promise) : response;
     const before = f.requests.filter((path) => path === "/api/auth/me").length;
@@ -72,7 +72,7 @@ it.each((["password", "login"] as const).flatMap((renewal) => (["shell", "setup"
     expect(screen.queryByText("The session could not be checked.") === null).toBe(true);
     expect(screen.queryByText("First-run setup status could not be checked.") === null).toBe(true);
     if (consumer === "shell") expect(screen.queryByRole("heading", { name: "Profile" }) !== null).toBe(true);
-    else expect(screen.queryByRole("heading", { name: "New administrator password" }) !== null).toBe(true);
+    else expect(screen.queryByRole("heading", { name: "Set a new password" }) !== null).toBe(true);
     expect(old.close).toHaveBeenCalledTimes(1);
     client.setQueryData(queryKeys.events, []);
     await act(async () => { f.sources.at(-1)!.onmessage?.({ data: JSON.stringify({ channel: "events", timestamp: "2026-10-24T00:00:00Z", eventLog: { type: "changed", timestamp: "2026-10-24T00:00:00Z" } }), lastEventId: "" } as MessageEvent); });

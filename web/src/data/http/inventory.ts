@@ -1,8 +1,9 @@
+import { inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/issues/82
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding.
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -15,34 +16,34 @@ import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRo
 export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
   function fail(code: string): never { throw new AdapterOutcomeError({ kind: "error", code }); }
-  async function hostInventory(host: Host) {
-    try {
-      const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects"), list("list-containers", host.id, "containers"), readConditions(host.id)]);
-      const observation: InventoryObservation = { ...projects.observation, ...(containers.observation.stale ? containers.observation : {}), stale: projects.observation.stale || containers.observation.stale };
-      onState(host.id, observation);
-      const projectRows = projects.rows as ProjectRow[];
-      const containerRows = containers.rows as ContainerRow[];
-      const allContainers = containerRows.map((row) => mapContainer(row, host.id, projectRows, observation));
-      const stacks = withoutSystem(projectRows.map((row) => mapStack(row, host.id, allContainers, observation)));
-      return withConditions({ stacks, containers: withoutSystem(allContainers) }, conditions);
-    } catch (error) {
-      onState(host.id, inventoryFailure(host.id, error));
-      return { stacks: [], containers: [] };
-    }
+  async function hostInventory(host: Host, signal?: AbortSignal) {
+    const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects", undefined, signal), list("list-containers", host.id, "containers", undefined, signal), readConditions(host.id, signal)]);
+    signal?.throwIfAborted();
+    const observation: InventoryObservation = { ...projects.observation, ...(containers.observation.stale ? containers.observation : {}), stale: projects.observation.stale || containers.observation.stale };
+    onState(host.id, observation);
+    const projectRows = projects.rows as ProjectRow[];
+    const containerRows = containers.rows as ContainerRow[];
+    const allContainers = containerRows.map((row) => mapContainer(row, host.id, projectRows, observation));
+    const stacks = withoutSystem(projectRows.map((row) => mapStack(row, host.id, allContainers, observation)));
+    return withConditions({ stacks, containers: withoutSystem(allContainers) }, conditions);
   }
-  async function aggregate(operation: string, onPartial?: (batches: Awaited<ReturnType<typeof hostInventory>>[]) => void) {
-    await requireCapability(operation);
+
+  async function aggregate(operation: string, onPartial?: (batches: Awaited<ReturnType<typeof hostInventory>>[]) => void, parent?: AbortSignal) {
+    const budget = inventoryReadBudget(parent);
+    const scope = await budget(async () => { await requireCapability(operation); return hosts(); });
     const batches: Awaited<ReturnType<typeof hostInventory>>[] = [];
-    return Promise.all((await hosts()).map(async (host) => {
-      const batch = await hostInventory(host);
+    return Promise.all(scope.map(async (host) => {
+      const batch = await budget((signal) => hostInventory(host, signal)).catch((error) => {
+        parent?.throwIfAborted(); onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] };
+      });
       batches.push(batch);
       onPartial?.(batches);
       return batch;
     }));
   }
   return {
-    async listStacks(onPartial) { return (await aggregate("listStacks", (batches) => onPartial?.(batches.flatMap((b) => b.stacks)))).flatMap((batch) => batch.stacks); },
-    async listContainers(onPartial) { return (await aggregate("listContainers", (batches) => onPartial?.(batches.flatMap((b) => b.containers)))).flatMap((batch) => batch.containers); },
+    async listStacks(onPartial, signal) { return (await aggregate("listStacks", (batches) => onPartial?.(batches.flatMap((b) => b.stacks)), signal)).flatMap((batch) => batch.stacks); },
+    async listContainers(onPartial, signal) { return (await aggregate("listContainers", (batches) => onPartial?.(batches.flatMap((b) => b.containers)), signal)).flatMap((batch) => batch.containers); },
     async getStack(id) {
       await requireCapability("getStack");
       const [hostId, projectId] = splitInventoryId(id);
@@ -52,7 +53,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       // file content, which only the compose read carries and which is never cached.
       const [detail, batch, files] = await Promise.all([
         read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`),
-        hostInventory(host),
+        hostInventory(host).catch((error) => { onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");

@@ -2,7 +2,7 @@
 // Revision: 86876feed1c0f8ad66d9a3eb54da6c4be5c3ebbc
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223).
+// Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223). M20 #360: shell list reads and target-specific terminal invalidation.
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { ActionDetailState } from "../adapter";
@@ -12,7 +12,7 @@ import { createSingleFlight } from "./single-flight";
 interface Options {
   read: (host: string, id: string, signal: AbortSignal, expanded: boolean) => Promise<CodedActionRun>;
   hasConsumer: () => boolean;
-  terminal?: (host: string) => void;
+  terminal?: (host: string, run: CodedActionRun) => void;
 }
 
 /** Full detail has explicit owners. Notification demand shares the transport,
@@ -55,7 +55,7 @@ export function createActivityTargets({ read, hasConsumer, terminal: terminalMem
         if (run.status === "running" || run.status === "queued") { lastMembership = undefined; if (notification >= terminalNotification) terminal = undefined; }
         else if (discover) {
           const stamp = `${run.status}:${run.finishedAt ?? ""}`;
-          if (stamp !== lastMembership) { lastMembership = stamp; terminalMembership(host); }
+          if (stamp !== lastMembership) { lastMembership = stamp; terminalMembership(host, run); }
         }
         return run;
       }

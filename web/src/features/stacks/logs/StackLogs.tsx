@@ -1,6 +1,7 @@
+import { useLogKeyboard } from "./use-log-keyboard";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { ArrowDownToLine, Eraser, Pause, Play, Search, WrapText } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -44,7 +45,6 @@ function StackLogsView({ stack }: { stack: Stack }) {
   const [stamps, setStamps] = useState(true);
   const [wrap, setWrap] = useState(false);
   const [clearedIds, setClearedIds] = useState<Set<string>>(() => new Set());
-  const scroller = useRef<HTMLDivElement>(null);
 
   const tones = useMemo(() => new Map(stack.services.map((s, i) => [s.name, SERVICE_TONES[i % SERVICE_TONES.length] ?? "info"])), [stack.services]);
   const shown = useMemo(() => {
@@ -58,9 +58,8 @@ function StackLogsView({ stack }: { stack: Stack }) {
     );
   }, [lines, services, level, query, clearedIds]);
 
-  useEffect(() => {
-    if (follow && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
-  }, [shown, follow]);
+  const scroller = useRef<HTMLDivElement>(null);
+  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -117,21 +116,22 @@ function StackLogsView({ stack }: { stack: Stack }) {
         </span>
       </div>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div ref={scroller} role="log" tabIndex={0} aria-live={paused ? "off" : "polite"} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
+      <div role="log" aria-live={paused ? "off" : "polite"} aria-label={t("title")}><p id={keyboard.hintId} className="sr-only">{t("keyboardHint")}</p>
+      <div ref={scroller} {...keyboard.region} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("empty")}</p>}
         {shown.map((l) => {
           const tone = tones.get(l.service) ?? "info";
           return (
-            <div key={l.id} className={cn("flex gap-3 px-3 hover:bg-muted/30", LEVEL_CLASS[l.level], wrap ? "whitespace-pre-wrap" : "whitespace-pre")}>
+            <div key={l.id} {...keyboard.row(l.id)} className={cn(keyboard.active === l.id && "bg-muted/30 outline outline-primary", "flex gap-3 px-3 hover:bg-muted/30", LEVEL_CLASS[l.level], wrap ? "whitespace-pre-wrap" : "whitespace-pre")}>
               {stamps && <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>}
-              <span data-tone={tone} className="w-28 shrink-0 truncate text-(--tone) select-none">
-                <LogSource line={l} />
+              <span data-tone={tone} className={cn("shrink-0 text-(--tone) select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}>
+                <LogSource line={l} active={keyboard.active === l.id} />
               </span>
               <span className="min-w-0"><LogMessage line={l} /></span>
             </div>
           );
         })}
-      </div>
+      </div></div>
     </Card>
   );
 }

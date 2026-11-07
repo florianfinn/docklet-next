@@ -1,9 +1,10 @@
+import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useCapability } from "@/data/use-capability";
 import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -45,6 +46,10 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
   const [paused, setPaused] = useState(false);
   const lines = useContainerLogs(c.id, paused);
   const shown = useMemo(() => lines.slice(-120), [lines]);
+  const [follow, setFollow] = useState(true);
+  const scroller = useRef<HTMLDivElement>(null);
+  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
+  const logs = useTranslations("stacks.logs");
   return (
     <Card className="gap-0 overflow-hidden py-0" data-slot="container-logs">
       <CardHeader className="flex flex-row flex-wrap items-center gap-2 border-b px-4 py-3">
@@ -61,16 +66,17 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
         )}
       </CardHeader>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div role="log" tabIndex={0} aria-label={t("logs")} aria-live={paused ? "off" : "polite"} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
+      <div role="log" aria-label={t("logs")} aria-live={paused ? "off" : "polite"}><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
+      <div ref={scroller} {...keyboard.region} aria-label={t("logs")} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("logsEmpty")}</p>}
         {shown.map((l) => (
-          <div key={l.id} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level])}>
+          <div key={l.id} {...keyboard.row(l.id)} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level], keyboard.active === l.id && "bg-muted/30 outline outline-primary")}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
-            <span className="w-28 shrink-0 truncate text-muted-foreground select-none"><LogSource line={l} /></span>
+            <span className={cn("shrink-0 text-muted-foreground select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}><LogSource line={l} active={keyboard.active === l.id} /></span>
             <span className="min-w-0 break-words"><LogMessage line={l} /></span>
           </div>
         ))}
-      </div>
+      </div></div>
     </Card>
   );
 }

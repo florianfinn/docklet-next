@@ -33,7 +33,8 @@ export function pageWidth(pathname: string): PageWidth {
       return "standard";
     case "settings":
     case "profile":
-    case "preview":
+    case "proxy":
+    case "games":
       return "narrow";
     default:
       return "standard";

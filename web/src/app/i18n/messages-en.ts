@@ -24,7 +24,7 @@ import { enCommon } from "@/shared/messages/en";
 import { enTheme } from "@/shared/theme/messages/en";
 import { enWorkspace } from "@/shared/workspace/messages/en";
 
-import { enPreview } from "../preview/messages/en";
+import { enComingSoon } from "../coming-soon/messages/en";
 import { enShell } from "../shell/messages/en";
 import { enLocale } from "./messages/en";
 
@@ -34,7 +34,7 @@ export const enMessages = {
   workspace: enWorkspace,
   theme: enTheme,
   shell: enShell,
-  preview: import.meta.env.DEV ? enPreview : ({} as typeof enPreview),
+  comingSoon: enComingSoon,
   activity: enActivity,
   environment: enEnvironmentEvents,
   user: enUserEvents,

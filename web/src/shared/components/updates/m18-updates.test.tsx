@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original per-source update gestures, policy locks, recovery and terminal-stream guards.
+// Deviations: Original per-source update gestures, policy locks, recovery and terminal-stream guards. M20 #360: regression coverage for shell reads, stack targets and neutral labels.
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -146,14 +146,14 @@ function PointProbe({ adapter }: { adapter: ReturnType<typeof updateFixture>["ad
 it.each(["project_update", "project_restore", "project_deploy", "project_redeploy"])("RP10: terminal %s stream alone invalidates held points", async (type) => {
   const f = updateFixture(); await f.adapter.getCurrentUser(); f.state.points[0]!.holdState = "active";
   renderWithApp(<PointProbe adapter={f.adapter} />, f.adapter); await screen.findByText("active");
-  const topics: string[][] = []; const off = f.adapter.subscribeChanges((value) => topics.push(value));
+  const targets: { stackId: string; hostId: string }[] = []; const off = f.adapter.subscribeStackTerminals!((value) => targets.push(value));
   const initialReads = f.calls.filter((c) => c.path.endsWith("/restore-points")).length;
   f.state.points[0]!.holdState = "none";
   await act(async () => { f.source.onmessage?.({ data: JSON.stringify({ channel: "activities", timestamp: point.createdAt, activity: { type: "updated", activity: { ...f.run, type, status: "success" } } }), lastEventId: "" } as MessageEvent); });
-  expect(topics.some((value) => value.includes("stacks"))).toBe(true);
+  expect(targets).toEqual([{ stackId: "direct~project", hostId: "direct" }]);
   off();
-  await screen.findByText("none");
   expect(f.calls.filter((c) => c.path.endsWith("/restore-points"))).toHaveLength(initialReads + 1);
+  await screen.findByText("none");
 });
 
 it("previous-image transport reads only the offered detail projection", async () => {

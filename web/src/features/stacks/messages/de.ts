@@ -125,6 +125,7 @@ export const deStacks: typeof enStacks = {
     trigger: { deploy: "Deploy", redeploy: "Redeploy", update: "Update", restore: "Wiederherstellung" },
   },
   logs: {
+    keyboardHint: "Pfeiltasten wechseln die Zeile; Pos1 und Ende springen zur ersten und letzten Zeile; Ende setzt die Live-Ansicht fort.",
     delivery: {
       connecting: "Verbindung zu den Logs wird hergestellt …", live: "Live-Logs", retrying: "Verbindung unterbrochen. Neuer Versuch …", offline: "Offline. Die Verbindung wird fortgesetzt, sobald du online bist.",
       unavailable: "Logs sind für diese Ressource nicht verfügbar.", error: "Logübertragung fehlgeschlagen. Erneut versuchen, um die letzten Zeilen anzufordern.", unauthenticated: "Melde dich an, um Logs zu empfangen.",
