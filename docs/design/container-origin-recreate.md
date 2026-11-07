@@ -167,8 +167,11 @@ admission. Shared contract and migration items are in
 
     Startup recovery is bounded so an unavailable Docker daemon cannot stop the
     hub or agent from starting: all journals and attempts share one 30 s budget,
-    each inspect has 5 s, and pending journals get at most three passes 2 s
-    apart. Only an unavailable daemon (connection refused or reset, missing
+    each Docker call (client setup, inspect, rename, start, remove) has 5 s,
+    and pending journals get at most three passes 2 s apart. A transient
+    failure of a compensation or cleanup effect is retried from the committed
+    intent with the exact IDs observed again, like a failed inspect. Only an
+    unavailable daemon (connection refused or reset, missing
     socket, `Unavailable`) or a call that exceeds its budget counts as
     transient; not-found, name and ownership observations keep their table
     meaning, and a journal write failure still fails startup. A run still

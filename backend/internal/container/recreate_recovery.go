@@ -19,7 +19,8 @@ import (
 )
 
 // recreateRecoveryTiming bounds startup recovery: one budget for all journals
-// and attempts, a per-inspect budget, and a few passes over pending journals.
+// and attempts, a per-call budget for each Docker call, and a few passes over
+// pending journals.
 var recreateRecoveryTiming = struct {
 	budget, call, pause time.Duration
 	attempts            int
@@ -28,12 +29,30 @@ var recreateRecoveryTiming = struct {
 type recreateCallBudgetKey struct{}
 
 // recreateCallContext applies the recovery per-call budget to one Docker
-// inspect; outside startup recovery the caller's context is unchanged.
+// call; outside startup recovery the caller's context is unchanged.
 func recreateCallContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if budget, ok := ctx.Value(recreateCallBudgetKey{}).(time.Duration); ok && budget > 0 {
 		return context.WithTimeout(ctx, budget)
 	}
 	return ctx, func() {}
+}
+
+// recreateCall runs one Docker effect under the recovery per-call budget.
+func recreateCall(ctx context.Context, effect func(context.Context) error) error {
+	ctx, cancel := recreateCallContext(ctx)
+	defer cancel()
+	return effect(ctx)
+}
+
+// recreateEffectFailed keeps a transient effect failure during startup
+// recovery retryable: the next pass reloads the committed intent and observes
+// the exact IDs again. Other failures, and every failure outside startup
+// recovery, stay ambiguous as before.
+func (s *ContainerService) recreateEffectFailed(ctx context.Context, j *RecreateJournal, err error) (dto.RecreateRecovery, error) {
+	if _, recovering := ctx.Value(recreateCallBudgetKey{}).(time.Duration); recovering && recreateRecoveryTransient(ctx, err) {
+		return dto.RecreateRecovery{}, err
+	}
+	return s.ambiguousRecreate(ctx, j)
 }
 
 // recreateRecoveryTransient reports a daemon that is unavailable or did not
@@ -77,8 +96,15 @@ func (s *ContainerService) RecoverRecreates(ctx context.Context) ([]dto.Recreate
 	var cause error
 	for attempt := 1; ; attempt++ {
 		var next []RecreateJournal
-		c, clientErr := s.dockerService.GetClient(budget)
+		var c *client.Client
+		clientErr := recreateCall(budget, func(ctx context.Context) (err error) {
+			c, err = s.dockerService.GetClient(ctx)
+			return err
+		})
 		if clientErr != nil {
+			if !recreateRecoveryTransient(budget, clientErr) {
+				return nil, nil, fmt.Errorf("recreate recovery: %w", clientErr)
+			}
 			next, cause = pending, clientErr
 		} else {
 			for i := range pending {

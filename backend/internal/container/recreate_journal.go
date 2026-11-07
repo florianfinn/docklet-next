@@ -212,8 +212,11 @@ func (s *ContainerService) compensateRecreate(ctx context.Context, c *client.Cli
 		if err := s.saveRecreate(ctx, j, "comp-remove-new"); err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if _, err := c.ContainerRemove(ctx, replacement.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerRemove(ctx, replacement.ID, client.ContainerRemoveOptions{Force: true})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 		if err := s.saveRecreate(ctx, j, "comp-rename-old"); err != nil {
 			return dto.RecreateRecovery{}, err
@@ -230,8 +233,11 @@ func (s *ContainerService) compensateRecreate(ctx context.Context, c *client.Cli
 		if err := s.saveRecreate(ctx, j, "comp-rename-old"); err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if _, err := c.ContainerRename(ctx, j.OldID, client.ContainerRenameOptions{NewName: j.OldName}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerRename(ctx, j.OldID, client.ContainerRenameOptions{NewName: j.OldName})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 		if err := s.saveRecreate(ctx, j, "comp-start-old"); err != nil {
 			return dto.RecreateRecovery{}, err
@@ -241,8 +247,11 @@ func (s *ContainerService) compensateRecreate(ctx context.Context, c *client.Cli
 		if err := s.saveRecreate(ctx, j, "comp-start-old"); err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if _, err := c.ContainerStart(ctx, j.OldID, client.ContainerStartOptions{}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerStart(ctx, j.OldID, client.ContainerStartOptions{})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 		if err := s.saveRecreate(ctx, j, "rolled-back"); err != nil {
 			return dto.RecreateRecovery{}, err
@@ -255,8 +264,11 @@ func (s *ContainerService) finishRecoveredRecreate(ctx context.Context, c *clien
 		return dto.RecreateRecovery{}, err
 	}
 	if old != nil {
-		if _, err := c.ContainerRemove(ctx, j.OldID, client.ContainerRemoveOptions{Force: true}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerRemove(ctx, j.OldID, client.ContainerRemoveOptions{Force: true})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 	}
 	if err := s.saveRecreate(ctx, j, "done"); err != nil {
