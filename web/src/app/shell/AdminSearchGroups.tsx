@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original role-scoped command palette using existing query consumers. M19 web consumer integration.
+// Deviations: Original role-scoped command palette using existing query consumers. M19 web consumer integration. Check all updates gated on the operation it runs.
 
 import { useTranslations } from "use-intl";
 import { captureCommandFailure } from "@/shared/components/command-failure";
@@ -22,7 +22,7 @@ export function AdminSearchGroups({ query, select, hostName, pages, actions: sha
   const hosts = useHosts(), containers = useContainers(), images = useImages(), volumes = useVolumes(), topology = useTopology();
   const t = useTranslations("shell.search"), nav = useTranslations("shell.nav"), settings = useTranslations("settings.sections"), adapter = useAdapter();
   const commandError = useCommandError();
-  const create = useCapability("deployStack"), add = useCapability("registerHost"), updates = useCapability("checkUpdates"), activity = useCapability("listActions");
+  const create = useCapability("deployStack"), add = useCapability("registerHost"), updates = useCapability(adapter.checkAllUpdates ? "checkAllUpdates" : "checkUpdates"), activity = useCapability("listActions");
   const actions = [
     ...(create.available ? [{ id: "new-stack", label: t("newStack"), to: "/stacks/new" }] : []),
     ...(add.available ? [{ id: "add-host", label: nav("newHost"), to: "/hosts/new" }] : []),
