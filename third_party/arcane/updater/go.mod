@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements; functional cut: module tidy.
+// Deviations: Relative local helper replacements; functional cut: module tidy; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/updater
 

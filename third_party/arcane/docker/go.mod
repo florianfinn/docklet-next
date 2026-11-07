@@ -2,7 +2,7 @@
 // Revision: e3d12f637964a6edd495f9b31a10d2f0a40fa127
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements; functional cut: module tidy.
+// Deviations: Relative local helper replacements; functional cut: module tidy; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/docker
 

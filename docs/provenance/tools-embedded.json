@@ -42,9 +42,9 @@
       "third_party/arcane/acfs/internal/version/version.go": "bce1a6205a8436b21e8ad7a0362409aa4a470d0e39e1383894f703e5bdd39d7e",
       "third_party/arcane/acfs/internal/cli/run.go": "b3e01c7e97a748f7f57f5e2e2df0a714299e82114278a92372248378a9363325",
       "third_party/arcane/acfs/cmd/main.go": "52aa83c6b589607d690f9d59133e8c5cd12fa71e14d1dcfe065abaf942d542bb",
-      "third_party/arcane/acfs/go.mod": "698ad6a083b6486d3ca7b227f3a7a36be7cf10bc8d938ae000eb578f361c6916",
+      "third_party/arcane/acfs/go.mod": "3651ad146f799b8287208203f02235188779085fa007ec8758a2a5ef79b6cb3e",
       "third_party/arcane/acfs/go.sum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "third_party/arcane/kit/go.mod": "b2069196289c6b38b07356d2ca5f329f645db84889a51400efb87a68ee2d63ea",
+      "third_party/arcane/kit/go.mod": "e79c8b039bebdaac430f49fcfe833f288ec3ff00a0135486ea39d66298792f11",
       "third_party/arcane/kit/go.sum": "b9e94061b15a383b0a7aebbfd69ec9aa3dd08a4e6d27d75cb44f7c7219c00831"
     },
     "modules": [

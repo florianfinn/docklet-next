@@ -2,7 +2,7 @@
 // Revision: ad1f8d7e16f4bfaf4f6dae6b35d9ea1e3ef961b5
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/docker/convert
 

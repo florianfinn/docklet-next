@@ -2,7 +2,7 @@
 // Revision: de96f232f840ee55de637f1178f8cb890de9a642
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/docker/compat
 

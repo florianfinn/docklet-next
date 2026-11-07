@@ -2,7 +2,7 @@
 // Revision: cefb3a12f0e22cbd2123d51cf397508db9aedcf8
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/sys/cgroup
 

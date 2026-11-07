@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Relative local helper replacements; SQLite-only driver and local Francis provider; PostgreSQL runtime removed.
+// Deviations: Local module namespace; Relative local helper replacements; SQLite-only driver and local Francis provider; PostgreSQL runtime removed; M20 removes the remote CLI dependency and unused sys/bytes replacement.
 
 module github.com/florianfinn/docklet-next/backend
 

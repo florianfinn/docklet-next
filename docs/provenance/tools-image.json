@@ -162,7 +162,7 @@
   ],
   "embeddedInventory": {
     "path": "docs/provenance/tools-embedded.json",
-    "sha256": "50122f459baeded4653c2f5fe4a3eaba95af8b7746d7ff1b2cf88aa4b4824b51"
+    "sha256": "8f05c7842a99ca323c2f59f3e55243e9e8589a6816baddb8e2c448d995949ee9"
   },
   "dependencyAssessment": "Trivy: exact amd64/arm64 release binary build metadata and 460-module release SBOM plus two actual linked module versions absent from that SBOM; exact legal texts and source forms in dependencyInventory. acfs and BusyBox: source/compiled package graph, static C link map and embedded libc/compiler notices in embeddedInventory."
 }
