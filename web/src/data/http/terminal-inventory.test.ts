@@ -2,7 +2,7 @@
 // Revision: 8c86f381fb4c582fb90b56a1d158585600e2d41f
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Every terminal stack runtime run refreshes the stack inventory, also when only an activity read observes the end. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Every terminal stack runtime run refreshes the stack inventory, also when only an activity read observes the end. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { expect, it, vi } from "vitest";
 import { activityFixture, at } from "./activity-reader.test-support";

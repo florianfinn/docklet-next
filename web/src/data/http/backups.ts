@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";

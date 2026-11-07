@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original reduced navigation, route denial and sign-out mode coverage. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original reduced navigation, route denial and sign-out mode coverage. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

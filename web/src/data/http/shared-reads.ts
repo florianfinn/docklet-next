@@ -2,7 +2,7 @@
 // Revision: fdb37e836f708bd9ff76f75075bbb3e60ae2f0b3
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original adapter-local sharing of concurrent read responses. M20 #360: shell read budgets and target-specific terminal invalidation.
+// Deviations: Original adapter-local sharing of concurrent read responses. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 // Only these inventory readers share abortable requests; other owned reads retain their own transport.
 const INVENTORY = /\/environments\/[^/]+\/(?:projects|containers|images|volumes|networks|runtime-conditions)(?:\?|$)/;

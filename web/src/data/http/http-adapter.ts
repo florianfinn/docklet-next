@@ -1,3 +1,9 @@
+// Source: docklet-next/docs/design/adapter-live-capabilities.md
+// Revision: dfdfa084478d327818d8c57b0973d638f80861f6
+// Retrieved: 2026-10-15
+// License: Apache-2.0
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation.
+
 import { inventoryReadBudget } from "./host-read-deadline";
 import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
@@ -9,11 +15,6 @@ import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
-// Source: docklet-next/docs/design/adapter-live-capabilities.md
-// Revision: dfdfa084478d327818d8c57b0973d638f80861f6
-// Retrieved: 2026-10-15
-// License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation.
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";

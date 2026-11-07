@@ -2,7 +2,7 @@
 // Revision: 4e71e45a2297a4f2719188cdf15c3e4d586b5357
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original real HTTP adapter fixtures for shell reads and terminal ownership. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original real HTTP adapter fixtures for shell reads and terminal ownership.
 
 import { vi } from "vitest";
 import { resourceFixture } from "./resources.test-support";

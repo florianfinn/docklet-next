@@ -66,9 +66,8 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
         )}
       </CardHeader>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div role="log" aria-label={t("logs")} aria-live={paused ? "off" : "polite"}><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
+      <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
       <div ref={scroller} {...keyboard.region} aria-label={t("logs")} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("logsEmpty")}</p>}
         {shown.map((l) => (
           <div key={l.id} {...keyboard.row(l.id)} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level], keyboard.active === l.id && "bg-muted/30 outline outline-primary")}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
@@ -76,7 +75,9 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
             <span className="min-w-0 break-words"><LogMessage line={l} /></span>
           </div>
         ))}
-      </div></div>
+      </div>
+      {shown.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-0 px-4 py-8 text-center text-muted-foreground">{t("logsEmpty")}</p>}
+      </div>
     </Card>
   );
 }

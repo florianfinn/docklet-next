@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original role-scoped command palette using existing query consumers. M19 web consumer integration. Check all updates gated on the operation it runs. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original role-scoped command palette using existing query consumers. M19 web consumer integration. Check all updates gated on the operation it runs. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { useTranslations } from "use-intl";
 import { captureCommandFailure } from "@/shared/components/command-failure";

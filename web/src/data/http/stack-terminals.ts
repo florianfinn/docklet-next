@@ -2,7 +2,7 @@
 // Revision: 593699500ef01a82fef720cc7217ed19eaaae7c0
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: A stack run observed going terminal refreshes the stack inventory, whether the change came from the stream, a receipt poll or an activity read. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: A stack run observed going terminal refreshes the stack inventory, whether the change came from the stream, a receipt poll or an activity read. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 const ACTIVE = new Set(["queued", "running", "waiting", "retrying"]);
 

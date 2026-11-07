@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original per-source update gestures, policy locks, recovery and terminal-stream guards. M20 #360: regression coverage for shell reads, stack targets and neutral labels.
+// Deviations: Original per-source update gestures, policy locks, recovery and terminal-stream guards. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

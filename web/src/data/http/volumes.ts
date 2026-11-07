@@ -1,9 +1,10 @@
-import { inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/docs/design/storage-workspace.md
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+
+import { inventoryReadBudget } from "./host-read-deadline";
 
 import { CancelledError } from "@tanstack/react-query";
 

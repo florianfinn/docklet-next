@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { operations } from "@/api/generated/schema";
 import { AdapterOutcomeError } from "@/data/capability";

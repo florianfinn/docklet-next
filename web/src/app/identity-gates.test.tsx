@@ -2,7 +2,7 @@
 // Revision: 5b7a533b0682154acf719fc2ddd059aed9a443c2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original route-level identity state matrix and credential-error regression. M20 #360: regression coverage for shell reads, stack targets and neutral labels.
+// Deviations: Original route-level identity state matrix and credential-error regression. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

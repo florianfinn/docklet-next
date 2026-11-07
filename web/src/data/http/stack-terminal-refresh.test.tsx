@@ -1,9 +1,10 @@
-import { deferred } from "./activity-reader.test-support";
 // Source: docklet-next/issues/383
 // Revision: 4e71e45a2297a4f2719188cdf15c3e4d586b5357
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original real HTTP terminal-to-detail ownership regressions. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original real HTTP terminal-to-detail ownership regressions.
+
+import { deferred } from "./activity-reader.test-support";
 
 import { act, screen, waitFor } from "@testing-library/react";
 import { useParams } from "react-router";
@@ -19,6 +20,9 @@ function Probe() {
   const { stackId } = useParams(); const stack = useStack(stackId);
   return <h1>{stack.data ? `${stack.data.id}:${stack.data.services.map((s) => s.state).join(",")}` : "loading"}</h1>;
 }
+// The hub-local producer publishes {type:"activity", activityId, activity} without an envelope host
+// (activity/service_projection.go publishActivityInternal); the activity names its environment.
+const sendProducerTerminal = (f: ReturnType<typeof hardeningFixture>) => f.source.onmessage?.({ data: JSON.stringify({ channel: "activities", timestamp: f.state.run.endedAt, activity: { type: "activity", activityId: f.state.run.id, activity: { ...f.state.run, resourceType: "stack" } } }), lastEventId: "" } as MessageEvent);
 const detailReads = (f: ReturnType<typeof hardeningFixture>, host: string, project = "project") => f.fetcher.mock.calls.filter(([input]) => String(input).split("?")[0]?.endsWith(`/environments/${host}/projects/${project}`)).length;
 
 it.each([false, true])("WH-B3 hub-local terminal refreshes header and services without reload, unchanged=%s", async (unchanged) => {
@@ -30,7 +34,7 @@ it.each([false, true])("WH-B3 hub-local terminal refreshes header and services w
     await act(async () => { await f.adapter.runStackCommand("0~project", "down"); });
     const before = detailReads(f, "0"); f.state.stopped = !unchanged;
     f.state.run = { ...f.state.run, status: "success", endedAt: "2026-11-07T00:00:01Z" };
-    act(() => f.source.send(f.state.run.id, "0"));
+    act(() => { sendProducerTerminal(f); });
     await waitFor(() => expect(detailReads(f, "0")).toBeGreaterThan(before));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "app", level: 1 }) !== null).toBe(true);

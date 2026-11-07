@@ -1,9 +1,10 @@
-import { inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/issues/83
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource reader over the shared inventory transport. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+
+import { inventoryReadBudget } from "./host-read-deadline";
 
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";

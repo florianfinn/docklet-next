@@ -51,7 +51,7 @@ describe("container inspector and page", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/containers/c-uptime-kuma"));
     expect([router.state.location.search, screen.queryByRole("dialog", { name: "uptime-kuma" })]).toEqual(["", null]);
     expect(await screen.findByRole("heading", { level: 1, name: "uptime-kuma" })).toBeTruthy();
-    expect(screen.getByRole("log", { name: "Logs" }) instanceof HTMLElement).toBe(true);
+    expect(screen.getByRole("listbox", { name: "Logs" }) instanceof HTMLElement).toBe(true);
   });
 
   it("restarts a standalone container at once, without a confirmation", async () => {

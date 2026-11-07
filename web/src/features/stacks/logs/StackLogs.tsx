@@ -116,9 +116,8 @@ function StackLogsView({ stack }: { stack: Stack }) {
         </span>
       </div>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div role="log" aria-live={paused ? "off" : "polite"} aria-label={t("title")}><p id={keyboard.hintId} className="sr-only">{t("keyboardHint")}</p>
+      <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{t("keyboardHint")}</p>
       <div ref={scroller} {...keyboard.region} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("empty")}</p>}
         {shown.map((l) => {
           const tone = tones.get(l.service) ?? "info";
           return (
@@ -131,7 +130,9 @@ function StackLogsView({ stack }: { stack: Stack }) {
             </div>
           );
         })}
-      </div></div>
+      </div>
+      {shown.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-0 px-4 py-8 text-center text-muted-foreground">{t("empty")}</p>}
+      </div>
     </Card>
   );
 }

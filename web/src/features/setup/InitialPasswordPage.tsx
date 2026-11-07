@@ -2,7 +2,7 @@
 // Revision: 5b7a533b0682154acf719fc2ddd059aed9a443c2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original password-change screen for an already configured hub. M20 #360: localised labels, neutral notation and keyboard log navigation.
+// Deviations: Original password-change screen for an already configured hub. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";

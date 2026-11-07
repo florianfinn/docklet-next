@@ -2,7 +2,7 @@
 // Revision: 4e71e45a2297a4f2719188cdf15c3e4d586b5357
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original production route proof without an adapter context or network reads. M20 #360: localised labels, neutral notation and keyboard log navigation.
+// Deviations: Original production route proof without an adapter context or network reads.
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router";

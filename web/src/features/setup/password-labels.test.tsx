@@ -2,7 +2,7 @@
 // Revision: 4e71e45a2297a4f2719188cdf15c3e4d586b5357
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original real HTTP terminal-to-detail ownership regressions. M20 #360: localised labels, neutral notation and keyboard log navigation.
+// Deviations: Original neutral password label proofs for the forced change and first-run setup.
 
 import { screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";

@@ -1,9 +1,10 @@
-import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
 // Source: docklet-next/docs/design/vulnerability-scanning.md
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+
+import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { DockletAdapter } from "../adapter";

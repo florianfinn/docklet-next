@@ -2,7 +2,7 @@
 // Revision: 5a51f9750ef391f272321daf1b1234a7e110c7f1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original real app-query and route-consumer renewal regressions informed by independent R3 probes. M20 #360: regression coverage for shell reads, stack targets and neutral labels.
+// Deviations: Original real app-query and route-consumer renewal regressions informed by independent R3 probes. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { CancelledError, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { act, render, screen, waitFor as testingWaitFor } from "@testing-library/react";

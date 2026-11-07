@@ -2,7 +2,7 @@
 // Revision: ed78cd8cf48b88e8225b656b0976d248829f85eb
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original keyboard and screen-reader checks on both log surfaces. M20 #360: localised labels, neutral notation and keyboard log navigation.
+// Deviations: Original keyboard and screen-reader checks on both log surfaces. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -33,6 +33,10 @@ it.each(["en-US", "de"] as const)("%s WH-B4 source streams have real keyboard ro
       { path: "/containers/:containerId", element: <ContainerPage /> },
     ], [kind === "stack" ? "/stack" : `/containers/${container.id}`], adapter);
     await screen.findByRole("log"); await act(settleLogs);
+    // The empty state sits beside the listbox, which owns only options and carries the only label.
+    const empty = within(screen.getByRole("log")).getByRole("listbox");
+    expect(empty.children.length === 0 && (empty.parentElement?.textContent?.trim().length ?? 0) > 0).toBe(true);
+    expect(document.querySelectorAll(`[aria-label="${empty.getAttribute("aria-label")}"]`).length).toBe(1);
     act(() => {
       f.sockets[0]!.send(Array.from({ length: 100 }, (_, i) => ({ ...wireLog(i + 1, i === 0 ? "visible application text" : `line ${i}`), service: "example-source", stream: "stderr" })));
       f.flush();

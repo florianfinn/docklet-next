@@ -38,9 +38,11 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
     () => {
       if (!enabled) return;
       const offDemand = registerReadConsumer(adapter.subscribeChanges, "events", () => client.getQueryCache().find({ queryKey: queryKeys.events, exact: true })?.isActive() ?? false);
-      const offStacks = adapter.subscribeStackTerminals?.(({ stackId }) => {
+      const offStacks = adapter.subscribeStackTerminals?.(({ stackId, hostId }) => {
         void client.invalidateQueries({ queryKey: queryKeys.stack(stackId) });
-        void client.invalidateQueries({ predicate: (query) => query.queryKey[0] === "capability" && query.queryKey[2] === "stack" && query.queryKey[3] === stackId });
+        // The stack's own descriptors and its host's container descriptors may change with the run.
+        void client.invalidateQueries({ predicate: ({ queryKey: [root, , kind, id] }) => root === "capability"
+          && (kind === "stack" && id === stackId || kind === "container" && typeof id === "string" && id.startsWith(`${hostId}~`)) });
         for (const key of [queryKeys.stacks, queryKeys.containers, queryKeys.images, queryKeys.volumes, queryKeys.topology, queryKeys.networks]) void client.invalidateQueries({ queryKey: key, exact: true });
       });
       const offChanges = adapter.subscribeChanges((topics) => {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata; classify daemon errors through errdefs predicates. M20 #360: localised labels, neutral notation and keyboard log navigation.
+// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata; classify daemon errors through errdefs predicates. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 package ws
 

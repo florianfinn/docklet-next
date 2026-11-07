@@ -2,7 +2,7 @@
 // Revision: 412ca6202d43c89db6e0b5b3947e86c7d2ab960d
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for the stack import contract. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original total catalogue maps for the stack import contract. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { useTranslations } from "use-intl";
 import type { components } from "@/api/generated/schema";

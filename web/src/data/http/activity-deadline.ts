@@ -2,7 +2,7 @@
 // Revision: 86876feed1c0f8ad66d9a3eb54da6c4be5c3ebbc
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223). M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223). M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { AdapterOutcomeError } from "../capability";
 import { hostReadDeadline } from "./host-read-deadline";

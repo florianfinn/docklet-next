@@ -2,7 +2,7 @@
 // Revision: 4e71e45a2297a4f2719188cdf15c3e4d586b5357
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original real HTTP adapter fixtures for shell reads and terminal ownership. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original logical host read budget and cancellation proofs.
 
 import { CancelledError } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
@@ -26,9 +26,11 @@ it("an already cancelled query never starts a physical request", async () => {
 it("one budget includes prerequisite queuing and all pagination phases", async () => {
   vi.useFakeTimers(); const budget = inventoryReadBudget();
   await budget(async () => { await vi.advanceTimersByTimeAsync(20_000); });
-  const held = budget(() => new Promise<void>(() => {})); const failed = held.catch((error: unknown) => error);
-  await vi.advanceTimersByTimeAsync(9_999); let settled = false; void held.catch(() => { settled = true; }); expect(settled).toBe(false);
-  await vi.advanceTimersByTimeAsync(1); expect(await failed).toMatchObject({ outcome: { code: "http.error" } });
+  const held = budget(() => new Promise<void>(() => {})); let outcome: unknown; let settled = false;
+  void held.catch((error: unknown) => { outcome = error; settled = true; });
+  await vi.advanceTimersByTimeAsync(9_999); expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1); expect(settled).toBe(true);
+  expect(outcome).toMatchObject({ outcome: { code: "http.error" } });
 });
 it.each(["listStacks", "listContainers", "listImages", "listVolumes", "listNetworkSummaries"] as const)("%s passes cancellation to the real HTTP transport", async (method) => {
   const f = hardeningFixture(); f.state.heldHost = "second"; const parent = new AbortController();

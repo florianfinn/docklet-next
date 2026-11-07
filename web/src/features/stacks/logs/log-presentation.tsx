@@ -2,7 +2,7 @@
 // Revision: 225dd4d1d1dc7fb16adc91179d3d9d6d675d2ced
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original shared localized log delivery notices. M20 #360: localised labels, neutral notation and keyboard log navigation.
+// Deviations: Original shared localized log delivery notices. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { useTranslations } from "use-intl";
 import type { LogLine } from "@/domain/model";

@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original live runtime condition merge for the fleet ring, issue #371. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original live runtime condition merge for the fleet ring, issue #371. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, RuntimeCondition, Stack } from "@/domain/model";
