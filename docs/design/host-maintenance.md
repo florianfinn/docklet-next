@@ -64,12 +64,20 @@ hosts stays in [host onboarding](host-onboarding.md).
    inserts the `reserved` row. Every runtime intake (HTTP, policy jobs,
    scheduled children) checks for an active restart in its admission
    transaction and refuses with 409 `host.restarting`. A restart on a busy host
-   is 409 `host.busy`.
+   is 409 `host.busy`; an already active restart answers it before any remote
+   compatibility probe, so an unreachable agent does not mask it.
 7. **Agent route** `POST /api/system/agent/restart` (agent mode, Edge allowlist
    `system.agent.restart`) resolves and inspects its own container first;
    unsupported setups get 409 `agent.restart-unsupported` and nothing restarts.
-   Otherwise it replies 202 `{instanceId}` and restarts its own container after
-   1 s.
+   A running volume backup, bind snapshot or restore on that agent (its durable
+   `running` rows, kept while writer discovery is unconfirmed, and active writer
+   fences) refuses the restart with 409 `host.busy`, as does an unreadable
+   backup state; the hub ends that restart run as failed with code `host.busy`
+   and shows it as a refusal. Otherwise it replies 202 `{instanceId}` and
+   restarts its own container after 1 s. A backup admitted in that second can
+   still be interrupted (documented limit). Auto Heal is not part of the busy
+   check: a container restart it loses to an agent restart is harmless and Auto
+   Heal resumes afterwards.
 8. **Credential revision**: `environments.credential_revision` increases in the
    same transaction as any change of access token, API key or endpoint,
    including a manual token replacement that keeps the key ID. Before sending,
@@ -183,6 +191,7 @@ and the `/health` `instanceId`.
 | HM12 | reservation versus runtime intakes | atomic, all intakes including policy jobs | admission transaction | race restart against ordinary and policy runs; one restart call, scope held (mutation: check only) |
 | HM13 | fencing | credential revision and registration, checked per observation and at settlement | run observer → settlement transaction | endpoint edit, key rotation, manual token replacement with unchanged key ID and endpoint, delete and re-register, delayed old 200 (mutation: compare registration, key and endpoint only) |
 | HM14 | installation sheet credentials | opening mutates nothing; explicit rotation once | sheet lifecycle → token route → file generator | open, close and switch → no rotation; rotate once; URL, IPv6 and Edge files valid (mutation: rotate on mount, or naive split) |
+| HM15 | agent-local backup work | busy check before the 202; hub maps a timely 409 `host.busy` to failed `host.busy` | agent route → restart run | running backup, bind snapshot or restore row, or a writer fence → 409 and zero restart calls; Direct and Edge run settles failed `host.busy` (mutation: drop the check) |
 | HM15 | no replay | hub restart, lost 202 | startup recovery | restart call count stays 1 (mutation: resend on resume) |
 
 ## Web consumers

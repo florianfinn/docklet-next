@@ -138,7 +138,8 @@ admission. Shared contract and migration items are in
     | started or intent-remove-old | `old_id` exists | remove `old_id` | succeeded |
     | intent-remove-old | `old_id` gone | none | succeeded |
     | any | `was_running=false` and the replacement created but deliberately not started | keep it stopped, remove old | succeeded |
-    | any | AutoRemove original gone before `started`, ID or name mismatch, a foreign container on a name, or both IDs missing | touch nothing | `ambiguous`, failed `container.recreate-ambiguous`, backup shown with a marker |
+    | intent-rename to created, no `new_id` | a foreign container (not labelled with the run) holds only `new_name`, which differs from `old_name` and `backup_name` | restore old; never touch the foreign container | failed `container.recreate-recovered` |
+    | any | AutoRemove original gone before `started`, ID or name mismatch, a foreign container on `old_name` or `backup_name` (or on `new_name` once our create was observed), or both IDs missing | touch nothing | `ambiguous`, failed `container.recreate-ambiguous`, backup shown with a marker |
 
     Compensation steps have their own intents (`comp-remove-new`,
     `comp-rename-old`, `comp-start-old`) and are re-evaluated idempotently by ID
@@ -163,6 +164,19 @@ admission. Shared contract and migration items are in
     for the ordinary settlement retry instead of discarding it. Releasing a
     host-local run is refused while its journal is unresolved, so recovery still
     sees it.
+
+    Startup recovery is bounded so an unavailable Docker daemon cannot stop the
+    hub or agent from starting: all journals and attempts share one 30 s budget,
+    each inspect has 5 s, and pending journals get at most three passes 2 s
+    apart. Only an unavailable daemon (connection refused or reset, missing
+    socket, `Unavailable`) or a call that exceeds its budget counts as
+    transient; not-found, name and ownership observations keep their table
+    meaning, and a journal write failure still fails startup. A run still
+    pending after the bound is held as unknown with its exclusion (never
+    settled as interrupted), the process becomes ready, and the next start with
+    Docker reachable recovers it once from the journal without replay. Limit:
+    the container's scope stays held until the hub or agent restarts with
+    Docker reachable.
 
 ## Web
 
