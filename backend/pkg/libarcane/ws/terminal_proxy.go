@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original terminal bridge with bounded agent exit draining.
+// Deviations: Original terminal bridge with bounded agent exit draining and a 1 MiB browser frame limit.
 
 package ws
 
@@ -52,7 +52,7 @@ func proxyTerminalHTTP(w http.ResponseWriter, r *http.Request, address string, h
 		return err
 	}
 	defer agent.CloseNow()
-	browser.SetReadLimit(-1)
+	browser.SetReadLimit(BrowserFrameLimit)
 	agent.SetReadLimit(-1)
 	pump, cancelPump := context.WithCancel(context.WithoutCancel(viewer))
 	browserDone, agentDone := make(chan struct{}), make(chan struct{})
