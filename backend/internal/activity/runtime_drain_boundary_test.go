@@ -61,9 +61,9 @@ func TestRuntimeWorkerCancellationAfterExecutorReturnDuringDrain(t *testing.T) {
 				_, err := io.WriteString(w, "accepted tail\n")
 				return err
 			})
+			// The deadline fires only after the executor returned, so the drain boundary is exercised.
+			deadline := newFiredDeadline(app)
 			if mode == "deadline" {
-				deadline, cancel := context.WithTimeout(app, 3*time.Second)
-				defer cancel()
 				f.service.localExecution.ApplicationContext = deadline
 			}
 			a := &runtimeLateAppender{ActivityService: f.store.svc, entered: make(chan struct{}), release: make(chan struct{})}
@@ -80,6 +80,7 @@ func TestRuntimeWorkerCancellationAfterExecutorReturnDuringDrain(t *testing.T) {
 				_, err = f.service.Cancel(t.Context(), b2Ref(c, admitted.ActivityID), c.Actor)
 				require.NoError(t, err)
 			} else {
+				deadline.fire()
 				b1Await(t, owner.ctx.Done())
 				require.ErrorIs(t, owner.ctx.Err(), context.DeadlineExceeded)
 			}
@@ -140,4 +141,28 @@ func TestRuntimeWorkerDrainBudgetExpiresBeforeSuccessfulJoin(t *testing.T) {
 	require.Contains(t, snapshot.LatestMessage, "effects unverified")
 	require.Len(t, runtimeBoundarySnapshot(t, f.store).Activities[0].Output, 1, "late success does not erase the earlier drain-budget failure")
 	b2FinalCount(t, f, admitted.ActivityID, 1)
+}
+
+// firedDeadline is an application context whose deadline expires when fire is called.
+type firedDeadline struct {
+	context.Context
+	done chan struct{}
+	fire func()
+}
+
+func newFiredDeadline(parent context.Context) *firedDeadline {
+	d := &firedDeadline{Context: parent, done: make(chan struct{})}
+	d.fire = sync.OnceFunc(func() { close(d.done) })
+	return d
+}
+
+func (d *firedDeadline) Done() <-chan struct{} { return d.done }
+
+func (d *firedDeadline) Err() error {
+	select {
+	case <-d.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
 }

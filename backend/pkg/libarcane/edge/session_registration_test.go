@@ -139,9 +139,16 @@ func TestEdgeWebSocketRegistrationTokenLifecycle(t *testing.T) {
 			err = wsjson.Read(ctx, conn, &response)
 			if state == "valid" {
 				require.NoError(t, err)
-				require.True(t, response.Accepted)
-				tunnel, ok := registry.Get("example-host").Get()
-				require.True(t, ok)
+				require.Equal(t, MessageTypeRegisterResponse, response.Type, "first frame: %+v", response)
+				require.True(t, response.Accepted, "rejected: %q", response.Error)
+				// The registry publishes the tunnel only after the server has sent this ACK and cleared
+				// its pending flag, so the client can see the ACK a moment before the tunnel is visible.
+				var tunnel *AgentTunnel
+				require.Eventually(t, func() bool {
+					var ok bool
+					tunnel, ok = registry.Get("example-host").Get()
+					return ok
+				}, time.Second, time.Millisecond)
 				require.Equal(t, "example-key", tunnel.APIKeyID)
 				require.Equal(t, AgentTokenHash(token), tunnel.TokenHash)
 			} else {
