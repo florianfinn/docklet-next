@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery.
 
 import { inventoryReadBudget } from "./host-read-deadline";
 import { inventoryId } from "./inventory-mapping";
@@ -46,6 +46,7 @@ import { createHttpServiceWidgets } from "./service-widgets";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
+import { createHostReadAdmission } from "./host-read-admission";
 import { createSharedReads } from "./shared-reads";
 import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
@@ -229,7 +230,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (closing && await closing) throw new CancelledError();
     if (signedOut) throw new CancelledError();
   }
-  const network = options.fetch ?? globalThis.fetch;
+  const network = createHostReadAdmission(options.fetch ?? globalThis.fetch, baseUrl);
   // Admitted reads still waiting for their answer; a logout lets them land before the session ends.
   const answering = new Set<Promise<void>>();
   // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.

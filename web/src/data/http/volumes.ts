@@ -2,8 +2,9 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
 
+import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
 
 import { CancelledError } from "@tanstack/react-query";
@@ -78,6 +79,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
   const api: Pick<DockletAdapter, "listVolumes" | "getVolume"> = {
     async listVolumes(onPartial, parent) {
       const budget = inventoryReadBudget(parent);
+      const recovery = inventoryRecovery();
       const check = begin();
       const scope = await budget(async () => { await requireCapability("listVolumes"); return hosts(); });
       check();
@@ -98,7 +100,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
           retained.set(host.id, combined); batches.set(host.id, combined);
           onState(host.id, observation);
         } catch (error) {
-          parent?.throwIfAborted(); check();
+          parent?.throwIfAborted(); recovery.failed(host, error); check();
           const state = inventoryFailure(host.id, error);
           onState(host.id, state);
           const old = retained.get(host.id);
@@ -107,7 +109,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
         onPartial?.([...batches.values()].flat());
       }));
       check();
-      return [...batches.values()].flat();
+      return recovery.result([...batches.values()].flat());
     },
     async getVolume(id, signal) {
       const check = begin();

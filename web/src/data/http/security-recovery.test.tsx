@@ -2,11 +2,12 @@
 // Revision: b6e3b7c1952172431c244c2a4a7dffdc6c3103f9
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original held-host recovery regressions for issue #263.
+// Deviations: Original held-host recovery regressions for issue #263. D4 #271: fair physical host reads and result-local recovery.
 
 import { act, cleanup } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
+import { INVENTORY_RECOVERY_MS } from "../inventory-recovery";
 import { securityRecoveryInterval, SECURITY_RECOVERY_MS } from "@/domain/security";
 import SecurityPage from "@/features/security/SecurityPage";
 import { renderWithApp } from "@/test/render";
@@ -23,10 +24,10 @@ it("re-reads a transiently unavailable host on the mounted page and stops after 
   expect(document.body.textContent).toContain("Scan data unavailable for second");
   expect(document.body.textContent).toContain("CVE-2026-0001");
   f.state.failureHost = "";
-  await act(() => vi.advanceTimersByTimeAsync(SECURITY_RECOVERY_MS + 1_000));
+  await act(() => vi.advanceTimersByTimeAsync(INVENTORY_RECOVERY_MS + 1_000));
   expect(document.body.textContent).not.toContain("Scan data unavailable for second");
   const settled = reads();
-  await act(() => vi.advanceTimersByTimeAsync(3 * SECURITY_RECOVERY_MS));
+  await act(() => vi.advanceTimersByTimeAsync(3 * INVENTORY_RECOVERY_MS));
   expect(reads()).toBe(settled);
 });
 
@@ -42,7 +43,7 @@ it("recovers a transport failure of the read-only summaries request on the mount
   await act(() => vi.advanceTimersByTimeAsync(1_000));
   expect(document.body.textContent).toContain("Scan data unavailable for second");
   broken = false;
-  await act(() => vi.advanceTimersByTimeAsync(SECURITY_RECOVERY_MS + 1_000));
+  await act(() => vi.advanceTimersByTimeAsync(INVENTORY_RECOVERY_MS + 1_000));
   expect(document.body.textContent).not.toContain("Scan data unavailable for second");
   expect(f.fetcher.mock.calls.some(([url]) => String(url).includes("/vulnerabilities/scan"))).toBe(false);
 });
@@ -77,7 +78,7 @@ it.each(recoverable)("recovers a lost %s on the mounted page", async (_, fault) 
   await act(() => vi.advanceTimersByTimeAsync(1_000));
   expect(document.body.textContent).toContain("Scan data unavailable for second");
   state.broken = false;
-  await act(() => vi.advanceTimersByTimeAsync(SECURITY_RECOVERY_MS + 1_000));
+  await act(() => vi.advanceTimersByTimeAsync(INVENTORY_RECOVERY_MS + 1_000));
   expect(document.body.textContent).not.toContain("Scan data unavailable for second");
 });
 it.each(permanent)("keeps a %s unavailable without re-reading", async (_, fault) => {
@@ -87,7 +88,7 @@ it.each(permanent)("keeps a %s unavailable without re-reading", async (_, fault)
   await act(() => vi.advanceTimersByTimeAsync(1_000));
   expect(document.body.textContent).toContain("Scan data unavailable for second");
   const before = reads();
-  await act(() => vi.advanceTimersByTimeAsync(3 * SECURITY_RECOVERY_MS));
+  await act(() => vi.advanceTimersByTimeAsync(3 * INVENTORY_RECOVERY_MS));
   expect(document.body.textContent).toContain("Scan data unavailable for second");
   expect(reads()).toBe(before);
 });

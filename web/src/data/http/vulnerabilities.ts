@@ -2,8 +2,9 @@
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
 
+import { inventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
@@ -111,6 +112,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         return { enabled, hosts: enabled ? await o.hosts() : [] };
       }, parent).catch((error: unknown) => { check(); throw error; });
       check();
+      const recovery = inventoryRecovery();
       const result: SecurityOverview = { enabled, schedule: { mode: "manual" }, images: [], findings: [], history: [], unavailable: [] };
       if (!enabled) { retained.clear(); return result; }
       // Publish once after every bounded host batch settles; retain only the same host's rows.
@@ -121,11 +123,13 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
           check();
           // This batch's own inventory decides; the host catalogue may carry an older observation.
           const unavailable = stale || batch.images.some((i) => i.unavailable);
+          if (unavailable) recovery.failed(host, "vulnerability.read-unavailable");
           return { hostId: host.id, ...batch, code: unavailable ? "vulnerability.read-unavailable" : undefined };
         }
         catch (error) {
           check();
           if (isCancelledError(error)) throw error;
+          recovery.failed(host, errorCode(error));
           const previous = retained.get(host.id);
           const images: ScannedImage[] = previous ?? known.map((i) => ({ id: i.id, ref: imageReference(i), hostId: host.id, usage: i.consumers.some((c) => c.state === "running") ? "running" : i.consumers.length ? "stopped" : "unused", counts: empty(), scannedAt: "" }));
           return { hostId: host.id, images: images.map((i) => ({ ...i, unavailable: true })), findings: [], history: [], code: errorCode(error) };
@@ -135,7 +139,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       retained = new Map(batches.map((b) => [b.hostId, b.images]));
       result.unavailable = batches.flatMap((b) => b.code ? [{ hostId: b.hostId, code: b.code }] : []);
       result.images = batches.flatMap((b) => b.images); result.findings = batches.flatMap((b) => b.findings); result.history = batches.flatMap((b) => b.history);
-      return result;
+      return recovery.result(result);
     },
     async runScan(input) {
       let selected: string[];

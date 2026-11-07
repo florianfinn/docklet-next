@@ -2,8 +2,9 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
 
+import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
 
 import type { DockletAdapter } from "@/data/adapter";
@@ -32,19 +33,20 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
   async function aggregate(operation: string, onPartial?: (batches: Awaited<ReturnType<typeof hostInventory>>[]) => void, parent?: AbortSignal) {
     const budget = inventoryReadBudget(parent);
     const scope = await budget(async () => { await requireCapability(operation); return hosts(); });
+    const recovery = inventoryRecovery();
     const batches: Awaited<ReturnType<typeof hostInventory>>[] = [];
-    return Promise.all(scope.map(async (host) => {
+    return { recovery, batches: await Promise.all(scope.map(async (host) => {
       const batch = await budget((signal) => hostInventory(host, signal)).catch((error) => {
-        parent?.throwIfAborted(); onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] };
+        parent?.throwIfAborted(); recovery.failed(host, error); onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] };
       });
       batches.push(batch);
       onPartial?.(batches);
       return batch;
-    }));
+    })) };
   }
   return {
-    async listStacks(onPartial, signal) { return (await aggregate("listStacks", (batches) => onPartial?.(batches.flatMap((b) => b.stacks)), signal)).flatMap((batch) => batch.stacks); },
-    async listContainers(onPartial, signal) { return (await aggregate("listContainers", (batches) => onPartial?.(batches.flatMap((b) => b.containers)), signal)).flatMap((batch) => batch.containers); },
+    async listStacks(onPartial, signal) { const { recovery, batches } = await aggregate("listStacks", (batches) => onPartial?.(batches.flatMap((b) => b.stacks)), signal); return recovery.result(batches.flatMap((batch) => batch.stacks)); },
+    async listContainers(onPartial, signal) { const { recovery, batches } = await aggregate("listContainers", (batches) => onPartial?.(batches.flatMap((b) => b.containers)), signal); return recovery.result(batches.flatMap((batch) => batch.containers)); },
     async getStack(id) {
       await requireCapability("getStack");
       const [hostId, projectId] = splitInventoryId(id);

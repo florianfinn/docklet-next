@@ -2,8 +2,9 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original assigned-stack reads without host-wide container inventory. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original assigned-stack reads without host-wide container inventory. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
 
+import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
 
 import type { CurrentUser } from "../api";
@@ -19,6 +20,7 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
   return {
     async listStacks(onPartial, parent) {
       const budget = inventoryReadBudget(parent);
+      const recovery = inventoryRecovery();
       const scope = await budget(() => hosts());
       const batches: Awaited<ReturnType<DockletAdapter["listStacks"]>>[] = [];
       const result = await Promise.all(scope.map(async (host) => {
@@ -27,12 +29,12 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
           const [projects, conditions] = await budget((signal) => Promise.all([list("list-projects", host.id, "projects", undefined, signal), readConditions(host.id, signal)]));
           rows = withConditions({ stacks: (projects.rows as ProjectRow[]).map((p) => mapStack(p, host.id, [], projects.observation)), containers: [] }, conditions).stacks;
         } catch (error) {
-          parent?.throwIfAborted();
+          parent?.throwIfAborted(); recovery.failed(host, error);
           onState(host.id, inventoryFailure(host.id, error));
         }
         batches.push(rows); onPartial?.(batches.flat()); return rows;
       }));
-      return result.flat();
+      return recovery.result(result.flat());
     },
     async getStack(id) {
       const [host, project] = splitInventoryId(id);
