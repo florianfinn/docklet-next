@@ -183,7 +183,6 @@ callers creating events must send a listed code. A run status transition uses
 | `system` | `system.prune`, `system.auto_update`, `system.upgrade` |
 | `user` | `user.login`, `user.logout` |
 | `environment` | `environment.create`, `environment.connect`, `environment.disconnect`, `environment.update`, `environment.delete`, `environment.api_key.regenerated`, `environment.mtls.ca_generated`, `environment.mtls.cert_issued`, `environment.mtls.enroll`, `environment.mtls.download` |
-| `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
 | `notification` | `notification.send` |
 | `load` | `load.sustained` |
 | `container.condition` | `container.condition.down`, `container.condition.unhealthy`, `container.condition.restart-loop`, `container.condition.running-again` |

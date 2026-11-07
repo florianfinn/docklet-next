@@ -17,7 +17,7 @@ assigned stacks and their own profile) instead of filtered copies of every page.
 |---|---|---|
 | Administrator | the existing global administrator account (built-in `role_admin`, global assignment) | everything, unchanged |
 | User | a `users` row without the administrator role | only the allowlist in §4 for assigned applications, plus self-service (§5) |
-| Machine | agent tokens, Edge tunnel credentials, environment bootstrap keys, webhook path tokens, `ADMIN_STATIC_API_KEY` | unchanged machine contracts; the static key stays an administrator credential |
+| Machine | agent tokens, Edge tunnel credentials, environment bootstrap keys, `ADMIN_STATIC_API_KEY` | unchanged machine contracts; the static key stays an administrator credential |
 
 Administrators are the accounts that are effective global administrators today (global `role_admin`
 assignment). The administrator can promote a user to administrator and demote another administrator;

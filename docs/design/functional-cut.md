@@ -18,7 +18,8 @@ work, but removing the module in M1 would break an adopted host capability.
 **Webhooks — keep.** A webhook is an automation entry point for retained
 container and stack operations. The approved scope does not exclude automation,
 and no replacement entry point is specified. Its token handling and action
-permissions need a separate review before release.
+permissions need a separate review before release. Superseded in M20: the
+module was removed (#358).
 
 **Search — keep.** Search spans retained resources, including stacks, images and
 hosts. The approved navigation does not prohibit a search endpoint. Its result

@@ -891,7 +891,8 @@ new stack-update admission may update images. Discovery-free workspace calls
 remain ordinary deploy operations. Webhook runtime start/stop/restart/redeploy/
 up/down remain; webhook update authority awaits its separate actor-model review.
 PR2a owns narrow webhook/legacy-ingress changes and tests zero file/pull/recreate
-effects on refused hub/agent paths; PR1 introduces no workload-update capability.
+effects on refused hub/agent paths; PR1 introduces no workload-update capability. The webhook module, including
+its runtime actions, was removed in M20 (#358).
 
 For PR2a restore, refuse `restore.shared-reference` only if a tag must move and
 another running/stopped workload uses that reference with a different saved ID,

@@ -31,7 +31,7 @@ invoke the host operations below, so additions require an explicit review.
 | WebSocket routes | Streams container/project logs, stats and shell traffic; the Echo route snapshot protects these non-Huma endpoints. |
 
 Identity, users, roles, API keys, environment enrollment and management,
-notifications, webhooks, dashboard, search and hub event ingress
+notifications, dashboard, search and hub event ingress
 remain hub routes. Agent mode also omits the browser UI, API documentation,
 pprof profiling endpoints, test-only Playwright routes and manager Edge tunnel
 listener. An Edge agent
@@ -118,7 +118,7 @@ Both agent modes register recreate/redeploy and stack stop through the existing
 runtime module and manager-authenticated execute/query transport. Origin
 assignment/reset remain hub-only. The retired edit route refuses with
 `update.path-retired`; headerless redeploy has the same refusal. Compose-child
-redeploy is also refused at the retained webhook effect boundary.
+redeploy is also refused at the service effect boundary.
 
 `system.agent.restart` answers POST `/api/system/agent/restart` only in agent
 modes, through the allowlisted system module. The receiver resolves and inspects
