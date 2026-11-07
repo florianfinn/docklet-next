@@ -26,11 +26,11 @@ func TestM20HubCommandTreeAndAliases(t *testing.T) {
 		children = append(children, cmd.Name())
 	}
 	require.ElementsMatch(t, []string{"secret", "tls", "mtls", "apikey"}, children)
-	for _, path := range [][]string{{"gen", "api-key"}, {"g", "secret"}, {"generate", "tls"}, {"generate", "mtls"}} {
+	for path, name := range map[[2]string]string{{"gen", "api-key"}: "apikey", {"g", "secret"}: "secret", {"generate", "tls"}: "tls", {"generate", "mtls"}: "mtls"} {
 		var found *cobra.Command
-		found, _, err = rootCmd.Find(path)
+		found, _, err = rootCmd.Find(path[:])
 		require.NoError(t, err)
-		require.Equal(t, path[len(path)-1] == "api-key" || found.Name() == path[len(path)-1], true)
+		require.Equal(t, name, found.Name(), "%v", path)
 		require.Equal(t, generate, found.Parent())
 	}
 }

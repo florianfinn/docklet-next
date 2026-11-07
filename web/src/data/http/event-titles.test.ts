@@ -49,7 +49,7 @@ it("gives every catalogued hub event a German title instead of the hub's English
   } finally { errors.mockRestore(); }
 });
 
-// Producers that tell phase or outcome apart under one code: the updater run, fleet upgrades and webhook actions.
+// Producers that tell phase or outcome apart under one code: the updater run and fleet upgrades.
 it.each([
   ["system.auto_update", "Auto-update run started", { severity: "info", resourceName: "auto_updater", metadata: { phase: "start" } }, "Automatische Aktualisierung gestartet", "Automatic update started"],
   ["system.auto_update", "Auto-update: image pull nginx:1.29", { resourceName: "auto_updater", metadata: { phase: "image_pull", imageNew: "nginx:1.29" } }, "Automatische Aktualisierung: Image geladen: nginx:1.29", "Automatic update: image pulled: nginx:1.29"],

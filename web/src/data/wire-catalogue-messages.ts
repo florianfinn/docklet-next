@@ -146,7 +146,7 @@ export const MESSAGE_CODE_KEYS = {
 >, CatalogueKey>;
 
 // Hub events have distinct title wording from direct messages with the same wire code.
-type HubEventCode = Exclude<Extract<Schema["EventEvent"]["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment" | "webhook"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
+type HubEventCode = Exclude<Extract<Schema["EventEvent"]["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
 export const HUB_EVENT_TITLE_KEYS = {
   "container.start": "runMessages.events.labels.container_start",
   "container.stop": "runMessages.events.labels.container_stop",
