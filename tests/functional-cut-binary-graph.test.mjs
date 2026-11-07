@@ -24,6 +24,9 @@ test("hub and agent graphs use pure-Go SQLite and exclude PostgreSQL", () => {
     assert.equal(target.cgo,"0");
     assert.equal(target.entrypoint,"./backend/cmd");
     assert.equal(paths.includes("github.com/florianfinn/docklet-next/backend/cmd/schema-baseline"),false);
+    assert.equal(paths.some(path => path.startsWith("github.com/florianfinn/docklet-next/cli")), false);
+    assert.equal(paths.some(path => path.includes("/internal/webhook")), false);
+    assert.ok(paths.includes("github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge/certgen"));
     assert.equal(paths.length,target.packages);
     const digest=createHash("sha256").update(paths.join("\n")+"\n").digest("hex");
     assert.equal(digest,target.packageGraphSha256,`${target.target} package graph`);

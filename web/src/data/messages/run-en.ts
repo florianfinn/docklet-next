@@ -1,4 +1,6 @@
 export const enRunMessages = {
+  pathEncoded: "This address contains encoded characters that Docklet does not accept in paths.",
+  restartRefused: "Restart refused: a backup or restore is running on this host.",
   exact: {
   "check": "Check",
   "imagePull": "Image pull",
@@ -349,7 +351,6 @@ export const enRunMessages = {
       "system_auto_update_complete": "Automatic update completed",
       "system_upgrade_failed": "System upgrade failed",
       "system_upgrade_partial": "System upgrade completed with errors",
-      "webhook_trigger_failed": "Webhook trigger failed",
       "system_upgrade": "System upgrade completed",
       "user_login": "User signed in",
       "user_logout": "User signed out",
@@ -363,10 +364,6 @@ export const enRunMessages = {
       "environment_mtls_cert_issued": "Host certificate issued",
       "environment_mtls_enroll": "Host certificate enrolled",
       "environment_mtls_download": "Host certificate downloaded",
-      "webhook_create": "Webhook created",
-      "webhook_update": "Webhook updated",
-      "webhook_delete": "Webhook deleted",
-      "webhook_trigger": "Webhook triggered",
     },
   },
   join: { dot: '{left} · {right}', dash: '{left} – {right}' },

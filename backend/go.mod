@@ -10,12 +10,12 @@ go 1.27.1
 
 replace (
 	github.com/docker/buildx => github.com/docker/buildx v0.32.1
-	github.com/florianfinn/docklet-next/cli => ../cli
 	github.com/florianfinn/docklet-next/types => ../types
 	github.com/italypaleale/francis => ../third_party/francis
 )
 
 require (
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.66.1
@@ -29,7 +29,6 @@ require (
 	github.com/docker/cli v29.8.2+incompatible
 	github.com/docker/compose/v5 v5.6.0
 	github.com/docker/go-units v0.5.0
-	github.com/florianfinn/docklet-next/cli v0.0.0
 	github.com/florianfinn/docklet-next/types v0.0.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-git/go-git/v5 v5.19.3
@@ -79,11 +78,11 @@ require (
 	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
-	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	golang.org/x/time v0.16.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gorm v1.31.2
 	modernc.org/sqlite v1.60.1
 )
@@ -95,7 +94,6 @@ require (
 	github.com/DefangLabs/secret-detector v0.0.0-20260916192156-3e28d7ed64df // indirect
 	github.com/DmitriyVTitov/size v1.5.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
-	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
@@ -286,13 +284,13 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260908043556-f8649ddbbfe6 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260908043556-f8649ddbbfe6 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	k8s.io/apimachinery v0.37.0 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
@@ -314,7 +312,6 @@ replace (
 	go.getarcane.app/docker/convert => ../third_party/arcane/docker/convert
 	go.getarcane.app/kit => ../third_party/arcane/kit
 	go.getarcane.app/streams => ../third_party/arcane/streams
-	go.getarcane.app/sys/bytes => ../third_party/arcane/sys/bytes
 	go.getarcane.app/sys/cgroup => ../third_party/arcane/sys/cgroup
 	go.getarcane.app/sys/crypto => ../third_party/arcane/sys/crypto
 	go.getarcane.app/updater => ../third_party/arcane/updater

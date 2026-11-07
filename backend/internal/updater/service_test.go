@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package updater
 
@@ -260,7 +260,7 @@ func TestUpdaterService_ApplyPendingNoRecordsInternal(t *testing.T) {
 // Type and ResourceIds are Arcane-side scoping the engine never acted on;
 // ApplyPending handles a scoped request itself before reaching the engine.
 // A pending run, forced or scoped, never lifts settings exclusions: that
-// override belongs to UpdateSingleContainer alone.
+// override is not part of the retained update pass.
 func TestUpdaterService_ModuleOptionsFromUpdaterOptionsInternal(t *testing.T) {
 	got := moduleOptionsFromUpdaterOptionsInternal(arcaneupdater.Options{
 		Type:        string(updater.ResourceTypeContainer),

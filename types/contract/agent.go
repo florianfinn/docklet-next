@@ -5,6 +5,6 @@
 // Deviations: Original implementation for issue 38; network contract v6 boundary for #203; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M19 backend contracts and target identity integration.
 package contract
 
-const AgentHubVersion = 15
-const MinimumAgentVersion = 15
-const AgentHubFingerprint = "9947b6ef38ead15e2804ce6696f35a70e9f1449668daab6c55588113cebd4b7b"
+const AgentHubVersion = 16
+const MinimumAgentVersion = 16
+const AgentHubFingerprint = "0248cf891b404b0616bb1c5cfdde2190e73ee5d9c10ac6d97bfc4e4052b94dc0"

@@ -20,7 +20,6 @@ replace (
 	go.getarcane.app/docker/compat => ../docker/compat
 	go.getarcane.app/docker/convert => ../docker/convert
 	go.getarcane.app/streams => ../streams
-	go.getarcane.app/sys/bytes => ../sys/bytes
 	go.getarcane.app/sys/cgroup => ../sys/cgroup
 	go.getarcane.app/sys/crypto => ../sys/crypto
 	go.getarcane.app/updater => ../updater

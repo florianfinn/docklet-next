@@ -338,8 +338,7 @@ func imageUpdateRecordToModuleInternal(record imageupdate.ImageUpdateRecord) upd
 // what the engine acts on. Options.Type and Options.ResourceIds stay behind:
 // the engine never read them, and ApplyPending already routes a scoped request
 // through applyScopedUpdatesInternal before reaching the engine. Settings
-// exclusions always apply to these runs; only UpdateSingleContainer overrides
-// them for its explicitly requested container.
+// exclusions always apply to these runs.
 func moduleOptionsFromUpdaterOptionsInternal(options arcaneupdater.Options) updater.Options {
 	return updater.Options{
 		Force:  options.ForceUpdate,

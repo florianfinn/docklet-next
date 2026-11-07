@@ -229,7 +229,7 @@ test("baseline exemptions require configured adoption and a valid header", (t) =
   stage(root, path, "line\n".repeat(1200));
   fails(check(root, "size"), "size-baseline-provenance");
 });
-for (const prefix of ["backend", "types", "third_party/arcane", "web", "cli", "deploy", "api"]) {
+for (const prefix of ["backend", "types", "third_party/arcane", "web", "deploy", "api"]) {
   test(`adopted prefix ${prefix} requires provenance`, (t) => {
     const root = scratch(t);
     const path = `${prefix}/example.txt`;
