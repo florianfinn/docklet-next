@@ -34,7 +34,7 @@ reviews from a different provider than its implementation:
 | #308 | S0 wire-code guard: every contract code the web renders maps to a catalogue entry | R1 failed with 1 blocker: producer text of carrier codes was hidden. The fix verify passed. |
 | #351, #352, #353, #355, #300, #299 | S1 backend foundations: named targets, migration 019, unhealthy history, Auto Heal cooldown, retention, agent contract 15 | R1 failed with 1 blocker in the unhealthy history. The fix verify passed. |
 | #348 | S2 import resolver: GitHub raw files and registries, bounded egress | R1 passed with 5 nonblocking findings, all fixed. The verify passed. |
-| #354, #308, #269, #270, #301, #303 | S3 link base, readable notices, scan receipt repair, classified delivery errors, event order | R1 failed with 3 blockers: Telegram lost line breaks, ntfy had no title, and the test endpoint had no guard. The fix verify passed. |
+| #354, #308, #269, #270, #301, #303 | S3 link base, readable notices, scan receipt repair, classified delivery errors, event order | R1 failed with 3 blockers: Telegram received unsupported `<br>` markup, ntfy had no title, and the test-endpoint response lacked a regression guard. The fix verify passed. |
 | #348, #349, #350, #351, #353, #355, #356 | S4 web: import, bulk actions, image details, targets, cooldown, retention and the search palette | R1 failed with 1 blocker: host results opened a missing page. All ten findings were fixed and the verify passed. |
 | #357 | Closing integration (#423) | Sol passed with 2 wording findings, both applied. Each candidate fix before it had its own verify; one verify round failed on a response contract and the correction passed. |
 | #356 | Acceptance fix (#424) | The independent review passed with no findings. |
@@ -111,12 +111,13 @@ cells' candidate evidence.
 
 | Package | Result | Cause and fix |
 | --- | --- | --- |
-| `fd950832` | Not accepted | The palette hid the "Check all updates" quick action. The action runs the check-all operation, but was gated on the per-target check. #424 gates it on the operation it runs. The hub-local regression stayed incomplete because the runner used up its attempts. |
+| `fd950832` | Not accepted | The palette hid the "Check all updates" quick action. The action runs the check-all operation, but was gated on the per-target check. #424 gates it on the operation it runs. The regression stayed incomplete on H and was not run on D or E because the aggregate attempt budget was exhausted on H. |
 | `d17b6224` | **Accepted, 40 of 40 cells** | The smoke gate passed on H, D and E. The palette, its German labels and the regression on H, D and E were rerun and passed. The hub-local regression needed a second bounded run after a runner error. The other cells passed on the earlier runs and were reused. |
 
 On the exact main runs, no browser request received a 5xx outside a deliberate
-fault window. Automatic recovery of a restarted Direct agent took 148 s,
-including the back-online notice.
+fault window. In candidate4, automatic recovery of a restarted Direct agent was observed after
+148 s, with the back-online notice already received; the exact-main runs reused
+this evidence.
 
 ## Limits
 
