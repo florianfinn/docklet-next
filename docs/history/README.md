@@ -20,3 +20,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M16 bind mounts and backup completion acceptance](m16-bind-mounts-backups-acceptance.md) | Merged package, sandbox-found defects, two acceptance fixes, method and limits on 2026-11-03 |
 | [M17 dashboard, history and service widgets acceptance](m17-dashboard-history-widgets-acceptance.md) | Merged package, sandbox-found defects, two acceptance fixes, method and limits on 2026-11-04 |
 | [M18 updates and schedules acceptance](m18-updates-schedules-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-05 |
+| [M19 import, bulk actions and settings parity acceptance](m19-import-bulk-settings-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-07 |
