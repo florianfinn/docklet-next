@@ -20,7 +20,8 @@ Keep operator values in an untracked private environment file. Set `ENCRYPTION_K
 to a newly generated secret, `APP_URL` to the dedicated domain root and optionally
 `PUID`/`PGID` to the desired numeric identity. Use `--env-file` consistently for all
 Compose commands. The listener is published on loopback; attach the operator's
-reverse proxy to it. Sub-path hosting is unsupported. The Docker socket grants
+reverse proxy to it as described in [reverse proxy](../../docs/deployment/reverse-proxy.md)
+(WebSockets, unbuffered `/api/stream`, HTTP/2, timeouts). Sub-path hosting is unsupported. The Docker socket grants
 management access to the local Docker host.
 
 `TZ` selects the hub time zone for schedules and date display (default `UTC`).
