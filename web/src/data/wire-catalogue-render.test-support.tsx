@@ -84,13 +84,19 @@ export async function hubBackup(maintenance: boolean) {
   return view.container.textContent ?? "";
 }
 
-export async function restartPhase() {
+async function restartRun(row: Record<string, string>) {
   let run: CodedActionRun | undefined;
-  const api = createHostRestarts({ baseUrl: "/api", client: { fetch: async () => Response.json({ success: true, data: { runId: "example-run", state: "reserved", createdAt: at, deadline: at } }), token: async () => "example" }, capability: available as never, generation: () => 0, publish: (value) => { run = value; }, changed: () => {} });
+  const api = createHostRestarts({ baseUrl: "/api", client: { fetch: async () => Response.json({ success: true, data: { runId: "example-run", createdAt: at, deadline: at, ...row } }), token: async () => "example" }, capability: available as never, generation: () => 0, publish: (value) => { run = value; }, changed: () => {} });
   try {
     await api.restartAgent("example");
-    return renderRun(run!, "de").steps[0]!.label;
+    return renderRun(run!, "de");
   } finally { api.reset(); }
+}
+export async function restartPhase() {
+  return (await restartRun({ state: "reserved" })).steps[0]!.label;
+}
+export async function restartFailure(code: string) {
+  return (await restartRun({ state: "failed", code })).error;
 }
 
 export function historyState() {

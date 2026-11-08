@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original live runtime condition merge for the fleet ring, issue #371.
+// Deviations: Original live runtime condition merge for the fleet ring, issue #371. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, RuntimeCondition, Stack } from "@/domain/model";
@@ -40,11 +40,11 @@ export function decodeConditionSnapshot(body: unknown): ConditionsByContainer {
     : []));
 }
 
-export type ConditionReader = (hostId: string) => Promise<ConditionsByContainer>;
+export type ConditionReader = (hostId: string, signal?: AbortSignal) => Promise<ConditionsByContainer>;
 
 /** Reads the container conditions of one host; throws when the read fails or the answer is malformed. */
-async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string): Promise<ConditionsByContainer> {
-  const response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/runtime-conditions`, { credentials: "same-origin", headers: { Accept: "application/json" } });
+async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string, signal?: AbortSignal): Promise<ConditionsByContainer> {
+  const response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/runtime-conditions`, { credentials: "same-origin", headers: { Accept: "application/json" }, signal });
   if (!response.ok) { void response.body?.cancel(); throw new Error("conditions.unavailable"); }
   return decodeConditionSnapshot(await response.json());
 }
@@ -57,10 +57,11 @@ async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string):
 export function createConditionReader(baseUrl: string, fetcher: typeof fetch): { read: ConditionReader; reset: () => void } {
   let last = new Map<string, ConditionsByContainer>();
   return {
-    async read(hostId) {
+    async read(hostId, signal) {
       const owner = last;
       try {
-        const conditions = await readHost(baseUrl, fetcher, hostId);
+        const conditions = await readHost(baseUrl, fetcher, hostId, signal);
+        signal?.throwIfAborted();
         if (owner === last) last.set(hostId, conditions);
         return conditions;
       } catch {
@@ -72,8 +73,8 @@ export function createConditionReader(baseUrl: string, fetcher: typeof fetch): {
 }
 
 /** One-off read without retained answers. */
-export function readRuntimeConditions(baseUrl: string, fetcher: typeof fetch, hostId: string): Promise<ConditionsByContainer> {
-  return createConditionReader(baseUrl, fetcher).read(hostId);
+export function readRuntimeConditions(baseUrl: string, fetcher: typeof fetch, hostId: string, signal?: AbortSignal): Promise<ConditionsByContainer> {
+  return createConditionReader(baseUrl, fetcher).read(hostId, signal);
 }
 
 /** Attaches each condition to the container and service that carry its Docker id, in their own id form. */

@@ -2,7 +2,7 @@
 // Revision: 3d2d4f27b524b3422d010d6a69a22fe57225a78f
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original production boundary and regression coverage for issue #27.
+// Deviations: Original production boundary and regression coverage for issue #27. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
@@ -23,7 +23,7 @@ it.each(["de", "en-US"] as const)("has no unreviewed empty %s production catalog
   expect(empty.filter((key) => !productionEmptyExceptions[key])).toEqual([]);
   expect(empty).toEqual(Object.keys(productionEmptyExceptions).sort());
   expect(Object.values(productionEmptyExceptions).every((reason) => reason.trim().length > 20)).toBe(true);
-  expect(catalogs[locale].preview).toEqual({});
+  expect(catalogs[locale].comingSoon.badge.length > 0).toBe(true);
   expect(catalogs[locale].lab).toEqual({});
 });
 

@@ -16,7 +16,7 @@ import (
 func TestAgentRestartVersionGateZeroSends(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		t.Run(mode, func(t *testing.T) {
-			f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.MinimumAgentVersion - 1, AgentContractFingerprint: contract.AgentHubFingerprint})
+			f := newAgentFixture(t, mode, version.Info{AgentContractVersion: 15, AgentContractFingerprint: contract.AgentHubFingerprint})
 			_, err := f.service.ExecuteRemoteRequest(t.Context(), f.id, "POST", "/api/system/agent/restart", nil)
 			require.ErrorIs(t, err, ErrAgentUpdateRequired)
 			require.Zero(t, f.count("POST /api/system/agent/restart"))

@@ -143,7 +143,8 @@ func TestHubBackupSchedulerTicksThroughPolicyRegistration(t *testing.T) {
 					return true
 				}, 8*time.Second, 50*time.Millisecond)
 				require.EqualValues(t, backuptypes.SystemBackupTriggerScheduled, backup.Trigger)
-				require.WithinDuration(t, due, backup.CreatedAt, 2*time.Second)
+				// The archive belongs to this due time: never early; the wait above bounds lateness.
+				require.False(t, backup.CreatedAt.Before(due), "archive created at %s before its due time %s", backup.CreatedAt, due)
 				require.Positive(t, backup.Size)
 				require.Zero(t, dockerProbes.Load(), "Hub SQLite archives must not probe Docker")
 				scheduled, err := coordinator.List(t.Context(), "0", "system-backup:"+policyID, 1, 20)

@@ -1,6 +1,7 @@
 // American English texts of the first-run setup wizard (preview, started from the design lab).
 
 export const enSetup = {
+  forcedChange: { heading: "Set a new password", newLabel: "New password", confirmationLabel: "Confirm new password" },
   activeMode: "Active sign-in mode: {mode}",
   modeConfiguredAtStartup: "The operator sets this mode with AUTH_MODE and the proxy variables before starting the hub.",
   currentPassword: "Current administrator password",

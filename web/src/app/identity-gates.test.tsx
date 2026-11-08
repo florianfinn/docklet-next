@@ -2,7 +2,7 @@
 // Revision: 5b7a533b0682154acf719fc2ddd059aed9a443c2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original route-level identity state matrix and credential-error regression.
+// Deviations: Original route-level identity state matrix and credential-error regression. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -60,7 +60,7 @@ it.each(states)("terminates both entry routes for $mode completed=$completed cha
       expect(document.querySelector('[aria-busy="true"]') === null).toBe(true);
       if (authenticated) {
         if (expectedPath === "/dashboard") expect(screen.queryByText("Dashboard terminal") !== null).toBe(true);
-        else if (completed && needsPassword) expect(screen.queryByLabelText("Bisheriges Administratorpasswort") !== null).toBe(true);
+        else if (completed && needsPassword) expect(screen.queryByLabelText("Bisheriges Passwort") !== null).toBe(true);
         else expect(screen.queryByLabelText("Interne Hub-Adresse") !== null).toBe(true);
       } else if (mode === "local") expect(screen.queryByLabelText("Benutzername") !== null).toBe(true);
       else expect(document.body.textContent).toMatch(mode === "proxy" ? /Proxy/ : /nicht/);
@@ -105,9 +105,9 @@ it("navigates once per gate from login through an outstanding password change", 
   await userEvent.type(await screen.findByLabelText("Benutzername"), "operator");
   await userEvent.type(screen.getByLabelText("Passwort"), "old-password");
   await userEvent.click(screen.getByRole("button", { name: "Anmelden" }));
-  await userEvent.type(await screen.findByLabelText("Bisheriges Administratorpasswort"), "old-password");
+  await userEvent.type(await screen.findByLabelText("Bisheriges Passwort"), "old-password");
   expect(paths).toEqual(["/login", "/dashboard", "/setup"]);
-  await userEvent.type(screen.getByLabelText("Neues Administratorpasswort"), "New-password1!");
+  await userEvent.type(screen.getByLabelText("Neues Passwort"), "New-password1!");
   await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
   await userEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
   await screen.findByText("Dashboard terminal");

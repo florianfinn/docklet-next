@@ -217,7 +217,9 @@ Reversals and additions (the approved interface applies):
   over visible resources and settings.
 - **M20**: webhooks and the remote CLI are removed (the hub binary takes over
   `generate`); Proxy and Games appear as "coming soon" without function or
-  simulation.
+  simulation; reverse-proxy requirements are documented
+  ([reverse proxy](../deployment/reverse-proxy.md)); environment paths that
+  could name different routes are refused (`request.path-encoded`).
 - **M21**: fresh migration baseline, pinned images with SemVer and digest, the
   installation package, documentation and release acceptance.
 

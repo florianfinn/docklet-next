@@ -2,7 +2,7 @@
 // Revision: 44a851951c82b6e8436e9757815305a4fb8ee276ca95831902245b096fe7e362
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 // German texts of the application shell (navigation, host filter, profile menu).
 import type { enShell } from "./en";
@@ -13,7 +13,9 @@ export const deShell: typeof enShell = {
   brandSub: (import.meta.env.DEV ? "React-Prototyp · Demo-Daten" : "Hub-Oberfläche"),
   skip: "Zum Inhalt springen",
   toggleSidebar: "Navigation ein- oder ausklappen",
-  breadcrumb: "Brotkrumen",
+  breadcrumb: "Brotkrümelnavigation",
+  navigationTitle: "Navigation",
+  navigationDescription: "Hauptnavigation",
   groups: { operate: "Betrieb", resources: "Ressourcen", system: "System", later: "Später" },
   nav: {
     dashboard: "Dashboard",
@@ -36,7 +38,6 @@ export const deShell: typeof enShell = {
     newHost: "Host hinzufügen",
   },
   partialSecurity: "Unvollständige Sicherheitssumme: Scan-Daten für mindestens einen Host sind nicht verfügbar.",
-  preview: "Vorschau",
   hostFilter: {
     title: "Hostfilter",
     all: "Alle Hosts",

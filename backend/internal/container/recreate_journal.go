@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original durable recreate effects and exact-identity startup compensation; M18 standalone image update and restore safety.
+// Deviations: Original durable recreate effects and exact-identity startup compensation; M18 standalone image update and restore safety; a foreign claim on only the reserved new name compensates.
 
 package container
 
@@ -182,6 +182,8 @@ func recreateInspect(ctx context.Context, c *client.Client, id string) (*dockerc
 	if id == "" {
 		return nil, nil
 	}
+	ctx, cancel := recreateCallContext(ctx)
+	defer cancel()
 	response, err := compat.ContainerInspectWithCompatibility(ctx, c, id, client.ContainerInspectOptions{})
 	if errdefs.IsNotFound(err) {
 		return nil, nil
@@ -210,8 +212,11 @@ func (s *ContainerService) compensateRecreate(ctx context.Context, c *client.Cli
 		if err := s.saveRecreate(ctx, j, "comp-remove-new"); err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if _, err := c.ContainerRemove(ctx, replacement.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerRemove(ctx, replacement.ID, client.ContainerRemoveOptions{Force: true})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 		if err := s.saveRecreate(ctx, j, "comp-rename-old"); err != nil {
 			return dto.RecreateRecovery{}, err
@@ -228,8 +233,11 @@ func (s *ContainerService) compensateRecreate(ctx context.Context, c *client.Cli
 		if err := s.saveRecreate(ctx, j, "comp-rename-old"); err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if _, err := c.ContainerRename(ctx, j.OldID, client.ContainerRenameOptions{NewName: j.OldName}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerRename(ctx, j.OldID, client.ContainerRenameOptions{NewName: j.OldName})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 		if err := s.saveRecreate(ctx, j, "comp-start-old"); err != nil {
 			return dto.RecreateRecovery{}, err
@@ -239,8 +247,11 @@ func (s *ContainerService) compensateRecreate(ctx context.Context, c *client.Cli
 		if err := s.saveRecreate(ctx, j, "comp-start-old"); err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if _, err := c.ContainerStart(ctx, j.OldID, client.ContainerStartOptions{}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerStart(ctx, j.OldID, client.ContainerStartOptions{})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 		if err := s.saveRecreate(ctx, j, "rolled-back"); err != nil {
 			return dto.RecreateRecovery{}, err
@@ -253,8 +264,11 @@ func (s *ContainerService) finishRecoveredRecreate(ctx context.Context, c *clien
 		return dto.RecreateRecovery{}, err
 	}
 	if old != nil {
-		if _, err := c.ContainerRemove(ctx, j.OldID, client.ContainerRemoveOptions{Force: true}); err != nil {
-			return s.ambiguousRecreate(ctx, j)
+		if err := recreateCall(ctx, func(ctx context.Context) error {
+			_, err := c.ContainerRemove(ctx, j.OldID, client.ContainerRemoveOptions{Force: true})
+			return err
+		}); err != nil {
+			return s.recreateEffectFailed(ctx, j, err)
 		}
 	}
 	if err := s.saveRecreate(ctx, j, "done"); err != nil {
@@ -281,12 +295,19 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	if err != nil {
 		return dto.RecreateRecovery{}, err
 	}
+	// Without an observed create of our own, a foreign container that holds only
+	// the reserved new name means our create never happened; compensation never
+	// touches it. A foreign claim on the old or backup name stays ambiguous.
+	foreignNewNameOnly := func(name string, observed *dockercontainer.InspectResponse) bool {
+		return name == j.NewName && j.NewID == "" && j.NewName != j.OldName && j.NewName != j.BackupName &&
+			(observed.Config == nil || observed.Config.Labels["io.docklet.run"] != j.RunID)
+	}
 	if j.NewID == "" && (j.Phase == "intent-create" || j.Phase == "created") {
 		candidate, err := recreateInspect(ctx, c, j.NewName)
 		if err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if candidate != nil {
+		if candidate != nil && !foreignNewNameOnly(j.NewName, candidate) {
 			created, parseErr := time.Parse(time.RFC3339Nano, candidate.Created)
 			if candidate.Config == nil || candidate.Config.Labels["io.docklet.run"] != j.RunID || parseErr != nil || created.Before(j.UpdatedAt) {
 				return s.ambiguousRecreate(ctx, j)
@@ -314,14 +335,15 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	if replacement != nil && (replacement.ID != j.NewID || strings.TrimPrefix(replacement.Name, "/") != j.NewName || replacement.Config == nil || replacement.Config.Labels["io.docklet.run"] != j.RunID) {
 		return s.ambiguousRecreate(ctx, j)
 	}
-	// Every reserved name belongs only to these exact IDs. A foreign claim
-	// is ambiguous even when the expected replacement itself still exists.
+	// Every reserved name belongs only to these exact IDs. A foreign claim is
+	// ambiguous even when the expected replacement itself still exists, except
+	// the new-name-only claim above.
 	for _, name := range []string{j.OldName, j.BackupName, j.NewName} {
 		observed, err := recreateInspect(ctx, c, name)
 		if err != nil {
 			return dto.RecreateRecovery{}, err
 		}
-		if observed != nil && observed.ID != j.OldID && observed.ID != j.NewID {
+		if observed != nil && observed.ID != j.OldID && observed.ID != j.NewID && !foreignNewNameOnly(name, observed) {
 			return s.ambiguousRecreate(ctx, j)
 		}
 	}
@@ -354,34 +376,6 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	return s.compensateRecreate(ctx, c, j, old, replacement)
 }
 
-// RecoverRecreates runs before generic startup settlement and admission. Only
-// unresolved local receipts are recovered; a write failure leaves them excluded.
-func (s *ContainerService) RecoverRecreates(ctx context.Context) ([]dto.RecreateRecovery, error) {
-	if s.operations == nil || s.operations.db == nil {
-		return nil, nil
-	}
-	var journals []RecreateJournal
-	err := s.operations.db.WithContext(ctx).Table("container_recreate_journal").Where("run_id IN (SELECT run_id FROM runtime_receipts WHERE environment_id='0' AND settled_at IS NULL)").Order("run_id").Find(&journals).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(journals) == 0 {
-		return nil, nil
-	}
-	c, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	results := make([]dto.RecreateRecovery, 0, len(journals))
-	for i := range journals {
-		result, err := s.recoverRecreate(ctx, c, &journals[i])
-		if err != nil {
-			return nil, fmt.Errorf("recreate recovery: %w", err)
-		}
-		results = append(results, result)
-	}
-	return results, nil
-}
 func (s *ContainerService) PruneRecreateJournals(ctx context.Context) error {
 	if s.operations == nil || s.operations.db == nil {
 		return nil

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata.
+// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata; classify daemon errors through errdefs predicates. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 package ws
 
@@ -326,7 +326,7 @@ func (h *WebSocketHandler) startLogSourceInternal(
 			resource, _ := docker.BoundLogText(resourceID, 256)
 			// Server logs retain only a fixed error class; authorized viewers below
 			// receive the bounded upstream diagnostic, which may contain sensitive text.
-			slog.WarnContext(ctx, "log source failed", "kind", kind, "resourceId", resource, "errorCategory", errdefs.Resolve(err).Error())
+			slog.WarnContext(ctx, "log source failed", "kind", kind, "resourceId", resource, "errorCategory", logSourceErrorCategory(err))
 			h.markLogStreamDoneInternal(key, ls)
 			text, cut := docker.BoundLogText("Failed to stream "+label+" logs: "+err.Error(), docker.MaxLogLineBytes)
 			select {
@@ -342,6 +342,21 @@ func (h *WebSocketHandler) startLogSourceInternal(
 	}()
 
 	return lines
+}
+
+func logSourceErrorCategory(err error) string {
+	switch {
+	case errdefs.IsNotFound(err):
+		return "not-found"
+	case errdefs.IsPermissionDenied(err):
+		return "permission"
+	case errdefs.IsUnavailable(err):
+		return "unavailable"
+	case errdefs.IsInternal(err):
+		return "internal"
+	default:
+		return "unknown"
+	}
 }
 
 func startLogForwardersInternal(

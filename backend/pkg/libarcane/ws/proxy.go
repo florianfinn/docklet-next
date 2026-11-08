@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation; dedicated terminal drain lifetime.
+// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation; dedicated terminal drain lifetime; 1 MiB browser frame limit.
 
 package ws
 
@@ -25,6 +25,9 @@ import (
 // use. It is required: this upgrade is reached with the caller's session cookie
 // already validated, so accepting any Origin would let an attacker-controlled
 // page open a terminal or log stream in a remote environment.
+// BrowserFrameLimit bounds one browser frame on a hub bridge, matching the hub-local shell route.
+const BrowserFrameLimit = 1 << 20
+
 func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header http.Header, checkOrigin func(*http.Request) bool) error {
 	if IsTerminalRequest(r) {
 		return proxyTerminalHTTP(w, r, remoteWS, header, checkOrigin)
@@ -46,8 +49,8 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		return err
 	}
 	defer lease.Release()
-	// This is a pure bridge; frame-size policing is the remote endpoint's job.
-	clientConn.SetReadLimit(-1)
+	// The browser leg is untrusted and bounded like the hub-local shell; the agent leg keeps its own policy.
+	clientConn.SetReadLimit(BrowserFrameLimit)
 
 	headerNames := make([]string, 0, len(header))
 	for name := range header {

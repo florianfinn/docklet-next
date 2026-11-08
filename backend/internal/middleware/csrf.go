@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Explicit Origin and double-submit CSRF checks for every hub sign-in mode; independently authenticated transports retain their ingress.
+// Deviations: Explicit Origin and double-submit CSRF checks for every hub sign-in mode; independently authenticated transports retain their ingress; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package middleware
 
@@ -83,15 +83,10 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 			}
 			// These routes authenticate only their own transport/path tokens downstream.
 			cookieLess := len(req.Header.Values("Cookie")) == 0
-			if strings.HasPrefix(req.URL.Path, "/api/webhooks/trigger/") || (cookieLess && m.transportAuthenticated != nil && m.transportAuthenticated(req)) {
+			if cookieLess && m.transportAuthenticated != nil && m.transportAuthenticated(req) {
 				return next(c)
 			}
 			if m.cfg.SignInMode() == "local" {
-				// These POSTs authenticate explicit body credentials and carry no ambient authority.
-				if req.Method == http.MethodPost && req.Header.Get("Origin") == "" && cookieLess &&
-					(req.URL.Path == "/api/auth/login" || req.URL.Path == "/api/auth/refresh") {
-					return next(c)
-				}
 				// An operation may ignore a header credential and authenticate its cookie instead.
 				if cookieLess && m.localCredential != nil {
 					valid, err := m.localCredential(req)

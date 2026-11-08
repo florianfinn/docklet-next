@@ -40,7 +40,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/query"
-	"github.com/florianfinn/docklet-next/backend/internal/webhook"
 	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	vulnerabilityDTO "github.com/florianfinn/docklet-next/types/vulnerability"
 )
@@ -66,6 +65,5 @@ func Models() []any {
 		&vulnerability.ScanNotification{}, &vulnerabilityDTO.ScanRun{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
 		&vulnerability.VulnerabilityScanItem{}, &vulnerability.VulnerabilityThreatIntel{},
 		&vulnerability.VulnerabilityIgnore{}, &query.VulnerabilityRiskSnapshot{},
-		&webhook.Webhook{},
 	)
 }

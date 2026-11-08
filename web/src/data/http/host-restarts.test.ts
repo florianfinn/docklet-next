@@ -7,6 +7,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { components } from "@/api/generated/schema";
 import type { CodedActionRun } from "../message-code";
+import { renderMessage } from "../message-code";
 import { operationReasonKey } from "../operation-reason";
 import { createHostRestarts } from "./host-restarts";
 const at = "2026-10-31T00:00:00Z";
@@ -90,4 +91,16 @@ it("H3 stops following a restart whose reads keep failing", async () => {
   h.api.reset();
   expect(g.runs.at(-1)?.status).toBe("running");
   f.api.reset(); g.api.reset();
+});
+
+it("M20 renders host.busy as a terminal refusal and stops polling", async () => {
+ const f = failing(() => new Response(JSON.stringify({ success: true, data: { ...row, state: "failed", code: "host.busy", settledAt: at } })));
+ await f.api.restartAgent("example"); await vi.advanceTimersByTimeAsync(1000);
+ expect(f.runs.at(-1)).toMatchObject({ status: "failed", error: { code: "runMessages.restartRefused" } });
+ expect(renderMessage(f.runs.at(-1)!.error!, "en-US")).toBe("Restart refused: a backup or restore is running on this host.");
+ expect(renderMessage(f.runs.at(-1)!.error!, "de")).toBe("Neustart abgelehnt: Auf diesem Host läuft ein Backup oder eine Wiederherstellung.");
+ const retained = f.api.retained().at(-1);
+ await vi.advanceTimersByTimeAsync(5000);
+ expect(f.api.retained().at(-1)).toEqual(retained);
+ f.api.reset();
 });

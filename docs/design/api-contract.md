@@ -183,7 +183,6 @@ callers creating events must send a listed code. A run status transition uses
 | `system` | `system.prune`, `system.auto_update`, `system.upgrade` |
 | `user` | `user.login`, `user.logout` |
 | `environment` | `environment.create`, `environment.connect`, `environment.disconnect`, `environment.update`, `environment.delete`, `environment.api_key.regenerated`, `environment.mtls.ca_generated`, `environment.mtls.cert_issued`, `environment.mtls.enroll`, `environment.mtls.download` |
-| `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
 | `notification` | `notification.send` |
 | `load` | `load.sustained` |
 | `container.condition` | `container.condition.down`, `container.condition.unhealthy`, `container.condition.restart-loop`, `container.condition.running-again` |
@@ -367,3 +366,28 @@ notification event `sustained_load`. Migrations 016 and 017 run forward at hub a
 start. Hub and agents upgrade together; `tunnel/v1` is unchanged. Details:
 [runtime history](runtime-history.md), [service widgets](service-widgets.md),
 [preferences](preferences.md).
+
+## Pre-release hardening (v16)
+
+Agent contract v16, minimum v16, is a protocol break: hub and agents upgrade together and
+a v15 agent is shown as update-required. The webhook module is removed: its four routes
+and `POST /api/webhooks/trigger/{token}` answer 404, `webhooks:*` permissions and
+`webhook.*` event codes are gone, and migration 020 drops the table, its grants, role
+entries and events. Notification webhooks (generic, Discord, Google Chat, Matrix) are
+unchanged. The remote CLI is removed; hub commands (`generate`, `version`, `health`,
+`openapi`, `config-schema`, `restore-hub`, `upgrade`) stay in the hub binary.
+
+Paths under `/api/environments/` have one route identity before any check or forwarding,
+on hub-local, Direct and Edge hosts alike. An encoded unreserved byte (letters, digits,
+`- . _ ~`), an encoded `/ ? # % \`, a decoded whitespace or control character or malformed UTF-8 answers
+400 with the request problem `request.path-encoded` (`RequestProblem`, separate from
+activity codes). An empty segment, a trailing `/` or a literal `.` or `..` segment answers
+404 like an unmatched route. Other escapes (`%3A` in image IDs, non-ASCII names) and
+query strings are unchanged. On the hub's shared HTTP/gRPC listener these paths always
+reach the API router, never the Edge tunnel gRPC endpoint. Image routes are addressed by image ID; a reference
+containing `/` cannot be used as a path segment. Every literal segment of a registered
+environment route and of the Edge command table uses unreserved characters only.
+
+An agent restart refused by a busy agent (a running volume backup, bind snapshot or
+restore) ends as a failed restart run with code `host.busy`; migration 020 admits that
+code in `agent_restart_requests`. Details: [host maintenance](host-maintenance.md).

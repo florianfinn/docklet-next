@@ -2,10 +2,10 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original real xterm and Radix gesture, reconnect and lifetime tests.
+// Deviations: Original real xterm and Radix gesture, reconnect and lifetime tests. M20 #360: shell readiness before Connected.
 
 import { useState } from "react";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
@@ -85,4 +85,63 @@ it("refreshes the shell descriptor when an offline-labelled host becomes standby
   await user.click(screen.getByRole("button", { name: "Observe host" }));
   expect(capability.mock.calls.filter(([operation]) => operation === "openContainerShell").length).toBe(2);
   await waitFor(() => expect(tab.hasAttribute("disabled")).toBe(false));
+});
+
+it("shows Connected and takes keyboard input only after the shell's first output, so its cursor reply precedes typed bytes", async () => {
+  const user = userEvent.setup(), adapter = createDemoAdapter();
+  const sent: string[] = [];
+  let push: (event: ShellEvent) => void = () => {};
+  adapter.openContainerShell = (_id, _query, listener) => { push = listener; return { send: (data) => { sent.push(data); }, resize: () => {}, close: () => {} }; };
+  renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], ["/containers/c-uptime-kuma"], adapter);
+  const tab = await screen.findByRole("tab", { name: "Terminal" }); await waitFor(() => expect(tab.hasAttribute("disabled")).toBe(false)); await user.click(tab);
+  const input = await screen.findByRole("textbox", { name: "Container-Terminaleingabe" });
+  push({ type: "live" });
+  await user.type(input, "early");
+  expect(screen.queryByText("Verbunden") === null).toBe(true);
+  // BusyBox ash prints its prompt and asks for the cursor position before reading a line.
+  push({ type: "output", data: new TextEncoder().encode("/ # \u001b[6n") });
+  await screen.findByText("Verbunden");
+  await user.type(input, "echo ok{Enter}");
+  const reply = sent[0] ?? "";
+  expect(reply.startsWith("\u001b[") && /^\[\d+;\d+R$/.test(reply.slice(1))).toBe(true);
+  expect(sent.slice(1).join("")).toBe("echo ok\r");
+});
+
+it("shows Connected after one second when the shell prints nothing", async () => {
+  const user = userEvent.setup(), adapter = createDemoAdapter();
+  let push: (event: ShellEvent) => void = () => {};
+  adapter.openContainerShell = (_id, _query, listener) => { push = listener; return { send: () => {}, resize: () => {}, close: () => {} }; };
+  renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], ["/containers/c-uptime-kuma"], adapter);
+  const tab = await screen.findByRole("tab", { name: "Terminal" }); await waitFor(() => expect(tab.hasAttribute("disabled")).toBe(false)); await user.click(tab);
+  await screen.findByRole("textbox", { name: "Container-Terminaleingabe" });
+  push({ type: "live" });
+  expect(screen.queryByText("Verbunden") === null).toBe(true);
+  await act(() => new Promise((resolve) => setTimeout(resolve, 1_200)));
+  expect(screen.queryByText("Verbunden") !== null).toBe(true);
+});
+
+async function earlySession() {
+  const user = userEvent.setup(), adapter = createDemoAdapter(), sent: string[] = [];
+  let push: (event: ShellEvent) => void = () => {};
+  adapter.openContainerShell = (_id, _query, listener) => { push = listener; listener({ type: "connecting" }); return { send: (data) => { sent.push(data); }, resize: () => {}, close: () => {} }; };
+  renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], ["/containers/c-uptime-kuma"], adapter);
+  const tab = await screen.findByRole("tab", { name: "Terminal" }); await waitFor(() => expect(tab.hasAttribute("disabled")).toBe(false)); await user.click(tab);
+  const input = await screen.findByRole("textbox", { name: "Container-Terminaleingabe" }) as HTMLTextAreaElement;
+  act(() => push({ type: "live" }));
+  return { user, input, sent, push };
+}
+
+it("holds pasted and composed text until the shell is ready, then accepts both", async () => {
+  const f = await earlySession();
+  f.input.focus(); await f.user.paste("echo early\n");
+  f.input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+  f.input.value = "早";
+  f.input.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true, data: "早" }));
+  f.input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "早" }));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+  expect(f.sent.length).toBe(0);
+  act(() => f.push({ type: "output", data: new TextEncoder().encode("/ # ") }));
+  await screen.findByText("Verbunden");
+  f.input.focus(); await f.user.paste("echo ok");
+  expect(f.sent.join("")).toBe("echo ok");
 });

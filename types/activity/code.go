@@ -120,10 +120,6 @@ const (
 	CodeEventEnvironmentMTLSCertIssued    Code = "environment.mtls.cert_issued"
 	CodeEventEnvironmentMTLSEnroll        Code = "environment.mtls.enroll"
 	CodeEventEnvironmentMTLSDownload      Code = "environment.mtls.download"
-	CodeEventWebhookCreate                Code = "webhook.create"
-	CodeEventWebhookUpdate                Code = "webhook.update"
-	CodeEventWebhookDelete                Code = "webhook.delete"
-	CodeEventWebhookTrigger               Code = "webhook.trigger"
 	CodeEventNotificationSend             Code = "notification.send"
 )
 
@@ -236,10 +232,6 @@ func Values() []Code {
 		CodeEventEnvironmentMTLSCertIssued,
 		CodeEventEnvironmentMTLSEnroll,
 		CodeEventEnvironmentMTLSDownload,
-		CodeEventWebhookCreate,
-		CodeEventWebhookUpdate,
-		CodeEventWebhookDelete,
-		CodeEventWebhookTrigger,
 		CodeEventNotificationSend,
 		CodeAutoHealRestarted,
 		CodeAutoHealRestartFailed,

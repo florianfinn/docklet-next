@@ -49,7 +49,7 @@ diagnostics streams, `/debug/pprof`, uploads). Kinds:
 | Kind | Meaning for a user |
 |---|---|
 | `Public` | unchanged public contract |
-| `Machine` | not reachable with a user credential (agent, Edge, pairing, webhook, notification dispatch) |
+| `Machine` | not reachable with a user credential (agent, Edge, pairing, notification dispatch) |
 | `Self` | allowed; acts on the caller only |
 | `Admin` | 403 `access.admin-required` before the handler (default for everything not listed) |
 | `App{Level, Ref}` | allowed only if `Ref` resolves to an assigned stack with at least `Level` |

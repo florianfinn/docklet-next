@@ -7,7 +7,7 @@ const header = "// Source: example/core/file.go\n// Revision: " + "a".repeat(40)
   "\n// Retrieved: 2026-10-13\n// License: BSD-3-Clause\n// Deviations: None\n";
 const content = (count) => header + Array.from({ length: count - 5 }, (_, i) => `// source line ${i}\n`).join("");
 const check = (root, base) => node(root, "scripts/check-structure.mjs", "--only", "size", "--base", base);
-for (const prefix of ["web/", "api/", "cli/", "deploy/"]) {
+for (const prefix of ["web/", "api/", "deploy/"]) {
   test(`provenance prefix cannot authorize oversized own code: ${prefix}`, (t) => {
     const root = scratch(t);
     const base = rawCommit(root);

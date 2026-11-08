@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original safe backup problem presentation. M19: total contract-code catalogue maps.
+// Deviations: Original safe backup problem presentation. M19: total contract-code catalogue maps. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { useTranslations } from "use-intl";
 import type { components } from "@/api/generated/schema";
@@ -42,7 +42,7 @@ const ACCESS_KEYS = {
 } as const;
 
 /** Server detail/title/error are deliberately never carried into user feedback. */
-export function backupErrorMessage(error: unknown, translate: ReturnType<typeof useTranslations>): string {
+export function backupErrorMessage(error: unknown, translate: ReturnType<typeof useTranslations<never>>): string {
   const code = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.code : undefined;
   const key = backupCodeKey(code) ?? (code === "volume.outcome-unknown" ? "volumes.errors.outcome-unknown" : code && code in ACCESS_KEYS ? ACCESS_KEYS[code as keyof typeof ACCESS_KEYS] : undefined);
   const reason = error instanceof BackupError ? wireKey(BACKUP_REASON_KEYS, error.problem.reason) : undefined;

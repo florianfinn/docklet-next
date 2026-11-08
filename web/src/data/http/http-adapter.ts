@@ -1,3 +1,11 @@
+// Source: docklet-next/docs/design/adapter-live-capabilities.md
+// Revision: dfdfa084478d327818d8c57b0973d638f80861f6
+// Retrieved: 2026-10-15
+// License: Apache-2.0
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery.
+
+import { inventoryReadBudget } from "./host-read-deadline";
+import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
 import { createStackImport } from "./stack-import";
 import { nextOccurrence } from "@/domain/schedule";
@@ -7,11 +15,6 @@ import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
-// Source: docklet-next/docs/design/adapter-live-capabilities.md
-// Revision: dfdfa084478d327818d8c57b0973d638f80861f6
-// Retrieved: 2026-10-15
-// License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search.
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
@@ -36,13 +39,14 @@ import { createSystemComponents } from "./system-components";
 import { createHostRestarts } from "./host-restarts";
 import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
-import { mapEvent } from "./map-dto";
+import { mapEvent, mapStatus } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createHttpHistory, createHttpUiPreferences } from "./history";
 import { createHttpServiceWidgets } from "./service-widgets";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
+import { createHostReadAdmission } from "./host-read-admission";
 import { createSharedReads } from "./shared-reads";
 import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
@@ -226,7 +230,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (closing && await closing) throw new CancelledError();
     if (signedOut) throw new CancelledError();
   }
-  const network = options.fetch ?? globalThis.fetch;
+  const network = createHostReadAdmission(options.fetch ?? globalThis.fetch, baseUrl);
   // Admitted reads still waiting for their answer; a logout lets them land before the session ends.
   const answering = new Set<Promise<void>>();
   // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.
@@ -261,6 +265,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
   const changeListeners = new Set<(topics: Topic[]) => void>();
+  const stackListeners = new Set<(target: { stackId: string; hostId: string }) => void>();
   const actionListeners = new Set<(runs: CodedActionRun[]) => void>();
   let source: Source | undefined;
   const healthListeners = new Set<(health: ActionReadHealth) => void>();
@@ -318,6 +323,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
     runtime.reset(retain);
+    stackTerminals.reset();
     restarts.reset();
     targets.reset(retain);
     logs.reset();
@@ -447,9 +453,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   });
   const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, admit, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
-  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
+  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); stackTerminals([run], true); if (detailed) targets.accept(run); } });
   const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
-  const stackTerminals = createStackTerminals(() => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks"])); });
+  const stackTerminals = createStackTerminals((target) => { sharedReads.clear(); stackListeners.forEach((listener) => listener(target)); });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
     retained: () => [...runtime.retained(), ...restarts.retained()],
@@ -515,7 +521,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
   });
 
-  const targets = createActivityTargets({ terminal: (host) => refreshHost(host), hasConsumer: () => actionListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
+  const targets = createActivityTargets({ terminal: (host, run) => { stackTerminals([run], true); refreshHost(host); }, hasConsumer: () => actionListeners.size > 0 || stackListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
 
   const events = createEventReader(async () => {
     await requireCapability("listEvents");
@@ -536,7 +542,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function refreshRun(activityId: string, environmentId?: string, terminal?: string, discoverOnTerminal = false): void {
-    if (principal?.isAdmin === false || actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || !actionListeners.size && !stackListeners.size) return;
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { if (environmentId) refreshHost(environmentId); else refreshRuns(); return; }
     targets.notify(environmentId, activityId, terminal, discoverOnTerminal);
@@ -569,11 +575,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       if (notification.type !== "message"
         && notification.activity?.metadata?.action
         && /backup|restore/.test(String(notification.activity.metadata.action))) backupChanged();
-      if (notification.activity?.status && !["queued", "running", "waiting", "retrying"].includes(notification.activity.status)
-        && notification.activity.type.startsWith("project_")) {
-        changeListeners.forEach((listener) => listener(["stacks"]));
-      }
       const host = notification.environmentId ?? notification.activity?.environmentId;
+      const activity = notification.activity;
+      if (host && activity?.id && activity.resourceId && (activity.resourceType === "project" || activity.resourceType === "stack")
+        && activity.status && ["success", "failed", "cancelled"].includes(activity.status)) {
+        stackTerminals([{ id: activity.id, hostId: host, stackId: inventoryId(host, activity.resourceId), status: mapStatus(activity.status), finishedAt: activity.endedAt }], true);
+      }
       if (notification.type === "snapshot" || notification.type === "error") {
         if (host) {
           if (notification.type === "error") actions.hostError(host);
@@ -716,7 +723,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       targets.notify(host, id, undefined, true);
     },
   });
-  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration);
+  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration, backups.decorate);
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
@@ -794,34 +801,30 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...backups.api,
-    async listVolumes(onPartial) {
-      const rows = await volumeReads.listVolumes(onPartial);
-      const hosts = [...new Set(rows.map((v) => v.hostId))];
-      const mapped = await Promise.all(hosts.map((host) => backups.decorate(host, rows.filter((v) => v.hostId === host))));
-      const covered = new Set(hosts);
-      return [...mapped.flat(), ...rows.filter((v) => !covered.has(v.hostId))];
-    },
-    async getVolume(id) {
-      let volume;
-      try { volume = await volumeReads.getVolume(id); }
-      catch (error) {
-        const missing = error instanceof AdapterOutcomeError
-          && error.outcome.kind === "error" && error.outcome.status === 404
-          || error instanceof Error && error.message === "not-found";
-        if (!missing) throw error;
-        const host = id.split("~")[0]!;
-        // A stored bind key stays reachable without a current mount (K3); a volume only once it is gone.
-        const observed = (await backups.api.getBackupOverview(host)).volumes.find((v) => v.id === id && (v.kind === "bind" || v.volumeExists === false));
-        if (!observed) throw error;
-        volume = { ...observed, backups: [] };
-      }
-      const known = volume.kind === "volume" || !!volume.bind?.eligible;
-      const [decorated, early] = await Promise.all([backups.decorate(volume.hostId, [volume]), known ? backups.history(id).catch(() => null) : undefined]);
-      const entry = { ...volume, ...decorated[0] };
-      // Other binds read history only when the overview shows a stored plan or backup (K3/K4).
-      if (!known && backupAccess(entry) === "none") return entry;
-      const history = known ? early : await backups.history(id).catch(() => null);
-      return { ...entry, backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
+    async getVolume(id, parent) {
+      return inventoryReadBudget(parent)(async (signal) => {
+        let volume;
+        try { volume = await volumeReads.getVolume(id, signal); }
+        catch (error) {
+          const missing = error instanceof AdapterOutcomeError
+            && error.outcome.kind === "error" && error.outcome.status === 404
+            || error instanceof Error && error.message === "not-found";
+          if (!missing) throw error;
+          const host = id.split("~")[0]!;
+          // A stored bind key stays reachable without a current mount (K3); a volume only once it is gone.
+          const observed = (await backups.readOverview(host, signal)).volumes.find((v) => v.id === id && (v.kind === "bind" || v.volumeExists === false));
+          if (!observed) throw error;
+          volume = { ...observed, backups: [] };
+        }
+        const known = volume.kind === "volume" || !!volume.bind?.eligible;
+        const [decorated, early] = await Promise.all([backups.decorate(volume.hostId, [volume], signal), known ? backups.history(id, signal).catch(() => null) : undefined]);
+        const entry = { ...volume, ...decorated[0] };
+        // Other binds read history only when the overview shows a stored plan or backup (K3/K4).
+        if (!known && backupAccess(entry) === "none") return entry;
+        const history = known ? early : await backups.history(id, signal).catch(() => null);
+        signal.throwIfAborted();
+        return { ...entry, backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
+      });
     },
     ...createImageMetadata(baseUrl, fetcher), ...createStackImport(baseUrl, client, () => lifetimeGeneration, getCapability),
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
@@ -909,6 +912,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       else if (actions.hasSnapshot()) listener(actions.runs());
       return () => { if (!actionListeners.delete(listener)) return; if (!actionListeners.size) { targets.dropIdle(); runtime.observe(false); } disconnectIfUnused(); };
     },
+    subscribeStackTerminals(listener) { stackListeners.add(listener); return () => { stackListeners.delete(listener); }; },
     subscribeChanges(listener) {
       changeListeners.add(listener);
       connect();

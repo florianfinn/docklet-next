@@ -20,7 +20,8 @@ Keep operator values in an untracked private environment file. Set `ENCRYPTION_K
 to a newly generated secret, `APP_URL` to the dedicated domain root and optionally
 `PUID`/`PGID` to the desired numeric identity. Use `--env-file` consistently for all
 Compose commands. The listener is published on loopback; attach the operator's
-reverse proxy to it. Sub-path hosting is unsupported. The Docker socket grants
+reverse proxy to it as described in [reverse proxy](../../docs/deployment/reverse-proxy.md)
+(WebSockets, unbuffered `/api/stream`, HTTP/2, timeouts). Sub-path hosting is unsupported. The Docker socket grants
 management access to the local Docker host.
 
 `TZ` selects the hub time zone for schedules and date display (default `UTC`).
@@ -87,8 +88,8 @@ exists on each target host or is accessible through its configured registry.
 `AUTH_MODE=local` is the default and uses the local administrator password and
 sessions. `AUTH_MODE=none` grants full administrator access to anyone who can reach
 the hub; the operator deliberately accepts that access. Switching away from none
-revokes sessions but preserves users, API keys, environment tokens and webhook
-tokens created meanwhile. Review users and revoke or rotate unwanted credentials.
+revokes sessions but preserves users, API keys and environment tokens created
+meanwhile. Review users and revoke or rotate unwanted credentials.
 The hub does not allowlist the request Host header; none-mode reads remain
 unauthenticated, including requests using another Host. Browser write and WebSocket
 Origin checks do not add Host validation for reads.
@@ -137,8 +138,8 @@ For every hub mode, fetch `GET /api/auth/mode`, retain the returned CSRF cookie
 and `X-CSRF-Token` header, then send that token header plus the exact `APP_URL`
 Origin on every POST, PUT, PATCH or DELETE. Missing/wrong Origin or CSRF tokens
 return 403, including requests carrying local Bearer/API-key or proxy identity
-headers. Machine transports authenticated by environment/agent tokens and
-path-token webhook ingress retain their separate authentication contracts.
+headers. Machine transports authenticated by environment/agent tokens retain
+their separate authentication contract.
 
 For a local candidate check, run `node scripts/smoke-hub-image.mjs IMAGE` after
 building. It checks an empty temporary volume, `/api/health`, the served web

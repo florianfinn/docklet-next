@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 // Package updater owns automatic container and project updates: deciding what
 // is out of date, applying the update, and the HTTP surface that drives it.
@@ -30,7 +30,7 @@ func New(service *UpdaterService) *Module {
 }
 
 // Service exposes the updater service to collaborators that trigger updates
-// outside the HTTP surface, such as the auto-update job and webhooks.
+// outside the HTTP surface, such as the auto-update job.
 func (m *Module) Service() *UpdaterService {
 	if m == nil {
 		return nil

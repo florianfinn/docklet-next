@@ -2,7 +2,7 @@
 // Revision: 225dd4d1d1dc7fb16adc91179d3d9d6d675d2ced
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original shared localized log delivery notices.
+// Deviations: Original shared localized log delivery notices. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { useTranslations } from "use-intl";
 import type { LogLine } from "@/domain/model";
@@ -21,12 +21,12 @@ export function LogDeliveryNotice({ lines, paused }: { lines: LogLine[]; paused:
     {!paused && (delivery?.status === "error" || delivery?.status === "unavailable") && delivery.retry && <Button size="sm" variant="outline" onClick={delivery.retry}>{t("retry")}</Button>}
   </div>;
 }
-export function LogSource({ line }: { line: LogLine }) {
+export function LogSource({ line, active = false }: { line: LogLine; active?: boolean }) {
   const t = useTranslations("stacks.logs.delivery");
   if (logGap(line) !== undefined) return null;
   const stream = t(`stream.${line.stream ?? "unknown"}`);
   return <Tooltip>
-    <TooltipTrigger asChild><span>{line.service || t("unknownSource")}<span className="sr-only">{` · ${stream}`}</span></span></TooltipTrigger>
+    <TooltipTrigger asChild><span>{line.service || t("unknownSource")}<span className={active ? undefined : "sr-only"}>{` · ${stream}`}</span></span></TooltipTrigger>
     <TooltipContent>{stream}</TooltipContent>
   </Tooltip>;
 }

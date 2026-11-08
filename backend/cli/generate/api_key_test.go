@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Adds the key format test from cli/pkg/generate/api_key_test.go when the remote CLI was removed.
 
 package generate
 
@@ -33,4 +33,17 @@ func TestAPIKeyCommandAvailableInBackendCLI(t *testing.T) {
 
 	require.NotContains(t, out, "ADMIN_STATIC_API_KEY",
 		"expected raw arc_ key in output, got: %q", out)
+}
+
+func TestGenerateAPIKeyProducesArcanePrefix(t *testing.T) {
+	apiKey, err := GenerateAPIKey()
+
+	require.NoError(t, err,
+		"GenerateAPIKey failed: %v", err)
+
+	require.True(t, strings.HasPrefix(apiKey, "arc_"),
+		"expected arc_ prefix, got %q", apiKey)
+
+	require.Len(t, apiKey, 68,
+		"expected 68-character key, got %d (%q)", len(apiKey), apiKey)
 }

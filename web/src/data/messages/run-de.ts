@@ -1,4 +1,6 @@
 export const deRunMessages = {
+  pathEncoded: "Diese Adresse enthält kodierte Zeichen, die Docklet in Pfaden nicht annimmt.",
+  restartRefused: "Neustart abgelehnt: Auf diesem Host läuft ein Backup oder eine Wiederherstellung.",
   exact: {
   "check": "Prüfung",
   "imagePull": "Image-Pull",
@@ -349,7 +351,6 @@ export const deRunMessages = {
       "system_auto_update_complete": "Automatische Aktualisierung abgeschlossen",
       "system_upgrade_failed": "Systemaktualisierung fehlgeschlagen",
       "system_upgrade_partial": "Systemaktualisierung mit Fehlern abgeschlossen",
-      "webhook_trigger_failed": "Webhook-Auslösung fehlgeschlagen",
       "system_upgrade": "Systemaktualisierung abgeschlossen",
       "user_login": "Benutzer angemeldet",
       "user_logout": "Benutzer abgemeldet",
@@ -363,10 +364,6 @@ export const deRunMessages = {
       "environment_mtls_cert_issued": "Host-Zertifikat ausgestellt",
       "environment_mtls_enroll": "Host-Zertifikat registriert",
       "environment_mtls_download": "Host-Zertifikat heruntergeladen",
-      "webhook_create": "Webhook erstellt",
-      "webhook_update": "Webhook aktualisiert",
-      "webhook_delete": "Webhook gelöscht",
-      "webhook_trigger": "Webhook ausgelöst",
     },
   },
   join: { dot: '{left} · {right}', dash: '{left} – {right}' },

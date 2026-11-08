@@ -42,6 +42,12 @@ func (h *EnvironmentHandler) RestartAgent(ctx context.Context, in *restartAgentI
 	if h.environmentService == nil || h.environmentService.restarts == nil {
 		return nil, huma.Error503ServiceUnavailable("Agent restart controller unavailable")
 	}
+	// An active restart answers host.busy before any remote probe; intake rechecks in its transaction.
+	if active, err := h.environmentService.restarts.hasActive(ctx, in.ID); err != nil {
+		return nil, huma.Error503ServiceUnavailable("Agent restart store unavailable")
+	} else if active {
+		return nil, hostProblem("host.busy", 409)
+	}
 	if in.ID != "0" {
 		if _, err := h.environmentService.CheckAgentCompatibility(ctx, in.ID); err != nil {
 			if verdict := handlerutil.AgentVerdict(err); verdict != nil {

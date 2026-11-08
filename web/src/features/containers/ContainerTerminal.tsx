@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original lazy xterm terminal with owned fit, input and reconnect lifetimes.
+// Deviations: Original lazy xterm terminal with owned fit, input and reconnect lifetimes. M20 #360: Connected and keyboard input wait for the first processed shell output.
 
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
@@ -32,12 +32,24 @@ export default function ContainerTerminal({ containerId }: { containerId: string
   useEffect(() => {
     const element = node.current;
     if (!element) return;
-    let active = true, ended = false;
+    let active = true, ended = false, ready = false;
+    let fallback: ReturnType<typeof setTimeout> | undefined;
     const style = getComputedStyle(element);
     const terminal = new Terminal({ scrollback: 2000, fontSize: 13, fontFamily: style.fontFamily || "monospace", screenReaderMode: true, disableStdin: true, theme: { background: style.backgroundColor || undefined, foreground: style.color || undefined } });
     const fit = new FitAddon();
     terminal.loadAddon(fit); terminal.open(element); terminalRef.current = terminal;
     terminal.textarea?.setAttribute("aria-label", labelRef.current);
+    // A shell's first output may query the cursor position; its reply must reach the shell before typed bytes.
+    terminal.attachCustomKeyEventHandler(() => ready);
+    // Paste and IME composition reach xterm's input outside the key handler; stop them before it until ready.
+    const early = (event: Event) => { if (!ready) { event.preventDefault(); event.stopPropagation(); } };
+    const entries = ["paste", "compositionstart", "compositionupdate", "compositionend", "beforeinput", "input"] as const;
+    for (const type of entries) element.addEventListener(type, early, true);
+    const markReady = () => {
+      if (!active || ended || ready) return;
+      ready = true; clearTimeout(fallback);
+      setState({ type: "live" }); terminal.focus();
+    };
     const size = () => {
       if (!active) return;
       if (element.clientWidth > 0 && element.clientHeight > 0) fit.fit();
@@ -46,16 +58,18 @@ export default function ContainerTerminal({ containerId }: { containerId: string
     if (element.clientWidth > 0 && element.clientHeight > 0) fit.fit();
     const session = adapter.openContainerShell(containerId, { shell, cols: Math.min(1000, terminal.cols), rows: Math.min(1000, terminal.rows) }, (event) => {
       if (!active || ended) return;
-      if (event.type === "output") { terminal.write(event.data); return; }
+      if (event.type === "output") { terminal.write(event.data, ready ? undefined : markReady); return; }
       if (event.type === "exit") ended = true;
       terminal.options.disableStdin = event.type !== "live";
+      // Connected and keyboard input follow the first processed output, or one second for a silent shell.
+      if (event.type === "live") { fallback = setTimeout(markReady, 1_000); return; }
+      clearTimeout(fallback);
       setState(event);
-      if (event.type === "live") terminal.focus();
     });
     const input = terminal.onData((data) => session?.send(data));
     const resize = terminal.onResize(({ cols, rows }) => session?.resize(Math.min(1000, cols), Math.min(1000, rows)));
     const observer = new ResizeObserver(size); observer.observe(element);
-    return () => { active = false; observer.disconnect(); input.dispose(); resize.dispose(); session?.close(); terminal.dispose(); terminalRef.current = null; };
+    return () => { active = false; clearTimeout(fallback); for (const type of entries) element.removeEventListener(type, early, true); observer.disconnect(); input.dispose(); resize.dispose(); session?.close(); terminal.dispose(); terminalRef.current = null; };
   }, [adapter, containerId, shell, attempt]);
   useEffect(() => { labelRef.current = inputLabel; terminalRef.current?.textarea?.setAttribute("aria-label", inputLabel); }, [inputLabel]);
   const status = state.type === "exit" ? state.reason ? t(shellMessage(state.reason)) : t("ended", { code: state.code === null ? t("unknownCode") : String(state.code) }) : t(state.type);

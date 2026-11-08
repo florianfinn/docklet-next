@@ -12,6 +12,11 @@ func (s *VolumeService) SweepBackupWriters(ctx context.Context) error {
 	return s.backup.SweepWriters(ctx)
 }
 func (s *VolumeService) BackupWriterFenced(name string) bool { return s.backup.WriterFenced(name) }
+
+// BackupWorkRunning is the agent restart busy check (read-only).
+func (s *VolumeService) BackupWorkRunning(ctx context.Context) (bool, error) {
+	return s.backup.WorkRunning(ctx)
+}
 func (s *VolumeService) ReconcileInterruptedBackups(ctx context.Context, _ ...string) error {
 	return s.backup.SettleInterrupted(ctx, false)
 }

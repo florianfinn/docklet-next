@@ -1,6 +1,7 @@
 // American English texts of shared components (status, updates, query states).
 
 export const enCommon = {
+  relativeTime: { justNow: "just now", soon: "shortly", now: "now", day: "day", days: "days" },
   bulkRun: {
     summary: "{action}: {started} started, {joined} joined, {skipped} skipped, {failed} failed",
     details: "Bulk action details", admissionHint: "Admission results. Follow progress in the activity centre.",

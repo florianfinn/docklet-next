@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding.
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { operations } from "@/api/generated/schema";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -22,7 +22,7 @@ export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch,
     const query = params.size ? `?${params}` : "";
     let response: Response;
     try { response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/${suffix}${query}`, { credentials: "same-origin", headers: { Accept: "application/json" }, signal }); }
-    catch { return fail("http.error"); }
+    catch { signal?.throwIfAborted(); return fail("http.error"); }
     // A lost body stream is a transport failure; only an unparsable body is an invalid response.
     let text: string;
     try { text = await response.text(); } catch { signal?.throwIfAborted(); return fail("http.error", response.status); }

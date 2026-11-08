@@ -182,6 +182,13 @@ func (c *restartController) reserve(ctx context.Context, id string) (AgentRestar
 	return row, nil
 }
 
+// hasActive reports an unsettled restart of the host; a read-only check ahead of remote probes.
+func (c *restartController) hasActive(ctx context.Context, id string) (bool, error) {
+	var n int64
+	err := c.service.db.WithContext(ctx).Model(&AgentRestartRequest{}).Where("environment_id=? AND settled_at IS NULL", id).Count(&n).Error
+	return n > 0, err
+}
+
 func (c *restartController) bound(ctx context.Context, row AgentRestartRequest) (*Environment, error) {
 	var env Environment
 	err := c.service.db.WithContext(ctx).First(&env, "id=?", row.EnvironmentID).Error
@@ -256,9 +263,9 @@ func (c *restartController) advance(ctx context.Context, w *restartWork) (bool, 
 				now := c.now().UTC()
 				outcome.acknowledged = &now
 			}
-			if restartUnsupported(response) {
+			if code := restartRefusal(response); code != "" {
 				outcome.state = "failed"
-				outcome.code = "agent.restart-unsupported"
+				outcome.code = code
 				outcome.observedAt = c.now().UTC()
 			}
 		}
@@ -327,7 +334,8 @@ func (c *restartController) persist(ctx context.Context, w *restartWork, out *re
 		if out.acknowledged != nil && out.acknowledged.Before(next.Deadline) {
 			next.AcknowledgedAt = out.acknowledged
 		}
-		lateProof := (state == "connected" || state == "failed" && code == "agent.restart-unsupported") && !out.observedAt.Before(next.Deadline)
+		refused := state == "failed" && (code == "agent.restart-unsupported" || code == "host.busy")
+		lateProof := (state == "connected" || refused) && !out.observedAt.Before(next.Deadline)
 		if lateProof || state == "awaiting" && !now.Before(next.Deadline) {
 			state, code = "unknown", "agent.restart-unconfirmed"
 			if next.AcknowledgedAt != nil {

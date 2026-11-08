@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; extracted focused request, stream and recorder ownership; validate legacy stream commands and preserve close metadata and stream handle identity.
+// Deviations: Local module namespace; extracted focused request, stream and recorder ownership; validate legacy stream commands and preserve close metadata and stream handle identity; stream input waits up to the delivery timeout instead of dropping.
 
 package edge
 
@@ -180,6 +180,7 @@ func (c *TunnelClient) registerStream(conn TunnelConnection, streamID string, ws
 		conn:   conn,
 		cancel: cancel,
 		dataCh: make(chan wsPayload, 100),
+		done:   make(chan struct{}),
 	}
 	c.activeStreams.Store(streamID, stream)
 	return stream
@@ -192,7 +193,7 @@ func (c *TunnelClient) closeWebSocketStream(streamID string, stream *activeWSStr
 		return
 	}
 	stream.closed = true
-	close(stream.dataCh)
+	close(stream.done)
 	stream.mu.Unlock()
 
 	stream.cancel()
@@ -244,10 +245,9 @@ func (c *TunnelClient) startLocalWebSocketWriteLoop(ctx, streamCtx context.Conte
 		select {
 		case <-streamCtx.Done():
 			return
-		case payload, ok := <-stream.dataCh:
-			if !ok {
-				return
-			}
+		case <-stream.done:
+			return
+		case payload := <-stream.dataCh:
 			msgType := websocket.MessageType(payload.messageType)
 			if msgType != websocket.MessageText && msgType != websocket.MessageBinary {
 				slog.WarnContext(ctx, "Dropping WebSocket message with unsupported type", "messageType", payload.messageType)
@@ -307,17 +307,30 @@ func (c *TunnelClient) handleStreamData(ctx context.Context, msg *TunnelMessage)
 		return
 	}
 	stream.mu.Lock()
-	if stream.closed {
-		stream.mu.Unlock()
+	closed := stream.closed
+	stream.mu.Unlock()
+	if closed {
 		return
 	}
+	payload := wsPayload{messageType: msg.WSMessageType, data: msg.Body}
 	select {
-	case stream.dataCh <- wsPayload{messageType: msg.WSMessageType, data: msg.Body}:
-		stream.mu.Unlock()
+	case stream.dataCh <- payload:
+		return
 	default:
-		stream.mu.Unlock()
-		// Drop if channel is full (backpressure)
-		slog.DebugContext(ctx, "Dropping WebSocket data due to backpressure", "streamId", msg.ID)
+	}
+
+	// A full buffer waits for the local writer like the hub side; a stuck writer
+	// ends the stream with an error instead of dropping input silently.
+	timer := time.NewTimer(streamDeliveryTimeout)
+	defer timer.Stop()
+	select {
+	case stream.dataCh <- payload:
+	case <-stream.done:
+	case <-ctx.Done():
+	case <-timer.C:
+		slog.WarnContext(ctx, "Closing slow local stream consumer", "streamId", msg.ID, "timeout", streamDeliveryTimeout)
+		c.sendStreamCloseMessage(stream.conn, msg.ID, "stream delivery timed out")
+		c.closeWebSocketStream(msg.ID, stream)
 	}
 }
 

@@ -18,7 +18,7 @@ import { mapActivityDetail } from "./http/map-dto";
 import { renderMessage, renderRun } from "./message-code";
 import { simulationStore } from "./demo/simulation";
 import { GUARDED_WIRE_ENUMS } from "./wire-catalogue.test-support";
-import { de, en, at, imageError, commandError, volumeOrNetworkError, backupStatus, backupTargets, hubBackup, restartPhase, historyState, prune, scanStatus, systemHint, notificationResult } from "./wire-catalogue-render.test-support";
+import { de, en, at, imageError, commandError, volumeOrNetworkError, backupStatus, backupTargets, hubBackup, restartPhase, restartFailure, historyState, prune, scanStatus, systemHint, notificationResult } from "./wire-catalogue-render.test-support";
 
 beforeEach(() => { setAppLocale("de"); simulationStore.set((state) => ({ ...state, latency: "instant", live: false })); });
 afterEach(() => { vi.restoreAllMocks(); simulationStore.reset(); });
@@ -62,6 +62,8 @@ const proofs = [
   { property: "BackupSystemBackupRun.status", member: "succeeded", key: "hubBackups.statusValues.succeeded", render: () => hubBackup(false) },
   { property: "BackupTargetHostDelivery.state", member: "conflict", key: "settings.backups.deliveryConflict", render: () => backupTargets() },
   { property: "EnvironmentAgentRestartRun.state", member: "reserved", key: "hosts.restart.phases.reserved", render: () => restartPhase() },
+  { property: "EnvironmentAgentRestartRun.code", member: "host.busy", key: "runMessages.restartRefused", render: () => restartFailure("host.busy") },
+  { property: "RequestProblem.code", member: "request.path-encoded", key: "runMessages.pathEncoded", render: () => commandError("request.path-encoded") },
   { property: "HistoryBucket.state", member: "unhealthy", key: "history.states.unhealthy", render: () => historyState() },
   { property: "VolumePruneFailed.code", member: "volume.remove-failed", key: "volumes.prune.failedReasons.remove-failed", render: () => prune(true) },
   { property: "VolumePrunePlanCandidate.reason", member: "unused-anonymous", key: "volumes.prune.candidateReasons.unused-anonymous", render: () => prune(false) },

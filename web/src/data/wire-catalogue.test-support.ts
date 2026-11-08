@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums.
 
-import { IMAGE_ERROR_KEYS, CONTAINER_CODE_KEYS, HOST_CODE_KEYS, ACCESS_CODE_KEYS, NETWORK_CODE_KEYS, WIDGET_CODE_KEYS } from "./wire-catalogue-errors";
+import { REQUEST_CODE_KEYS, IMAGE_ERROR_KEYS, CONTAINER_CODE_KEYS, HOST_CODE_KEYS, ACCESS_CODE_KEYS, NETWORK_CODE_KEYS, WIDGET_CODE_KEYS } from "./wire-catalogue-errors";
 import { BACKUP_CODE_KEYS, BACKUP_REASON_KEYS, VOLUME_COMMAND_KEYS } from "./wire-catalogue-backup";
 import { NOTIFICATION_CODE_KEYS, AUTOHEAL_CODE_KEYS, NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS, SETTINGS_CODE_KEYS } from "./wire-catalogue-settings";
 import { IMPORT_PROBLEM_KEYS } from "./wire-catalogue-import";
@@ -13,11 +13,12 @@ import { BACKUP_STATUS_KEYS, BACKUP_TARGET_KIND_KEYS, MAINTENANCE_PHASE_KEYS, HU
 
 /** Exact property identities are pinned, including equivalent unions on different DTOs. */
 export const GUARDED_WIRE_ENUMS = [
+  { name: "REQUEST_CODE_KEYS", keys: REQUEST_CODE_KEYS, properties: ["RequestProblem.code"] },
   { name: "IMAGE_ERROR_KEYS", keys: IMAGE_ERROR_KEYS, properties: ["JobscheduleJobStatus.code", "ProjectUpdateInfo.policyCode", "SchedulerOutcome.code", "SchedulerTargetOutcome.code", "UpdaterAutoUpdatePolicy.code", "UpdaterBaselineStatus.code", "UpdaterLifecycleResult.baselineCode", "UpdaterLifecycleResult.code", "UpdaterLifecycleResult.pointCode", "UpdaterRestorePoint.code", "UpdaterSystemImageHint.code", "ImageProblem.code", "ImagePruneItem.code", "VulnerabilityProblem.code", "VulnerabilityScanResult.errorCode", "VulnerabilityScanRun.errorCode", "VulnerabilityScanSummary.errorCode", "HistoryProblem.code", "PreferencesProblem.code"] },
   { name: "BACKUP_CODE_KEYS", keys: BACKUP_CODE_KEYS, properties: ["BackupProblem.code"] },
   { name: "BACKUP_REASON_KEYS", keys: BACKUP_REASON_KEYS, properties: ["BackupProblem.reason", "VolumeRestoreRun.reason"] },
   { name: "CONTAINER_CODE_KEYS", keys: CONTAINER_CODE_KEYS, properties: ["ContainerProblem.code"] },
-  { name: "HOST_CODE_KEYS", keys: HOST_CODE_KEYS, properties: ["EnvironmentHostProblem.code"] },
+  { name: "HOST_CODE_KEYS", keys: HOST_CODE_KEYS, properties: ["EnvironmentHostProblem.code", "EnvironmentAgentRestartRun.code"] },
   { name: "ACCESS_CODE_KEYS", keys: ACCESS_CODE_KEYS, properties: ["UserAccessProblem.code"] },
   { name: "NETWORK_CODE_KEYS", keys: NETWORK_CODE_KEYS, properties: ["NetworkError.code"] },
   { name: "WIDGET_CODE_KEYS", keys: WIDGET_CODE_KEYS, properties: ["WidgetProblem.code"] },

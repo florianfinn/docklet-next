@@ -2,7 +2,7 @@
 // Revision: ad1f8d7e16f4bfaf4f6dae6b35d9ea1e3ef961b5
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/docker/convert
 
@@ -36,7 +36,6 @@ replace (
 	go.getarcane.app/docker/compat => ../compat
 	go.getarcane.app/kit => ../../kit
 	go.getarcane.app/streams => ../../streams
-	go.getarcane.app/sys/bytes => ../../sys/bytes
 	go.getarcane.app/sys/cgroup => ../../sys/cgroup
 	go.getarcane.app/sys/crypto => ../../sys/crypto
 	go.getarcane.app/updater => ../../updater

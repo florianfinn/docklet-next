@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability. M19: total contract-code catalogue maps.
+// Deviations: Original typed notification and Auto Heal problem presentation. M14 host maintenance and availability. M19: total contract-code catalogue maps. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import type { useTranslations } from "use-intl";
 import { AUTOHEAL_CODE_KEYS, NOTIFICATION_CODE_KEYS, SETTINGS_CODE_KEYS } from "./wire-catalogue-settings";
@@ -52,7 +52,7 @@ const KEYS = {
 } satisfies Record<SettingsProblemCode, CatalogueKey>;
 
 /** Server detail and title never reach user feedback; a refused write reads as a refusal. */
-export function settingsErrorMessage(error: unknown, translate: ReturnType<typeof useTranslations>): string {
+export function settingsErrorMessage(error: unknown, translate: ReturnType<typeof useTranslations<never>>): string {
   if (error instanceof SettingsProblemError) return translate(KEYS[error.code] as never);
   if (error instanceof AdapterOutcomeError && error.outcome.kind === "not-available") return translate("activity.capability.unavailable");
   const status = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.status : undefined;

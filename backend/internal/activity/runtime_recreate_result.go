@@ -65,9 +65,28 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	results, err := port.RecoverRecreates(ctx)
+	results, pending, err := port.RecoverRecreates(ctx)
 	if err != nil {
 		return err
+	}
+	// Docker stayed unavailable within the startup bound: hold the receipt as
+	// unknown so generic settlement cannot release its exclusion; the next
+	// start recovers it once from the journal.
+	for _, runID := range pending {
+		err := s.transactionInternal(context.WithValue(ctx, gateRunContextKey{}, runID), func(tx *gorm.DB, now time.Time) error {
+			var row RuntimeReceipt
+			if err := tx.First(&row, "run_id=?", runID).Error; err != nil {
+				return err
+			}
+			if row.SettledAt != nil {
+				return nil
+			}
+			_, err := runtimeEvidenceTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: row.ExecutorStartedAt})
+			return err
+		})
+		if err != nil {
+			return err
+		}
 	}
 	for _, recovered := range results {
 		ctx := context.WithValue(ctx, gateRunContextKey{}, recovered.RunID)

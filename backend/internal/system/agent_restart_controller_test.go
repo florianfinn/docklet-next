@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original real receiver, Direct HTTP and Edge reconnect controller proofs.
+// Deviations: Original real receiver, Direct HTTP and Edge reconnect controller proofs; busy receiver toggle.
 
 package system
 
@@ -53,6 +53,7 @@ type restartTransportFixture struct {
 	restarted chan struct{}
 	postCalls atomic.Int32
 	versions  atomic.Int32
+	busy      atomic.Bool
 	instance  atomic.Value
 	changes   <-chan struct{}
 }
@@ -92,7 +93,7 @@ func newRestartTransportFixture(t *testing.T) *restartTransportFixture {
 	cfg := &config.Config{AgentMode: true, AgentToken: "example", AuthMode: "local"}
 	authService := auth.NewAuthService(nil, nil, nil, nil, cfg)
 	api.UseMiddleware(auth.NewHumaMiddleware(api, authService, nil, nil, nil, cfg))
-	h := &agentRestartHandler{appCtx: t.Context(), selfID: func() (string, error) { return "example-self", nil }, client: func(context.Context) (*client.Client, error) { return dockerClient, nil }, wait: func(ctx context.Context, delay time.Duration) bool {
+	h := &agentRestartHandler{appCtx: t.Context(), selfID: func() (string, error) { return "example-self", nil }, client: func(context.Context) (*client.Client, error) { return dockerClient, nil }, busy: func(context.Context) (bool, error) { return f.busy.Load(), nil }, wait: func(ctx context.Context, delay time.Duration) bool {
 		if delay != time.Second {
 			panic("wrong restart delay")
 		}

@@ -120,7 +120,7 @@ const AUTO_UPDATE_PHASES = new Map<string, { key: string; name: string[] }>([
   ["container", { key: "container", name: ["resourceName", "container", "containerId"] }], ["project", { key: "project", name: ["projectName", "projectId"] }],
 ]);
 /** Variant keys of codes whose producers tell phase or outcome apart by metadata or severity. */
-export const EVENT_TITLE_VARIANTS = [...new Set([...AUTO_UPDATE_PHASES.values()].map(({ key }) => `system_auto_update_${key}`))].concat("system_upgrade_failed", "system_upgrade_partial", "webhook_trigger_failed");
+export const EVENT_TITLE_VARIANTS = [...new Set([...AUTO_UPDATE_PHASES.values()].map(({ key }) => `system_auto_update_${key}`))].concat("system_upgrade_failed", "system_upgrade_partial");
 
 /** Catalogue key and named target of an event, keeping the phase and outcome its producer recorded. */
 function eventLabel(event: Event): { key: string; name: string } {
@@ -131,7 +131,7 @@ function eventLabel(event: Event): { key: string; name: string } {
     return phase ? { key: `system_auto_update_${phase.key}`, name: phase.name.map((field) => text(meta[field])).find(Boolean) ?? "" } : { key: "system_auto_update", name: "" };
   }
   const key = eventTitleKey(event.messageCode);
-  const outcome = event.severity === "error" && (event.messageCode === "system.upgrade" || event.messageCode === "webhook.trigger") ? "_failed"
+  const outcome = event.severity === "error" && event.messageCode === "system.upgrade" ? "_failed"
     : event.severity === "warning" && event.messageCode === "system.upgrade" ? "_partial" : "";
   const name = event.resourceName || (event.messageCode.startsWith("user.") ? event.username : "") || "";
   const marker = !event.resourceId && PRUNE_MARKERS.has(name) && (event.messageCode.endsWith(".prune") || meta.action === "prune");

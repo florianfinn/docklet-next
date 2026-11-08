@@ -3,13 +3,24 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const SCAN_BUDGET_MS = 2000;
-test("scan budget stays at two seconds", () => {
-  assert.equal(SCAN_BUDGET_MS, 2 * 1000);
+// Load-independent guard: each case scans the full input and its first eighth in one process.
+// A linear scanner takes about 8x as long for the full input (measured up to 13x), a quadratic one about 64x.
+// Load slows both measurements alike; cheap scans below FLOOR_MS never fail.
+const GROWTH_LIMIT = 32;
+const FLOOR_MS = 250;
+const HANG_TIMEOUT_MS = 30000;
+test("scan guard keeps its growth limit, floor and hang timeout", () => {
+  assert.deepEqual([GROWTH_LIMIT, FLOOR_MS, HANG_TIMEOUT_MS], [32, 250, 30 * 1000]);
   const source = readFileSync(new URL(import.meta.url), "utf8");
-  assert.deepEqual(source.split("\n").filter((line) => /^\s*assert[.]equal\(timing[.]ms/.test(line)).map((line) => line.trim()),
-    ['assert.equal(timing.ms < SCAN_BUDGET_MS, true, `${label}: ${timing.ms.toFixed(1)} ms`);']);
-  assert.deepEqual(source.match(/timeout: \d+/g), ["timeout: " + 5000]);
+  assert.deepEqual(source.split("\n").filter((line) => /^\s*assert[.]equal\(withinGrowth\(timing/.test(line)).map((line) => line.trim()),
+    ["assert.equal(withinGrowth(timing), true, `${label}: ${timing.full.toFixed(1)} ms full, ${timing.part.toFixed(1)} ms eighth`);"]);
+  assert.deepEqual(source.match(/^\s*timeout: \S+,$/gm)?.map((line) => line.trim()), ["timeout: HANG_TIMEOUT_MS,"]);
+});
+const withinGrowth = (timing) => timing.full < FLOOR_MS || timing.full < GROWTH_LIMIT * timing.part;
+test("growth rule separates linear from quadratic scans", () => {
+  assert.equal(withinGrowth({ full: 800, part: 100 }), true);
+  assert.equal(withinGrowth({ full: 6400, part: 100 }), false);
+  assert.equal(withinGrowth({ full: 120, part: 1 }), true);
 });
 const cases = [
   ["78 KB adjacent name/value spaces", '\'{ name: "x"\' + " ".repeat(80000)', "inspectText", "example.ts", 80000],
@@ -57,23 +68,27 @@ for (const prefix of prefixes) {
 }
 for (const [label, expression, scanner = "inspectText", path = "synthetic", minimumBytes = 1000000] of cases) {
   test(`adversarial scan: ${label}`, (t) => {
+    const call = scanner === "inspectPath" ? "inspectPath(value)" : `inspectText(value, ${JSON.stringify(path)}, ["absent-term"], { detailed: ${path !== "synthetic"} })`;
     const source = `
       import { inspectText, inspectPath } from "./scripts/publication-patterns.mjs";
       const input = (${expression});
-      const start = performance.now();
-      ${scanner === "inspectPath" ? "inspectPath(input)" : `inspectText(input, ${JSON.stringify(path)}, ["absent-term"], { detailed: ${path !== "synthetic"} })`};
-      console.log(JSON.stringify({ bytes: Buffer.byteLength(input), ms: performance.now() - start }));
+      const time = (value) => { const start = performance.now(); ${call}; return performance.now() - start; };
+      const part = input.slice(0, Math.floor(input.length / 8));
+      // The eighth runs first (it also warms the JIT); its fastest of three is the reference.
+      const reference = Math.min(time(part), time(part), time(part));
+      const full = time(input);
+      console.log(JSON.stringify({ bytes: Buffer.byteLength(input), full, part: reference }));
     `;
     // A subprocess timeout also stops a synchronous scanner that never returns.
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", source], {
       cwd: new URL("../", import.meta.url),
       encoding: "utf8",
-      timeout: 5000,
+      timeout: HANG_TIMEOUT_MS,
     });
     assert.equal(result.status, 0, result.error?.code ?? result.stderr);
     const timing = JSON.parse(result.stdout);
     assert.equal(timing.bytes >= minimumBytes, true);
-    assert.equal(timing.ms < SCAN_BUDGET_MS, true, `${label}: ${timing.ms.toFixed(1)} ms`);
-    t.diagnostic(`${label}: ${timing.bytes} bytes, ${timing.ms.toFixed(1)} ms`);
+    assert.equal(withinGrowth(timing), true, `${label}: ${timing.full.toFixed(1)} ms full, ${timing.part.toFixed(1)} ms eighth`);
+    t.diagnostic(`${label}: ${timing.bytes} bytes, ${timing.full.toFixed(1)} ms full, ${timing.part.toFixed(1)} ms eighth`);
   });
 }

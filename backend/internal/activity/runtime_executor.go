@@ -228,7 +228,7 @@ func (a *RuntimeServiceAdapter) RuntimeSettled(ctx context.Context) {
 type runtimeContainerRecreatePort interface {
 	EditContainer(context.Context, string, containerDTO.Edit, usertypes.Actor) (string, error)
 	RedeployContainer(context.Context, string, usertypes.Actor) (string, error)
-	RecoverRecreates(context.Context) ([]containerDTO.RecreateRecovery, error)
+	RecoverRecreates(context.Context) ([]containerDTO.RecreateRecovery, []string, error)
 	PruneRecreateJournals(context.Context) error
 }
 

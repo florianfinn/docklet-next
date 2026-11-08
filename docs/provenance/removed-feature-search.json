@@ -4,6 +4,8 @@
   "globs": ["*.go", "!**/*_test.go"],
   "excludedEvidence": "Adopted-source provenance headers and PostgreSQL migration history reserved for issue #8.",
   "queries": [
+    {"feature": "webhook module", "pattern": "internal/webhook|types/webhook|WebhookService|PermWebhooks|webhooksCategory|webhook\\.(create|update|delete|trigger)", "expectedMatches": []},
+    {"feature": "remote CLI", "pattern": "docklet-next/cli|sys/bytes", "expectedMatches": []},
     {"feature": "analytics heartbeat", "pattern": "AnalyticsJob|analytics-heartbeat|ANALYTICS_DISABLED", "expectedMatches": []},
     {"feature": "APNS", "pattern": "Apns|APNS|/apns", "expectedMatches": []},
     {"feature": "Svelte", "pattern": "Svelte|/_app", "expectedMatches": []},

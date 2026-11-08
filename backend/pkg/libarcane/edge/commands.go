@@ -245,7 +245,8 @@ func normalizeCommandPathInternal(requestPath string) string {
 	if idx := strings.IndexByte(requestPath, '?'); idx >= 0 {
 		requestPath = requestPath[:idx]
 	}
-	requestPath = strings.TrimSpace(requestPath)
+	// No trimming: the hub refuses whitespace in paths, and the command must
+	// resolve the same segments the hub checked (#264).
 	if requestPath == "" {
 		return "/"
 	}

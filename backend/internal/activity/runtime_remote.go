@@ -253,19 +253,31 @@ func (c *RuntimeRemoteCoordinator) startFollowInternal(ref RuntimeRunReference, 
 			case <-timer.C:
 			}
 			snapshot, err := c.Refresh(follow.ctx, ref)
-			// Administrator recovery holds the run only transiently; a rejected
-			// release leaves it known active, so keep following afterwards.
-			if errors.Is(err, ErrRuntimeRecoveryInProgress) {
-				timer.Reset(c.followEvery)
-				continue
-			}
-			if err != nil || !runtimeFollowableInternal(snapshot) {
-				recheck = err == nil
+			var keep bool
+			if keep, recheck = runtimeFollowStepInternal(snapshot, err); !keep {
 				return
 			}
 			timer.Reset(c.followEvery)
 		}
 	}()
+}
+
+// runtimeFollowStepInternal decides after one Refresh whether the follower keeps
+// following and, when it departs, whether it rechecks the bound snapshot: a
+// non-followable answer may hide a handoff, a Refresh error does not recheck.
+func runtimeFollowStepInternal(snapshot activitytypes.RuntimeSnapshot, err error) (keep, recheck bool) {
+	// Administrator recovery holds the run only transiently; a rejected
+	// release leaves it known active, so keep following afterwards.
+	if errors.Is(err, ErrRuntimeRecoveryInProgress) {
+		return true, false
+	}
+	if err != nil {
+		return false, false
+	}
+	if !runtimeFollowableInternal(snapshot) {
+		return false, true
+	}
+	return true, false
 }
 
 // A recovered active answer may have handed off to this departing registration.

@@ -2,20 +2,19 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package middleware
 
 import (
+	"golang.org/x/time/rate"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/time/rate"
 )
 
 func TestPerIPRateLimit_AllowsUnderBurstAndBlocksOver(t *testing.T) {
@@ -152,13 +151,13 @@ func TestPerIPRateLimitForPaths_RouteParamsDoNotEscapeFilter(t *testing.T) {
 	router := echo.New()
 	router.IPExtractor = echo.ExtractIPDirect()
 
-	router.Use(PerIPRateLimitForPaths([]string{"/webhooks/trigger/:token"}, 60, 1))
-	router.POST("/webhooks/trigger/:token", func(c *echo.Context) error {
+	router.Use(PerIPRateLimitForPaths([]string{"/actions/:token"}, 60, 1))
+	router.POST("/actions/:token", func(c *echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
 
 	doReq := func(token string) int {
-		req := httptest.NewRequest(http.MethodPost, "/webhooks/trigger/"+token, http.NoBody)
+		req := httptest.NewRequest(http.MethodPost, "/actions/"+token, http.NoBody)
 		req.RemoteAddr = "192.0.2.10:4000"
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -167,137 +166,6 @@ func TestPerIPRateLimitForPaths_RouteParamsDoNotEscapeFilter(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, doReq("token-aaa"))
 	require.Equal(t, http.StatusTooManyRequests, doReq("token-bbb"))
-}
-
-// newTokenRateLimitTestRouterInternal wires PerTokenRateLimitForPaths ahead
-// of handler and returns a doReq helper posting from a fixed source IP.
-func newTokenRateLimitTestRouterInternal(
-	t *testing.T,
-	perMinute, burst int,
-	isAuthentic func(string) bool,
-	handler echo.HandlerFunc,
-) (doReq func(token string) int) {
-	t.Helper()
-
-	router := echo.New()
-	router.IPExtractor = echo.ExtractIPDirect()
-	router.Use(PerTokenRateLimitForPaths([]string{"/webhooks/trigger/:token"}, perMinute, burst, isAuthentic))
-	router.POST("/webhooks/trigger/:token", handler)
-
-	return func(token string) int {
-		req := httptest.NewRequest(http.MethodPost, "/webhooks/trigger/"+token, http.NoBody)
-		req.RemoteAddr = "192.0.2.10:4000"
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		return rec.Code
-	}
-}
-
-func okHandlerInternal(c *echo.Context) error {
-	return c.NoContent(http.StatusOK)
-}
-
-func TestPerTokenRateLimitForPaths_TracksDistinctTokensNotIP(t *testing.T) {
-	acceptAll := func(string) bool { return true }
-	doReq := newTokenRateLimitTestRouterInternal(t, 60, 1, acceptAll, okHandlerInternal)
-
-	require.Equal(t, http.StatusOK, doReq("token-a"))
-	require.Equal(t, http.StatusOK, doReq("token-b"))
-	require.Equal(t, http.StatusOK, doReq("token-c"))
-	require.Equal(t, http.StatusTooManyRequests, doReq("token-a"))
-}
-
-// TestPerTokenRateLimitForPaths_NilAuthenticatorFailsClosedToSharedIPBucket proves
-// a nil isAuthentic does not hand out independent per-token buckets: all nonempty
-// tokens contend for one shared IP bucket and trip 429 together.
-func TestPerTokenRateLimitForPaths_NilAuthenticatorFailsClosedToSharedIPBucket(t *testing.T) {
-	doReq := newTokenRateLimitTestRouterInternal(t, 60, 1, nil, okHandlerInternal)
-
-	require.Equal(t, http.StatusOK, doReq("token-a"))
-	require.Equal(t, http.StatusTooManyRequests, doReq("token-b"),
-		"a nil authenticator must fail closed: distinct tokens share the IP bucket")
-	require.Equal(t, http.StatusTooManyRequests, doReq("token-a"))
-}
-
-func TestPerTokenRateLimitForPaths_IPCeilingBoundsUnauthenticTokenCycling(t *testing.T) {
-	rejectAll := func(string) bool { return false }
-	const perMinute, burst = 1, 3
-	handlerHits := 0
-	doReq := newTokenRateLimitTestRouterInternal(t, perMinute, burst, rejectAll, func(c *echo.Context) error {
-		handlerHits++
-		return c.NoContent(http.StatusNotFound)
-	})
-
-	rejections := 0
-	for i := range 200 {
-		if doReq(strconv.Itoa(i)) == http.StatusTooManyRequests {
-			rejections++
-		}
-	}
-
-	require.Positive(t, rejections, "expected the IP ceiling to reject some requests once its burst is exhausted")
-	require.Equal(t, burst, handlerHits,
-		"distinct unauthenticated tokens from one IP must reach the handler only up to the configured burst; more would mean the old 10x IP allowance came back")
-}
-
-func TestPerTokenRateLimitForPaths_MalformedTokensGetNoBucketButStillHitIPCeiling(t *testing.T) {
-	isAuthentic := func(token string) bool {
-		return token == "well-formed"
-	}
-	const perMinute, burst = 2, 2
-
-	doReq := newTokenRateLimitTestRouterInternal(t, perMinute, burst, isAuthentic, okHandlerInternal)
-
-	successes := 0
-	for i := range burst + 10 {
-		if doReq("not-well-formed-"+strconv.Itoa(i)) == http.StatusOK {
-			successes++
-		}
-	}
-
-	require.LessOrEqual(t, successes, burst,
-		"malformed tokens must be bounded by the IP ceiling, not given their own per-token bucket")
-}
-
-func TestPerTokenRateLimitForPaths_AuthenticTokenNotStarvedByGarbageFromSameIP(t *testing.T) {
-	isAuthentic := func(token string) bool {
-		return token == "authentic"
-	}
-	doReq := newTokenRateLimitTestRouterInternal(t, 2, 2, isAuthentic, okHandlerInternal)
-
-	for i := range 100 {
-		doReq("garbage-" + strconv.Itoa(i))
-	}
-	require.Equal(t, http.StatusTooManyRequests, doReq("garbage-final"),
-		"IP ceiling must be exhausted by the garbage traffic")
-
-	require.Equal(t, http.StatusOK, doReq("authentic"),
-		"an authentic token must not be starved by garbage traffic from its source IP")
-}
-
-func TestPerTokenRateLimitForPaths_AppliesOnlyToConfiguredPaths(t *testing.T) {
-	router := echo.New()
-	router.IPExtractor = echo.ExtractIPDirect()
-
-	router.Use(PerTokenRateLimitForPaths([]string{"/webhooks/trigger/:token"}, 60, 1, nil))
-	router.POST("/webhooks/trigger/:token", func(c *echo.Context) error {
-		return c.NoContent(http.StatusOK)
-	})
-	router.POST("/unlimited/:token", func(c *echo.Context) error {
-		return c.NoContent(http.StatusOK)
-	})
-
-	doReq := func(path string) int {
-		req := httptest.NewRequest(http.MethodPost, path, http.NoBody)
-		req.RemoteAddr = "192.0.2.10:4000"
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		return rec.Code
-	}
-
-	for range 10 {
-		require.Equal(t, http.StatusOK, doReq("/unlimited/same-token"))
-	}
 }
 
 func TestIPRateLimiter_EnforcesMaxEntriesForRecentClients(t *testing.T) {

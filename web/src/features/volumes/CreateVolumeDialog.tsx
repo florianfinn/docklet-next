@@ -81,7 +81,7 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
             <DialogTitle>{t("title")}</DialogTitle>
             <DialogDescription>{t("description")}</DialogDescription>
           </DialogHeader>
-          <TextField id="vol-name" label={t("name")} value={name} onChange={setName} description={t("nameHint")} error={tried ? message : undefined} mono placeholder="werkstatt_daten" />
+          <TextField id="vol-name" label={t("name")} value={name} onChange={setName} description={t("nameHint")} error={tried ? message : undefined} mono placeholder="app_data" />
           <Field>
             <FieldLabel htmlFor="vol-host">{t("host")}</FieldLabel>
             <Select value={hostId} onValueChange={setHostId} disabled={busy}>
@@ -106,7 +106,7 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
           </Field>
           <Field>
             <FieldLabel htmlFor="vol-labels">{t("labels")}</FieldLabel>
-            <Textarea id="vol-labels" value={labels} onChange={(e) => setLabels(e.target.value)} className="min-h-16 font-mono text-[13px]" placeholder="docklet.owner=werkstatt" />
+            <Textarea id="vol-labels" value={labels} onChange={(e) => setLabels(e.target.value)} className="min-h-16 font-mono text-[13px]" placeholder="docklet.owner=team" />
             <FieldDescription>{t("labelsHint")}</FieldDescription>
           </Field>
           <DialogCommandFooter feedback={feedback}>

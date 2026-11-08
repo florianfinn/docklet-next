@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original agent-only Docker self restart receiver.
+// Deviations: Original agent-only Docker self restart receiver; refuses while local backup or restore work runs.
 
 package system
 
@@ -28,11 +28,13 @@ type agentRestartHandler struct {
 	client func(context.Context) (*client.Client, error)
 	selfID func() (string, error)
 	wait   func(context.Context, time.Duration) bool
+	// busy reports running local backup or restore work; nil only without a service graph.
+	busy   func(context.Context) (bool, error)
 	appCtx context.Context
 }
 
-func registerAgentRestart(api huma.API, dockerService *docker.DockerClientService, appCtx context.Context) {
-	h := &agentRestartHandler{selfID: cgroup.CurrentContainerID, wait: waitAgentRestart, appCtx: appCtx}
+func registerAgentRestart(api huma.API, dockerService *docker.DockerClientService, busy func(context.Context) (bool, error), appCtx context.Context) {
+	h := &agentRestartHandler{selfID: cgroup.CurrentContainerID, wait: waitAgentRestart, busy: busy, appCtx: appCtx}
 	if dockerService != nil {
 		h.client = dockerService.GetClient
 	}
@@ -76,6 +78,17 @@ func (h *agentRestartHandler) restart(ctx context.Context, _ *struct{}) (*huma.S
 	inspected, err := dockerClient.ContainerInspect(probeCtx, id, client.ContainerInspectOptions{})
 	if err != nil || inspected.Container.ID == "" {
 		return nil, unsupported
+	}
+	// A running backup or restore refuses the restart; an unreadable state is
+	// refused too (safe side). A backup admitted in the following second can
+	// still be interrupted (documented limit).
+	if h.busy != nil {
+		if busy, busyErr := h.busy(probeCtx); busy || busyErr != nil {
+			if busyErr != nil {
+				slog.WarnContext(ctx, "Agent restart refused: backup state unreadable", "error", busyErr)
+			}
+			return nil, &dto.HostProblem{Code: "host.busy", Status: 409}
+		}
 	}
 	// Resolve once before acceptance; the delayed effect uses the inspected ID.
 	ownID := inspected.Container.ID

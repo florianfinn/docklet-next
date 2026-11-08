@@ -31,7 +31,9 @@ type restartFixture struct {
 	now          time.Time
 	instance     string
 	calls        int
+	probes       int
 	sendStatus   int
+	sendCode     string // 409 refusal code; empty means agent.restart-unsupported
 	sendError    bool
 	unreachable  bool
 	incompatible bool
@@ -54,6 +56,7 @@ func (f *restartFixture) roundTrip(r *http.Request) (*http.Response, error) {
 	body := []byte(`{}`)
 	switch r.URL.Path {
 	case "/api/health":
+		f.probes++
 		if f.unreachable {
 			return nil, errors.New("synthetic unreachable")
 		}
@@ -65,6 +68,10 @@ func (f *restartFixture) roundTrip(r *http.Request) (*http.Response, error) {
 		}
 		body, _ = json.Marshal(map[string]string{"status": "UP", "instanceId": instance})
 	case "/api/app-version":
+		f.probes++
+		if f.unreachable {
+			return nil, errors.New("synthetic unreachable")
+		}
 		info := version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}
 		if f.incompatible {
 			info.AgentContractVersion--
@@ -81,7 +88,11 @@ func (f *restartFixture) roundTrip(r *http.Request) (*http.Response, error) {
 			return nil, errors.New("synthetic lost acknowledgement")
 		}
 		if status == 409 {
-			body = []byte(`{"code":"agent.restart-unsupported","status":409}`)
+			code := f.sendCode
+			if code == "" {
+				code = "agent.restart-unsupported"
+			}
+			body = []byte(`{"code":"` + code + `","status":409}`)
 		} else {
 			body = []byte(`{"instanceId":"response-is-only-evidence"}`)
 		}
@@ -551,4 +562,20 @@ func TestRestartNonDefinitiveAnswersAndDisabledHost(t *testing.T) {
 		assertRestartCode(t, w, "failed", "agent.restart-timeout")
 		require.Equal(t, 1, f.calls)
 	})
+}
+
+// CL-A-4: a second restart while one is active answers host.busy before any probe of a down agent.
+func TestRestartActiveAnswersBusyBeforeProbingUnreachableAgent(t *testing.T) {
+	f := newRestartFixture(t)
+	f.c.service.restarts = f.c
+	f.reserve(t)
+	f.unreachable = true
+	h := NewHandler(f.c.service, nil, nil, nil, nil, nil)
+	_, err := h.RestartAgent(t.Context(), &restartAgentInput{ID: "example-host"})
+	var p *dto.HostProblem
+	require.ErrorAs(t, err, &p)
+	require.Equal(t, "host.busy", p.Code)
+	require.Equal(t, 409, p.Status)
+	require.Zero(t, f.probes, "an active restart must not probe the agent")
+	require.Zero(t, f.calls)
 }

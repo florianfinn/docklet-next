@@ -1,4 +1,5 @@
-import { useTranslations } from "use-intl";
+import { memo } from "react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { formatTime } from "@/domain/format";
 import type { EventKind, Host, OpsEvent, Tone } from "@/domain/model";
@@ -20,8 +21,15 @@ const KIND_TONE: Record<EventKind, Tone> = {
 const SPAN = 24 * 3_600_000;
 const TICKS = [24, 18, 12, 6, 0];
 
-/** 24-hour lanes per host; markers are focusable buttons with details. */
-export function TimelineWidget({ events, hosts, now }: { events: OpsEvent[]; hosts: Host[]; now: number }) {
+type Props = { events: OpsEvent[]; hosts: Host[]; now: number };
+const lanes = (hosts: Host[]) => JSON.stringify(hosts.map((h) => [h.id, h.name, h.color]));
+
+/**
+ * 24-hour lanes per host; markers are focusable buttons with details. A busy fleet holds
+ * thousands of markers, so the widget renders only when its events, lanes or time change,
+ * not on every metrics or host-observation update of the Dashboard.
+ */
+export const TimelineWidget = memo(function TimelineWidget({ events, hosts, now }: Props) {
   const t = useTranslations("dashboard.timeline");
   const recent = events.filter((e) => now - new Date(e.at).getTime() <= SPAN);
   if (!recent.length) return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
@@ -49,23 +57,7 @@ export function TimelineWidget({ events, hosts, now }: { events: OpsEvent[]; hos
               <span aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-border" />
               {recent
                 .filter((e) => e.hostId === h.id)
-                .map((e, i) => (
-                  <Tooltip key={e.id}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        data-tone={KIND_TONE[e.kind]}
-                        aria-label={`${formatTime(e.at)} · ${e.title}`}
-                        className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-(--tone) shadow-[0_0_calc(10px*var(--glow))_var(--tone)] outline-none transition-transform duration-(--dur-fast) hover:scale-125 focus-visible:scale-125 focus-visible:ring-2 focus-visible:ring-ring"
-                        style={{ left: pos(e.at), animationDelay: `calc(${i} * 40ms)` }}
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-64">
-                      <div className="font-medium">{formatTime(e.at)}</div>
-                      {e.title}
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
+                .map((e) => <Marker key={e.id} at={e.at} title={e.title} kind={e.kind} left={pos(e.at)} />)}
             </div>
           ))}
         </div>
@@ -86,4 +78,30 @@ export function TimelineWidget({ events, hosts, now }: { events: OpsEvent[]; hos
       </div>
     </div>
   );
-}
+}, (a, b) => a.events === b.events && a.now === b.now && lanes(a.hosts) === lanes(b.hosts));
+
+/**
+ * Primitive props keep unchanged markers when a refetch prepends events (selected rows are new
+ * objects then); the locale subscription re-renders them because formatTime reads the active locale.
+ */
+const Marker = memo(function Marker({ at, title, kind, left }: { at: string; title: string; kind: EventKind; left: string }) {
+  useLocale();
+  const time = formatTime(at);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-tone={KIND_TONE[kind]}
+          aria-label={`${time} · ${title}`}
+          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-(--tone) shadow-[0_0_calc(10px*var(--glow))_var(--tone)] outline-none transition-transform duration-(--dur-fast) hover:scale-125 focus-visible:scale-125 focus-visible:ring-2 focus-visible:ring-ring"
+          style={{ left }}
+        />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">
+        <div className="font-medium">{time}</div>
+        {title}
+      </TooltipContent>
+    </Tooltip>
+  );
+});

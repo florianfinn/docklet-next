@@ -2,10 +2,10 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original apps widget address mapping tests.
+// Deviations: Original apps widget address mapping tests. M20 #360: stacks without an address are not parsed.
 
 import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppsWidget } from "@/features/dashboard/widgets/SmallWidgets";
 import { renderWithApp } from "@/test/render";
 import { mapStack, stackAddress, type ProjectRow } from "./inventory-mapping";
@@ -42,5 +42,19 @@ describe("stack address mapping (#334)", () => {
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
     expect(screen.queryByRole("link", { name: /craft/ }) === null).toBe(true);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses no address for stacks without one, so dense Dashboards render without thrown errors", async () => {
+    const parsed: string[] = [];
+    const Native = URL;
+    vi.stubGlobal("URL", new Proxy(Native, { construct: (target, args: [string]) => { parsed.push(args[0]); return new target(...args); } }));
+    const stack = mapStack(project("p1", "media", ["https://media.example.com"]), "1", [], observed);
+    const bare = Array.from({ length: 3 }, (_, i) => mapStack(project(`b${i}`, `bare${i}`, []), "1", [], observed));
+    parsed.length = 0;
+    renderWithApp(<AppsWidget stacks={[stack, ...bare]} hosts={new Map()} />);
+    await screen.findByRole("link", { name: /media/ });
+    expect(parsed.includes("")).toBe(false);
   });
 });

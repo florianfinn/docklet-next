@@ -24,7 +24,7 @@ import { deCommon } from "@/shared/messages/de";
 import { deTheme } from "@/shared/theme/messages/de";
 import { deWorkspace } from "@/shared/workspace/messages/de";
 
-import { dePreview } from "../preview/messages/de";
+import { deComingSoon } from "../coming-soon/messages/de";
 import { deShell } from "../shell/messages/de";
 import { deLocale } from "./messages/de";
 
@@ -36,7 +36,7 @@ export const messages: typeof enMessages = {
   workspace: deWorkspace,
   theme: deTheme,
   shell: deShell,
-  preview: import.meta.env.DEV ? dePreview : ({} as typeof dePreview),
+  comingSoon: deComingSoon,
   activity: deActivity,
   environment: deEnvironmentEvents,
   user: deUserEvents,

@@ -19,7 +19,7 @@ type AgentRestartRun struct {
 	CreatedAt time.Time  `json:"createdAt"`
 	Deadline  time.Time  `json:"deadline"`
 	SettledAt *time.Time `json:"settledAt,omitempty"`
-	Code      string     `json:"code,omitempty"`
+	Code      string     `json:"code,omitempty" enum:"agent.restart-superseded,agent.restart-timeout,agent.restart-unsupported,agent.restart-interrupted,agent.restart-unconfirmed,host.unreachable,host.busy"`
 }
 type HostProblem struct {
 	Code   string `json:"code" enum:"agent.restart-unsupported,agent.restart-superseded,agent.restart-timeout,agent.restart-unconfirmed,agent.restart-interrupted,host.busy,host.restarting,host.name-invalid,host.name-taken,host.unreachable,edge.heartbeat-stale,agent.ui-configuration-disabled,settings.ui-configuration-disabled"`

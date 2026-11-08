@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package edge
 
@@ -20,7 +20,7 @@ import (
 	"time"
 	"uuid"
 
-	certgen "github.com/florianfinn/docklet-next/cli/pkg/generate"
+	certgen "github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge/certgen"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/mo"
 	kit "go.getarcane.app/kit/pkg"

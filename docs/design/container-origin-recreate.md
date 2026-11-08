@@ -38,8 +38,8 @@ admission. Shared contract and migration items are in
   retired. The shared core `recreateContainerInternal` renames the old
   container, stops it, creates and starts the replacement and removes the old
   one, with rollback branches and an AutoRemove special case.
-- Webhooks call `ContainerService.RedeployContainer`, which delegates Compose
-  children to `UpdateProjectServices`.
+- Webhooks (removed in M20) called `ContainerService.RedeployContainer`, which
+  delegates Compose children to `UpdateProjectServices`.
 - Remote container JSON is assembled on the agent and forwarded by the
   environment middleware; the inventory middleware captures and retains remote
   list responses.
@@ -79,8 +79,8 @@ admission. Shared contract and migration items are in
 6. The executing host enforces the same rule at the effect boundary,
    independent of the caller: `RedeployContainer`, `EditContainer` and the
    recreate core refuse any `com.docker.compose.*` label, an Unraid label or the
-   protected-self container. This covers the retained
-   webhook caller; webhooks are removed in M20 without a further redesign.
+   protected-self container. This covers every remaining
+   caller; the webhook caller was removed in M20 without a further redesign.
 
 ## Recreate and redeploy through runtime admission
 
@@ -138,7 +138,8 @@ admission. Shared contract and migration items are in
     | started or intent-remove-old | `old_id` exists | remove `old_id` | succeeded |
     | intent-remove-old | `old_id` gone | none | succeeded |
     | any | `was_running=false` and the replacement created but deliberately not started | keep it stopped, remove old | succeeded |
-    | any | AutoRemove original gone before `started`, ID or name mismatch, a foreign container on a name, or both IDs missing | touch nothing | `ambiguous`, failed `container.recreate-ambiguous`, backup shown with a marker |
+    | intent-rename to created, no `new_id` | a foreign container (not labelled with the run) holds only `new_name`, which differs from `old_name` and `backup_name` | restore old; never touch the foreign container | failed `container.recreate-recovered` |
+    | any | AutoRemove original gone before `started`, ID or name mismatch, a foreign container on `old_name` or `backup_name` (or on `new_name` once our create was observed), or both IDs missing | touch nothing | `ambiguous`, failed `container.recreate-ambiguous`, backup shown with a marker |
 
     Compensation steps have their own intents (`comp-remove-new`,
     `comp-rename-old`, `comp-start-old`) and are re-evaluated idempotently by ID
@@ -163,6 +164,22 @@ admission. Shared contract and migration items are in
     for the ordinary settlement retry instead of discarding it. Releasing a
     host-local run is refused while its journal is unresolved, so recovery still
     sees it.
+
+    Startup recovery is bounded so an unavailable Docker daemon cannot stop the
+    hub or agent from starting: all journals and attempts share one 30 s budget,
+    each Docker call (client setup, inspect, rename, start, remove) has 5 s,
+    and pending journals get at most three passes 2 s apart. A transient
+    failure of a compensation or cleanup effect is retried from the committed
+    intent with the exact IDs observed again, like a failed inspect. Only an
+    unavailable daemon (connection refused or reset, missing
+    socket, `Unavailable`) or a call that exceeds its budget counts as
+    transient; not-found, name and ownership observations keep their table
+    meaning, and a journal write failure still fails startup. A run still
+    pending after the bound is held as unknown with its exclusion (never
+    settled as interrupted), the process becomes ready, and the next start with
+    Docker reachable recovers it once from the journal without replay. Limit:
+    the container's scope stays held until the hub or agent restarts with
+    Docker reachable.
 
 ## Web
 
@@ -210,7 +227,7 @@ enums, recreate options and result.
 | OR7 | crash recovery | decision table before readiness, exclusion held until settlement | executor startup | separate process lifetimes, one case per table row including a crash during compensation and a failing compensation, each asserting the exact Docker state, outcome code and exclusion (mutation: name-pattern cleanup, release before recovery, or treat intent-start with a running replacement as failed) |
 | OR8 | Direct/Edge parity | runtime sender and receiver with body and result | remote runtime path | real Direct and Edge tests (mutation: drop the result) |
 | OR9 | edit bounds | strict, at most 64 KiB, both intakes | hub intake and receiver | unknown field, oversize, nested invalid → refused at the receiver too (mutation: receiver skips validation) |
-| OR10 | effect-boundary guard | Compose, Unraid and self refused at the service | `RedeployContainer` through the webhook producer | webhook-triggered Compose-child redeploy refused without effect (mutation: remove the service guard) |
+| OR10 | effect-boundary guard | Compose, Unraid and self refused at the service | retained producers: manual runtime admission, updater executor, Auto Heal, scheduled updates (the webhook producer was removed in M20) | `TestRecreateFreshAdmissionOriginLocksAllTransports`, `TestContainerImageOriginExecutor`, the Auto Heal eligibility and self-exclusion tests and the scheduled-update policy tests refuse without effect (mutation: remove the service guard) |
 | OR11 | codes and shapes | listed above | types, OpenAPI, v11 fixture, EN/DE | catalogue and fixture tests |
 | OR12 | host removal and re-registration | overrides deleted; a late result cannot resurrect one | delete and projection | remove, re-register the same name, deliver the old result → no override (mutation: unconditional upsert) |
 | OR13 | replacement result retention | compact receipt result, query, retry, navigation | executor receipt → Direct/Edge query → hub projection | lost terminal response, activity history cleared on executor and hub, store reopened, then real query and retry on the removed old ID: same run, all four identity fields, navigation target, no second effect (mutation: result only in activity metadata, or omitted from the compact projection) |

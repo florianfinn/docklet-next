@@ -20,7 +20,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   stacks: [queryKeys.stacks, queryKeys.stackRoot, queryKeys.images],
   containers: [queryKeys.containers, queryKeys.images, ["container"]],
   security: [queryKeys.security],
-  topology: [queryKeys.topology],
+  topology: [queryKeys.topology, queryKeys.networks],
   events: [queryKeys.events],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot, ["backup-overviews"], ["backup-overview"], ["backup-repository"]],
@@ -38,6 +38,13 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
     () => {
       if (!enabled) return;
       const offDemand = registerReadConsumer(adapter.subscribeChanges, "events", () => client.getQueryCache().find({ queryKey: queryKeys.events, exact: true })?.isActive() ?? false);
+      const offStacks = adapter.subscribeStackTerminals?.(({ stackId, hostId }) => {
+        void client.invalidateQueries({ queryKey: queryKeys.stack(stackId) });
+        // The stack's own descriptors and its host's container descriptors may change with the run.
+        void client.invalidateQueries({ predicate: ({ queryKey: [root, , kind, id] }) => root === "capability"
+          && (kind === "stack" && id === stackId || kind === "container" && typeof id === "string" && id.startsWith(`${hostId}~`)) });
+        for (const key of [queryKeys.stacks, queryKeys.containers, queryKeys.images, queryKeys.volumes, queryKeys.topology, queryKeys.networks]) void client.invalidateQueries({ queryKey: key, exact: true });
+      });
       const offChanges = adapter.subscribeChanges((topics) => {
         if (topics.some((topic) => topic === "containers" || topic === "stacks" || topic === "hosts")) {
           void client.invalidateQueries({ queryKey: ["capability"] });
@@ -46,7 +53,7 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
           for (const key of TOPIC_KEYS[topic]) void client.invalidateQueries({ queryKey: key });
         }
       });
-      return () => { offDemand(); offChanges(); };
+      return () => { offDemand(); offChanges(); offStacks?.(); };
     },
     [adapter, client, enabled],
   );

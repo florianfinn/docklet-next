@@ -18,6 +18,7 @@ export const queryKeys = {
   serviceWidgetConfig: (kind: string) => ["service-widgets", "config", kind],
   security: ["security"],
   topology: ["topology"],
+  networks: ["network-summaries"],
   events: ["events"],
   actions: ["actions"],
   schedule: ["schedule"],

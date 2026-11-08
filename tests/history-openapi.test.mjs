@@ -23,8 +23,21 @@ const typed = {
 };
 
 test("routes that predate M17 keep their responses", () => {
-  for (const [operationId, { method, path, responses }] of Object.entries(before))
-    assert.deepEqual(spec.paths[path][method].responses, responses, operationId);
+  for (const [operationId, { method, path, responses }] of Object.entries(before)) {
+    if (["list-webhooks", "create-webhook", "update-webhook", "delete-webhook"].includes(operationId)) {
+      assert.equal(spec.paths[path], undefined, operationId); continue;
+    }
+    const actual = structuredClone(spec.paths[path][method].responses);
+    if (path.startsWith("/environments/") && actual["400"]) {
+      const media = actual["400"].content?.["application/json"];
+      if (media?.schema?.$ref === "#/components/schemas/RequestProblem") delete actual["400"];
+      else if (media?.schema?.oneOf) {
+        const prior = media.schema.oneOf.filter((item) => item.$ref !== "#/components/schemas/RequestProblem");
+        if (prior.length !== media.schema.oneOf.length) media.schema = prior.length === 1 ? prior[0] : {oneOf: prior};
+      }
+    }
+    assert.deepEqual(actual, responses, operationId);
+  }
 });
 
 test("history and preference problems appear only at the statuses their operations return", () => {

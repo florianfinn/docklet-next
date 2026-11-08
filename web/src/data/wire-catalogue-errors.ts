@@ -11,6 +11,10 @@ type Schema = components["schemas"];
 
 const CREDENTIAL_REJECTED_KEY = "common.commandErrors.credentialRejected" satisfies CatalogueKey;
 
+export const REQUEST_CODE_KEYS = {
+  "request.path-encoded": "runMessages.pathEncoded",
+} satisfies Record<Schema["RequestProblem"]["code"], CatalogueKey>;
+
 export const IMAGE_ERROR_KEYS = {
   "agent.unavailable": "images.errors.agent_unavailable",
   "container.origin-locked": "images.errors.container_origin-locked",

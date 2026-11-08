@@ -33,7 +33,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message, step and output DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
-| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
+| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. A stack detail reads the project list, its plain detail and compose file, runtime conditions and only the containers labelled with the stack's Compose project; when a runtime container ID is missing from that answer it falls back to the host's container pages, which keeps the ownership rules (#383). |
 | `getSecurity` | Image inventory, batch vulnerability summaries, enriched environment findings and host-run lists | Aggregate validated host-qualified rows, preserve unavailable host states, read terminal host history without inventing samples. |
 | `runScan`, `cancelScan` | Per-image or host-wide vulnerability scan; activity cancel | Every scan reaches host admission. `409 vulnerability.busy` follows the returned activity. Activity settlement refreshes security and images. |
 | `getScanSettings`, `saveScanSettings`, `setScanEnabled` | Hub settings; job list for next-run projection | Independent feature/automatic switches, daily/weekly schedule, ignore-unfixed and three notification causes. Next run comes exclusively from the backend. |
@@ -583,21 +583,40 @@ partial totals while a visible host is unavailable, including unknown totals whe
 all visible hosts fail. Host batches are merged together after all reads settle, retaining
 the prior query snapshot during refetch. A security-owned 30-second budget per
 host covers capability, image/project/container inventory and every vulnerability
-response body. Hub capability, settings and host discovery share a separate
-30-second prerequisite budget. Timeout is `vulnerability.read-timeout`; retained
+response body. It starts with the query, so the time hub capability, settings and
+host discovery take (capped at 30 seconds themselves) also counts against each
+host's budget. Timeout is `vulnerability.read-timeout`; retained
 image rows are unavailable and failed batches supply no findings or history.
 Identity and request generations fence late responses before the atomic merge.
 Inventory cancellation is opt-in for this path; other inventory readers retain
-their existing behavior. Over HTTP/2 a held host therefore leaves the other hosts
-visible. Over HTTP/1.1 the shell's unbounded inventory reads to a held host can
-occupy every per-origin connection and queue the healthy hosts' reads as well
-(#271). Pending and filtered hosts do not remove
+their existing behavior. Over HTTP/1.1 (six connections per origin) the adapter
+admits at most five physical GETs under `/environments/<host>/` at a time, leaving
+one connection for the stream. A free slot goes to the waiting host with the fewest
+active reads (oldest waiting request on ties), so a lone dense host can use all
+five; a slot is held until the body has been read, cancelled or aborted. A host is
+held to one active read when the hub answers it as unavailable (an
+`X-Docklet-Host-Reason` header or status 502, after the hub's 20-second inventory
+bound) or when its admitted read was aborted after at least ten seconds without
+response headers; the next fresh answer from that host clears the mark. HTTP/2 and
+HTTP/3 pages, the stream, writes, hub reads and downloads are not admitted (#271);
+a page whose browser reports no protocol is treated as HTTP/1.1. Known limits: several held hosts can still slow healthy hosts over
+HTTP/1.1 until their reads reach the 30-second budget; hub-local settings, jobs and
+notification reads under `/environments/0/` are admitted as host 0 reads. Pending
+and filtered hosts do not remove
 retained inventory. A host batch is judged by the inventory observation of its own
 security-owned reads, not by an older host-catalogue snapshot. Host failures are
-successful query data, so while a host is unavailable for a recoverable reason
-(agent, transport, timeout, offline, pending or storage) the mounted security query
-re-reads every 10 seconds and stops once no such host remains; other codes wait for
-a change event. Transport loss is classified at each producer:
+successful query data. Every mounted inventory list (stacks, containers, images,
+volumes, network summaries, topology and security, including assigned-user stacks)
+re-reads every 15 seconds while its last result holds an online host whose batch
+failed transiently (agent, transport, timeout or storage) or returned the hub's
+retained snapshot with a transient host reason (HTTP 200 with
+`X-Docklet-Host-Reason: agent.unavailable`). Snapshot rows stay rendered until a
+fresh complete batch replaces them. Recovery belongs to that result, survives
+structural sharing and stops once every batch is fresh or the host leaves the online
+catalogue; a failed topology detail keeps its summary rows and does not re-read.
+Offline and pending hosts recover through the catalogue-change invalidation; permanent
+reasons such as `agent.invalid-token` and `agent.update-required` and other codes
+wait for a change event. Transport loss is classified at each producer:
 - The read-only summaries POST reports `agent.unavailable`, like the GET reads; only
   writes report `dispatch-unknown`.
 - A lost inventory body stream is `http.error`; only an unparsable body is an invalid

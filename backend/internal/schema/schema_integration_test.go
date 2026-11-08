@@ -107,6 +107,7 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	actual, err := migrated.SQLDB()
 	require.NoError(t, err)
 	require.Equal(t, catalog(t, pool), catalog(t, actual))
+	require.False(t, migrated.Migrator().HasTable("webhooks"))
 	require.Empty(t, sqlRows(t, actual, "PRAGMA foreign_key_check"))
 	require.Equal(t, [][]string{{"ok"}}, sqlRows(t, actual, "PRAGMA integrity_check"))
 	var expected [][]string

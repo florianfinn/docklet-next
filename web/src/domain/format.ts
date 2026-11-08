@@ -1,12 +1,8 @@
-import { activeLocale, formatNumber, INTL_LOCALE, type AppLocale } from "./locale";
+import { enCommon } from "@/shared/messages/en";
+import { deCommon } from "@/shared/messages/de";
+import { activeLocale, formatNumber, INTL_LOCALE } from "./locale";
 
 export { formatNumber };
-
-/** Words the formatters add themselves; Intl covers everything else. */
-const WORDS: Record<AppLocale, { justNow: string; soon: string; now: string; day: string; days: string; percentGap: string }> = {
-  de: { justNow: "gerade eben", soon: "gleich", now: "jetzt", day: "Tag", days: "Tagen", percentGap: " " },
-  "en-US": { justNow: "just now", soon: "shortly", now: "now", day: "day", days: "days", percentGap: "" },
-};
 
 const formatters = new Map<string, Intl.DateTimeFormat | Intl.RelativeTimeFormat>();
 
@@ -38,7 +34,7 @@ export function formatDateTime(iso: string): string {
 }
 
 export function formatRelative(iso: string, now = Date.now()): string {
-  const w = WORDS[activeLocale()];
+  const w = (activeLocale() === "de" ? deCommon : enCommon).relativeTime;
   const rtf = relativeFormat();
   const diff = new Date(iso).getTime() - now;
   if (!Number.isFinite(diff)) return "–";
@@ -51,7 +47,7 @@ export function formatRelative(iso: string, now = Date.now()): string {
 
 /** "in 3 h 12 min" style countdown for schedules. */
 export function formatCountdown(iso: string, now = Date.now()): string {
-  const w = WORDS[activeLocale()];
+  const w = (activeLocale() === "de" ? deCommon : enCommon).relativeTime;
   const ms = Math.max(0, new Date(iso).getTime() - now);
   const min = Math.round(ms / 60_000);
   if (min < 1) return w.now;
@@ -74,7 +70,7 @@ export function formatGb(gb: number): string {
 }
 
 export function formatPercent(value: number): string {
-  return `${Math.round(value)}${WORDS[activeLocale()].percentGap}%`;
+  return `${Math.round(value)}${activeLocale() === "de" ? " " : ""}%`;
 }
 
 export function formatPorts(ports: { host?: string; container: string; protocol?: string }[]): string {

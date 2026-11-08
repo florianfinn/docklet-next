@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original reduced navigation, route denial and sign-out mode coverage.
+// Deviations: Original reduced navigation, route denial and sign-out mode coverage. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -85,4 +85,14 @@ it("W1 actual user stack list never loads the host container inventory or admini
   expect(settings).not.toHaveBeenCalled();
   // Administrator-only actions are hidden, not merely disabled (simple-users §4).
   expect(screen.queryByText("New stack") === null).toBe(true);
+});
+
+it.each(["/proxy", "/games"])("WH-B6 simple users cannot see or directly enter %s", async (path) => {
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, kind: "http" as const, getCurrentUser: async () => ({ id: "member", username: "member", isAdmin: false, assignments: [], requiresPasswordChange: false }) };
+  const mount = vi.fn(); function Page() { mount(); return <h1>Coming soon area</h1>; }
+  renderRoutes([{ element: <AuthGate />, children: [{ element: <AppShell />, children: [{ path, element: <Page /> }] }] }], [path], adapter);
+  expect((await screen.findByRole("heading")).textContent).toBe("Not available");
+  expect(mount).not.toHaveBeenCalled();
+  expect(document.querySelector('a[href="/proxy"], a[href="/games"]') === null).toBe(true);
 });

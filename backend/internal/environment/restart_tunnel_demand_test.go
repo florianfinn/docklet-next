@@ -26,6 +26,9 @@ func TestRestartObservationRenewsEdgeTunnelDemandAfterReopen(t *testing.T) {
 	require.Equal(t, edge.TunnelStatusIdle, edge.GetDemandRegistry().DesiredStatus(id, false, time.Now()), "a fresh hub process has no demand")
 	var env Environment
 	require.NoError(t, f.c.service.db.First(&env, "id=?", id).Error)
+	// The demand registry reads wall time; align the controller clock so slow
+	// fixture setup cannot move the demand expiry past the stored deadline.
+	f.now = time.Now().UTC()
 	_, _ = f.c.observe(t.Context(), w.row, env)
 	require.Equal(t, edge.TunnelStatusRequired, edge.GetDemandRegistry().DesiredStatus(id, false, time.Now()))
 	require.Equal(t, edge.TunnelStatusIdle, edge.GetDemandRegistry().DesiredStatus(id, false, w.row.Deadline.Add(time.Second)), "demand ends with the stored deadline")

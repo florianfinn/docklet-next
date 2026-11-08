@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed federated credentials; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package role
 
@@ -317,10 +317,6 @@ func requiredPermissionsForPickerInternal(permission string) []string {
 		authz.PermUsersDelete,
 		authz.PermRolesList,
 		authz.PermRolesRead,
-		authz.PermWebhooksList,
-		authz.PermWebhooksCreate,
-		authz.PermWebhooksUpdate,
-		authz.PermWebhooksDelete,
 		authz.PermNotificationsManage,
 		authz.PermDiagnosticsRead:
 		return []string{authz.PermSettingsRead}

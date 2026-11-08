@@ -226,7 +226,11 @@ token (10, burst 3); `/api/tunnel/mtls/enroll` per IP and per token (10, burst 3
 `/api/tunnel/poll` has no rate limit (`registerEdgeTunnelRoutes` in
 `internal/bootstrap/edge_bootstrap.go`). Valid tokens are cached; misses query
 SQLite (`ResolveEdgeEnvironmentByToken`). Each tunnel message is bounded
-(T12), and stream delivery waits at most `streamDeliveryTimeout` (5 seconds).
+(T12), and stream delivery waits at most `streamDeliveryTimeout` (5 seconds) on
+both sides: the hub fails a slow stream consumer, and the agent, when a stream's
+input buffer stays full that long, closes the stream with an error to the hub
+instead of dropping input. Browser frames on the Direct log and terminal
+bridges are limited to 1 MiB.
 
 Residual risk: an unauthenticated flood on the poll endpoint costs one indexed
 lookup per request. At this scale a reverse proxy or firewall in front of the hub

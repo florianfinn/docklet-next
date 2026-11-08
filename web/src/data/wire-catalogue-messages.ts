@@ -121,10 +121,6 @@ export const MESSAGE_CODE_KEYS = {
   "environment.mtls.cert_issued": "runMessages.events.labels.environment_mtls_cert_issued",
   "environment.mtls.enroll": "runMessages.events.labels.environment_mtls_enroll",
   "environment.mtls.download": "runMessages.events.labels.environment_mtls_download",
-  "webhook.create": "runMessages.events.labels.webhook_create",
-  "webhook.update": "runMessages.events.labels.webhook_update",
-  "webhook.delete": "runMessages.events.labels.webhook_delete",
-  "webhook.trigger": "runMessages.events.labels.webhook_trigger",
   "notification.send": "runMessages.codes.notification.send",
   "autoheal.restarted": "runMessages.codes.autoheal.restarted",
   "autoheal.restart-failed": "runMessages.codes.autoheal.restart-failed",
@@ -150,7 +146,7 @@ export const MESSAGE_CODE_KEYS = {
 >, CatalogueKey>;
 
 // Hub events have distinct title wording from direct messages with the same wire code.
-type HubEventCode = Exclude<Extract<Schema["EventEvent"]["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment" | "webhook"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
+type HubEventCode = Exclude<Extract<Schema["EventEvent"]["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
 export const HUB_EVENT_TITLE_KEYS = {
   "container.start": "runMessages.events.labels.container_start",
   "container.stop": "runMessages.events.labels.container_stop",
@@ -223,8 +219,4 @@ export const HUB_EVENT_TITLE_KEYS = {
   "environment.mtls.cert_issued": "runMessages.events.labels.environment_mtls_cert_issued",
   "environment.mtls.enroll": "runMessages.events.labels.environment_mtls_enroll",
   "environment.mtls.download": "runMessages.events.labels.environment_mtls_download",
-  "webhook.create": "runMessages.events.labels.webhook_create",
-  "webhook.update": "runMessages.events.labels.webhook_update",
-  "webhook.delete": "runMessages.events.labels.webhook_delete",
-  "webhook.trigger": "runMessages.events.labels.webhook_trigger",
 } satisfies Record<HubEventCode, CatalogueKey>;

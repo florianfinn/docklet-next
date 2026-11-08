@@ -15,6 +15,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/history"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"maps"
 	"slices"
 	"time"
 )
@@ -36,6 +37,11 @@ func seedConditions(tx *gorm.DB, host, revision string, old *hostState) error {
 	rows := []conditionRow{}
 	if err := tx.Where("host_id=? AND revision=?", host, revision).Find(&rows).Error; err != nil {
 		return err
+	}
+	// Seeding works on a private map; the cached state is published only after commit.
+	old.restarts = maps.Clone(old.restarts)
+	if old.restarts == nil {
+		old.restarts = map[string][]restartPoint{}
 	}
 	old.conditions, old.stacks = map[string]dto.Condition{}, map[string]dto.Condition{}
 	for _, row := range rows {

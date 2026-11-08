@@ -24,9 +24,10 @@ import (
 func TestAgentManualTokenChangeRejectsLateTunnel(t *testing.T) {
 	for _, transport := range []string{"service", "middleware"} {
 		t.Run(transport, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-			defer cancel()
 			f := newAgentFixture(t, "edge", version.Info{})
+			// The budget covers the update and the refused request, not fixture setup.
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
 			old := f.tunnel
 			replacement := "test-only"
 			_, err := f.service.UpdateEnvironment(ctx, f.id, map[string]any{"access_token": replacement}, nil, nil)
