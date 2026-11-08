@@ -2,11 +2,11 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Feature-branch push runs, superseded-run cancellation, separate root check budgets, pinned toolchains, baseline comparison, Docker-isolated default SQLite checks and a separate package-image smoke gate.
+# Deviations: Feature-branch push runs, no rerun when a draft PR is marked ready, superseded-run cancellation, separate root check budgets, pinned toolchains, baseline comparison, Docker-isolated default SQLite checks and a separate package-image smoke gate.
 name: Repository checks
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main, "feature/**"]
 # Main runs get unique groups (never cancelled or replaced while queued); PR and
