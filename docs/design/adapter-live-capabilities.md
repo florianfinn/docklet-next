@@ -605,12 +605,17 @@ and filtered hosts do not remove
 retained inventory. A host batch is judged by the inventory observation of its own
 security-owned reads, not by an older host-catalogue snapshot. Host failures are
 successful query data. Every mounted inventory list (stacks, containers, images,
-volumes, network summaries, topology and security) whose last result omitted an
-online host because that host's batch failed transiently (agent, transport, timeout
-or storage) re-reads every 15 seconds and stops once every batch succeeds or the host
-leaves the online catalogue; a failed topology detail keeps its summary rows and does
-not re-read. Offline and pending hosts recover through the catalogue-change
-invalidation; other codes wait for a change event. Transport loss is classified at each producer:
+volumes, network summaries, topology and security, including assigned-user stacks)
+re-reads every 15 seconds while its last result holds an online host whose batch
+failed transiently (agent, transport, timeout or storage) or returned the hub's
+retained snapshot with a transient host reason (HTTP 200 with
+`X-Docklet-Host-Reason: agent.unavailable`). Snapshot rows stay rendered until a
+fresh complete batch replaces them. Recovery belongs to that result, survives
+structural sharing and stops once every batch is fresh or the host leaves the online
+catalogue; a failed topology detail keeps its summary rows and does not re-read.
+Offline and pending hosts recover through the catalogue-change invalidation; permanent
+reasons such as `agent.invalid-token` and `agent.update-required` and other codes
+wait for a change event. Transport loss is classified at each producer:
 - The read-only summaries POST reports `agent.unavailable`, like the GET reads; only
   writes report `dispatch-unknown`.
 - A lost inventory body stream is `http.error`; only an unparsable body is an invalid
