@@ -41,6 +41,10 @@ export default function ContainerTerminal({ containerId }: { containerId: string
     terminal.textarea?.setAttribute("aria-label", labelRef.current);
     // A shell's first output may query the cursor position; its reply must reach the shell before typed bytes.
     terminal.attachCustomKeyEventHandler(() => ready);
+    // Paste and IME composition reach xterm's input outside the key handler; stop them before it until ready.
+    const early = (event: Event) => { if (!ready) { event.preventDefault(); event.stopPropagation(); } };
+    const entries = ["paste", "compositionstart", "compositionupdate", "compositionend", "beforeinput", "input"] as const;
+    for (const type of entries) element.addEventListener(type, early, true);
     const markReady = () => {
       if (!active || ended || ready) return;
       ready = true; clearTimeout(fallback);
@@ -65,7 +69,7 @@ export default function ContainerTerminal({ containerId }: { containerId: string
     const input = terminal.onData((data) => session?.send(data));
     const resize = terminal.onResize(({ cols, rows }) => session?.resize(Math.min(1000, cols), Math.min(1000, rows)));
     const observer = new ResizeObserver(size); observer.observe(element);
-    return () => { active = false; clearTimeout(fallback); observer.disconnect(); input.dispose(); resize.dispose(); session?.close(); terminal.dispose(); terminalRef.current = null; };
+    return () => { active = false; clearTimeout(fallback); for (const type of entries) element.removeEventListener(type, early, true); observer.disconnect(); input.dispose(); resize.dispose(); session?.close(); terminal.dispose(); terminalRef.current = null; };
   }, [adapter, containerId, shell, attempt]);
   useEffect(() => { labelRef.current = inputLabel; terminalRef.current?.textarea?.setAttribute("aria-label", inputLabel); }, [inputLabel]);
   const status = state.type === "exit" ? state.reason ? t(shellMessage(state.reason)) : t("ended", { code: state.code === null ? t("unknownCode") : String(state.code) }) : t(state.type);

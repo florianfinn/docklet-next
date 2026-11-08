@@ -119,3 +119,29 @@ it("shows Connected after one second when the shell prints nothing", async () =>
   await act(() => new Promise((resolve) => setTimeout(resolve, 1_200)));
   expect(screen.queryByText("Verbunden") !== null).toBe(true);
 });
+
+async function earlySession() {
+  const user = userEvent.setup(), adapter = createDemoAdapter(), sent: string[] = [];
+  let push: (event: ShellEvent) => void = () => {};
+  adapter.openContainerShell = (_id, _query, listener) => { push = listener; listener({ type: "connecting" }); return { send: (data) => { sent.push(data); }, resize: () => {}, close: () => {} }; };
+  renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], ["/containers/c-uptime-kuma"], adapter);
+  const tab = await screen.findByRole("tab", { name: "Terminal" }); await waitFor(() => expect(tab.hasAttribute("disabled")).toBe(false)); await user.click(tab);
+  const input = await screen.findByRole("textbox", { name: "Container-Terminaleingabe" }) as HTMLTextAreaElement;
+  act(() => push({ type: "live" }));
+  return { user, input, sent, push };
+}
+
+it("holds pasted and composed text until the shell is ready, then accepts both", async () => {
+  const f = await earlySession();
+  f.input.focus(); await f.user.paste("echo early\n");
+  f.input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+  f.input.value = "早";
+  f.input.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true, data: "早" }));
+  f.input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "早" }));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+  expect(f.sent.length).toBe(0);
+  act(() => f.push({ type: "output", data: new TextEncoder().encode("/ # ") }));
+  await screen.findByText("Verbunden");
+  f.input.focus(); await f.user.paste("echo ok");
+  expect(f.sent.join("")).toBe("echo ok");
+});
