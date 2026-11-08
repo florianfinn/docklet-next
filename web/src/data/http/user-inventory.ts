@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original assigned-stack reads without host-wide container inventory. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
+// Deviations: Original assigned-stack reads without host-wide container inventory. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -28,6 +28,8 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
         try {
           const [projects, conditions] = await budget((signal) => Promise.all([list("list-projects", host.id, "projects", undefined, signal), readConditions(host.id, signal)]));
           rows = withConditions({ stacks: (projects.rows as ProjectRow[]).map((p) => mapStack(p, host.id, [], projects.observation)), containers: [] }, conditions).stacks;
+          recovery.observed(host, projects.observation);
+          onState(host.id, projects.observation);
         } catch (error) {
           parent?.throwIfAborted(); recovery.failed(host, error);
           onState(host.id, inventoryFailure(host.id, error));

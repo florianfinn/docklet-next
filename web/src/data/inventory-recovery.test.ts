@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original query-local recovery, equal-result sharing and catalogue exclusion regressions.
+// Deviations: Original query-local recovery, equal-result sharing and catalogue exclusion regressions. C2 #271: stale-success catalogue and freshness exclusions.
 
 import { expect, it } from "vitest";
 import type { Host } from "@/domain/model";
@@ -23,6 +23,12 @@ it.each(["http.error", "agent.unavailable", "inventory.read-error", "vulnerabili
 });
 it.each(["offline", "pending", "disabled"] as const)("never retries a %s catalogue host", (status) => {
   const recovery = inventoryRecovery(); recovery.failed({ ...host, status } as Host, "agent.unavailable");
+  expect(inventoryRecoveryInterval(recovery.result([]), [host])).toBe(false);
+  recovery.observed({ ...host, status } as Host, { stale: true, reason: "agent.unavailable" });
+  expect(inventoryRecoveryInterval(recovery.result([]), [host])).toBe(false);
+});
+it("C2-3 does not treat a fresh observation with a leftover reason as a failed batch", () => {
+  const recovery = inventoryRecovery(); recovery.observed(host, { stale: false, reason: "agent.unavailable" });
   expect(inventoryRecoveryInterval(recovery.result([]), [host])).toBe(false);
 });
 it.each(["inventory.mapping-error", "permission.denied", "agent.invalid-token", "agent.update-required"])("does not retry permanent read failure %s", (code) => {
@@ -56,7 +62,7 @@ it("keeps an unrelated successful inventory from clearing another list's recover
   expect(inventoryRecoveryInterval(containers, [host])).toBe(15_000);
 });
 
-// A failed network detail keeps the host's summary rows, so only a failed host batch schedules a topology re-read.
+// A failed network detail keeps the host's summary rows without scheduling a host-batch re-read.
 it.each([["batch", "/networks", 15_000], ["detail", "/networks/net", false]] as const)("topology recovers a failed %s only when the host batch failed", async (_, failing, interval) => {
   const f = resourceFixture(); f.state.hostIds = ["first"];
   const hosts = await f.adapter.listHosts();
@@ -73,4 +79,16 @@ it("an assigned-stack list recovers a host whose project batch failed", async ()
     ? Response.json({ success: false, code: "agent.unavailable" }, { status: 502 }) : f.fetcher(input as string);
   const reader = createUserInventory("/api", fetcher, async () => hosts, () => undefined, () => {}, async () => new Map());
   expect(inventoryRecoveryInterval(await reader.listStacks(), hosts)).toBe(15_000);
+});
+
+it("an assigned-stack list publishes its own stale and fresh observations", async () => {
+  const f = resourceFixture(); f.state.hostIds = ["first"];
+  const hosts = await f.adapter.listHosts();
+  const observations: boolean[] = [];
+  const reader = createUserInventory("/api", f.fetcher as typeof fetch, async () => hosts, () => undefined, (_host, state) => observations.push(state.stale), async () => new Map());
+  f.state.reason = "agent.unavailable";
+  await reader.listStacks();
+  f.state.reason = "";
+  await reader.listStacks();
+  expect(observations).toEqual([true, false]);
 });

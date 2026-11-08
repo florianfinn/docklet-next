@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler.
+// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler. C2 #271: mounted stale-success recovery through containers and Dashboard consumers.
 
 import { act } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -25,6 +25,7 @@ function Probe() {
     <p data-testid="counts">{JSON.stringify(counts)}</p>
     {Object.entries(batches).map(([name, rows]) => <p key={name} data-testid={name}>{["0", "edge", "direct"].map((host) => `${host}:${rows?.filter((row) => row.hostId === host).length ?? 0}`).join(",")}</p>)}
     <p data-testid="security" data-ready={security.isSuccess}>{security.data?.unavailable?.map((h) => h.hostId).sort().join(",")}</p>
+    <p data-testid="direct-container">{containers.data?.filter((row) => row.hostId === "direct").map((row) => `${row.name}:${row.state}:${!!row.inventory?.stale}`).join(",")}</p>
     <InventoryNotice hosts={hosts.data ?? []} items={containers.data ?? []} />
   </>;
 }
@@ -40,6 +41,29 @@ it("D4-1 completes healthy multi-page batches with all nav readers and one strea
   expect(pool.maximum).toBe(6);
   expect(pool.maximumHosts.get("direct")).toBe(5);
   expect(pool.sent.some((path) => path.includes("/edge/containers?start=200"))).toBe(true);
+});
+
+function Containers() {
+  const hosts = useHosts(), containers = useContainers();
+  return <>
+    <p data-testid="direct-container">{containers.data?.filter((row) => row.hostId === "direct").map((row) => `${row.name}:${row.state}:${!!row.inventory?.stale}`).join(",")}</p>
+    <InventoryNotice hosts={hosts.data ?? []} items={containers.data ?? []} />
+  </>;
+}
+
+it("C2-1 recovers retained HTTP 200 snapshot rows in the mounted containers list within 15 s of release", async () => {
+  vi.useFakeTimers(); const pool = hostReadPool({ hubBound: true, hubSnapshot: true });
+  const view = renderWithApp(<Containers />, pool.adapter);
+  await act(() => vi.advanceTimersByTimeAsync(25_000));
+  expect(view.getByTestId("direct-container").textContent).toBe("snapshot-0:stopped:true");
+  expect(view.getByRole("status").textContent?.includes("direct")).toBe(true);
+  pool.resume();
+  await act(() => vi.advanceTimersByTimeAsync(15_000));
+  expect(view.getByTestId("direct-container").textContent).toBe("fresh-0:running:false");
+  expect(view.getByRole("status").textContent).toBe("");
+  const reads = pool.sent.filter((path) => /\/(projects|containers)\?/.test(path)).length;
+  await act(() => vi.advanceTimersByTimeAsync(60_000));
+  expect(pool.sent.filter((path) => /\/(projects|containers)\?/.test(path)).length).toBe(reads);
 });
 
 it("D4-4 recovers the mounted lists within 15 s after release with no catalogue or identity change", async () => {
@@ -69,6 +93,21 @@ function DenseDashboard() {
   useEvents(); useSchedule(["0", "direct", "edge"]);
   return <Probe />;
 }
+
+it("C2-2 recovers the mounted Dashboard's snapshot rows and state within 15 s of release", async () => {
+  vi.useFakeTimers(); const pool = hostReadPool({ holdDirect: true, hubBound: true, hubSnapshot: true });
+  const view = renderWithApp(<DenseDashboard />, pool.adapter);
+  await act(() => vi.advanceTimersByTimeAsync(35_000));
+  expect(view.getByTestId("containers").textContent).toBe("0:201,edge:201,direct:1");
+  expect(view.getByTestId("direct-container").textContent).toBe("snapshot-0:stopped:true");
+  expect(view.getByRole("status").textContent?.includes("direct")).toBe(true);
+  pool.resume();
+  await act(() => vi.advanceTimersByTimeAsync(15_000));
+  expect(view.getByTestId("direct-container").textContent).toBe("fresh-0:running:false");
+  for (const name of Object.keys(hooks)) expect(view.getByTestId(name).textContent?.endsWith("direct:1")).toBe(true);
+  expect(view.getByRole("status").textContent).toBe("");
+  expect(view.getByTestId("security").textContent).toBe("");
+});
 
 it("C1-1d completes dense Dashboard host inventories within 30 s with slow metrics pages and six physical connections", async () => {
   vi.useFakeTimers(); const pool = hostReadPool({ dense: true });

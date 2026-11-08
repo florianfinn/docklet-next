@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C1 #383: target container reads with exact ownership fallback.
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C1 #383: target container reads with exact ownership fallback. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -28,7 +28,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
     const containerRows = containers.rows as ContainerRow[];
     const allContainers = containerRows.map((row) => mapContainer(row, host.id, projectRows, observation));
     const stacks = withoutSystem(projectRows.map((row) => mapStack(row, host.id, allContainers, observation)));
-    return withConditions({ stacks, containers: withoutSystem(allContainers) }, conditions);
+    return { ...withConditions({ stacks, containers: withoutSystem(allContainers) }, conditions), observation };
   }
 
   async function stackInventory(host: Host, projectId: string) {
@@ -56,8 +56,12 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
     const recovery = inventoryRecovery();
     const batches: Awaited<ReturnType<typeof hostInventory>>[] = [];
     return { recovery, batches: await Promise.all(scope.map(async (host) => {
-      const batch = await budget((signal) => hostInventory(host, signal)).catch((error) => {
-        parent?.throwIfAborted(); recovery.failed(host, error); onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] };
+      const batch = await budget((signal) => hostInventory(host, signal)).then((batch) => {
+        recovery.observed(host, batch.observation); return batch;
+      }).catch((error) => {
+        parent?.throwIfAborted(); recovery.failed(host, error);
+        const observation = inventoryFailure(host.id, error); onState(host.id, observation);
+        return { stacks: [], containers: [], observation };
       });
       batches.push(batch);
       onPartial?.(batches);

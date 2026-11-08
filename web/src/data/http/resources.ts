@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
+// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -41,7 +41,7 @@ export function createObservedHostImageReader(baseUrl: string, fetcher: typeof f
 
 export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listImages" | "listVolumes" | "getVolume" | "getTopology" | "listNetworkSummaries"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
-  const hostImages = createHostImageReader(baseUrl, fetcher, onState);
+  const hostImages = createObservedHostImageReader(baseUrl, fetcher, onState);
   async function context(hostId: string, signal?: AbortSignal) {
     const [projects, containers] = await Promise.all([list("list-projects", hostId, "projects", undefined, signal), list("list-containers", hostId, "containers", undefined, signal)]);
     return { projects: projects.rows, containers: containers.rows, observations: [projects.observation, containers.observation] };
@@ -51,13 +51,13 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     onState(hostId, inventory);
     return inventory;
   }
-  async function aggregate<T>(operation: string, load: (host: Host, signal: AbortSignal) => Promise<T[]>, onPartial?: (rows: T[]) => void, parent?: AbortSignal): Promise<T[]> {
+  async function aggregate<T>(operation: string, load: (host: Host, signal: AbortSignal) => Promise<{ rows: T[]; inventory: InventoryObservation }>, onPartial?: (rows: T[]) => void, parent?: AbortSignal): Promise<T[]> {
     const budget = inventoryReadBudget(parent);
     const scope = await budget(async () => { await requireCapability(operation); return hosts(); });
     const recovery = inventoryRecovery();
     const completed: T[] = [];
     const batches = await Promise.all(scope.map(async (host) => {
-      try { const rows = await budget((signal) => load(host, signal)); completed.push(...rows); onPartial?.([...completed]); return rows; }
+      try { const { rows, inventory } = await budget((signal) => load(host, signal)); recovery.observed(host, inventory); completed.push(...rows); onPartial?.([...completed]); return rows; }
       catch (error) {
         parent?.throwIfAborted(); recovery.failed(host, error);
         onState(host.id, inventoryFailure(host.id, error));
@@ -68,7 +68,8 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
   }
   const listVolumes: DockletAdapter["listVolumes"] = (onPartial, signal) => aggregate("listVolumes", async (h, owned) => {
     const [volumes, ctx] = await Promise.all([list("list-volumes", h.id, "volumes", undefined, owned), context(h.id, owned)]);
-    return mapVolumes(volumes.rows, h.id, ctx.containers, ctx.projects, observe(h.id, [...ctx.observations, volumes.observation]));
+    const inventory = observe(h.id, [...ctx.observations, volumes.observation]);
+    return { rows: mapVolumes(volumes.rows, h.id, ctx.containers, ctx.projects, inventory), inventory };
   }, onPartial, signal);
   return {
     listVolumes,
@@ -79,8 +80,11 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
       if (!volume) throw new AdapterOutcomeError({ kind: "error", code: "get-volume.not-found" });
       return { ...volume, backups: [] };
     },
-    listImages: (onPartial, signal) => aggregate("listImages", (h, owned) => hostImages(h.id, owned), onPartial, signal),
-    listNetworkSummaries: (signal) => aggregate("getTopology", async (h, owned) => (await list("list-networks", h.id, "networks", undefined, owned)).rows.filter((n) => n.labels?.["io.docklet.system"] !== "agent").map((n) => ({ id: n.id, hostId: h.id })), undefined, signal),
+    listImages: (onPartial, signal) => aggregate("listImages", async (h, owned) => { const { images, inventory } = await hostImages(h.id, owned); return { rows: images, inventory }; }, onPartial, signal),
+    listNetworkSummaries: (signal) => aggregate("getTopology", async (h, owned) => {
+      const networks = await list("list-networks", h.id, "networks", undefined, owned);
+      return { rows: networks.rows.filter((n) => n.labels?.["io.docklet.system"] !== "agent").map((n) => ({ id: n.id, hostId: h.id })), inventory: networks.observation };
+    }, undefined, signal),
     async getTopology(onPartial, retained) {
       await requireCapability("getTopology");
       const scope = await hosts();
@@ -118,6 +122,8 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
           const unavailable = new Map(details.filter((d) => d.unavailable || contextual.status === "rejected").map((d) => [d.row.id, { ...base, ...d.observation, stale: true, reason: d.observation.reason ?? base.reason ?? "inventory.read-error" as const }]));
           const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)]);
           const graph = mapTopology(details.map((d) => d.row), h.id, ctx.containers, ctx.projects, base, networks.rows, unavailable);
+          // Failed details retain their summaries without polling; successful stale reads still own recovery.
+          recovery.observed(h, combine([...(contextual.status === "fulfilled" ? ctx.observations : []), networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]));
           batches.set(h.id, { ...graph, ...(inventory.stale ? { inventory: { [h.id]: inventory } } : {}) });
         } catch (error) {
           recovery.failed(h, error);

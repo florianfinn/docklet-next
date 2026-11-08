@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
+// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -98,6 +98,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
           });
           check();
           retained.set(host.id, combined); batches.set(host.id, combined);
+          recovery.observed(host, observation);
           onState(host.id, observation);
         } catch (error) {
           parent?.throwIfAborted(); recovery.failed(host, error); check();

@@ -2,7 +2,7 @@
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery.
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
@@ -94,7 +94,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       return { id: r.activityId, hostId: host.id, at: r.startedAt, trigger: r.origin, status: r.status as Exclude<typeof r.status, "running">,
         sampled: r.status === "completed" || r.status === "partial" && r.scanned > 0, counts: counts(r) };
     });
-    return { images: rows, findings, history: historyRows, stale: inventory.stale };
+    return { images: rows, findings, history: historyRows, inventory };
   }
   return {
     ...settings,
@@ -119,11 +119,11 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const batches = await Promise.all(hosts.map(async (host) => {
         let known: DockerImage[] = [];
         try {
-          const { stale, ...batch } = await budget((signal) => hostImages(host, signal, (rows) => { known = rows; }));
+          const { inventory, ...batch } = await budget((signal) => hostImages(host, signal, (rows) => { known = rows; }));
           check();
           // This batch's own inventory decides; the host catalogue may carry an older observation.
-          const unavailable = stale || batch.images.some((i) => i.unavailable);
-          if (unavailable) recovery.failed(host, "vulnerability.read-unavailable");
+          const unavailable = inventory.stale || batch.images.some((i) => i.unavailable);
+          recovery.observed(host, inventory);
           return { hostId: host.id, ...batch, code: unavailable ? "vulnerability.read-unavailable" : undefined };
         }
         catch (error) {
