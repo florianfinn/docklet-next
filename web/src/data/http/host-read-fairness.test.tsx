@@ -2,10 +2,11 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original actual navigation consumers against a six-connection HTTP/1.1 scheduler.
+// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler.
 
 import { act } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { useMetrics } from "../live";
 import { useNavCounts } from "@/app/shell/use-nav-counts";
 import { useActionsQuery, useContainers, useHosts, useImages, useNetworkSummaries, useSecurity, useStacks, useVolumes } from "../queries";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
@@ -37,7 +38,7 @@ it("D4-1 completes healthy multi-page batches with all nav readers and one strea
   expect(view.getByRole("status").textContent?.includes("direct")).toBe(true);
   expect(view.getByRole("status").textContent?.includes("edge")).toBe(false);
   expect(pool.maximum).toBe(6);
-  expect(pool.maximumHosts.get("direct")).toBe(2);
+  expect(pool.maximumHosts.get("direct")).toBe(5);
   expect(pool.sent.some((path) => path.includes("/edge/containers?start=200"))).toBe(true);
 });
 
@@ -61,4 +62,22 @@ it("D4-5 performs no periodic inventory reads after every batch succeeds", async
   const initial = reads(); expect(initial > 0).toBe(true);
   await act(() => vi.advanceTimersByTimeAsync(60_000));
   expect(reads()).toBe(initial);
+});
+
+function DenseDashboard() {
+  useMetrics((snapshot) => snapshot?.containers);
+  return <Probe />;
+}
+
+it("C1-1d completes dense Dashboard host inventories within 30 s with slow metrics pages and six physical connections", async () => {
+  vi.useFakeTimers(); const pool = hostReadPool({ dense: true });
+  const view = renderWithApp(<DenseDashboard />, pool.adapter);
+  await act(() => vi.advanceTimersByTimeAsync(29_900));
+  expect(view.getByTestId("stacks").textContent).toBe("0:21,edge:201,direct:201");
+  expect(view.getByTestId("containers").textContent).toBe("0:336,edge:201,direct:201");
+  expect(view.getByTestId("images").textContent).toBe("0:336,edge:201,direct:201");
+  expect(view.getByTestId("security").textContent).toBe("");
+  expect(pool.maximum).toBe(6);
+  for (const resource of ["containers", "images"]) expect(pool.sent.some((path) => path.includes(`/0/${resource}?start=300`))).toBe(true);
+  expect(pool.sent.some((path) => path.includes("/0/containers?") && path.includes("sort=cpuUsage"))).toBe(true);
 });

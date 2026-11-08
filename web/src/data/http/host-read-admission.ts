@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original FIFO physical host GET admission through response-body completion.
+// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission.
 
 const BODY_METHODS = new Set(["json", "text", "arrayBuffer", "blob", "formData", "bytes"]);
 
@@ -33,12 +33,33 @@ function admitted(response: Response, release: () => void): Response {
   });
 }
 
-/** HTTP/1.1 has six connections per origin; two per host plus the stream leaves room for other hosts. Downloads are
- * not admitted, so a long transfer never holds a host's slots. */
-export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api"): typeof fetch {
+type WaitingRead = { order: number; start: () => void };
+type HostReads = { active: number; held: boolean; queue: WaitingRead[] };
+
+function navigationProtocol(): string {
+  return typeof performance !== "undefined" && typeof performance.getEntriesByType === "function"
+    ? (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.nextHopProtocol ?? "" : "";
+}
+
+export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api", protocol: () => string = navigationProtocol): typeof fetch {
   const base = new URL(baseUrl, "https://hub.example.com");
   const prefix = `${base.pathname.replace(/\/$/, "")}/environments/`;
-  const hosts = new Map<string, { active: number; queue: (() => void)[] }>();
+  const hosts = new Map<string, HostReads>();
+  // Six HTTP/1.1 connections per origin minus the persistent stream leave five host reads.
+  const limit = 5;
+  let active = 0, order = 0;
+  const cleanup = (key: string, state: HostReads) => { if (!state.active && !state.queue.length && !state.held) hosts.delete(key); };
+  function drain() {
+    while (active < limit) {
+      let next: HostReads | undefined;
+      for (const state of hosts.values()) {
+        if (!state.queue.length || state.held && state.active >= 1) continue;
+        if (!next || state.active < next.active || state.active === next.active && state.queue[0]!.order < next.queue[0]!.order) next = state;
+      }
+      if (!next) break;
+      next.queue.shift()!.start();
+    }
+  }
   return async (input, init) => {
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input), base);
@@ -46,43 +67,50 @@ export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api")
     const suffix = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : "";
     const host = suffix.includes("/") ? suffix.split("/")[0] : undefined;
     const headers = new Headers(init?.headers ?? request?.headers);
-    if (method !== "GET" || !host || url.pathname.endsWith("/download") || headers.get("Accept")?.includes("text/event-stream")) return fetcher(input, init);
+    if (["h2", "h3"].includes(protocol()) || method !== "GET" || !host || url.pathname.endsWith("/download") || headers.get("Accept")?.includes("text/event-stream")) return fetcher(input, init);
     const key = `${url.origin}/${host}`;
     const signal = init?.signal ?? request?.signal;
     signal?.throwIfAborted();
-    const state = hosts.get(key) ?? { active: 0, queue: [] };
+    const state = hosts.get(key) ?? { active: 0, held: false, queue: [] };
     hosts.set(key, state);
     let release!: () => void;
+    let receivedHeaders = false;
     await new Promise<void>((resolve, reject) => {
-      const cleanup = () => { if (!state.active && !state.queue.length) hosts.delete(key); };
-      const start = () => {
+      const entry: WaitingRead = { order: order++, start: () => {
         signal?.removeEventListener("abort", abort);
-        ++state.active;
+        ++active; ++state.active;
+        const startedAt = Date.now();
         let released = false;
+        const abortActive = () => {
+          // Ten seconds without headers distinguishes held transport from ordinary short cancellation.
+          if (!released && !receivedHeaders && Date.now() - startedAt >= 10_000) state.held = true;
+          release();
+        };
         release = () => {
           if (released) return;
           released = true;
-          signal?.removeEventListener("abort", release);
-          --state.active;
-          state.queue.shift()?.();
-          cleanup();
+          signal?.removeEventListener("abort", abortActive);
+          --active; --state.active;
+          cleanup(key, state); drain();
         };
         // A caller that never reads its body releases the slot when its request is aborted.
-        signal?.addEventListener("abort", release, { once: true });
+        signal?.addEventListener("abort", abortActive, { once: true });
         resolve();
-      };
+      } };
       const abort = () => {
-        const index = state.queue.indexOf(start);
+        const index = state.queue.indexOf(entry);
         if (index >= 0) state.queue.splice(index, 1);
         signal?.removeEventListener("abort", abort);
-        cleanup(); reject(signal?.reason);
+        cleanup(key, state); reject(signal?.reason);
       };
-      if (state.active < 2) start();
-      else { state.queue.push(start); signal?.addEventListener("abort", abort, { once: true }); }
+      state.queue.push(entry); signal?.addEventListener("abort", abort, { once: true }); drain();
     });
     try {
       signal?.throwIfAborted();
       const response = await fetcher(input, init);
+      receivedHeaders = true;
+      const current = hosts.get(key);
+      if (current) { current.held = false; cleanup(key, current); drain(); }
       if (!response.body || response.headers.get("Content-Type")?.includes("text/event-stream")) { release(); return response; }
       return admitted(response, release);
     } catch (error) { release(); throw error; }

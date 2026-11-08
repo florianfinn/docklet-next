@@ -2,17 +2,17 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original six-connection HTTP/1.1 fetch scheduler with a persistent stream connection.
+// Deviations: Original six-connection HTTP/1.1 fetch scheduler with a persistent stream connection and dense Dashboard timing profile.
 
 import { vi } from "vitest";
 import { createHttpAdapter } from "./http-adapter";
 import { securityFixture } from "./vulnerabilities.test-support";
 
 /** Physical requests above six wait FIFO, including healthy hosts; abort removes queued or held work. */
-export function hostReadPool() {
+export function hostReadPool({ dense = false } = {}) {
   const fixture = securityFixture(); fixture.inventory.state.hostIds = ["direct", "0", "edge"];
   const original = fixture.fetcher.getMockImplementation()!;
-  let active = 0, maximum = 0, held = true;
+  let active = 0, maximum = 0, held = !dense;
   const queue: (() => void)[] = [], heldReads = new Set<() => void>();
   const sent: string[] = [], waiting: string[] = [];
   const activeHosts = new Map<string, number>(), maximumHosts = new Map<string, number>();
@@ -40,7 +40,8 @@ export function hostReadPool() {
           if (body.pagination && Array.isArray(body.data) && /\/(projects|containers|images|networks|volumes)$/.test(path)) {
             const sample = body.data[0];
             // Three real pages exercise the remainder of each host's original logical budget.
-            const total = 201, start = Number(url.searchParams.get("start") ?? 0);
+            const total = dense && host === "0" ? path.endsWith("/projects") ? 21 : /\/(containers|images)$/.test(path) ? 336 : 201 : 201;
+            const start = Number(url.searchParams.get("start") ?? 0);
             body.data = sample ? Array.from({ length: Math.min(100, total - start) }, (_, offset) => {
               const index = start + offset;
               return { ...sample, id: `${sample.id}-${index}`, ...(typeof sample.name === "string" ? { name: `${sample.name}-${index}` } : {}), ...(sample.names ? { names: [`/web-${index}`] } : {}) };
@@ -53,7 +54,7 @@ export function hostReadPool() {
             cancel() { finish(); },
           }, { highWaterMark: 0 }), { status: response.status, headers: response.headers }));
         } catch (error) { finish(); reject(error); }
-      })(); }, 250);
+      })(); }, dense && host === "0" ? url.searchParams.get("sort") === "cpuUsage" ? 11_500 : 2_000 : 250);
     };
     const start = () => {
       started = true; reserve(); sent.push(path + url.search);
@@ -66,7 +67,7 @@ export function hostReadPool() {
     else { waiting.push(path + url.search); queue.push(start); }
   }));
   const source = fixture.source;
-  const adapter = createHttpAdapter({ fetch: fetcher, eventSource: () => {
+  const adapter = createHttpAdapter({ fetch: fetcher, webSocket: fixture.inventory.webSocket, eventSource: () => {
     reserve(); source.close = () => release();
     return source;
   } });
