@@ -174,8 +174,9 @@ export function SecurityWidget({ security, visibleHostIds }: { security: Securit
 
 export function AppsWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<string, Host> }) {
   const t = useTranslations("dashboard.apps");
+  // Most stacks have no address; parsing only present ones keeps Dashboard renders free of thrown errors.
   const withUrl = stacks.filter((s) => {
-    try { return ["https:", "http:"].includes(new URL(s.url ?? "").protocol); } catch { return false; }
+    try { return !!s.url && ["https:", "http:"].includes(new URL(s.url).protocol); } catch { return false; }
   });
   if (!withUrl.length) return <p className="text-sm text-muted-foreground">{t("none")}</p>;
   return (
