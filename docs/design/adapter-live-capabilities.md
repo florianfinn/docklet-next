@@ -33,7 +33,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message, step and output DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
-| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
+| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. A stack detail reads the project list, its plain detail and compose file, runtime conditions and only the containers labelled with the stack's Compose project; when a runtime container ID is missing from that answer it falls back to the host's container pages, which keeps the ownership rules (#383). |
 | `getSecurity` | Image inventory, batch vulnerability summaries, enriched environment findings and host-run lists | Aggregate validated host-qualified rows, preserve unavailable host states, read terminal host history without inventing samples. |
 | `runScan`, `cancelScan` | Per-image or host-wide vulnerability scan; activity cancel | Every scan reaches host admission. `409 vulnerability.busy` follows the returned activity. Activity settlement refreshes security and images. |
 | `getScanSettings`, `saveScanSettings`, `setScanEnabled` | Hub settings; job list for next-run projection | Independent feature/automatic switches, daily/weekly schedule, ignore-unfixed and three notification causes. Next run comes exclusively from the backend. |
@@ -588,14 +588,18 @@ response body. Hub capability, settings and host discovery share a separate
 image rows are unavailable and failed batches supply no findings or history.
 Identity and request generations fence late responses before the atomic merge.
 Inventory cancellation is opt-in for this path; other inventory readers retain
-their existing behavior. The adapter admits at most two physical GETs per host
-under `/environments/<host>/` at a time, first come first served, until each body
-has been read, cancelled or aborted; the stream, writes, hub reads and downloads are
-not admitted (#271). Over HTTP/1.1 (six connections per origin) one held host
-therefore leaves connections for the healthy hosts. Known limits: the cap also
-applies over HTTP/2; two or more held hosts can still starve healthy hosts over
-HTTP/1.1; hub-local settings, jobs and notification reads under `/environments/0/`
-share host 0's two slots. Pending and filtered hosts do not remove
+their existing behavior. Over HTTP/1.1 (six connections per origin) the adapter
+admits at most five physical GETs under `/environments/<host>/` at a time, leaving
+one connection for the stream. A free slot goes to the waiting host with the fewest
+active reads (oldest waiting request on ties), so a lone dense host can use all
+five; a slot is held until the body has been read, cancelled or aborted. A host
+whose admitted read was aborted after at least ten seconds without response
+headers is held to one active read until any response headers from it arrive.
+HTTP/2 and HTTP/3 pages, the stream, writes, hub reads and downloads are not
+admitted (#271). Known limits: several held hosts can still slow healthy hosts over
+HTTP/1.1 until their reads reach the 30-second budget; hub-local settings, jobs and
+notification reads under `/environments/0/` are admitted as host 0 reads. Pending
+and filtered hosts do not remove
 retained inventory. A host batch is judged by the inventory observation of its own
 security-owned reads, not by an older host-catalogue snapshot. Host failures are
 successful query data. Every mounted inventory list (stacks, containers, images,

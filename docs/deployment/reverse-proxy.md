@@ -27,11 +27,12 @@ in front of it for TLS and the public name. This page lists what that proxy must
   actions or old counts for seconds to minutes after the hub finished them. Keep the read timeout on this
   route at 60 seconds or more so the heartbeat holds the connection open.
 - **HTTP/2 between browser and proxy is recommended.** Over HTTP/1.1 a browser opens at most six
-  connections per name. The web interface sends at most two reads per host at a time, so one agent that
-  stops answering leaves connections for the other hosts. When two or more agents stop answering, their
-  slow reads can still hold those connections, and pages for healthy hosts wait until the hub's 20 second
-  inventory bound or the browser's 30 second per-host budget ends those reads. With HTTP/2 the reads share
-  one connection and other pages keep loading.
+  connections per name. Over HTTP/1.1 the web interface shares five of them fairly between hosts and keeps
+  one for live updates; an agent that stops answering is limited to one connection once its first read has
+  hung, so the other hosts keep loading. When several agents stop answering at once, their slow reads can
+  still hold connections, and pages for healthy hosts wait until the hub's 20 second inventory bound or the
+  browser's 30 second per-host budget ends those reads. With HTTP/2 the reads share one connection and
+  other pages keep loading.
 - **Forwarded headers.** Send `X-Forwarded-For` and `X-Forwarded-Proto`. List the proxy's address in
   `TRUSTED_PROXIES` so the hub records the client address; this setting does not grant sign-in trust
   (see `AUTH_MODE=proxy` in [deploy/hub/README.md](../../deploy/hub/README.md) for proxy sign-in).
