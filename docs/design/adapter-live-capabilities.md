@@ -583,8 +583,9 @@ partial totals while a visible host is unavailable, including unknown totals whe
 all visible hosts fail. Host batches are merged together after all reads settle, retaining
 the prior query snapshot during refetch. A security-owned 30-second budget per
 host covers capability, image/project/container inventory and every vulnerability
-response body. Hub capability, settings and host discovery share a separate
-30-second prerequisite budget. Timeout is `vulnerability.read-timeout`; retained
+response body. It starts with the query, so the time hub capability, settings and
+host discovery take (capped at 30 seconds themselves) also counts against each
+host's budget. Timeout is `vulnerability.read-timeout`; retained
 image rows are unavailable and failed batches supply no findings or history.
 Identity and request generations fence late responses before the atomic merge.
 Inventory cancellation is opt-in for this path; other inventory readers retain
