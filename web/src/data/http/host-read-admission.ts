@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission.
+// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission; the hub's unavailable answer keeps a host held.
 
 const BODY_METHODS = new Set(["json", "text", "arrayBuffer", "blob", "formData", "bytes"]);
 
@@ -110,7 +110,8 @@ export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api",
       const response = await fetcher(input, init);
       receivedHeaders = true;
       const current = hosts.get(key);
-      if (current) { current.held = false; cleanup(key, current); drain(); }
+      // The hub bounds a paused agent's read and answers with a host reason or 502; only a fresh answer clears the mark.
+      if (current) { current.held = response.headers.has("X-Docklet-Host-Reason") || response.status === 502; cleanup(key, current); drain(); }
       if (!response.body || response.headers.get("Content-Type")?.includes("text/event-stream")) { release(); return response; }
       return admitted(response, release);
     } catch (error) { release(); throw error; }

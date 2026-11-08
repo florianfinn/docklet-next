@@ -2,17 +2,17 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original six-connection HTTP/1.1 fetch scheduler with a persistent stream connection and dense Dashboard timing profile.
+// Deviations: Original six-connection HTTP/1.1 fetch scheduler with a persistent stream connection, dense Dashboard timing profile and the hub's bounded unavailable answer.
 
 import { vi } from "vitest";
 import { createHttpAdapter } from "./http-adapter";
 import { securityFixture } from "./vulnerabilities.test-support";
 
 /** Physical requests above six wait FIFO, including healthy hosts; abort removes queued or held work. */
-export function hostReadPool({ dense = false } = {}) {
+export function hostReadPool({ dense = false, holdDirect, hubBound = false }: { dense?: boolean; holdDirect?: boolean; hubBound?: boolean } = {}) {
   const fixture = securityFixture(); fixture.inventory.state.hostIds = ["direct", "0", "edge"];
   const original = fixture.fetcher.getMockImplementation()!;
-  let active = 0, maximum = 0, held = !dense;
+  let active = 0, maximum = 0, held = holdDirect ?? !dense;
   const queue: (() => void)[] = [], heldReads = new Set<() => void>();
   const sent: string[] = [], waiting: string[] = [];
   const activeHosts = new Map<string, number>(), maximumHosts = new Map<string, number>();
@@ -59,7 +59,11 @@ export function hostReadPool({ dense = false } = {}) {
     const start = () => {
       started = true; reserve(); sent.push(path + url.search);
       if (host) { const count = (activeHosts.get(host) ?? 0) + 1; activeHosts.set(host, count); maximumHosts.set(host, Math.max(maximumHosts.get(host) ?? 0, count)); }
-      if (host === "direct" && held) heldReads.add(answer); else answer();
+      if (host === "direct" && held) {
+        heldReads.add(answer);
+        // Like the hub's 20 s inventory bound, a paused agent's read is answered as unavailable.
+        if (hubBound) timer = setTimeout(() => { heldReads.delete(answer); resolve(Response.json({ success: false, code: "agent.unavailable" }, { status: 502 })); finish(); }, 20_000);
+      } else answer();
     };
     init?.signal?.addEventListener("abort", abort, { once: true });
     if (init?.signal?.aborted) abort();
@@ -72,7 +76,7 @@ export function hostReadPool({ dense = false } = {}) {
     return source;
   } });
   return {
-    adapter, sent, waiting, maximumHosts,
+    adapter, sent, waiting, maximumHosts, activeHosts,
     get maximum() { return maximum; },
     resume() { held = false; [...heldReads].forEach((answer) => answer()); },
   };

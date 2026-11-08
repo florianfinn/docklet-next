@@ -592,11 +592,13 @@ their existing behavior. Over HTTP/1.1 (six connections per origin) the adapter
 admits at most five physical GETs under `/environments/<host>/` at a time, leaving
 one connection for the stream. A free slot goes to the waiting host with the fewest
 active reads (oldest waiting request on ties), so a lone dense host can use all
-five; a slot is held until the body has been read, cancelled or aborted. A host
-whose admitted read was aborted after at least ten seconds without response
-headers is held to one active read until any response headers from it arrive.
-HTTP/2 and HTTP/3 pages, the stream, writes, hub reads and downloads are not
-admitted (#271). Known limits: several held hosts can still slow healthy hosts over
+five; a slot is held until the body has been read, cancelled or aborted. A host is
+held to one active read when the hub answers it as unavailable (an
+`X-Docklet-Host-Reason` header or status 502, after the hub's 20-second inventory
+bound) or when its admitted read was aborted after at least ten seconds without
+response headers; the next fresh answer from that host clears the mark. HTTP/2 and
+HTTP/3 pages, the stream, writes, hub reads and downloads are not admitted (#271);
+a page whose browser reports no protocol is treated as HTTP/1.1. Known limits: several held hosts can still slow healthy hosts over
 HTTP/1.1 until their reads reach the 30-second budget; hub-local settings, jobs and
 notification reads under `/environments/0/` are admitted as host 0 reads. Pending
 and filtered hosts do not remove

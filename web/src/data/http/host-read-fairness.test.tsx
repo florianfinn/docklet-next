@@ -83,3 +83,15 @@ it("C1-1d completes dense Dashboard host inventories within 30 s with slow metri
   for (const resource of ["containers", "images"]) expect(pool.sent.some((path) => path.includes(`/0/${resource}?start=300`))).toBe(true);
   expect(pool.sent.some((path) => path.includes("/0/containers?") && path.includes("sort=cpuUsage"))).toBe(true);
 });
+
+it("C1R1-1 keeps a paused Direct host restrained after the hub answers it unavailable, so dense H completes", async () => {
+  vi.useFakeTimers(); const pool = hostReadPool({ dense: true, holdDirect: true, hubBound: true });
+  const view = renderWithApp(<DenseDashboard />, pool.adapter);
+  // Reads Direct started before its first unavailable answer drain within about two seconds of it.
+  await act(() => vi.advanceTimersByTimeAsync(22_500));
+  let directAfterAnswer = 0;
+  for (let t = 0; t < 7; t++) { await act(() => vi.advanceTimersByTimeAsync(1_000)); directAfterAnswer = Math.max(directAfterAnswer, pool.activeHosts.get("direct") ?? 0); }
+  expect(directAfterAnswer <= 1).toBe(true);
+  expect(view.getByTestId("stacks").textContent).toBe("0:21,edge:201,direct:0");
+  expect(view.getByTestId("containers").textContent).toBe("0:336,edge:201,direct:0");
+});
