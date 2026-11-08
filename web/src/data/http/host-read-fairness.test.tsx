@@ -8,7 +8,7 @@ import { act } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useMetrics } from "../live";
 import { useNavCounts } from "@/app/shell/use-nav-counts";
-import { useActionsQuery, useContainers, useHosts, useImages, useNetworkSummaries, useSecurity, useStacks, useVolumes } from "../queries";
+import { useActionsQuery, useEvents, useSchedule, useContainers, useHosts, useImages, useNetworkSummaries, useSecurity, useStacks, useVolumes } from "../queries";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { renderWithApp } from "@/test/render";
 import { hostReadPool } from "./host-read-pool.test-support";
@@ -24,7 +24,7 @@ function Probe() {
   return <>
     <p data-testid="counts">{JSON.stringify(counts)}</p>
     {Object.entries(batches).map(([name, rows]) => <p key={name} data-testid={name}>{["0", "edge", "direct"].map((host) => `${host}:${rows?.filter((row) => row.hostId === host).length ?? 0}`).join(",")}</p>)}
-    <p data-testid="security">{security.data?.unavailable?.map((h) => h.hostId).sort().join(",")}</p>
+    <p data-testid="security" data-ready={security.isSuccess}>{security.data?.unavailable?.map((h) => h.hostId).sort().join(",")}</p>
     <InventoryNotice hosts={hosts.data ?? []} items={containers.data ?? []} />
   </>;
 }
@@ -66,6 +66,7 @@ it("D4-5 performs no periodic inventory reads after every batch succeeds", async
 
 function DenseDashboard() {
   useMetrics((snapshot) => snapshot?.containers);
+  useEvents(); useSchedule(["0", "direct", "edge"]);
   return <Probe />;
 }
 
@@ -76,6 +77,7 @@ it("C1-1d completes dense Dashboard host inventories within 30 s with slow metri
   expect(view.getByTestId("stacks").textContent).toBe("0:21,edge:201,direct:201");
   expect(view.getByTestId("containers").textContent).toBe("0:336,edge:201,direct:201");
   expect(view.getByTestId("images").textContent).toBe("0:336,edge:201,direct:201");
+  expect(view.getByTestId("security").getAttribute("data-ready")).toBe("true");
   expect(view.getByTestId("security").textContent).toBe("");
   expect(pool.maximum).toBe(6);
   for (const resource of ["containers", "images"]) expect(pool.sent.some((path) => path.includes(`/0/${resource}?start=300`))).toBe(true);
