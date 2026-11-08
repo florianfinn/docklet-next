@@ -26,6 +26,7 @@ function Probe() {
     {Object.entries(batches).map(([name, rows]) => <p key={name} data-testid={name}>{["0", "edge", "direct"].map((host) => `${host}:${rows?.filter((row) => row.hostId === host).length ?? 0}`).join(",")}</p>)}
     <p data-testid="security" data-ready={security.isSuccess}>{security.data?.unavailable?.map((h) => h.hostId).sort().join(",")}</p>
     <p data-testid="direct-container">{containers.data?.filter((row) => row.hostId === "direct").map((row) => `${row.name}:${row.state}:${!!row.inventory?.stale}`).join(",")}</p>
+    <p data-testid="direct-stale">{Object.entries({ stacks: stacks.data, images: images.data, volumes: volumes.data }).map(([name, rows]) => `${name}:${!!rows?.some((row) => row.hostId === "direct" && row.inventory?.stale)}`).join(",")}</p>
     <InventoryNotice hosts={hosts.data ?? []} items={containers.data ?? []} />
   </>;
 }
@@ -101,10 +102,13 @@ it("C2-2 recovers the mounted Dashboard's snapshot rows and state within 15 s of
   expect(view.getByTestId("containers").textContent).toBe("0:201,edge:201,direct:1");
   expect(view.getByTestId("direct-container").textContent).toBe("snapshot-0:stopped:true");
   expect(view.getByRole("status").textContent?.includes("direct")).toBe(true);
+  // The snapshot fixture holds the stack and volume reads; images arrive fresh through their own read.
+  for (const name of ["stacks:true", "volumes:true"]) expect(view.getByTestId("direct-stale").textContent?.includes(name)).toBe(true);
   pool.resume();
   await act(() => vi.advanceTimersByTimeAsync(15_000));
   expect(view.getByTestId("direct-container").textContent).toBe("fresh-0:running:false");
   for (const name of Object.keys(hooks)) expect(view.getByTestId(name).textContent?.endsWith("direct:1")).toBe(true);
+  expect(view.getByTestId("direct-stale").textContent).toBe("stacks:false,images:false,volumes:false");
   expect(view.getByRole("status").textContent).toBe("");
   expect(view.getByTestId("security").textContent).toBe("");
 });
