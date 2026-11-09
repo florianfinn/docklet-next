@@ -2,13 +2,14 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original hub-only target administration and agent metadata routes; M16 bind mounts and backup completion.
+// Deviations: Preserve typed local host.busy/409 admission refusals;  Original hub-only target administration and agent metadata routes; M16 bind mounts and backup completion.
 
 package backuptarget
 
 import (
 	"context"
 	"errors"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -70,6 +71,10 @@ func out[T any](data T) *handlerutil.Out[T] {
 	return &handlerutil.Out[T]{Body: base.ApiResponse[T]{Success: true, Data: data}}
 }
 func failure(err error) error {
+	var hostProblem *environmentDTO.HostProblem
+	if errors.As(err, &hostProblem) && hostProblem.Code == "host.busy" && hostProblem.Status == 409 {
+		return hostProblem
+	}
 	if access := AgentAccess(err); access != nil {
 		return access
 	}

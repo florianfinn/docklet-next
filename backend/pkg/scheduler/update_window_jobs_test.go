@@ -30,7 +30,7 @@ func TestRefreshUpdateWindowsCreatesRemovesAndRebuildsJobs(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, cfg.Stop(context.WithoutCancel(t.Context()))) })
 	require.NoError(t, db.Exec("INSERT INTO environments(id,name,api_url,enabled) VALUES('0','Local','',1)").Error)
 	controller := newJobSchedulerForTestInternal(t, t.Context(), nil)
-	owner, e := updater.NewUpdaterService(db, cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, &config.Config{}, nil, nil, nil)
+	owner, e := updater.NewUpdaterService(db, cfg, nil, nil, nil, nil, nil, nil, nil, nil, &config.Config{}, nil, nil, nil)
 	require.NoError(t, e)
 	owner.ConfigureImagePolicies(nil, func(ctx context.Context) error { return RefreshUpdateWindows(ctx, controller, owner) })
 	store := policy.Store{DB: db.DB}

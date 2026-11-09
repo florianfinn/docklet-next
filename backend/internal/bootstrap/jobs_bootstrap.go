@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #269 scan receipt repair wiring.
+// Deviations: Local module namespace; remove fleet-upgrade resume and obsolete log cleanup; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #269 scan receipt repair wiring.
 
 package bootstrap
 
@@ -74,7 +74,6 @@ func newJobScheduler(
 		SetZoneProvider(scheduleutil.ZoneProvider)
 	}).SetZoneProvider(cfg)
 	var repairDone chan struct{}
-	var resumeDone chan struct{}
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			started := false
@@ -104,10 +103,7 @@ func newJobScheduler(
 					repairBackupDispatchesInternal(schedulerCtx, backupEngine)
 				}()
 			}
-			if !cfg.AgentMode && systemService != nil {
-				resumeDone = make(chan struct{})
-				go func() { defer close(resumeDone); systemService.ResumeUpdateAllOnStartup(schedulerCtx) }()
-			}
+
 			if startupCancellationErr := ctx.Err(); startupCancellationErr != nil {
 				return fmt.Errorf("complete scheduler startup: %w", startupCancellationErr)
 			}
@@ -115,7 +111,7 @@ func newJobScheduler(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			return stopJobSchedulerInternal(ctx, cancelScheduler, []chan struct{}{repairDone, resumeDone}, jobService.Coordinator(), jobScheduler)
+			return stopJobSchedulerInternal(ctx, cancelScheduler, []chan struct{}{repairDone}, jobService.Coordinator(), jobScheduler)
 		},
 	})
 	return jobScheduler, nil
@@ -287,7 +283,6 @@ type registerJobsParams struct {
 	Version       *version.VersionService
 
 	DockerClientRefresh    *scheduler.DockerClientRefreshJob
-	UpgradeLogCleanup      schedulertypes.Job `name:"upgrade-log-cleanup"`
 	EventCleanup           *scheduler.EventCleanupJob
 	PruningVolumeHelper    *scheduler.PruningVolumeHelperJob
 	ExpiredSessionsCleanup *scheduler.ExpiredSessionsCleanupJob
@@ -317,7 +312,6 @@ func registerJobs(params registerJobsParams) error {
 		params.AutoHeal,
 		params.ActivitySweep,
 		params.UploadSessionsCleanup,
-		params.UpgradeLogCleanup,
 	} {
 		if err := params.Scheduler.RegisterJob(job); err != nil {
 			return err

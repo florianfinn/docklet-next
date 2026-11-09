@@ -2,7 +2,7 @@
 // Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: New durable activity admission gate.
+// Deviations: New durable activity admission gate; refuse new mutations during a host self-update.
 
 package activity
 
@@ -75,6 +75,11 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 	s.runningMu.Lock()
 	defer s.runningMu.Unlock()
 	admit := func(tx *gorm.DB) error {
+		if !request.Check {
+			if err := CheckSelfUpdateHostTx(tx, request.EnvironmentID); err != nil {
+				return err
+			}
+		}
 		now := s.nowInternal().UTC().Truncate(time.Microsecond)
 		var active Activity
 		err := tx.Where("environment_id = ? AND gate_scope = ? AND status IN ?", request.EnvironmentID, request.Scope, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).Order("started_at DESC, id DESC").First(&active).Error

@@ -1,4 +1,18 @@
 export const enRunMessages = {
+  selfUpdate: {
+    "available": "Update available",
+    "current": "Up to date",
+    "checking": "Checking for updates",
+    "not-eligible": "Manual update required",
+    "unavailable": "Update check unavailable",
+    "reserved": "Update reserved",
+    "helper-started": "Update helper started",
+    "settled": "Update finished",
+    "healthy": "Updated service is healthy",
+    "failed-health": "Updated service did not become healthy",
+    "failed-pre-effect": "Update failed before replacement",
+    "unknown": "Update outcome unknown",
+  },
   pathEncoded: "This address contains encoded characters that Docklet does not accept in paths.",
   restartRefused: "Restart refused: a backup or restore is running on this host.",
   exact: {

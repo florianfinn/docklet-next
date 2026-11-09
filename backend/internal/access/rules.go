@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration.
 
 package access
 
@@ -326,12 +326,10 @@ var Rules = map[string]Rule{
 	"test-notification":                            Rule{Kind: Admin},
 	"testConnection":                               Rule{Kind: Admin},
 	"testContainerRegistry":                        Rule{Kind: Admin},
-	"trigger-update-all":                           Rule{Kind: Admin},
 	"trigger-upgrade":                              Rule{Kind: Admin},
 	"unarchive-project":                            Rule{Kind: App, Ref: ProjectPath, Level: Full},
 	"unignore-vulnerability":                       Rule{Kind: Admin},
 	"unpause-container":                            Rule{Kind: Admin},
-	"update-all-status":                            Rule{Kind: Admin},
 	"update-api-key":                               Rule{Kind: Admin},
 	"update-auto-heal-settings":                    Rule{Kind: Admin},
 	"update-backup-target":                         Rule{Kind: Admin},

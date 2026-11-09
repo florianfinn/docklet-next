@@ -391,3 +391,8 @@ environment route and of the Edge command table uses unreserved characters only.
 An agent restart refused by a busy agent (a running volume backup, bind snapshot or
 restore) ends as a failed restart run with code `host.busy`; migration 020 admits that
 code in `agent_restart_requests`. Details: [host maintenance](host-maintenance.md).
+
+The unreleased v17 self-update recovery envelope is described in [in-app updates](app-updates.md).
+Terminal health failures use `update.self-failed`; an unconfirmed interrupted
+operation uses `update.outcome-unknown`. Both retain the existing failed activity
+status and are separate from the immutable helper phase evidence.

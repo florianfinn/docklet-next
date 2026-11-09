@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original application-owned one-shot agent restart controller.
+// Deviations: Original application-owned one-shot agent restart controller; share durable self-update admission.
 
 package environment
 
@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/selfupdate"
 	dto "github.com/florianfinn/docklet-next/types/environment"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -161,6 +162,9 @@ func (c *restartController) reserve(ctx context.Context, id string) (AgentRestar
 			return err
 		}
 		row.CredentialRevision = env.CredentialRevision
+		if err := selfupdate.CheckHostTx(tx, id); err != nil {
+			return err
+		}
 		var n int64
 		if err := tx.Table("runtime_receipts").Where("environment_id=? AND settled_at IS NULL", id).Count(&n).Error; err != nil {
 			return err
@@ -184,6 +188,13 @@ func (c *restartController) reserve(ctx context.Context, id string) (AgentRestar
 
 // hasActive reports an unsettled restart of the host; a read-only check ahead of remote probes.
 func (c *restartController) hasActive(ctx context.Context, id string) (bool, error) {
+	if err := selfupdate.CheckHostTx(c.service.db.WithContext(ctx), id); err != nil {
+		var problem *dto.HostProblem
+		if errors.As(err, &problem) && problem.Code == "host.busy" {
+			return true, nil
+		}
+		return false, err
+	}
 	var n int64
 	err := c.service.db.WithContext(ctx).Model(&AgentRestartRequest{}).Where("environment_id=? AND settled_at IS NULL", id).Count(&n).Error
 	return n > 0, err

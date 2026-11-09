@@ -638,9 +638,9 @@ func TestActivityServiceResolveStaleAutoUpdateActivitiesInternal(t *testing.T) {
 
 	var selfUpdated Activity
 	require.NoError(t, db.First(&selfUpdated, "id = ?", selfUpdateRun.ID).Error)
-	require.Equal(t, activity.StatusSuccess, selfUpdated.Status)
+	require.Equal(t, activity.StatusFailed, selfUpdated.Status)
 	require.NotNil(t, selfUpdated.EndedAt)
-	require.Contains(t, selfUpdated.LatestMessage, "restarted with the updated image")
+	require.Contains(t, selfUpdated.LatestMessage, "interrupted")
 	require.Equal(t, false, selfUpdated.Metadata["dryRun"])
 
 	var interrupted Activity

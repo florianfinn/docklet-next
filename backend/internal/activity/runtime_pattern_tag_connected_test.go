@@ -198,7 +198,7 @@ func testConnectedPatternTag(t *testing.T, tc connectedPatternCase, isEdge bool)
 	// The real checker is the agent's lifecycle checker (NewUpdaterService wires it).
 	registries := registry.NewContainerRegistryService(f.agent.db, nil, nil, f.agent.settings, server.Client())
 	checks := imageupdate.NewImageUpdateService(f.agent.db, f.agent.settings, registries, f.agent.docker, nil, nil, nil)
-	checker, err := updater.NewUpdaterService(f.agent.db, f.agent.settings, f.agent.docker, f.agent.projects, checks, registries, nil, f.agent.images, nil, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
+	checker, err := updater.NewUpdaterService(f.agent.db, f.agent.settings, f.agent.docker, f.agent.projects, checks, registries, nil, f.agent.images, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
 	require.NoError(t, err)
 	checked, err := checker.CheckProjectUpdates(t.Context(), target.ID)
 	require.NoError(t, err)

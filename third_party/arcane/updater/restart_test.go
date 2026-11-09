@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Self targets are declined while ordinary restart ordering stays covered.
 
 package updater
 
@@ -218,14 +218,8 @@ func TestRestartContainersUsingOldImagesRoutesLegacyArcaneServerThroughSelfUpdat
 	if err != nil {
 		t.Fatalf("RestartContainersUsingOldImages() error = %v", err)
 	}
-	if len(selfUpdater.targets) != 1 {
-		t.Fatalf("self-update targets = %#v, want exactly one", selfUpdater.targets)
-	}
-	if selfUpdater.targets[0].ContainerID != "arcane-id" || selfUpdater.targets[0].InstanceType != "server" {
-		t.Fatalf("self-update target = %#v, want arcane server", selfUpdater.targets[0])
-	}
-	if selfUpdater.targets[0].NewImageRef != "ghcr.io/getarcaneapp/arcane:2" {
-		t.Fatalf("self-update target NewImageRef = %q, want resolved new image ref", selfUpdater.targets[0].NewImageRef)
+	if len(selfUpdater.targets) != 0 {
+		t.Fatalf("self updater was invoked: %#v", selfUpdater.targets)
 	}
 	if len(projectUpdater.updateCalls) != 0 {
 		t.Fatalf("project updater calls = %#v, want none", projectUpdater.updateCalls)
@@ -233,7 +227,7 @@ func TestRestartContainersUsingOldImagesRoutesLegacyArcaneServerThroughSelfUpdat
 	if len(operations) != 0 {
 		t.Fatalf("standalone container operations = %#v, want none", operations)
 	}
-	if len(results) != 1 || results[0].Status != StatusUpdated {
+	if len(results) != 1 || results[0].Status != StatusFailed {
 		t.Fatalf("results = %#v, want one updated result", results)
 	}
 }
@@ -307,16 +301,15 @@ func TestRestartContainersUsingOldImagesSelfContainerIDFiresAfterStandalone(t *t
 	assertOperationsInOrder(t, operations, []string{
 		"stop:app-id",
 		"start:new-app-id",
-		"self-update:self-id",
 	})
-	if len(selfUpdater.targets) != 1 || selfUpdater.targets[0].NewImageRef != "ghcr.io/getarcaneapp/arcane:2" {
-		t.Fatalf("self-update targets = %#v, want one with the new image ref", selfUpdater.targets)
+	if len(selfUpdater.targets) != 0 {
+		t.Fatalf("self updater was invoked: %#v", selfUpdater.targets)
 	}
 	statusByName := map[string]ResourceStatus{}
 	for _, result := range results {
 		statusByName[result.ResourceName] = result.Status
 	}
-	if statusByName["app"] != StatusUpdated || statusByName["arcane"] != StatusUpdated {
+	if statusByName["app"] != StatusUpdated || statusByName["arcane"] != StatusFailed {
 		t.Fatalf("results = %#v, want app and arcane updated", results)
 	}
 }

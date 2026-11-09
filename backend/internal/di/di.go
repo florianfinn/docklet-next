@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences; hub service widget module; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; real stack import resolver; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Local module namespace; wire Compose update lifecycle and retire fleet cleanup; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.; hub-owned one-shot restart wiring; M14 shared shell registry provider; M17 runtime history and personal preferences; hub service widget module; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; real stack import resolver; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -62,6 +62,7 @@ var RuntimeOptions = fx.Options(fx.Provide(provideRuntimeInternal))
 // ServiceOptions constructs services once and injects them into route modules.
 var ServiceOptions = fx.Options(
 	fx.Invoke(wireImageSafety),
+	fx.Invoke(wireSelfUpdates),
 	fx.Invoke(wireNotifications),
 	fx.Invoke(wireHistory),
 	RuntimeOptions,
@@ -157,6 +158,5 @@ var JobOptions = fx.Options(
 		provideAutoHealJobInternal,
 		scheduler.NewActivitySweepJob,
 		scheduler.NewUploadSessionsCleanupJob,
-		fx.Annotate(scheduler.NewUpgradeLogCleanupJob, fx.ResultTags(`name:"upgrade-log-cleanup"`)),
 	),
 )

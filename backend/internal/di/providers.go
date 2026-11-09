@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite-only local persistence; actor-host loss ends the application with a fatal cause; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; remove the updater self-upgrade dependency; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; SQLite-only local persistence; actor-host loss ends the application with a fatal cause; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package di
 
@@ -37,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
@@ -284,7 +283,6 @@ type updaterServiceParams struct {
 	Event        *event.EventService
 	Image        *image.ImageService
 	Notification *notification.NotificationService
-	System       *system.SystemService
 	Activity     *activity.ActivityService
 }
 
@@ -299,7 +297,6 @@ func provideUpdaterServiceInternal(p updaterServiceParams) (*updater.UpdaterServ
 		p.Event,
 		p.Image,
 		p.Notification,
-		p.System,
 		p.Activity,
 		p.Config,
 		p.Coordinator,

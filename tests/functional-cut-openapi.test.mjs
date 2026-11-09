@@ -108,7 +108,11 @@ const retiredSystemRecovery = new Map([
 ]);
 const retiredM20 = new Map([["GET /environments/{id}/webhooks", "list-webhooks"], ["POST /environments/{id}/webhooks", "create-webhook"], ["DELETE /environments/{id}/webhooks/{webhookId}", "delete-webhook"], ["PATCH /environments/{id}/webhooks/{webhookId}", "update-webhook"]]);
 // M21 removed the retired deployment snippet route with its generator (#362).
-const retiredM21 = new Map([["GET /environments/{id}/deployment", "getDeploymentSnippets"]]);
+const retiredM21 = new Map([
+  ["GET /environments/{id}/deployment", "getDeploymentSnippets"],
+  ["POST /environments/{id}/system/upgrade/all", "trigger-update-all"],
+  ["GET /environments/{id}/system/upgrade/all/status", "update-all-status"],
+]);
 const operations = (document) => new Map(
   Object.entries(document.paths).flatMap(([path, entries]) =>
     Object.entries(entries)
