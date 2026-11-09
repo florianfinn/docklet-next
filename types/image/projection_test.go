@@ -52,3 +52,25 @@ func TestUncheckedReadShapes(t *testing.T) {
 	require.Equal(t, "unknown", info.AuthState)
 	require.True(t, info.CheckedAt.IsZero())
 }
+
+// The checker stores the current tag's version capture and the candidate's
+// literal tag; execution reads LatestVersion, so it stays literal.
+func TestTagPatternCandidateComparesByVersion(t *testing.T) {
+	for _, tc := range []struct{ name, tag, current, latest, want, kind string }{
+		{"prefix pattern", "release-1.0.0", "1.0.0", "release-1.1.0", "version", "minor"},
+		{"suffix pattern", "1.0.0-alpine", "1.0.0", "1.0.1-alpine", "version", "patch"},
+		{"v control", "v1.0.0", "1.0.0", "v2.0.0", "version", "major"},
+		{"plain control", "1.0.0", "1.0.0", "1.1.0", "version", "minor"},
+		{"other scheme", "release-1.0.0", "1.0.0", "beta-1.1.0", "rebuild", "tag"},
+		{"older candidate", "release-1.1.0", "1.1.0", "release-1.0.0", "rebuild", "tag"},
+		{"digest strategy", "latest", "latest", "latest", "rebuild", "digest"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := UpdateInfo{CheckTime: time.Now(), ImageRef: "registry.example.com:5000/app:" + tc.tag, CurrentVersion: tc.current, LatestVersion: tc.latest, CurrentDigest: "a", LatestDigest: "b", Platform: "linux/amd64", UpdateType: tc.kind}
+			ProjectUpdate(&v)
+			require.Equal(t, tc.want, v.State)
+			require.Equal(t, tc.kind, v.UpdateType)
+			require.Equal(t, tc.latest, v.LatestVersion, "the execution target stays the literal tag")
+		})
+	}
+}
