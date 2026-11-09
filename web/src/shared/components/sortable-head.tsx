@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ariaSort, type SortState } from "@/shared/lib/table-sort";
 import { cn } from "@/shared/lib/utils";
 import { TableHead } from "@/shared/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 interface SortButtonProps<K extends string> {
   sortKey: K;
@@ -13,13 +14,14 @@ interface SortButtonProps<K extends string> {
   /** Accessible hint, e.g. "Sortieren nach Name". */
   label: string;
   className?: string;
+  help?: ReactNode;
 }
 
 /** Header button of one sort key: a quiet highlight and an arrow mark the active key. */
-export function SortButton<K extends string>({ sortKey, sort, onSort, children, label, className }: SortButtonProps<K>) {
+export function SortButton<K extends string>({ sortKey, sort, onSort, children, label, className, help }: SortButtonProps<K>) {
   const active = sort.key === sortKey;
   const Icon = !active ? ChevronsUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
-  return (
+  const button = (
     <button
       type="button"
       onClick={() => onSort(sortKey)}
@@ -36,6 +38,11 @@ export function SortButton<K extends string>({ sortKey, sort, onSort, children, 
       <Icon className={cn("size-3.5 shrink-0", !active && "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60")} aria-hidden />
     </button>
   );
+  // Slot composes handlers and forwards its ref directly to the native sort button.
+  return help ? <Tooltip>
+    <TooltipTrigger asChild>{button}</TooltipTrigger>
+    <TooltipContent className="max-w-xs">{help}</TooltipContent>
+  </Tooltip> : button;
 }
 
 /**
@@ -43,10 +50,10 @@ export function SortButton<K extends string>({ sortKey, sort, onSort, children, 
  * mark the active column. `filtered` adds a primary dot for a set column
  * filter; `filteredLabel` is its text for screen readers.
  */
-export function SortableHead<K extends string>({ sortKey, sort, onSort, children, label, className, filtered, filteredLabel }: SortButtonProps<K> & { filtered?: boolean; filteredLabel?: string }) {
+export function SortableHead<K extends string>({ sortKey, sort, onSort, children, label, className, help, filtered, filteredLabel }: SortButtonProps<K> & { filtered?: boolean; filteredLabel?: string }) {
   return (
     <TableHead aria-sort={ariaSort(sort, sortKey)} data-sorted={sort.key === sortKey || undefined} data-filtered={filtered || undefined} className={cn("px-1", className)}>
-      <SortButton sortKey={sortKey} sort={sort} onSort={onSort} label={filtered && filteredLabel ? `${label} (${filteredLabel})` : label}>
+      <SortButton sortKey={sortKey} sort={sort} onSort={onSort} help={help} label={filtered && filteredLabel ? `${label} (${filteredLabel})` : label}>
         {children}
         {filtered && <span data-slot="filter-marker" aria-hidden className="size-1.5 shrink-0 rounded-full bg-control-text" />}
       </SortButton>
