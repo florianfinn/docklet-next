@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Real Direct/Edge lifecycle execution, query and lost-ack receipt recovery.
+// Deviations: Real Direct/Edge lifecycle execution, query and lost-ack receipt recovery; M21 selects a pattern tag.
 
 package activity_test
 
@@ -97,8 +97,9 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		}
 		return id
 	}
-	oldRef := "registry.example.com/app:1.0.0"
-	newRef := "registry.example.com/app:1.1.0"
+	// A tag-pattern selection travels literally to the Engine create call.
+	oldRef := "registry.example.com/app:release-1.0.0"
+	newRef := "registry.example.com/app:release-1.1.0"
 	tags := map[string]string{oldID: oldID, newID: newID, oldRef: oldID}
 	reference := oldRef
 	var mu sync.Mutex
@@ -313,6 +314,9 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	body, err := os.ReadFile(filepath.Join(path, "compose.yaml"))
 	require.NoError(t, err)
 	require.Contains(t, string(body), newRef)
+	mu.Lock()
+	require.Equal(t, newRef, reference, "the container is created from the selected literal tag")
+	mu.Unlock()
 	baseline, err = f.agent.projects.ImageBaselineStatus(t.Context(), target.ID, f.store.RegistrationID)
 	require.NoError(t, err)
 	meta, err := f.sender.Resolve(t.Context(), activityDTO.RuntimeTargetRequest{Registration: activityDTO.RuntimeExecutorIdentity{ManagerID: f.store.ManagerID, RegistrationID: f.store.RegistrationID, ExecutorGeneration: f.store.ExecutorGeneration}, Target: target, Lifecycle: &dto.LifecycleRequest{PointID: updated.ImageLifecycle.RestorePointID, ExpectedRevision: baseline.SavedRevision, ReplaceConfiguration: true}})

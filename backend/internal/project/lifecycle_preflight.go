@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection; a partial rebuild of a shared reference is refused.
+// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection; a partial rebuild of a shared reference is refused; M21 resolves the literal tag of a tag-policy version.
 
 package project
 
@@ -173,7 +173,11 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		selected := img.Reference
 		kind := "rebuild"
 		if lifecycleTagPolicyVersion(info, img.Reference, current.Model.Services[key].Labels) {
-			selected, err = lifecycleVersionReference(img.Reference, info.LatestVersion)
+			tag, err := s.lifecycleSelectedTag(ctx, img.Reference, current.Model.Services[key].Labels, info.LatestVersion)
+			if err != nil {
+				return nil, err
+			}
+			selected, err = lifecycleVersionReference(img.Reference, tag)
 			if err != nil {
 				return nil, err
 			}
@@ -254,6 +258,38 @@ func lifecycleVersionReference(source, version string) (string, error) {
 	selected := base + ":" + version
 	if guard.ValidateReference(selected) != nil {
 		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	return selected, nil
+}
+
+// lifecycleSelectedTag resolves the literal tag behind a checked tag-policy
+// version: observations carry the selected version, execution needs the tag,
+// including a pattern's surrounding text or a "v". A different selection than
+// the checked version is refused rather than installed.
+func (s *ProjectService) lifecycleSelectedTag(ctx context.Context, ref string, labels map[string]string, version string) (string, error) {
+	policy, err := tagpolicy.Resolve(ref, updater.DefaultLabelPolicy().TagPolicy(labels))
+	if err != nil {
+		return "", lifecycleFailure("update.check-unavailable")
+	}
+	named, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	tagged, ok := named.(reference.Tagged)
+	if !ok {
+		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	tags, err := s.containerRegistryService.ListImageTags(ctx, ref, nil)
+	if err != nil {
+		return "", lifecycleFailure("update.check-unavailable")
+	}
+	selected, err := tagpolicy.Select(tagged.Tag(), tags, policy)
+	if err != nil {
+		return "", lifecycleFailure("update.check-unavailable")
+	}
+	selectedVersion, err := tagpolicy.Version(selected, policy)
+	if err != nil || strings.TrimPrefix(selectedVersion, "v") != strings.TrimPrefix(version, "v") {
+		return "", lifecycleFailure("update.target-changed")
 	}
 	return selected, nil
 }

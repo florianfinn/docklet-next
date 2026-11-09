@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229; M21 compares tag-pattern candidates by their version.
+// Deviations: Original PR1 image and registry safety implementation for issue #229.
 
 package image
 
@@ -65,14 +65,13 @@ func ProjectUpdate(info *UpdateInfo) {
 		info.State = "rebuild"
 		info.HasUpdate = true
 	}
-	currentVersion, latestVersion := comparableVersions(info)
-	current := "v" + strings.TrimPrefix(currentVersion, "v")
-	candidate := "v" + strings.TrimPrefix(latestVersion, "v")
+	current := "v" + strings.TrimPrefix(info.CurrentVersion, "v")
+	candidate := "v" + strings.TrimPrefix(info.LatestVersion, "v")
 	if compared, valid := CompareRelease(candidate, current); valid && compared > 0 && info.CurrentDigest != info.LatestDigest {
 		info.State = "version"
 		info.HasUpdate = true
-		a := strings.Split(strings.TrimPrefix(currentVersion, "v"), ".")
-		b := strings.Split(strings.TrimPrefix(latestVersion, "v"), ".")
+		a := strings.Split(strings.TrimPrefix(info.CurrentVersion, "v"), ".")
+		b := strings.Split(strings.TrimPrefix(info.LatestVersion, "v"), ".")
 		info.UpdateType = "patch"
 		if a[0] != b[0] {
 			info.UpdateType = "major"
@@ -80,29 +79,6 @@ func ProjectUpdate(info *UpdateInfo) {
 			info.UpdateType = "minor"
 		}
 	}
-}
-
-// comparableVersions cuts a tag-pattern candidate to its version. The checker
-// stores the current tag's version capture but the candidate's literal tag, which
-// execution needs; the candidate loses the prefix and suffix around the current
-// capture in the current tag. Other shapes compare unchanged.
-func comparableVersions(info *UpdateInfo) (string, string) {
-	current, latest := info.CurrentVersion, info.LatestVersion
-	name, _, _ := strings.Cut(info.ImageRef, "@")
-	colon := strings.LastIndex(name, ":")
-	if current == "" || colon < strings.LastIndex(name, "/") {
-		return current, latest
-	}
-	tag := name[colon+1:]
-	at := strings.Index(tag, current)
-	if tag == current || at < 0 {
-		return current, latest
-	}
-	prefix, suffix := tag[:at], tag[at+len(current):]
-	if len(latest) > len(prefix)+len(suffix) && strings.HasPrefix(latest, prefix) && strings.HasSuffix(latest, suffix) {
-		latest = latest[len(prefix) : len(latest)-len(suffix)]
-	}
-	return current, latest
 }
 
 // CompareRelease accepts stable numeric SemVer releases; prerelease/ambiguous

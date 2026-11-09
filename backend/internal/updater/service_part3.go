@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M21 tag-policy records store the selected version.
 
 package updater
 
@@ -201,7 +201,9 @@ func (s *UpdaterService) checkProjectServiceInternal(ctx context.Context, projec
 			record.HasUpdate = false
 			record.LastError = new(parseErr.Error())
 		} else {
-			record.LatestVersion = new(target.Tag)
+			// A tag policy stores the selected tag's version, like container
+			// discovery; stack preflight resolves the literal tag again.
+			record.LatestVersion = new(cmp.Or(check.TargetVersion, target.Tag))
 		}
 	}
 	name := ""
