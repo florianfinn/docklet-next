@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229; M21 seeds the release baseline before reopening.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; M21 checks protection constraints and reopen on the release baseline.
 
 package guard
 
@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-func TestImageProtectionForwardMigrationAndReopen(t *testing.T) {
+func TestImageProtectionBaselineConstraintsAndReopen(t *testing.T) {
 	raw := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	localPath, err := sqlitestore.Path(raw)
 	require.NoError(t, err)

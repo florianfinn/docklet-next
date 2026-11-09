@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Forward 008-to-009 keeps existing lifecycle data and enforces policy constraints; M21 seeds the release baseline before reopening.
+// Deviations: Release baseline keeps existing lifecycle data and enforces policy constraints across reopen.
 
 package policies
 
@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
+func TestPolicyBaselinePreservesLifecycleDataAndReopens(t *testing.T) {
 	raw := sqlitestore.URL(filepath.Join(t.TempDir(), "forward.db"))
 	path, err := sqlitestore.Path(raw)
 	require.NoError(t, err)

@@ -107,6 +107,7 @@ var settingWriteFormsInternal = []*regexp.Regexp{
 	regexp.MustCompile(`range map\[string\]string\{([^}]*)\}`),
 	regexp.MustCompile(`INTO settings[^"]*",\s*"([^"]+)"`),
 	regexp.MustCompile(`SettingVariable\{Key: "([^"]+)"`),
+	regexp.MustCompile(`INSERT INTO settings\(key,value\) VALUES\('([^']+)'`),
 }
 
 var mapKeyInternal = regexp.MustCompile(`"([^"]+)":`)

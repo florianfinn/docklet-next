@@ -367,6 +367,10 @@ journal changes or new sidecars: a main file without WAL frames uses a read-only
 immutable connection; committed WAL frames are inspected from a private copy of
 the main/WAL pair, opened read-only. The original files and Francis sidecar stay
 unchanged. The lock is held and no application connection has opened yet.
+That copy needs temporary space (`TMPDIR`, default `/tmp`) for the main file and
+its WAL; a start after an unclean stop fails with a message naming this need when
+the space is missing. The view directory is named per database path, replaced if
+a killed start left it behind, and removed after inspection.
 
 Accept empty files, valid release histories and exactly the restartable initial
 state: only Goose's table with one applied version-0 row, left after a failed 001

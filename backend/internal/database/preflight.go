@@ -8,7 +8,9 @@ package database
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -81,19 +83,33 @@ func preflightView(path string) (string, func(), error) {
 	if !wal.Mode().IsRegular() {
 		return "", nil, errors.New("database WAL must be a regular file")
 	}
-	dir, err := os.MkdirTemp("", "docklet-preflight-")
-	if err != nil {
-		return "", nil, err
+	dir := preflightViewDir(path)
+	spaceErr := func(err error) error {
+		return fmt.Errorf("database preflight needs temporary space in %s for a copy of %s and its WAL: %w", os.TempDir(), path, err)
+	}
+	// The caller holds this database's lifetime lock, so a leftover view of the
+	// same path is stale (killed copy) and can be replaced.
+	if err := os.RemoveAll(dir); err != nil {
+		return "", nil, spaceErr(err)
+	}
+	if err := os.Mkdir(dir, 0700); err != nil {
+		return "", nil, spaceErr(err)
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	view := filepath.Join(dir, "inspect.db")
 	for _, suffix := range []string{"", "-wal"} {
 		if err := copyPreflightFile(path+suffix, view+suffix); err != nil {
 			cleanup()
-			return "", nil, err
+			return "", nil, spaceErr(err)
 		}
 	}
 	return view, cleanup, nil
+}
+
+// preflightViewDir names one temporary view per database path.
+func preflightViewDir(path string) string {
+	sum := sha256.Sum256([]byte(path))
+	return filepath.Join(os.TempDir(), "docklet-preflight-"+hex.EncodeToString(sum[:8]))
 }
 
 func copyPreflightFile(source, destination string) error {

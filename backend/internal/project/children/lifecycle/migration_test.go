@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Migration 006 to 007 with live receipt/key rows, encrypted snapshot reopen and key refusal; M21 seeds the release baseline before reopening.
+// Deviations: Release baseline with live receipt/key rows, encrypted snapshot reopen and key refusal.
 
 package lifecycle_test
 
@@ -24,7 +24,7 @@ import (
 	"go.getarcane.app/sys/crypto"
 )
 
-func TestLifecycleForwardMigrationPreservesLiveReceiptsAndReopens(t *testing.T) {
+func TestLifecycleBaselinePreservesLiveReceiptsAndReopens(t *testing.T) {
 	raw := sqlitestore.URL(filepath.Join(t.TempDir(), "lifecycle.db"))
 	path, err := sqlitestore.Path(raw)
 	require.NoError(t, err)

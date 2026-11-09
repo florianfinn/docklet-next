@@ -9,6 +9,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"log/slog"
 	"os"
@@ -318,7 +319,7 @@ func OfflineRestore(ctx context.Context, cfg *config.Config, id string) error {
 	defer lock.Stop()
 	// Classify the destination before checkpoint policy can chmod it or create WAL.
 	if err = database.ValidateExistingDatabase(ctx, path); err != nil {
-		return errMigration
+		return fmt.Errorf("%w: destination database: %v", errMigration, err)
 	}
 	if err = checkpointStoppedPair(ctx, path); err != nil {
 		return err

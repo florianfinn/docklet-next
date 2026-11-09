@@ -213,4 +213,5 @@ func TestOfflineRestoreRefusesPrereleaseDestinationWithoutWrites(t *testing.T) {
 		require.Equal(t, before[i], read(name), filepath.Base(name))
 	}
 	require.ErrorIs(t, err, errMigration)
+	require.ErrorContains(t, err, "destination database", "the operator is pointed at the destination, not the archive")
 }
