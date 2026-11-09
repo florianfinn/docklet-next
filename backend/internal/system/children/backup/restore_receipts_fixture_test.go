@@ -63,9 +63,9 @@ type restoreArchiveFixture struct {
 	legacy     []string
 }
 
-func restoreArchiveNew(t *testing.T) *restoreArchiveFixture {
+func restoreArchiveNew(t *testing.T, options ...database.MigrationOptions) *restoreArchiveFixture {
 	t.Helper()
-	db, cfg := archiveFixture(t)
+	db, cfg := archiveFixture(t, options...)
 	a := activity.NewActivityService(db, nil)
 	r := activity.NewRuntimeService(a, restoreArchiveResolver{})
 	generation, err := r.InitializeGeneration(t.Context())

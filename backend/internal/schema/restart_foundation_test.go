@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-func TestRestartFoundationFreshUpgradeReopen(t *testing.T) {
+func TestRestartFoundationFreshBaselineReopen(t *testing.T) {
 	for _, upgrade := range []bool{false, true} {
 		for _, hub := range []bool{false, true} {
 			t.Run(filepath.Base(t.TempDir()), func(t *testing.T) {
@@ -33,7 +33,7 @@ func TestRestartFoundationFreshUpgradeReopen(t *testing.T) {
 					require.NoError(t, err)
 					provider, err := goose.NewProvider(goose.DialectSQLite3, pool, files)
 					require.NoError(t, err)
-					_, err = provider.UpTo(t.Context(), 13)
+					_, err = provider.UpTo(t.Context(), 1)
 					require.NoError(t, err)
 					_, err = pool.ExecContext(t.Context(), `INSERT INTO environments(id,name,api_url) VALUES('example-host','Example','https://agent.example.com')`)
 					require.NoError(t, err)

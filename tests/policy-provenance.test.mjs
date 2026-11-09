@@ -18,7 +18,7 @@ test("policy provenance paths exist and never cite the pre-document revision", (
     assert.notEqual(revision, "c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db", `${file}: revision predates source document`);
   }
   assert.ok(count >= 28);
-  const sidecar = JSON.parse(readFileSync("scripts/provenance.json", "utf8")).sidecars["backend/resources/migrations/sqlite/009_update_policies.sql"];
+  const sidecar = JSON.parse(readFileSync("scripts/provenance.json", "utf8")).sidecars["backend/internal/schema/testdata/prerelease-chain/009_update_policies.sql"];
   assert.notEqual(sidecar.revision, "c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db");
 });
 

@@ -2,7 +2,7 @@
 // Revision: 32e24a1b5260c98b6ce490ce2c1f6f50413c1e83
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original upgrade from M19 with preservation and removed-feature cleanup proof.
+// Deviations: Release baseline role, key, setting and restart evidence survives reopen.
 
 package schema
 
@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestM20UpgradeRemovesWebhooksPreservesRolesAndRestartEvidence(t *testing.T) {
+func TestReleaseBaselinePreservesRolesAndRestartEvidence(t *testing.T) {
 	for _, hub := range []bool{false, true} {
 		t.Run(map[bool]string{true: "hub", false: "agent"}[hub], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "upgrade.db")
@@ -32,16 +32,15 @@ func TestM20UpgradeRemovesWebhooksPreservesRolesAndRestartEvidence(t *testing.T)
 			require.NoError(t, err)
 			provider, err := goose.NewProvider(goose.DialectSQLite3, pool, files)
 			require.NoError(t, err)
-			_, err = provider.UpTo(t.Context(), 19)
+			_, err = provider.UpTo(t.Context(), 1)
 			require.NoError(t, err)
 			for _, statement := range []string{
-				`INSERT INTO webhooks(id,name,token_hash,token_prefix,target_type,target_id) VALUES('hook','Example','hash','prefix','container','container')`,
 				`INSERT INTO api_keys(id,name,key_hash,key_prefix) VALUES('key','Example','hash','prefix')`,
-				`INSERT INTO api_key_permissions(id,api_key_id,permission) VALUES('removed','key','webhooks:list'),('kept','key','containers:list')`,
-				`INSERT INTO roles(id,name,permissions) VALUES('mixed','Mixed','["webhooks:list","containers:list"]'),('only','Only','["webhooks:create"]')`,
+				`INSERT INTO api_key_permissions(id,api_key_id,permission) VALUES('kept','key','containers:list')`,
+				`INSERT INTO roles(id,name,permissions) VALUES('mixed','Mixed','["containers:list"]'),('only','Only','[]')`,
 				`INSERT INTO users(id,username,password_hash) VALUES('operator','operator','hash')`,
 				`INSERT INTO user_role_assignments(id,user_id,role_id) VALUES('assignment','operator','only')`,
-				`INSERT INTO events(id,type,title,timestamp) VALUES('removed','webhook.trigger','Example',CURRENT_TIMESTAMP),('kept','container.start','Example',CURRENT_TIMESTAMP)`,
+				`INSERT INTO events(id,type,title,timestamp) VALUES('kept','container.start','Example',CURRENT_TIMESTAMP)`,
 				`INSERT INTO settings(key,value) VALUES('webhooksCategory',''),('loadAlertsEnabled','true')`,
 				`INSERT INTO agent_restart_requests(run_id,environment_id,registration_id,credential_revision,old_instance,state,created_at,updated_at,sent_at,acknowledged_at,code,deadline,settled_at) VALUES('restart','example-host','registration',7,'old','failed','2026-11-01 12:00:00','2026-11-01 12:00:01','2026-11-01 12:00:00','2026-11-01 12:00:01','host.unreachable','2026-11-01 12:01:00','2026-11-01 12:00:01')`,
 			} {
@@ -60,7 +59,7 @@ func TestM20UpgradeRemovesWebhooksPreservesRolesAndRestartEvidence(t *testing.T)
 			actual, err := db.SQLDB()
 			require.NoError(t, err)
 			require.False(t, db.Migrator().HasTable("webhooks"))
-			require.Equal(t, before, sqlRows(t, actual, "SELECT * FROM agent_restart_requests"), "all restart columns survive the rebuild")
+			require.Equal(t, before, sqlRows(t, actual, "SELECT * FROM agent_restart_requests"), "all restart columns survive reopening")
 			require.Equal(t, [][]string{{"containers:list"}}, sqlRows(t, actual, "SELECT permission FROM api_key_permissions WHERE api_key_id='key'"))
 			require.Equal(t, [][]string{{"container.start"}}, sqlRows(t, actual, "SELECT type FROM events"))
 			require.Equal(t, [][]string{{"only"}}, sqlRows(t, actual, "SELECT role_id FROM user_role_assignments WHERE id='assignment'"))
@@ -70,7 +69,7 @@ func TestM20UpgradeRemovesWebhooksPreservesRolesAndRestartEvidence(t *testing.T)
 				require.NoError(t, err)
 				permissions := []string(row.Permissions)
 				_, err = svc.UpdateRole(t.Context(), row.ID, row.Name, row.Description, permissions)
-				require.NoError(t, err, "an upgraded custom role must remain saveable")
+				require.NoError(t, err, "a persisted custom role must remain saveable")
 				require.Equal(t, expected, permissions)
 			}
 			cfg, err := settings.NewSettingsService(t.Context(), db)
@@ -82,11 +81,11 @@ func TestM20UpgradeRemovesWebhooksPreservesRolesAndRestartEvidence(t *testing.T)
 			code := "host.busy"
 			now := time.Now().UTC()
 			busy := environment.AgentRestartRequest{RunID: "busy", EnvironmentID: "example-host", RegistrationID: "registration", CredentialRevision: 7, OldInstance: "old", State: "failed", Code: &code, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Minute), SettledAt: &now}
-			require.NoError(t, db.Create(&busy).Error, "terminal host.busy is admitted by the forward CHECK")
+			require.NoError(t, db.Create(&busy).Error, "terminal host.busy is admitted by the baseline CHECK")
 			busy.RunID, busy.State, busy.Code, busy.SettledAt = "active", "reserved", nil, nil
 			require.NoError(t, db.Create(&busy).Error)
 			busy.RunID = "duplicate"
-			require.Error(t, db.Create(&busy).Error, "active environment uniqueness survives the rebuild")
+			require.Error(t, db.Create(&busy).Error, "active environment uniqueness survives reopening")
 			require.Equal(t, [][]string{{"ok"}}, sqlRows(t, actual, "PRAGMA integrity_check"))
 			require.Empty(t, sqlRows(t, actual, "PRAGMA foreign_key_check"))
 		})

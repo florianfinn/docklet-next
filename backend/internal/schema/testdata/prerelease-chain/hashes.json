@@ -1,0 +1,22 @@
+{
+  "001_baseline.sql": "a07e07cf4bd91985e8f72bc7b21903510426384cfede6a7e18d1b9022937cecd",
+  "002_hub_backup_archive.sql": "524cb0ebf27896c4831e5b5ee89f3767265fe12835d8f17a99e99e4fb431ad78",
+  "003_runtime_receipts.sql": "2e1e2103a728617ca1ea772b68faf087b3d9d78bf4f1024c997ffc6ec7776593",
+  "004_runtime_output.sql": "201c706f1f1bec837cad49d10765d9e6ed8c46863743f5a76cbc696460f4b672",
+  "005_runtime_registration.sql": "8007eedd540421ded14d14d6d63162cae941a379b90e0dab85c7cbdd61844d50",
+  "006_image_protection.sql": "6dde1831c62671066954b88c86e1ad5a000c318637dc151c15548fe994c18c5f",
+  "007_image_lifecycle.sql": "1d1274ec1007d56fb8699e721b1e2935fbe835d1270e35ce452c48b8629f16fe",
+  "008_restore_retention.sql": "d727135fbd5e6419f195dcd8cd6ddbef486d0ac01afd0f584e1440d1334dcb1e",
+  "009_update_policies.sql": "b01863370bb14cf82b2865d4787531e28463afc9bae05c2d814c4c3e2e97ebc9",
+  "010_vulnerability_attempts.sql": "8e26fdcff420f772c29f423426e20fb3680c6263fcaa786a78f625566399cd9f",
+  "011_vulnerability_notifications.sql": "a8c887b2e5254ddeea1fade74d401ca009cf3569e205f93e0328f9fa60536369",
+  "012_volume_backup_lifecycle.sql": "56b090eebdd21109bc97548b17eab2eded39c3fa585a373d2862b717e94e4254",
+  "013_notifications_auto_heal.sql": "7243770613547b4785451281343ff88091b7f81dbd1f97168d16838f9d87f328",
+  "014_container_host_operations.sql": "20e41700aca7a5f53780ed33c138366b7708139c208c0222c3640e54ef0359db",
+  "015_simple_users.sql": "b3681f6932e07bb8f3af0331765655f5cba9868ed2e1a45def9dfa0f742f87d2",
+  "016_runtime_history.sql": "0a6ea63519f1a7cf124fb572b93718f3c7d0d89491e87e18d25e0dab13eda34d",
+  "017_service_widgets.sql": "a17d03e2fe73b30c8057c3f2a048936287b880ad815babaaf9f46f61c8d2de5c",
+  "018_update_policy_windows.sql": "2b7429be2f2ff9d0ad34cd4a3b9b260bb2f8ade534a6e6278ee7edd219743412",
+  "019_named_targets_conditions.sql": "b31e707c021a18929204a49ccccab15e3ee305fcb8ce31499dcf0e58504eaada",
+  "020_remove_webhooks.sql": "3d426fa10628f63e5f2c91a50f02d285cd752012400c775d4b701c01bc00a521"
+}

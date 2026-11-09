@@ -2,7 +2,7 @@
 // Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; M17 retains the exact historical fifteen-migration fixture.
+// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; M17 retains the exact historical release baseline fixture.
 
 package schema
 
@@ -18,7 +18,7 @@ import (
 	"testing/fstest"
 )
 
-func TestM15DatabaseStoresBindKeysWithoutMigration(t *testing.T) {
+func TestReleaseDatabaseStoresBindKeysWithoutMigration(t *testing.T) {
 	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	pool, err := db.DB()
@@ -29,17 +29,17 @@ func TestM15DatabaseStoresBindKeysWithoutMigration(t *testing.T) {
 	require.NoError(t, err)
 	fs := fstest.MapFS{}
 	for _, name := range names {
-		if filepath.Base(name) > "015_simple_users.sql" {
+		if filepath.Base(name) > "001_baseline.sql" {
 			continue
 		}
 		body, err := os.ReadFile(name)
 		require.NoError(t, err)
 		fs[filepath.Base(name)] = &fstest.MapFile{Data: body}
 	}
-	require.Len(t, fs, 15)
+	require.Len(t, fs, 1)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, fs)
 	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 15)
+	_, err = provider.UpTo(t.Context(), 1)
 	require.NoError(t, err)
 	require.NoError(t, db.Exec("INSERT INTO volume_backup_policies(id,volume_name,schedule,retention_count) VALUES ('baseline','data','0 0 2 * * *',11)").Error)
 	key := volume.BindKey("/srv/app")
@@ -56,5 +56,5 @@ func TestM15DatabaseStoresBindKeysWithoutMigration(t *testing.T) {
 	}
 	version, err := provider.GetDBVersion(t.Context())
 	require.NoError(t, err)
-	require.EqualValues(t, 15, version)
+	require.EqualValues(t, 1, version)
 }

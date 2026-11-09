@@ -9,6 +9,7 @@ package backup
 import (
 	"context"
 	"database/sql"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"os"
 	"sync"
 	"time"
@@ -19,7 +20,10 @@ import (
 
 const snapshotDeadline = 30 * time.Second
 
-func mustNewestMigration() int64 { version, _ := newestMigration(); return version }
+func mustNewestMigration(options ...database.MigrationOptions) int64 {
+	version, _ := newestMigration(options...)
+	return version
+}
 
 func (s *Service) snapshotArchive(workCtx context.Context, activityID, id string) (string, int64, error) {
 	ctx, cancel := context.WithTimeout(workCtx, archiveDeadline)
@@ -94,5 +98,5 @@ func (s *Service) snapshotArchive(workCtx context.Context, activityID, id string
 		return "", 0, archiveValidationError(snapshotCtx)
 	}
 	s.maintenance.SetPhase("applying")
-	return createSQLiteArchive(ctx, snapshotCtx, s.backupDir(), id, hub, sidecar, backuptypes.MaxSystemArchiveBytes, release)
+	return createSQLiteArchive(ctx, snapshotCtx, s.backupDir(), id, hub, sidecar, backuptypes.MaxSystemArchiveBytes, s.db.MigrationOptions(), release)
 }

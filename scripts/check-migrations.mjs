@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migrationDir = "backend/resources/migrations";
 const baseline = "sqlite/001_baseline.sql";
 // Independent of the manifest so rehashing a shipped baseline cannot certify it.
-const baselineHash = "a07e07cf4bd91985e8f72bc7b21903510426384cfede6a7e18d1b9022937cecd";
+const baselineHash = "817f3ea53b4b15ab07397b69b76790198c2f1a19f97e01280c7efe25bf511ada";
 
 export function migrationProblems(files, manifest, pinnedBaselineHash = baselineHash) {
   const problems = [];
@@ -36,21 +36,36 @@ export function migrationProblems(files, manifest, pinnedBaselineHash = baseline
   return problems;
 }
 
-const legacyManifest = {
-  "001_baseline.sql": "c39ff6da5f2a456e6f63261c4ec6ad13b584dc53fd5d4b501b6ca9638f573554",
-  "002_run_traces.sql": "0f5b2c64b41be772a14b1231434d67ea21f28df3eca6ff2b952a2bbdb378d48b",
-  "003_sync_receipt_lifecycle.sql": "671bcfc6ac6486430b793bf3d6c178a0c1c6f1fb18cc5b7eff61e1bb5180a578",
-  "004_gate_owner.sql": "f3c8fdb6a543a7af2b70a8bea81354d9251e1214fe50a1bbe1f9081a64f08709",
-  "005_gate_lease.sql": "61c4116c28a808fe45a4577a366835e8d842e67428302c3b213aa3cb733d9f89",
-  "006_single_hub_gate.sql": "dbf959161d6b5554d211007cb84669843b3044a63b2b073d86434b2fccb8e67a",
-  "007_activity_raw_output.sql": "51c48b1468886cb1725eadeb4f463ffc07c7f6b725466afe138728fed107efa8"
+// Pinned independently: only this complete prerelease chain may be replaced once.
+export const prereleaseManifest = {
+  "sqlite/001_baseline.sql": "a07e07cf4bd91985e8f72bc7b21903510426384cfede6a7e18d1b9022937cecd",
+  "sqlite/002_hub_backup_archive.sql": "524cb0ebf27896c4831e5b5ee89f3767265fe12835d8f17a99e99e4fb431ad78",
+  "sqlite/003_runtime_receipts.sql": "2e1e2103a728617ca1ea772b68faf087b3d9d78bf4f1024c997ffc6ec7776593",
+  "sqlite/004_runtime_output.sql": "201c706f1f1bec837cad49d10765d9e6ed8c46863743f5a76cbc696460f4b672",
+  "sqlite/005_runtime_registration.sql": "8007eedd540421ded14d14d6d63162cae941a379b90e0dab85c7cbdd61844d50",
+  "sqlite/006_image_protection.sql": "6dde1831c62671066954b88c86e1ad5a000c318637dc151c15548fe994c18c5f",
+  "sqlite/007_image_lifecycle.sql": "1d1274ec1007d56fb8699e721b1e2935fbe835d1270e35ce452c48b8629f16fe",
+  "sqlite/008_restore_retention.sql": "d727135fbd5e6419f195dcd8cd6ddbef486d0ac01afd0f584e1440d1334dcb1e",
+  "sqlite/009_update_policies.sql": "b01863370bb14cf82b2865d4787531e28463afc9bae05c2d814c4c3e2e97ebc9",
+  "sqlite/010_vulnerability_attempts.sql": "8e26fdcff420f772c29f423426e20fb3680c6263fcaa786a78f625566399cd9f",
+  "sqlite/011_vulnerability_notifications.sql": "a8c887b2e5254ddeea1fade74d401ca009cf3569e205f93e0328f9fa60536369",
+  "sqlite/012_volume_backup_lifecycle.sql": "56b090eebdd21109bc97548b17eab2eded39c3fa585a373d2862b717e94e4254",
+  "sqlite/013_notifications_auto_heal.sql": "7243770613547b4785451281343ff88091b7f81dbd1f97168d16838f9d87f328",
+  "sqlite/014_container_host_operations.sql": "20e41700aca7a5f53780ed33c138366b7708139c208c0222c3640e54ef0359db",
+  "sqlite/015_simple_users.sql": "b3681f6932e07bb8f3af0331765655f5cba9868ed2e1a45def9dfa0f742f87d2",
+  "sqlite/016_runtime_history.sql": "0a6ea63519f1a7cf124fb572b93718f3c7d0d89491e87e18d25e0dab13eda34d",
+  "sqlite/017_service_widgets.sql": "a17d03e2fe73b30c8057c3f2a048936287b880ad815babaaf9f46f61c8d2de5c",
+  "sqlite/018_update_policy_windows.sql": "2b7429be2f2ff9d0ad34cd4a3b9b260bb2f8ade534a6e6278ee7edd219743412",
+  "sqlite/019_named_targets_conditions.sql": "b31e707c021a18929204a49ccccab15e3ee305fcb8ce31499dcf0e58504eaada",
+  "sqlite/020_remove_webhooks.sql": "3d426fa10628f63e5f2c91a50f02d285cd752012400c775d4b701c01bc00a521"
 };
-
-const backupLegacyManifest = { ...legacyManifest, "008_hub_backup_archive.sql": "887c68b84d26386d9f9e8e119c79e4dc52ca4c99a641959b1347f2f7f99aca1e" };
 
 export function baseManifestProblems(previous, manifest) {
   const exact = (a, b) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
-  if ((exact(previous, legacyManifest) || exact(previous, backupLegacyManifest)) && manifest[baseline] === baselineHash) return [];
+  const release = manifest[baseline] === baselineHash && Object.keys(manifest).every((name) =>
+    name === baseline || (/^sqlite\/(\d{3})_[a-z0-9_]+\.sql$/.test(name) && Number(basename(name).slice(0, 3)) > 1 && (!Object.hasOwn(prereleaseManifest, name) || manifest[name] !== prereleaseManifest[name])));
+  // Forward entries may accompany the collapse; migrationProblems verifies their bytes.
+  if (exact(previous, prereleaseManifest) && release) return [];
   if (!Object.hasOwn(previous, baseline)) return ["invalid-transition-base"];
   return Object.entries(previous).filter(([name, hash]) => manifest[name] !== hash)
     .map(([name]) => `changed-shipped:${name}`);
@@ -63,13 +78,7 @@ function comparisonProblems(manifest) {
  if (previous.status !== 0) throw new Error("migration-integrity: unreadable base manifest");
  const old = JSON.parse(previous.stdout.toString("utf8"));
  const problems = baseManifestProblems(old, manifest);
- if (!problems.length && Object.hasOwn(old, "001_baseline.sql")) {
-  for (const [name, hash] of Object.entries(old)) {
-   const file = spawnSync("git", ["show", `${base}:${migrationDir}/postgres/${name}`], {cwd: root});
-   if (file.status !== 0 || createHash("sha256").update(file.stdout).digest("hex") !== hash)
-    problems.push(`changed-transition-source:${name}`);
-  }
- }
+
  return problems;
 }
 function migrationFiles(dir, prefix = "") {
