@@ -9,6 +9,10 @@ import { createReadStream } from "node:fs";
 import { isIP } from "node:net";
 import { isMain, layout, options, releaseReference, sha256 } from "./common.mjs";
 
+function bearer(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(value)) throw new Error("invalid registry bearer credential");
+  return `Bearer ${value}`;
+}
 function privateHost(host) {
   if (host === "localhost" || host === "[::1]") return true;
   if (isIP(host) === 4) {
@@ -22,6 +26,16 @@ export function registryURL(registry, scheme = "https", resolvedAddresses = []) 
   if (url.username || url.password || url.pathname !== "/" || !["http:", "https:"].includes(url.protocol) || (url.protocol === "http:" && !privateHost(url.hostname) && !(resolvedAddresses.length && resolvedAddresses.every(privateHost)))) throw new Error("registry requires HTTPS or a private/loopback HTTP address");
   return url.origin;
 }
+async function boundedBody(response, maximum) {
+  if (Number(response.headers.get("content-length")) > maximum) { await response.body?.cancel(); throw new Error("registry response too large"); }
+  const chunks = []; let size = 0;
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > maximum) throw new Error("registry response too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
 async function checkedOrigin(registry, scheme) {
   const url = new URL(`${scheme}://${registry}`);
   const addresses = scheme === "http" && !privateHost(url.hostname) ?
@@ -34,7 +48,7 @@ export async function pushOCI({ directory, reference, scheme = "https", env = pr
   if (source.digest !== ref.digest) throw new Error("reference differs from OCI index digest");
   const origin = await checkedOrigin(ref.registry, scheme);
   const base = `${origin}/v2/${ref.path}`;
-  let authorization = env.REGISTRY_BEARER_TOKEN ? `Bearer ${env.REGISTRY_BEARER_TOKEN}` :
+  let authorization = env.REGISTRY_BEARER_TOKEN ? bearer(env.REGISTRY_BEARER_TOKEN) :
     env.REGISTRY_USERNAME && env.REGISTRY_PASSWORD ? `Basic ${Buffer.from(`${env.REGISTRY_USERNAME}:${env.REGISTRY_PASSWORD}`).toString("base64")}` : "";
   async function request(url, init = {}, retry = true) {
     const target = new URL(url, origin);
@@ -56,9 +70,12 @@ export async function pushOCI({ directory, reference, scheme = "https", env = pr
       const basic = env.REGISTRY_USERNAME && env.REGISTRY_PASSWORD ? `Basic ${Buffer.from(`${env.REGISTRY_USERNAME}:${env.REGISTRY_PASSWORD}`).toString("base64")}` : "";
       const exchangeResponse = await fetch(exchangeURL, { headers: basic ? { Authorization: basic } : {}, redirect: "error", signal: AbortSignal.timeout(30000) });
       if (!exchangeResponse.ok) throw new Error("registry token exchange failed");
-      const grant = await exchangeResponse.json();
+      const body = await boundedBody(exchangeResponse, 64 * 1024);
+      let grant;
+      try { grant = JSON.parse(body.toString("utf8")); } catch { throw new Error("invalid registry authentication response"); }
+      if (!grant || typeof grant !== "object") throw new Error("invalid registry authentication response");
       if (typeof (grant.token ?? grant.access_token) !== "string") throw new Error("registry token missing");
-      authorization = `Bearer ${grant.token ?? grant.access_token}`;
+      authorization = bearer(grant.token ?? grant.access_token);
       // Streaming uploads are never replayed. Authenticate via HEAD before opening a stream.
       if (init.body && typeof init.body !== "string" && !Buffer.isBuffer(init.body)) throw new Error("registry authentication expired during upload");
       return request(url, init, false);
@@ -74,11 +91,7 @@ export async function pushOCI({ directory, reference, scheme = "https", env = pr
     const response = await request(`${base}/manifests/${key}`, { headers: { Accept: accept } });
     if (absentAllowed && response.status === 404) { await response.body?.cancel(); return false; }
     if (!response.ok) { await requireStatus(response, [200]); }
-    const length = Number(response.headers.get("content-length"));
-    if (length > 16 * 1024 * 1024) throw new Error("remote manifest too large");
-    const chunks = []; let size = 0;
-    for await (const chunk of response.body) { size += chunk.length; if (size > 16 * 1024 * 1024) throw new Error("remote manifest too large"); chunks.push(chunk); }
-    const bytes = Buffer.concat(chunks);
+    const bytes = await boundedBody(response, 16 * 1024 * 1024);
     const header = response.headers.get("docker-content-digest");
     if (sha256(bytes) !== expected || (header && header !== expected)) throw new Error("remote manifest digest mismatch");
     return true;

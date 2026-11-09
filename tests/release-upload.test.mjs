@@ -14,7 +14,7 @@ import { pushOCI, registryURL } from "../deploy/release/push-oci.mjs";
 import { layout, sha256 } from "../deploy/release/common.mjs";
 import { fixture } from "./release-fixture.mjs";
 
-async function registryTest({ mismatch = false, bearer = false, basic = false, dockerIndex = false, platformMismatch = false } = {}) {
+async function registryTest({ mismatch = false, bearer = false, basic = false, dockerIndex = false, platformMismatch = false, oversizedGrant = false, invalidGrant = false, unsafeGrant = false } = {}) {
   const out = mkdtempSync(join(tmpdir(), "docklet-release-upload-"));
   fixture(out);
   if (dockerIndex) { const path = join(out, "index.json"); const root = JSON.parse(readFileSync(path)); root.mediaType = "application/vnd.docker.distribution.manifest.list.v2+json"; writeFileSync(path, JSON.stringify(root)); }
@@ -26,7 +26,7 @@ async function registryTest({ mismatch = false, bearer = false, basic = false, d
       if (path === "/token") {
         tokenExchanges++;
         if (basic) assert.equal(req.headers.authorization, "Basic " + Buffer.from("test:test-only").toString("base64"));
-        res.setHeader("Content-Type", "application/json"); res.end('{"token":"test-only"}'); return;
+        res.setHeader("Content-Type", "application/json"); res.end(invalidGrant ? "test-only" : unsafeGrant ? JSON.stringify({ token: "test-only".concat(String.fromCharCode(10)) }) : oversizedGrant ? JSON.stringify({ token: "test-only".repeat(10000) }) : '{"token":"test-only"}'); return;
       }
       if (bearer && req.headers.authorization !== "Bearer test-only") {
         res.writeHead(401, { "www-authenticate": `Bearer realm="${origin}/token",service="fixture",scope="repository:example/hub:pull,push"` }); res.end(); return;
@@ -63,6 +63,9 @@ async function registryTest({ mismatch = false, bearer = false, basic = false, d
   try {
     const env = basic ? { REGISTRY_USERNAME: "test", REGISTRY_PASSWORD: "test-only" } : {};
     const result = pushOCI({ directory: out, reference, scheme: "http", env });
+    if (unsafeGrant) { await assert.rejects(result, { message: "invalid registry bearer credential" }); return; }
+    if (invalidGrant) { await assert.rejects(result, { message: "invalid registry authentication response" }); return; }
+    if (oversizedGrant) { await assert.rejects(result, /registry response too large/); return; }
     if (mismatch || platformMismatch) await assert.rejects(result, /remote manifest digest mismatch/);
     else {
       assert.equal(await result, source.digest);
@@ -83,6 +86,9 @@ test("OCI upload preserves an original Docker index media type", () => registryT
 test("OCI upload rejects different remote digest after a successful upload", () => registryTest({ mismatch: true }));
 test("OCI upload rejects a changed remote platform manifest", () => registryTest({ platformMismatch: true }));
 test("OCI upload uses basic and challenged bearer authentication without Docker", async () => { await registryTest({ basic: true }); await registryTest({ bearer: true, basic: true }); });
+test("OCI upload bounds authentication response bodies", () => registryTest({ bearer: true, oversizedGrant: true }));
+test("OCI upload never echoes a malformed authentication response", () => registryTest({ bearer: true, invalidGrant: true }));
+test("OCI upload rejects unsafe bearer values without reflecting their content", () => registryTest({ bearer: true, unsafeGrant: true }));
 test("registry transport permits private HTTP and refuses public cleartext", () => {
   assert.equal(registryURL("127.0.0.1:5000", "http"), "http://127.0.0.1:5000");
   assert.throws(() => registryURL("registry.example.com", "http"), /HTTPS/);
