@@ -112,7 +112,7 @@ it.each(["access.admin-required", "feature-disabled"])("CW-h hides check and upd
 });
 it("keeps ignore input and focus during a candidate result refresh", async () => {
   const f = setup();
-  const run = { ...f.data.runs[0]!, id: "auto", activityId: "auto-run", status: "running" as const };
+  const run: CandidateResults["runs"][number] = { id: "auto", activityId: "auto-run", trigger: "automatic", status: "running", startedAt: new Date().toISOString(), targets: 1, scanned: 0, cached: 0, failed: 0, deferred: 0, intelligence: "available" };
   f.data.runs = [run];
   const observers = new Map<string, (detail: unknown) => void>();
   f.adapter.observeActionDetail = vi.fn((_host: string, id: string, listener: (detail: never) => void) => { observers.set(id, listener as (detail: unknown) => void); return () => {}; }) as never;
