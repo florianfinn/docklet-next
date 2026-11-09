@@ -42,7 +42,7 @@ it("never describes unknown host or failed Docker usage as no affected container
   r.hosts[0]!.detail!.occurrences.forEach((o) => { o.containers = []; o.updates = []; }); r.hosts.push({ hostId: "offline", code: "vulnerability.host-offline" });
   renderWithApp(<AdvisoryContent data={r} hosts={new Map()} onRetry={() => {}} />);
   expect(screen.queryAllByText(/Container usage is unavailable/).length).toBeGreaterThan(0);
-  expect(screen.queryByText(/Host not reachable/) !== null).toBe(true);
+  expect(screen.queryByText(/could not be read and are unknown/) !== null).toBe(true);
   expect(screen.queryByText(/No affected containers/) === null).toBe(true);
 });
 
@@ -100,6 +100,35 @@ it.each([true, false])("restores URL-driven sheet focus with a matching row: %s"
   await userEvent.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
   expect(document.activeElement === target).toBe(true);
+});
+
+it("keeps a typed ignore reason and its focus across change notifications", async () => {
+  setAppLocale("en-US");
+  const adapter = createDemoAdapter(), listeners = new Set<(topics: Topic[]) => void>();
+  adapter.subscribeChanges = (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+  adapter.listHosts = async () => [];
+  adapter.getCapability = async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true });
+  let release!: () => void;
+  adapter.getVulnerabilityAdvisory = vi.fn(async () => { if (vi.mocked(adapter.getVulnerabilityAdvisory).mock.calls.length > 1) await new Promise<void>((resolve) => { release = resolve; }); return read(); });
+  renderRoutes([{ path: "/security/vulnerabilities/:key", element: <VulnerabilityPage /> }], [`/security/vulnerabilities/${key}`], adapter);
+  const input = (await screen.findAllByLabelText("Reason (optional)"))[0]!;
+  await userEvent.type(input, "accepted risk");
+  await act(async () => { listeners.forEach((fn) => fn(["security"])); listeners.forEach((fn) => fn(["hosts"])); });
+  await waitFor(() => expect(adapter.getVulnerabilityAdvisory).toHaveBeenCalledTimes(2));
+  expect([(screen.getAllByLabelText("Reason (optional)")[0] as HTMLInputElement).value, document.activeElement === input]).toEqual(["accepted risk", true]);
+  await act(async () => { release(); });
+  expect([(screen.getAllByLabelText("Reason (optional)")[0] as HTMLInputElement).value, document.activeElement === input]).toEqual(["accepted risk", true]);
+});
+
+it("picks the newest modification instant across hosts, not the newest date string", () => {
+  setAppLocale("en-US");
+  const earlier = read(), later = read();
+  earlier.hosts[0]!.detail!.advisory!.lastModifiedDate = "2026-11-09T13:30:00+02:00";
+  later.hosts[0]!.detail!.advisory!.lastModifiedDate = "2026-11-09T12:00:00Z";
+  later.hosts[0]!.detail!.advisory!.sourceOccurrence = { ...later.hosts[0]!.detail!.advisory!.sourceOccurrence, package: "newest-package" };
+  const data: AdvisoryRead = { key, hosts: [{ ...earlier.hosts[0]!, hostId: "first" }, { ...later.hosts[0]!, hostId: "second" }] };
+  renderWithApp(<AdvisoryContent data={data} hosts={new Map()} onRetry={() => {}} />);
+  expect(screen.queryByText(/newest-package/) !== null).toBe(true);
 });
 
 it("ignores one occurrence through the detail action and reloads both detail and active table", async () => {

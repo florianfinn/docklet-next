@@ -2,7 +2,7 @@
 // Revision: 2c49b8db789d39b644e27a85a09e277707b4fe12
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original shared plain-text advisory content and exact occurrence actions. M21 #437: advisory detail.
+// Deviations: Original shared plain-text advisory content and exact occurrence actions. M21 #437: advisory detail; R1 NB-5 instant ordering.
 
 import { ExternalLink } from "lucide-react";
 import { useId, useState } from "react";
@@ -67,7 +67,9 @@ export function AdvisoryContent({ data, error, hosts, selected, onRetry }: { dat
   const t = useTranslations("security"), format = useFormatter();
   if (error) return <QueryError error={error} onRetry={onRetry} />;
   if (!data) return <div aria-busy="true"><Skeleton className="h-36 w-full" /></div>;
-  const representatives = data.hosts.flatMap((h) => h.detail?.advisory ? [{ hostId: h.hostId, advisory: h.detail.advisory }] : []).sort((a, b) => (b.advisory.lastModifiedDate ?? "").localeCompare(a.advisory.lastModifiedDate ?? "") || a.hostId.localeCompare(b.hostId));
+  // Newest modification instant first (offsets differ across hosts), missing dates last, then host list order.
+  const modified = (date?: string) => { const ms = date ? Date.parse(date) : NaN; return Number.isNaN(ms) ? -Infinity : ms; };
+  const representatives = data.hosts.flatMap((h) => h.detail?.advisory ? [{ hostId: h.hostId, advisory: h.detail.advisory }] : []).sort((a, b) => modified(b.advisory.lastModifiedDate) - modified(a.advisory.lastModifiedDate) || 0);
   const representative = representatives[0], a = representative?.advisory;
   return <div className="flex min-w-0 flex-col gap-5 [overflow-wrap:anywhere]">
     {a && <section className="flex flex-col gap-3">

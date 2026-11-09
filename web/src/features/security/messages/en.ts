@@ -30,7 +30,7 @@ export const enSecurity = {
     published: "Published",
     modified: "Modified",
     noHosts: "No permitted hosts in this scope.",
-    hostUnknown: "Host not reachable — occurrences and container usage here are unknown.",
+    hostUnknown: "Occurrences and container usage on this host could not be read and are unknown.",
     usageUnavailable: "Container usage is unavailable. Affected containers are unknown.",
     noOccurrences: "No stored occurrences on this host.",
     noContainers: "No affected containers in the current host snapshot.",

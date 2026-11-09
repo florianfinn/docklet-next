@@ -31,7 +31,7 @@ export const deSecurity: typeof enSecurity = {
     published: "Veröffentlicht",
     modified: "Geändert",
     noHosts: "Keine erlaubten Hosts in diesem Umfang.",
-    hostUnknown: "Host nicht erreichbar — Vorkommen und Container-Nutzung sind hier unbekannt.",
+    hostUnknown: "Vorkommen und Container-Nutzung auf diesem Host konnten nicht gelesen werden und sind unbekannt.",
     usageUnavailable: "Container-Nutzung nicht verfügbar. Betroffene Container sind unbekannt.",
     noOccurrences: "Keine gespeicherten Vorkommen auf diesem Host.",
     noContainers: "Keine betroffenen Container im aktuellen Host-Abbild.",
