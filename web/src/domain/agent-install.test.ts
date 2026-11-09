@@ -164,8 +164,15 @@ describe("agent installer security contract", () => {
   });
 
   it("accepts any operator image reference (K-P3)", () => {
-    for (const image of ["registry.example.com/agent:latest", "agent", "registry.example.com:5000/docklet/agent@sha256:" + "a".repeat(64)]) {
-      expect(buildInstallArtifacts({ ...plan, image }).compose).toContain(`image: \${DOCKLET_AGENT_IMAGE:-${image}}`);
+    for (const image of ["registry.example.com/agent:latest", "agent", "registry.example.com:5000/docklet/agent@sha256:" + "a".repeat(64), "[2001:db8::1]:5000/docklet/agent:latest"]) {
+      for (const connection of ["direct", "edge"] as const) {
+        const artifacts = buildInstallArtifacts({ ...plan, connection, image });
+        expect(artifacts.compose).toContain(`image: \${DOCKLET_AGENT_IMAGE:-${image}}`);
+        expect(artifacts.script).toContain(`image: \${DOCKLET_AGENT_IMAGE:-${image}}`);
+      }
+    }
+    for (const image of ["[2001:db8::1]:5000/agent:1.0.0 extra", "[2001:db8::1];id/agent", "agent:'x'", "agent:1.0.0}"]) {
+      expect(() => buildInstallArtifacts({ ...plan, image })).toThrow("agent-install.invalid-image");
     }
   });
 });

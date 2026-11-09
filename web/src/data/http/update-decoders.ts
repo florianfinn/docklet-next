@@ -2,9 +2,10 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original phase 2a stack update consumer for issue #231.
+// Deviations: Original phase 2a stack update consumer for issue #231; agent hints compare product versions (#235).
 
 import { AdapterOutcomeError } from "../capability";
+import { compareProductVersion } from "@/domain/product-version";
 import type { UpdateBaseline, UpdatePoint, StackUpdatePolicy, SystemHints } from "@/domain/stack-updates";
 import { record, text, id, bool, revision, date, optionalDate, list, choice, reason, invalidUpdate } from "./update-validation";
 import { observation } from "./update-validation";
@@ -50,7 +51,8 @@ export function hints(value: unknown): SystemHints {
   const o = record(value), hubVersion = text(o.hubVersion);
   return { hubVersion, images: list(o.images).map((v) => { const h = record(v); const kind = choice(h.kind, ["agent", "tools"]); const currentVersion = h.currentVersion === undefined ? undefined : text(h.currentVersion); const candidateVersion = h.candidateVersion === undefined ? undefined : text(h.candidateVersion);
     if (bool(h.manualOnly) !== true) throw invalidUpdate();
-    if (kind === "agent" && candidateVersion && (compareVersion(candidateVersion, hubVersion) === undefined || compareVersion(candidateVersion, hubVersion)! > 0 || !currentVersion || compareVersion(candidateVersion, currentVersion) === undefined || compareVersion(candidateVersion, currentVersion)! <= 0)) throw invalidUpdate();
+    // Hub and agent are product versions: release candidates order before their release.
+    if (kind === "agent" && candidateVersion && (compareProductVersion(candidateVersion, hubVersion) === undefined || compareProductVersion(candidateVersion, hubVersion)! > 0 || !currentVersion || compareProductVersion(candidateVersion, currentVersion) === undefined || compareProductVersion(candidateVersion, currentVersion)! <= 0)) throw invalidUpdate();
     return { kind, reference: text(h.reference), currentVersion, candidateVersion, compatibleReference: h.compatibleReference === undefined ? undefined : text(h.compatibleReference), state: choice(h.state, ["current", "available", "pinned", "unknown"]), requiresHubUpdate: bool(h.requiresHubUpdate), manualOnly: true, code: reason(h.code) }; }) };
 }
 export function checkResult(value: unknown) {

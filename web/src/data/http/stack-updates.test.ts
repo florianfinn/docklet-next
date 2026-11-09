@@ -181,6 +181,19 @@ it("hints accept build metadata while retaining numeric ordering and the hub cap
   for (const invalid of ["01.2.3+build", "1.2.3-rc.1+build", "9007199254740992.0.0+build"]) expect(compareVersion(invalid, "2.0.0")).toBeUndefined();
 });
 
+it.each([
+  ["2.0.0", "2.0.0-rc.1", "2.0.0"],
+  ["2.0.0-rc.2", "1.8.0", "1.9.0"],
+])("hints decode product versions: hub %s, agent %s, candidate %s", (hubVersion, currentVersion, candidateVersion) => {
+  const value = { hubVersion, images: [{ ...systemHints.images[0]!, reference: `registry.example.com/docklet/agent:${currentVersion}`, currentVersion, candidateVersion, state: "available" }] };
+  expect(hints(value).images[0]!.candidateVersion).toBe(candidateVersion);
+});
+it("hints still refuse an rc candidate above an rc hub or a non-newer candidate", () => {
+  const base = { ...systemHints.images[0]!, state: "available" };
+  expect(() => hints({ hubVersion: "2.0.0-rc.2", images: [{ ...base, currentVersion: "1.8.0", candidateVersion: "2.0.0" }] })).toThrow();
+  expect(() => hints({ hubVersion: "2.0.0", images: [{ ...base, currentVersion: "2.0.0", candidateVersion: "2.0.0-rc.1" }] })).toThrow();
+});
+
 // Producer shapes from updater GetImagePolicy: an unbound stack and an unsaved container send "", a saved container its name.
 it("decodes every policy identity the hub produces and still rejects a malformed stack identity", async () => {
   const f = updateFixture();

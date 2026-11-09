@@ -316,3 +316,35 @@ func TestPublishedReleaseAtMostKeepsUpdateAllCodes(t *testing.T) {
 	_, err := svc.PublishedReleaseAtMost(t.Context(), "1.0.0")
 	require.Equal(t, "update.requires-hub-update", imageDTO.Neutral(err, "", 0).Problem.Code)
 }
+
+func TestReleaseFeedChecksEveryRedirectHop(t *testing.T) {
+	var requested []string
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requested = append(requested, r.URL.String())
+		if len(requested) == 1 {
+			return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": {"http://192.0.2.10/releases"}}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("[" + feedEntryJSON("v1.0.0") + "]")), Request: r}, nil
+	})}
+	svc := NewVersionService(client, false, "https://feed.example.com/releases", "1.0.0", "", nil, nil)
+	_, _, err := svc.NewestRelease(t.Context())
+	require.Equal(t, "update.check-unavailable", codeOf(err))
+	require.Len(t, requested, 1, "a redirect to public cleartext is never requested")
+}
+
+func TestReleaseFeedRechecksTheHostBeforeEachPage(t *testing.T) {
+	full := "[" + strings.TrimSuffix(strings.Repeat(feedEntryJSON("v1.0.0")+",", releaseFeedPageSize), ",") + "]"
+	feed := newRecordingFeedInternal(t, full, "[]")
+	svc := NewVersionService(feed.client, false, "http://feed.example.com/releases", "1.0.0", "", nil, nil)
+	lookups := 0
+	svc.feed.lookup = func(context.Context, string) ([]netip.Addr, error) {
+		lookups++
+		if lookups == 1 {
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		}
+		return []netip.Addr{netip.MustParseAddr("192.0.2.10")}, nil
+	}
+	_, _, err := svc.NewestRelease(t.Context())
+	require.Equal(t, "update.check-unavailable", codeOf(err))
+	require.Len(t, feed.seen(), 1, "the second page is refused once the host resolves publicly")
+}

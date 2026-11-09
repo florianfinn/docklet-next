@@ -32,6 +32,12 @@ func TestValidateUpgradeTargetInternal(t *testing.T) {
 		{"own registry with port", "registry.example.com:5000/docklet/hub:1.0.0", "", "hub", true},
 		{"invalid reference", "UPPER/Case:tag", "", "hub", false},
 		{"invalid pull reference", "ghcr.io/florianfinn/docklet-next-hub:1.0.0", "bad ref!", "hub", false},
+		{"digest-only reference", "registry.example.com/docklet/hub@sha256:" + strings.Repeat("a", 64), "", "hub", true},
+		{"malformed digest", "registry.example.com/docklet/hub:1.0.0@sha256:not-a-digest", "", "hub", false},
+		{"short digest", "registry.example.com/docklet/hub:1.0.0@sha256:abc", "", "hub", false},
+		{"empty digest", "registry.example.com/docklet/hub:1.0.0@", "", "hub", false},
+		{"unsupported digest", "registry.example.com/docklet/hub:1.0.0@md5:" + strings.Repeat("a", 32), "", "hub", false},
+		{"malformed pull digest", "ghcr.io/florianfinn/docklet-next-hub:1.0.0", "registry.example.com/docklet/hub:1.0.0@sha256:not-a-digest", "hub", false},
 		{"unknown role", "ghcr.io/florianfinn/docklet-next-hub:1.0.0", "", "proxy", false},
 	}
 	for _, tc := range cases {
@@ -42,7 +48,7 @@ func TestValidateUpgradeTargetInternal(t *testing.T) {
 	}
 }
 
-func TestRunUpgradeWithoutImageMakesNoEngineRequest(t *testing.T) {
+func TestRunUpgradeInvalidTargetMakesNoEngineRequest(t *testing.T) {
 	var requests atomic.Int32
 	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -53,13 +59,17 @@ func TestRunUpgradeWithoutImageMakesNoEngineRequest(t *testing.T) {
 
 	saved := []string{targetImage, pullImageRef, targetRole, containerName}
 	defer func() { targetImage, pullImageRef, targetRole, containerName = saved[0], saved[1], saved[2], saved[3] }()
-	targetImage, pullImageRef, targetRole, containerName = "", "", "hub", ""
-
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-	err := runUpgrade(cmd, nil)
-	require.ErrorContains(t, err, "--image is required")
-	require.Zero(t, requests.Load())
+	for _, tc := range []struct{ image, pull, want string }{
+		{"", "", "--image is required"},
+		{"registry.example.com/docklet/hub:1.0.0@sha256:not-a-digest", "", "invalid --image"},
+		{"registry.example.com/docklet/hub:1.0.0", "registry.example.com/docklet/hub:1.0.0@sha256:abc", "invalid --pull-image"},
+	} {
+		targetImage, pullImageRef, targetRole, containerName = tc.image, tc.pull, "hub", ""
+		cmd := &cobra.Command{}
+		cmd.SetContext(t.Context())
+		require.ErrorContains(t, runUpgrade(cmd, nil), tc.want)
+		require.Zero(t, requests.Load(), tc.image)
+	}
 }
 
 type engineContainerInternal struct {

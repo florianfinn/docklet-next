@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/distribution/reference"
 	"log/slog"
 	"maps"
 	"os"
@@ -79,11 +80,12 @@ func validateUpgradeTargetInternal(image, pull, role string) error {
 	if strings.TrimSpace(image) == "" {
 		return errors.New("--image is required: give the exact image reference to run (docs/upgrade.md)")
 	}
-	if _, err := refs.NormalizeReference(strings.TrimSpace(image)); err != nil {
+	// The full parser keeps and validates a digest; refs.NormalizeReference drops it.
+	if _, err := reference.ParseNormalizedNamed(strings.TrimSpace(image)); err != nil {
 		return fmt.Errorf("invalid --image %q: %w", image, err)
 	}
 	if strings.TrimSpace(pull) != "" {
-		if _, err := refs.NormalizeReference(strings.TrimSpace(pull)); err != nil {
+		if _, err := reference.ParseNormalizedNamed(strings.TrimSpace(pull)); err != nil {
 			return fmt.Errorf("invalid --pull-image %q: %w", pull, err)
 		}
 	}

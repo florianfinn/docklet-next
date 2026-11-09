@@ -97,6 +97,26 @@ func hintTag(ref string) (string, string) {
 	return reference.TrimNamed(named).String(), strings.TrimPrefix(tagged.Tag(), "v")
 }
 
+// runningAgentImage reads the app-version producer's shape: RepoDigests give a
+// repository-only CurrentImageRef with the tag in CurrentTag; a tagged
+// reference (config fallback) carries its own tag.
+func runningAgentImage(info versionDTO.Info) (string, string) {
+	if repository, tag := hintTag(info.CurrentImageRef); repository != "" {
+		return repository, tag
+	}
+	named, err := reference.ParseNormalizedNamed(info.CurrentImageRef)
+	if err != nil {
+		return "", ""
+	}
+	if _, tagged := named.(reference.Tagged); tagged {
+		return "", ""
+	}
+	if _, valid := versionDTO.ParseProduct(info.CurrentTag); !valid {
+		return "", ""
+	}
+	return reference.TrimNamed(named).String(), strings.TrimPrefix(info.CurrentTag, "v")
+}
+
 // systemImageHints offers feed versions only for agents running the configured
 // image from the repository the release feed describes.
 func systemImageHints(hub, configured, releaseRepository string, info versionDTO.Info, feed releaseFeedObservation) dto.SystemImageHints {
@@ -105,7 +125,7 @@ func systemImageHints(hub, configured, releaseRepository string, info versionDTO
 	}
 	agent := unknown("agent", info.CurrentImageRef)
 	tools := unknown("tools", info.ToolsImage)
-	repository, currentTag := hintTag(info.CurrentImageRef)
+	repository, currentTag := runningAgentImage(info)
 	allowed, _ := hintTag(configured)
 	canonical, _ := hintTag(releaseRepository + ":0.0.0")
 	if allowed != canonical {

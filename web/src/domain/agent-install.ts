@@ -49,7 +49,7 @@ function validatePlan(plan: AgentInstallPlan): void {
   // Operator overrides may be any image reference (the hub validates it); this
   // only keeps the value inert inside Compose and shell text.
   const image = plan.image ?? AGENT_IMAGE;
-  if (image.length > 512 || !/^[A-Za-z0-9][A-Za-z0-9._/:-]*(?:@sha256:[a-f0-9]{64})?$/.test(image)) throw new Error("agent-install.invalid-image");
+  if (image.length > 512 || !/^(?:\[[0-9A-Fa-f:.]+\](?::\d{1,5})?\/)?[A-Za-z0-9][A-Za-z0-9._/:-]*(?:@sha256:[a-f0-9]{64})?$/.test(image)) throw new Error("agent-install.invalid-image");
 }
 
 export function agentCompose(plan: AgentInstallPlan): string {

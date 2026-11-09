@@ -119,11 +119,17 @@ func localFeedAddressInternal(a netip.Addr) bool {
 	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast()
 }
 
-func (f *releaseFeed) checkCleartextInternal(ctx context.Context) error {
-	if f.endpoint.Scheme != "http" {
+// checkRequestURLInternal applies the scheme rule to every outgoing request:
+// each page and each redirect hop, with a fresh lookup for http host names.
+func (f *releaseFeed) checkRequestURLInternal(ctx context.Context, u *url.URL) error {
+	switch u.Scheme {
+	case "https":
 		return nil
+	case "http":
+	default:
+		return errors.New("release feed request scheme is not http(s)")
 	}
-	host := f.endpoint.Hostname()
+	host := u.Hostname()
 	if literal, err := netip.ParseAddr(host); err == nil {
 		if localFeedAddressInternal(literal) {
 			return nil
@@ -140,6 +146,25 @@ func (f *releaseFeed) checkCleartextInternal(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// requestClientInternal shares the transport but checks every redirect hop.
+func (f *releaseFeed) requestClientInternal() *http.Client {
+	client := *f.client
+	previous := f.client.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := f.checkRequestURLInternal(req.Context(), req.URL); err != nil {
+			return err
+		}
+		if previous != nil {
+			return previous(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("release feed redirected too often")
+		}
+		return nil
+	}
+	return &client
 }
 
 // releases returns a copy of the cached stable releases, newest first. An empty
@@ -168,9 +193,7 @@ type feedEntryInternal struct {
 }
 
 func (f *releaseFeed) fetch(ctx context.Context) ([]Release, error) {
-	if err := f.checkCleartextInternal(ctx); err != nil {
-		return nil, err
-	}
+	client := f.requestClientInternal()
 	var out []Release
 	for page := 1; page <= releaseFeedPages; page++ {
 		endpoint := *f.endpoint
@@ -178,7 +201,10 @@ func (f *releaseFeed) fetch(ctx context.Context) ([]Release, error) {
 		query.Set("per_page", strconv.Itoa(releaseFeedPageSize))
 		query.Set("page", strconv.Itoa(page))
 		endpoint.RawQuery = query.Encode()
-		entries, missing, err := f.fetchPageInternal(ctx, endpoint.String())
+		if err := f.checkRequestURLInternal(ctx, &endpoint); err != nil {
+			return nil, err
+		}
+		entries, missing, err := f.fetchPageInternal(ctx, client, endpoint.String())
 		if err != nil {
 			return nil, err
 		}
@@ -202,13 +228,13 @@ func (f *releaseFeed) fetch(ctx context.Context) ([]Release, error) {
 	return nil, errors.New("release feed exceeds the page limit")
 }
 
-func (f *releaseFeed) fetchPageInternal(ctx context.Context, endpoint string) ([]feedEntryInternal, bool, error) {
+func (f *releaseFeed) fetchPageInternal(ctx context.Context, client *http.Client, endpoint string) ([]feedEntryInternal, bool, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return nil, false, err
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
-	response, err := f.client.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, false, err
 	}
