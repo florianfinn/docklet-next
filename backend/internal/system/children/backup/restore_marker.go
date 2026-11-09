@@ -138,7 +138,7 @@ func restoreStage(path, id string) string { return path + ".restore-" + id }
 
 // preparePair writes both immutable recovery inputs on the live filesystem.
 // Safety copies are independent of the archive volume and retained after success.
-func preparePair(ctx context.Context, cfg *config.Config, path, id, activityID string) (restoreMarker, error) {
+func preparePair(ctx context.Context, cfg *config.Config, path, id, activityID string, options ...database.MigrationOptions) (restoreMarker, error) {
 	marker := restoreMarker{Version: 1, BackupID: id, RestoreID: uuid.New().String(), ActivityID: activityID, Phase: "applying", DatabasePath: path}
 	stage := restoreStage(path, marker.RestoreID)
 	if err := os.Mkdir(stage, 0700); err != nil {
@@ -151,7 +151,7 @@ func preparePair(ctx context.Context, cfg *config.Config, path, id, activityID s
 		}
 	}()
 	name, _ := backuptypes.ArchiveNameForID(id)
-	info, err := extractArchive(ctx, filepath.Join(cfg.BackupDir, name), stage, mustNewestMigration())
+	info, err := extractArchive(ctx, filepath.Join(cfg.BackupDir, name), stage, mustNewestMigration(options...), options...)
 	if err != nil {
 		return marker, err
 	}
@@ -208,7 +208,7 @@ func copyDurable(ctx context.Context, source, target string) error {
 
 // Roll forward from persistent inputs after any interruption. Reinstall both
 // images even if one rename already completed; never infer progress from existence.
-func installPair(ctx context.Context, dir string, marker restoreMarker) error {
+func installPair(ctx context.Context, dir string, marker restoreMarker, options ...database.MigrationOptions) error {
 	stage := restoreStage(marker.DatabasePath, marker.RestoreID)
 	for _, item := range marker.Images {
 		actual, err := describeImage(ctx, filepath.Join(stage, item.Name), item.Name)
@@ -216,7 +216,7 @@ func installPair(ctx context.Context, dir string, marker restoreMarker) error {
 			return ErrRestoreRecoveryRequired
 		}
 	}
-	if version, err := validateImages(ctx, stage, mustNewestMigration()); err != nil || version != marker.MigrationVersion {
+	if version, err := validateImages(ctx, stage, mustNewestMigration(options...), options...); err != nil || version != marker.MigrationVersion {
 		return ErrRestoreRecoveryRequired
 	}
 	for i, live := range []string{marker.DatabasePath, sqlitestore.FrancisPath(marker.DatabasePath)} {

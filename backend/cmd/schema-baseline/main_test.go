@@ -7,6 +7,8 @@
 package main
 
 import (
+	"bytes"
+	"github.com/florianfinn/docklet-next/backend/resources"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,4 +41,13 @@ func TestGeneratorRefusesLiveHub(t *testing.T) {
 	pool, err := db.SQLDB()
 	require.NoError(t, err)
 	require.NoError(t, pool.Ping())
+}
+
+func TestGeneratorMatchesFrozenReleaseBaseline(t *testing.T) {
+	t.Setenv("DATABASE_URL", sqlitestore.URL(filepath.Join(t.TempDir(), "baseline.db")))
+	var output bytes.Buffer
+	require.NoError(t, generateTo(&output))
+	expected, err := resources.FS.ReadFile("migrations/sqlite/001_baseline.sql")
+	require.NoError(t, err)
+	require.Equal(t, string(expected), output.String())
 }

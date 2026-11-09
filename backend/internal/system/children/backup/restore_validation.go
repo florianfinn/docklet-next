@@ -30,18 +30,18 @@ type archiveInfo struct {
 	migration int64
 }
 
-func validateArchive(ctx context.Context, path string, newest int64) (archiveInfo, error) {
+func validateArchive(ctx context.Context, path string, newest int64, options ...database.MigrationOptions) (archiveInfo, error) {
 	dir, err := os.MkdirTemp(filepath.Dir(path), ".validate-")
 	if err != nil {
 		return archiveInfo{}, ErrSystemBackupUnavailable
 	}
 	defer os.RemoveAll(dir)
-	return extractArchive(ctx, path, dir, newest)
+	return extractArchive(ctx, path, dir, newest, options...)
 }
 
 // Only three regular members in a fixed order are accepted. No archive path,
 // link, mode or filename is passed to the filesystem as supplied by an upload.
-func extractArchive(ctx context.Context, path, dir string, newest int64) (archiveInfo, error) {
+func extractArchive(ctx context.Context, path, dir string, newest int64, options ...database.MigrationOptions) (archiveInfo, error) {
 	var info archiveInfo
 	if err := archiveContextError(ctx); err != nil {
 		return info, err
@@ -135,7 +135,7 @@ func extractArchive(ctx context.Context, path, dir string, newest int64) (archiv
 			return info, errInvalidArchive
 		}
 	}
-	version, err := validateImages(ctx, dir, newest)
+	version, err := validateImages(ctx, dir, newest, options...)
 	if err != nil {
 		return info, err
 	}
@@ -159,4 +159,6 @@ func archiveValidationError(ctx context.Context) error {
 	}
 	return errInvalidArchive
 }
-func newestMigration() (int64, error) { return database.LatestMigrationVersion() }
+func newestMigration(options ...database.MigrationOptions) (int64, error) {
+	return database.LatestMigrationVersion(options...)
+}

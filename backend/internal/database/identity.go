@@ -2,7 +2,7 @@
 // Revision: b3607be5144101152c8eb7738d389e8c73986fba
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original pre-migration ownership and forward-history validation.
+// Deviations: Release ownership, exact restartable initial catalog and source-bound forward history.
 
 package database
 
@@ -13,9 +13,9 @@ import (
 	"fmt"
 )
 
-const identity = "docklet-next:sqlite:1"
+const identity = "docklet-next:sqlite:2"
 
-func validateIdentity(ctx context.Context, db *sql.DB, required int64) error {
+func validateIdentity(ctx context.Context, db *sql.DB, required int64, options ...MigrationOptions) error {
 	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
 	if err != nil {
 		return fmt.Errorf("inspect SQLite schema: %w", err)
@@ -32,17 +32,39 @@ func validateIdentity(ctx context.Context, db *sql.DB, required int64) error {
 	if err != nil {
 		return err
 	}
+	foreign := errors.New("foreign or inconsistent database; start with an empty Docklet SQLite database")
+	if len(tables) <= 1 {
+		var objects int
+		if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").Scan(&objects); err != nil {
+			return err
+		}
+		if objects != len(tables) {
+			return foreign
+		}
+	}
 	if len(tables) == 0 {
 		return nil
 	}
-	foreign := errors.New("foreign or inconsistent database; start with an empty Docklet SQLite database")
-	if tables[legacyVersionTable] || !tables["docklet_database_metadata"] || !tables["goose_db_version"] {
+	if tables[legacyVersionTable] {
+		return errPrerelease
+	}
+	if len(tables) == 1 && tables["goose_db_version"] {
+		var total, initial int
+		if err := db.QueryRowContext(ctx, "SELECT count(*), coalesce(sum(version_id=0 AND is_applied=1),0) FROM goose_db_version").Scan(&total, &initial); err == nil && total == 1 && initial == 1 {
+			return nil
+		}
+		return foreign
+	}
+	if !tables["docklet_database_metadata"] || !tables["goose_db_version"] {
 		return foreign
 	}
 	var owner string
 	var count int
 	if err = db.QueryRowContext(ctx, "SELECT count(*),coalesce(max(identity),'') FROM docklet_database_metadata").Scan(&count, &owner); err != nil {
 		return foreign
+	}
+	if count == 1 && owner == "docklet-next:sqlite:1" {
+		return errPrerelease
 	}
 	if count != 1 || owner != identity {
 		return foreign
@@ -52,7 +74,7 @@ func validateIdentity(ctx context.Context, db *sql.DB, required int64) error {
 		return foreign
 	}
 	defer rows.Close()
-	versions, err := getEmbeddedMigrationVersionsInternal(dbProviderSQLite)
+	versions, err := getEmbeddedMigrationVersionsInternal(dbProviderSQLite, options...)
 	if err != nil {
 		return err
 	}

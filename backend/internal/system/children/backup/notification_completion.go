@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296; interruption is classified before the terminal save; M16 bind mounts and backup completion.
+// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296; interruption is classified before the terminal save; M16 bind mounts and backup completion. Release baseline migration source propagation.
 
 package backup
 
@@ -21,7 +21,7 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 	archive, size, err := s.snapshotArchive(workCtx, run.ActivityID, run.ID)
 	var migration int64
 	if err == nil {
-		info, validateErr := validateArchive(workCtx, filepath.Join(s.backupDir(), archive), mustNewestMigration())
+		info, validateErr := validateArchive(workCtx, filepath.Join(s.backupDir(), archive), mustNewestMigration(s.db.MigrationOptions()), s.db.MigrationOptions())
 		err, migration = validateErr, info.migration
 	}
 	now := time.Now().UTC()
