@@ -2,7 +2,7 @@
 // Revision: 747254e2620528ca922ef71c066f3d796fa7b856268644e2517f16edf5b0f4c5
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration. M21 #439: Compose self-update controls and capability integration.
 
 import { usersEn, keysEn } from "./users-en";
 // American English texts of hub settings and the profile page.
@@ -208,6 +208,23 @@ export const enSettings = {
     noChown: "Docklet does not change ownership on hosts.",
   },
   updates: {
+    selfUpdate: {
+      hub: "Update Docklet",
+      agent: "Update agent",
+      currentVersion: "Installed version: {version}",
+      targetVersion: "Target version: {version}",
+      check: "Check again",
+      viewRun: "View update activity",
+      manual: "Manual command {number}",
+      confirmHub: "Update Docklet to {version}. A helper updates this Compose service and its image pin. The connection will pause while Docklet restarts. This page reloads after the new version is confirmed healthy.",
+      confirmAgent: "Update this agent to {version}. A helper updates its Compose service and image pin. The agent disconnects briefly; progress remains available in Activity.",
+      noRollback: "There is no automatic rollback. If the update fails, use the saved previous configuration for manual recovery.",
+      backupAdvice: "Back up the hub before updating.",
+      backupLink: "Open Hub backups",
+      cancel: "Cancel",
+      changed: "Update availability changed. Close this dialog and check again.",
+      confirm: "Start update",
+    },
     title: "Updates",
     missing: "Target missing",
     remove: "Remove schedule",

@@ -2,8 +2,9 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration.
 
+import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
 import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
@@ -145,7 +146,7 @@ const IMPLEMENTED = new Set<string>([
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
-  "restartAgent",
+  "restartAgent", "selfUpdate", "getSelfUpdate",
   "connectHost", "reconnectHost",
   "updateHost",
   "registerHost",
@@ -325,6 +326,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     runtime.reset(retain);
     stackTerminals.reset();
     restarts.reset();
+    if (!retain) selfUpdates.reset();
     targets.reset(retain);
     logs.reset();
     shells.reset();
@@ -521,6 +523,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
   });
 
+  const selfUpdates = createSelfUpdates({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, readRun: async (host, id, signal) => { const run = await actions.readDetail(id, host, signal, true); actions.upsert(run); return run; } });
   const targets = createActivityTargets({ terminal: (host, run) => { stackTerminals([run], true); refreshHost(host); }, hasConsumer: () => actionListeners.size > 0 || stackListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
 
   const events = createEventReader(async () => {
@@ -769,6 +772,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
     listSystemComponents: createSystemComponents({ baseUrl, client, hosts: listHosts, capability: getCapability, generation: () => identityGeneration }),
     restartAgent: restarts.restartAgent,
+    selfUpdate: selfUpdates.selfUpdate,
+    getSelfUpdate: selfUpdates.getSelfUpdate,
     installStackUpdates: runtime.installStackUpdates,
     installContainerUpdate: runtime.installContainerUpdate,
     restoreContainerImage: runtime.restoreContainerImage,
