@@ -18,7 +18,7 @@ const cleanups: (() => void)[] = [];
 afterEach(() => { cleanups.splice(0).forEach(f => f()); vi.useRealTimers(); });
 function fixture() {
   vi.useFakeTimers(); let generation = 0;
-  const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? json(accepted, 202) : json({ currentVersion: "1.0.0" }));
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? json(accepted, 202) : json({ currentVersion: "v1.0.0" }));
   const capability = vi.fn(async (operationId: string, resourceRef: ResourceRef) => ({ operationId, resourceRef, available: true }));
   const readRun = vi.fn(async () => run()); const reload = vi.fn();
   const api = createSelfUpdates({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability, generation: () => generation, readRun, reload });
@@ -54,22 +54,22 @@ it("A2-o survives delayed, offline and old-version reconnects, requiring success
   let release!: (value: Response) => void;
   f.fetcher.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
   await vi.advanceTimersByTimeAsync(1000); expect(f.readRun).toHaveBeenCalledTimes(1); expect(f.reload).not.toHaveBeenCalled();
-  release(json({ currentVersion: "1.0.0" })); await vi.advanceTimersByTimeAsync(0);
+  release(json({ currentVersion: "v1.0.0" })); await vi.advanceTimersByTimeAsync(0);
   f.fetcher.mockRejectedValueOnce(new TypeError("offline")); await vi.advanceTimersByTimeAsync(1000); expect(f.reload).not.toHaveBeenCalled();
   // Reconnection with the old version is not evidence of an update.
   await vi.advanceTimersByTimeAsync(2000); expect(f.reload).not.toHaveBeenCalled();
-  f.fetcher.mockResolvedValue(json({ currentVersion: "1.0.1" })); await vi.advanceTimersByTimeAsync(4000); expect(f.reload).not.toHaveBeenCalled();
-  f.readRun.mockResolvedValue(run("succeeded")); f.fetcher.mockResolvedValue(json({ currentVersion: "1.0.0" }));
+  f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" })); await vi.advanceTimersByTimeAsync(4000); expect(f.reload).not.toHaveBeenCalled();
+  f.readRun.mockResolvedValue(run("succeeded")); f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.0" }));
   await vi.advanceTimersByTimeAsync(8000); expect(f.reload).not.toHaveBeenCalled();
-  f.fetcher.mockResolvedValue(json({ currentVersion: "1.0.1" })); await vi.advanceTimersByTimeAsync(10_000); expect(f.reload).toHaveBeenCalledTimes(1);
+  f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" })); await vi.advanceTimersByTimeAsync(10_000); expect(f.reload).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(30_000); expect(f.reload).toHaveBeenCalledTimes(1);
 });
 it.each(["failed", "cancelled"])("A2-o never reloads on %s even with the target version", async status => {
-  const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); f.readRun.mockResolvedValue(run(status)); f.fetcher.mockResolvedValue(json({ currentVersion: "1.0.1" }));
+  const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); f.readRun.mockResolvedValue(run(status)); f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" }));
   await vi.advanceTimersByTimeAsync(60_000); expect(f.reload).not.toHaveBeenCalled(); expect(f.readRun).toHaveBeenCalledTimes(1);
 });
 it("never infers success from an unavailable or foreign run, and stops at identity change", async () => {
-  const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); f.fetcher.mockResolvedValue(json({ currentVersion: "1.0.1" }));
+  const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" }));
   f.readRun.mockRejectedValueOnce(new TypeError("offline")); await vi.advanceTimersByTimeAsync(1000); expect(f.reload).not.toHaveBeenCalled();
   f.readRun.mockResolvedValue(run("succeeded", "foreign")); await vi.advanceTimersByTimeAsync(1000); expect(f.reload).not.toHaveBeenCalled();
   f.identity(); await vi.advanceTimersByTimeAsync(60_000); expect(f.reload).not.toHaveBeenCalled(); expect(f.readRun).toHaveBeenCalledTimes(2);

@@ -8,7 +8,7 @@ import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
 import type { CodedActionRun } from "../message-code";
 import { unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
-import { selfUpdateRef, validSelfUpdateCheck, selfUpdateCodeKey, type SelfUpdateCheck, type SelfUpdateInput, type SelfUpdateResponse } from "@/domain/self-update";
+import { sameProductVersion, selfUpdateRef, validSelfUpdateCheck, selfUpdateCodeKey, type SelfUpdateCheck, type SelfUpdateInput, type SelfUpdateResponse } from "@/domain/self-update";
 import { SELF_UPDATE_PHASE_KEYS } from "../wire-catalogue-self-update";
 import { wireKey } from "../wire-catalogue";
 import { object, runtimeError } from "./runtime-mapping";
@@ -87,7 +87,7 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
           const active = status === "running" || status === "queued";
           done = !active && status !== "succeeded" || host !== "0" && !active;
           const info = (app.status === "fulfilled" ? app.value : undefined) as components["schemas"]["VersionInfo"] | undefined;
-          if (host === "0" && status === "succeeded" && info?.currentVersion === target) {
+          if (host === "0" && status === "succeeded" && sameProductVersion(info?.currentVersion, target)) {
             done = true;
             if (!reloaded) { reloaded = true; reload(); }
           }

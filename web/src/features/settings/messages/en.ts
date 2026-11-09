@@ -211,6 +211,8 @@ export const enSettings = {
     selfUpdate: {
       hub: "Update Docklet",
       agent: "Update agent",
+      agentOn: "Update agent on {name}",
+      checkFor: "Check again for {name}",
       currentVersion: "Installed version: {version}",
       targetVersion: "Target version: {version}",
       check: "Check again",

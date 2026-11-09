@@ -212,6 +212,8 @@ export const deSettings: typeof enSettings = {
     selfUpdate: {
       hub: "Docklet aktualisieren",
       agent: "Agent aktualisieren",
+      agentOn: "Agent auf {name} aktualisieren",
+      checkFor: "Für {name} erneut prüfen",
       currentVersion: "Installierte Version: {version}",
       targetVersion: "Zielversion: {version}",
       check: "Erneut prüfen",

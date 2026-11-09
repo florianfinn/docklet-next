@@ -5,7 +5,7 @@
 // Deviations: Original frozen self-update model regression tests.
 
 import { describe, expect, it } from "vitest";
-import { canSelfUpdate, selfUpdateState, selfUpdateRef, validSelfUpdateCheck } from "./self-update";
+import { canSelfUpdate, sameProductVersion, selfUpdateState, selfUpdateRef, validSelfUpdateCheck } from "./self-update";
 import type { SelfUpdateCheck } from "./self-update";
 
 describe("self-update state", () => {
@@ -30,3 +30,11 @@ describe("self-update state", () => {
     expect(selfUpdateRef("example")).toEqual({ kind: "host", id: "example" });
   });
 });
+
+it("compares app-version and release-feed versions with or without a leading v", () => {
+  expect(sameProductVersion("v1.0.1", "1.0.1")).toBe(true);
+  expect(sameProductVersion("1.0.1", "v1.0.1")).toBe(true);
+  expect(sameProductVersion("v1.0.0", "1.0.1")).toBe(false);
+  expect(sameProductVersion(undefined, "1.0.1")).toBe(false);
+});
+
