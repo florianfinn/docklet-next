@@ -58,6 +58,13 @@ var replaceEnv = atomicFile
 // it created itself; tests observe it because they cannot run as root.
 var chownFile = func(f *os.File, uid, gid int) error { return f.Chown(uid, gid) }
 
+// envOwner reads the env file's owner; tests substitute an operator identity
+// that differs from the unprivileged test process.
+var envOwner = func(info os.FileInfo) (*syscall.Stat_t, bool) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return stat, ok
+}
+
 func ownLike(f *os.File, owner *syscall.Stat_t) error {
 	info, err := f.Stat()
 	if err != nil {
@@ -129,16 +136,26 @@ func writePin(raw []byte, variable, target string) []byte {
 	}
 	return []byte(text + variable + "=" + target + "\n")
 }
-func backupEnv(path string, raw []byte, mode os.FileMode, owner *syscall.Stat_t) error {
+
+// backupEnv creates the backup exclusively and removes it again when it cannot
+// carry the original mode, owner and bytes.
+func backupEnv(path string, raw []byte, mode os.FileMode, owner *syscall.Stat_t) (err error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	if err := f.Chmod(mode.Perm()); err != nil {
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			_ = os.Remove(path)
+		}
+	}()
+	if err = f.Chmod(mode.Perm()); err != nil {
 		return err
 	}
-	if err := ownLike(f, owner); err != nil {
+	if err = ownLike(f, owner); err != nil {
 		return err
 	}
 	if _, err = f.Write(raw); err != nil {

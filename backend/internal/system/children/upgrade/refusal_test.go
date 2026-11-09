@@ -77,7 +77,11 @@ func TestAgentRefusalClassification(t *testing.T) {
 	}{
 		{"host busy", &remenv.StatusError{StatusCode: 409, Body: []byte(`{"code":"host.busy","status":409}`)}, "host.busy", true},
 		{"huma detail", &remenv.StatusError{StatusCode: 409, Body: []byte(`{"status":409,"detail":"update.requires-hub-update"}`)}, core.CodeHub, true},
-		{"unknown code", &remenv.StatusError{StatusCode: 403, Body: []byte(`{"detail":"forbidden"}`)}, core.CodeFailed, true},
+		{"unknown code", &remenv.StatusError{StatusCode: 403, Body: []byte(`{"status":403,"detail":"forbidden"}`)}, core.CodeFailed, true},
+		{"empty 4xx", &remenv.StatusError{StatusCode: 404}, "", false},
+		{"plain text 4xx", &remenv.StatusError{StatusCode: 400, Body: []byte("bad gateway reply")}, "", false},
+		{"foreign problem", &remenv.StatusError{StatusCode: 403, Body: []byte(`{"status":401,"detail":"forbidden"}`)}, "", false},
+		{"timeout with code", &remenv.StatusError{StatusCode: 408, Body: []byte(`{"status":408,"code":"host.busy"}`)}, "", false},
 		{"server error", &remenv.StatusError{StatusCode: 503, Body: []byte(`{"code":"host.busy"}`)}, "", false},
 		{"transport", &remenv.TransportError{Err: context.DeadlineExceeded}, "", false},
 		{"success", nil, "", false},

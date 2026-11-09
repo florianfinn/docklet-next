@@ -7,6 +7,7 @@
 package upgrade
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -54,6 +55,8 @@ type updateTransportFixture struct {
 	version      atomic.Value
 	posts        atomic.Int32
 	loseReply    atomic.Bool
+	loseStatus   int          // status replacing the lost reply; 0 means 503
+	postChecks   atomic.Int32 // agent checks after the first POST, i.e. hub observation
 	post         chan struct{}
 	handler      http.Handler
 	holdCheck    atomic.Bool
@@ -164,6 +167,9 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 		return nil, nil
 	}, func(op *huma.Operation) { op.Security = handlerutil.DefaultOperationSecurity() })
 	f.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/environments/0/system/upgrade/check" && f.posts.Load() > 0 {
+			f.postChecks.Add(1)
+		}
 		if r.Method == http.MethodGet && r.URL.Path == "/api/environments/0/system/upgrade/check" && f.holdCheck.CompareAndSwap(true, false) {
 			capture := httptest.NewRecorder()
 			agentRouter.ServeHTTP(capture, r)
@@ -185,7 +191,7 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 			if f.loseReply.CompareAndSwap(true, false) {
 				capture := httptest.NewRecorder()
 				agentRouter.ServeHTTP(capture, r)
-				w.WriteHeader(503)
+				w.WriteHeader(cmp.Or(f.loseStatus, 503))
 				select {
 				case f.post <- struct{}{}:
 				default:

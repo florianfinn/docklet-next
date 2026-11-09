@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -112,55 +113,63 @@ func TestBrowserEnvelopeCannotBypassHubOwnerDirectAndEdge(t *testing.T) {
 }
 func TestLostReplyReservesOnceThenObservesDirectAndEdge(t *testing.T) {
 	updateStamp(t)
-	for _, edge := range []bool{false, true} {
-		t.Run(map[bool]string{false: "direct", true: "edge"}[edge], func(t *testing.T) {
-			f := newUpdateTransport(t, edge)
-			configureUpdateFeed(t, f)
-			f.loseReply.Store(true)
-			result, err := f.hub.StartUpdate(t.Context(), f.remote.ID, dto.SelfUpdateEnvelope{}, "operator", "operator")
-			require.NoError(t, err)
-			require.NotEmpty(t, result.RunID)
-			select {
-			case <-f.daemon.created:
-			case <-time.After(5 * time.Second):
-				t.Fatal("helper create/start was not observed")
-			}
-			select {
-			case <-f.post:
-			case <-time.After(5 * time.Second):
-				t.Fatal("lost reply was not observed")
-			}
-			var run activity.Activity
-			require.NoError(t, f.db.First(&run, "id=?", result.RunID).Error)
-			require.Equal(t, "running", string(run.Status))
-			// Repeating the exact agent envelope is read-only, even after a lost reply.
-			request := dto.SelfUpdateEnvelope{OpID: result.OpID, TargetVersion: "1.0.1", TargetReference: repository("agent") + ":1.0.1@sha256:" + testDigest, HubVersion: "1.0.1"}
-			body, _ := json.Marshal(request)
-			var repeated dto.SelfUpdateResponse
-			require.NoError(t, f.hub.environments.ProxyJSONRequestForEnvironment(t.Context(), f.remote, http.MethodPost, "/api/environments/0/system/upgrade", body, &repeated))
-			require.Equal(t, result.OpID, repeated.OpID)
-			f.daemon.mu.Lock()
-			creates := append([]map[string]any(nil), f.daemon.creates...)
-			f.daemon.mu.Unlock()
-			require.Len(t, creates, 1)
-			require.Equal(t, request.TargetReference, creates[0]["Image"])
-			// Stop automatic observers so the assertion owns the exact settlement barrier.
-			f.hub.Stop()
-			f.agent.Stop()
-			require.NoError(t, core.WriteJSON(core.ResultPath(f.agent.data, result.OpID), core.Result{OpID: result.OpID, TargetRef: request.TargetReference, Phase: "healthy"}))
-			f.version.Store("1.0.1")
-			done, err := f.agent.observer().Advance(t.Context())
-			require.NoError(t, err)
-			require.True(t, done)
-			done, err = f.hub.advanceRemote(t.Context(), f.hub.remoteStore(f.remote.ID))
-			require.NoError(t, err)
-			require.True(t, done)
-			require.NoError(t, f.db.First(&run, "id=?", result.RunID).Error)
-			require.Equal(t, "success", string(run.Status))
-			var count int64
-			require.NoError(t, f.db.Model(&activity.Activity{}).Where("type=?", "agent.update").Count(&count).Error)
-			require.EqualValues(t, 1, count)
-		})
+	// A 408 from an intermediary is a lost reply too, never an agent refusal.
+	for _, lost := range []int{503, http.StatusRequestTimeout} {
+		for _, edge := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/%d", map[bool]string{false: "direct", true: "edge"}[edge], lost), func(t *testing.T) {
+				f := newUpdateTransport(t, edge)
+				configureUpdateFeed(t, f)
+				f.loseStatus = lost
+				f.loseReply.Store(true)
+				result, err := f.hub.StartUpdate(t.Context(), f.remote.ID, dto.SelfUpdateEnvelope{}, "operator", "operator")
+				require.NoError(t, err)
+				require.NotEmpty(t, result.RunID)
+				select {
+				case <-f.daemon.created:
+				case <-time.After(5 * time.Second):
+					t.Fatal("helper create/start was not observed")
+				}
+				select {
+				case <-f.post:
+				case <-time.After(5 * time.Second):
+					t.Fatal("lost reply was not observed")
+				}
+				var run activity.Activity
+				// Synchronise with the hub's decision: it either settles the run or observes.
+				require.Eventually(t, func() bool {
+					require.NoError(t, f.db.First(&run, "id=?", result.RunID).Error)
+					return f.postChecks.Load() > 0 || string(run.Status) != "running"
+				}, 10*time.Second, 20*time.Millisecond)
+				require.Equal(t, "running", string(run.Status))
+				// Repeating the exact agent envelope is read-only, even after a lost reply.
+				request := dto.SelfUpdateEnvelope{OpID: result.OpID, TargetVersion: "1.0.1", TargetReference: repository("agent") + ":1.0.1@sha256:" + testDigest, HubVersion: "1.0.1"}
+				body, _ := json.Marshal(request)
+				var repeated dto.SelfUpdateResponse
+				require.NoError(t, f.hub.environments.ProxyJSONRequestForEnvironment(t.Context(), f.remote, http.MethodPost, "/api/environments/0/system/upgrade", body, &repeated))
+				require.Equal(t, result.OpID, repeated.OpID)
+				f.daemon.mu.Lock()
+				creates := append([]map[string]any(nil), f.daemon.creates...)
+				f.daemon.mu.Unlock()
+				require.Len(t, creates, 1)
+				require.Equal(t, request.TargetReference, creates[0]["Image"])
+				// Stop automatic observers so the assertion owns the exact settlement barrier.
+				f.hub.Stop()
+				f.agent.Stop()
+				require.NoError(t, core.WriteJSON(core.ResultPath(f.agent.data, result.OpID), core.Result{OpID: result.OpID, TargetRef: request.TargetReference, Phase: "healthy"}))
+				f.version.Store("1.0.1")
+				done, err := f.agent.observer().Advance(t.Context())
+				require.NoError(t, err)
+				require.True(t, done)
+				done, err = f.hub.advanceRemote(t.Context(), f.hub.remoteStore(f.remote.ID))
+				require.NoError(t, err)
+				require.True(t, done)
+				require.NoError(t, f.db.First(&run, "id=?", result.RunID).Error)
+				require.Equal(t, "success", string(run.Status))
+				var count int64
+				require.NoError(t, f.db.Model(&activity.Activity{}).Where("type=?", "agent.update").Count(&count).Error)
+				require.EqualValues(t, 1, count)
+			})
+		}
 	}
 }
 func TestIdentityFenceRejectsHeldReply(t *testing.T) {

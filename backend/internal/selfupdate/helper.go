@@ -11,7 +11,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -113,7 +112,7 @@ func (h Helper) Run(ctx context.Context, data, id string) (err error) {
 		_ = phase("failed-pre-effect")
 		return err
 	}
-	owner, ok := info.Sys().(*syscall.Stat_t)
+	owner, ok := envOwner(info)
 	if !ok {
 		return Refuse(CodeLayout)
 	}

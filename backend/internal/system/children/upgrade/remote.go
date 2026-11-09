@@ -175,17 +175,26 @@ func agentRefusal(err error) (string, bool) {
 	if !errors.As(err, &status) || status.StatusCode < 400 || status.StatusCode >= 500 {
 		return "", false
 	}
+	// 408 is timeout semantics, and only a decoded agent problem (its own status
+	// or a known code) proves a refusal; an intermediary body could replace an
+	// accepted reply, so those stay in observation.
 	var problem struct {
+		Status int    `json:"status"`
 		Code   string `json:"code"`
 		Detail string `json:"detail"`
 	}
-	_ = json.Unmarshal(status.Body, &problem)
+	if status.StatusCode == http.StatusRequestTimeout || json.Unmarshal(status.Body, &problem) != nil {
+		return "", false
+	}
 	for _, code := range []string{problem.Code, problem.Detail} {
 		if refusalCodes[code] {
 			return code, true
 		}
 	}
-	return core.CodeFailed, true
+	if problem.Status == status.StatusCode {
+		return core.CodeFailed, true
+	}
+	return "", false
 }
 
 var refusalCodes = map[string]bool{
