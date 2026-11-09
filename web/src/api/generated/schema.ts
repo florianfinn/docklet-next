@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: d2686d04e42bced428b5899bcdf0ba66aaaf87fe861d7fda8c1eafcbea085b09
+// Revision: 587a19c7fb8a0076a3292f2354ed8d11aaf8caa5a02564b7c7ab8923dd744c09
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11819,7 +11819,6 @@ export interface components {
             trivyServerUrl?: string | null;
             /** @enum {string|null} */
             updateCheckInterval?: "6h" | "12h" | "24h" | null;
-            updateCheckRegistry?: string | null;
             /** @enum {string|null} */
             updateNotify?: "true" | "false" | null;
             upgradeLogRetentionDays?: string | null;

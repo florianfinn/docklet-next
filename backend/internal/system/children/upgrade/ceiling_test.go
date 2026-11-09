@@ -53,12 +53,12 @@ func TestUpdateAllAgentCeilingAndPublishedCandidate(t *testing.T) {
 				disabled                              bool
 			}{
 				{"above without published candidate", "2.0.0", "2.1.0", `[]`, "update.requires-hub-update", "", false},
-				{"disabled", "2.0.0", "2.1.0", `[{"tag_name":"2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "update.requires-hub-update", "", true},
+				{"disabled", "2.0.0", "2.1.0", `[{"tag_name":"v2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "update.requires-hub-update", "", true},
 				{"blank", "2.0.0", "", `[]`, "update.invalid-target", "", false},
 				{"unknown hub", "custom", "1.9.0", `[]`, "update.system-version-unknown", "", false},
 				{"unknown target", "2.0.0", "custom", `[]`, "update.system-version-unknown", "", false},
-				{"published cap", "2.0.0", "2.1.0", `[{"tag_name":"2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"},{"tag_name":"2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "", "2.0.0", false},
-				{"no invented hub tag", "2.0.0", "2.1.0", `[{"tag_name":"2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"}]`, "", "1.9.1", false},
+				{"published cap", "2.0.0", "2.1.0", `[{"tag_name":"v2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"v1.9.1","published_at":"2026-10-24T00:00:00Z"},{"tag_name":"v2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "", "2.0.0", false},
+				{"no invented hub tag", "2.0.0", "2.1.0", `[{"tag_name":"v2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"v1.9.1","published_at":"2026-10-24T00:00:00Z"}]`, "", "1.9.1", false},
 				{"under cap", "2.0.0", "1.9.1", `[]`, "", "1.9.1", false},
 				{"no downgrade", "2.0.0", "1.8.0", `[]`, "update.invalid-target", "", false},
 			} {
@@ -129,7 +129,7 @@ func TestUpdateAllAgentCeilingAndPublishedCandidate(t *testing.T) {
 						require.Contains(t, r.URL.Path, "/releases")
 						return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(test.feed)), Header: http.Header{}, Request: r}, nil
 					})}
-					service := NewService(db, nil, version.NewVersionService(releaseClient, test.disabled, test.hub, "", nil, nil, nil, nil), nil, nil, nil, nil)
+					service := NewService(db, nil, version.NewVersionService(releaseClient, test.disabled, "", test.hub, "", nil, nil), nil, nil, nil, nil)
 					job := &EnvironmentUpdateJob{UserID: "operator", Username: "operator"}
 					require.NoError(t, db.Create(job).Error)
 					result := &EnvironmentUpdateResult{EnvironmentID: id}

@@ -102,7 +102,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		"vulnerabilityScanSchedule",
 		"vulnerabilityScanInterval",
 		"toolsImage",
-		"updateCheckRegistry",
 		"trivyDbRegistry",
 		"trivyNetwork",
 		"trivySecurityOpts",
@@ -129,8 +128,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "0 0 0 * * *", sv.Value)
 		case "toolsImage":
 			require.Empty(t, sv.Value)
-		case "updateCheckRegistry":
-			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":
 			require.Empty(t, sv.Value)
 		case "trivyNetwork":

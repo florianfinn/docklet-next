@@ -142,7 +142,7 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 		Environment: environment.New(environments, f.settings, keys, nil, cfg, local),
 		Project:     project.New(f.projects, local), Container: container.New(f.containers, f.docker, f.settings, local),
 		System:  system.New(nil, f.docker, environments, local, cfg),
-		Version: version.NewVersionService(client, true, "0.0.0", "", nil, f.docker, nil, f.settings),
+		Version: version.NewVersionService(client, true, "", "0.0.0", "", f.docker, f.settings),
 	})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)

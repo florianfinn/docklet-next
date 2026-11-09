@@ -49,7 +49,6 @@ func DefaultSettingsConfig() *Settings {
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
 		ToolsImage:                            SettingVariable{Value: ""},
-		UpdateCheckRegistry:                   SettingVariable{Value: "auto"},
 		ScheduledPruneEnabled:                 SettingVariable{Value: "false"},
 		ScheduledPruneInterval:                SettingVariable{Value: "0 0 0 * * *"},
 		PruneContainerMode:                    SettingVariable{Value: "stopped"},

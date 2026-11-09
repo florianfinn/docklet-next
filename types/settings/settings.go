@@ -122,13 +122,6 @@ type Update struct {
 	// Required: false
 	ToolsImage *string `json:"toolsImage,omitzero" doc:"Docker image reference; empty uses this environment's release default"`
 
-	// UpdateCheckRegistry is the registry queried when checking whether the
-	// running Arcane image has a newer digest. "auto" follows the registry the
-	// running image was pulled from.
-	//
-	// Required: false
-	UpdateCheckRegistry *string `json:"updateCheckRegistry,omitzero" binding:"omitempty,oneof=auto ghcr.io docker.io"`
-
 	// ScheduledPruneEnabled indicates if scheduled pruning is enabled.
 	//
 	// Required: false

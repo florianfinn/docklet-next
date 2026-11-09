@@ -226,12 +226,10 @@ func provideDockerClientServiceInternal(
 func provideVersionServiceInternal(
 	httpClient *http.Client,
 	cfg *config.Config,
-	localRegistry *registry.ContainerRegistryService,
 	localDocker *docker.DockerClientService,
-	imageUpdate *imageupdate.ImageUpdateService,
 	settingsService *settings.SettingsService,
 ) *version.VersionService {
-	return version.NewVersionService(httpClient, cfg.UpdateCheckDisabled, config.Version, config.Revision, localRegistry, localDocker, imageUpdate, settingsService)
+	return version.NewVersionService(httpClient, cfg.UpdateCheckDisabled, cfg.ReleaseFeedURL, config.Version, config.Revision, localDocker, settingsService)
 }
 
 func provideAuthModuleInternal(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService) *auth.Module {

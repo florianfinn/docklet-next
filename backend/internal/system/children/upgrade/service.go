@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; fallback container search uses the Docklet system label (#235).
 
 package upgrade
 
@@ -611,9 +611,9 @@ func (s *Service) findArcaneContainerInternal(ctx context.Context, containerId s
 		return inspectResult.Container, nil
 	}
 
-	// Fallback: search for containers with arcane image
+	// Fallback: search Docklet system containers by their image label.
 	filter := make(client.Filters)
-	filter = filter.Add("ancestor", "ghcr.io/getarcaneapp/arcane")
+	filter = filter.Add("label", "io.docklet.system")
 
 	containers, err := dockerClient.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
