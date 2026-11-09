@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; single-host upgrade routes are hub-owned before dispatch; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package middleware
 
@@ -712,6 +712,9 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) bool {
 	suffix, ok := strings.CutPrefix(c.Request().URL.Path, apiEnvironmentsPrefix+envID)
 	if !ok || len(suffix) <= 1 || suffix[0] != '/' {
+		return false
+	}
+	if c.Request().Method == http.MethodPost && suffix == "/system/upgrade" || c.Request().Method == http.MethodGet && suffix == "/system/upgrade/check" {
 		return false
 	}
 	return !isManagementPathInternal(c.Request().Method, suffix)

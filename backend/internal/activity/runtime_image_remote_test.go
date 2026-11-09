@@ -208,7 +208,7 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	source := "name: example_stack\nservices:\n  app:\n    platform: " + requested + "\n    image: " + oldRef + "\n"
 	path := f.agent.project(target.ID, target.ID, source)
 	if baselineOnly {
-		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
+		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
 		require.NoError(t, e)
 		router := echo.New()
 		api := runtimeImageAPI(router)
@@ -244,7 +244,7 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	require.NoError(t, err, "baseline code=%s events=%s", imageDTO.Neutral(err, "unknown", 500).Problem.Code, f.agent.debugEvents())
 	require.True(t, baseline.Available)
 	if baselineOnly {
-		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
+		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
 		require.NoError(t, e)
 		owner.ConfigureImagePolicies(nil, nil)
 		router := echo.New()

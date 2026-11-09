@@ -1,4 +1,18 @@
 export const deRunMessages = {
+  selfUpdate: {
+    "available": "Update verfügbar",
+    "current": "Aktuell",
+    "checking": "Updates werden geprüft",
+    "not-eligible": "Manuelles Update erforderlich",
+    "unavailable": "Update-Prüfung nicht verfügbar",
+    "reserved": "Update vorgemerkt",
+    "helper-started": "Update-Helfer gestartet",
+    "settled": "Update abgeschlossen",
+    "healthy": "Aktualisierter Dienst ist gesund",
+    "failed-health": "Aktualisierter Dienst wurde nicht gesund",
+    "failed-pre-effect": "Update vor dem Austausch fehlgeschlagen",
+    "unknown": "Update-Ergebnis unbekannt",
+  },
   pathEncoded: "Diese Adresse enthält kodierte Zeichen, die Docklet in Pfaden nicht annimmt.",
   restartRefused: "Neustart abgelehnt: Auf diesem Host läuft ein Backup oder eine Wiederherstellung.",
   exact: {

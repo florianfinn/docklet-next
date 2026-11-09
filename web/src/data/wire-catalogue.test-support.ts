@@ -46,6 +46,7 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
+  ...["SystemSelfUpdateEligibility.state", "SystemSelfUpdateEligibility.code", "SystemSelfUpdateOperation.phase", "SystemSelfUpdateOperation.outcome", "SystemSelfUpdateResponse.phase", "SystemSelfUpdateResponse.code"].map((property) => ({ property, reason: "Backend recovery contract without a rendered consumer yet; the separately owned self-update UI step adds render proofs. Frozen typed maps: wire-catalogue-self-update.ts." })),
   { property: "ActivityStepTraceEntry.status", reason: "Mapped to a domain step state before display: web/src/data/http/map-dto.ts." },
   { property: "HistoryCondition.kind", reason: "Transport selector for condition projection, never rendered: web/src/data/http/runtime-conditions.ts." },
   { property: "HistoryCondition.reason", reason: "Transport evidence for runtime conditions, never rendered: web/src/data/http/runtime-conditions.ts." },

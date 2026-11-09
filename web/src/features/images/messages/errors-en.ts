@@ -8,6 +8,11 @@ import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "update_self-not-compose": "This installation is not managed by Compose. Use the manual update commands.",
+  "update_self-unsupported-layout": "This Compose layout cannot be replayed safely. Use the manual update commands.",
+  "update_self-custom-image": "This installation uses a custom or floating image. Update it manually.",
+  "update_self-failed": "The update failed. Keep the previous configuration and recover manually.",
+  "update_outcome-unknown": "The update outcome could not be confirmed. Check the host before trying again.",
   "agent_unavailable": enBackend.errors.agent.unavailable,
   "container_origin-locked": "Docklet does not manage updates for this container.",
   "container_recreate-ambiguous": "The container replacement could not be identified.",

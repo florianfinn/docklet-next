@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original non-waiting durable-admission then workspace-lock ownership.
+// Deviations: Original non-waiting durable-admission then workspace-lock ownership; preserve injected host.busy admission refusals.
 
 package backup
 
@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
 	dto "github.com/florianfinn/docklet-next/types/backup"
+	host "github.com/florianfinn/docklet-next/types/environment"
 	"uuid"
 )
 
@@ -51,7 +52,7 @@ func (s *Service) acquireOperation(ctx context.Context, source, destination stri
 		lease, ok, err := s.deps.Engine.TryAcquireRun(ctx, backup.VolumeAdmissionScope, name)
 		if err != nil {
 			release()
-			return ctx, nil, dto.NewProblem(503, "volume.backup.engine-unavailable", err)
+			return ctx, nil, backupAdmissionError(err)
 		}
 		if !ok {
 			release()
@@ -101,7 +102,23 @@ func (s *Service) checkWriterFence(ctx context.Context, name string) error {
 	}
 	return ctx.Err()
 }
+func backupAdmissionError(err error) error {
+	if problem := hostBusyAdmission(err); problem != nil {
+		return problem
+	}
+	return dto.NewProblem(503, "volume.backup.engine-unavailable", err)
+}
+func hostBusyAdmission(err error) *host.HostProblem {
+	var problem *host.HostProblem
+	if errors.As(err, &problem) && problem.Code == "host.busy" && problem.Status == 409 {
+		return problem
+	}
+	return nil
+}
 func neutralBackupError(err error, code string) error {
+	if problem := hostBusyAdmission(err); problem != nil {
+		return problem
+	}
 	if err == nil {
 		return nil
 	}
