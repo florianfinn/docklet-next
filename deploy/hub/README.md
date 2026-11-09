@@ -82,8 +82,9 @@ Edge containers are named `docklet-edge-agent`. Both retain
 Before deploying this onboarding boundary, use a matching hub/agent contract
 version and fingerprint. Environment creation, updates and deletion require a
 global administrator; delegated `environments:*` permissions no longer grant those
-operations. `GET /api/environments/{id}/deployment` returns HTTP 410; use the
-one-time onboarding package and token instead. Ensure the selected agent image
+operations. The former deployment snippet route
+`GET /api/environments/{id}/deployment` no longer exists; use the one-time
+onboarding package and token instead. Ensure the selected agent image
 exists on each target host or is accessible through its configured registry.
 
 ## Sign-in and recovery

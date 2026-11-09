@@ -107,6 +107,8 @@ const retiredSystemRecovery = new Map([
   ["POST /backups/{id}/restore-files", "restore-system-backup-files"],
 ]);
 const retiredM20 = new Map([["GET /environments/{id}/webhooks", "list-webhooks"], ["POST /environments/{id}/webhooks", "create-webhook"], ["DELETE /environments/{id}/webhooks/{webhookId}", "delete-webhook"], ["PATCH /environments/{id}/webhooks/{webhookId}", "update-webhook"]]);
+// M21 removed the retired deployment snippet route with its generator (#362).
+const retiredM21 = new Map([["GET /environments/{id}/deployment", "getDeploymentSnippets"]]);
 const operations = (document) => new Map(
   Object.entries(document.paths).flatMap(([path, entries]) =>
     Object.entries(entries)
@@ -124,7 +126,7 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   ));
 
   assert.equal(baseline.size, manifest.baselineOperations);
-  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size - replacedRoutes.size - retiredM20.size);
+  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size - replacedRoutes.size - retiredM20.size - retiredM21.size);
   assert.equal(removed.size, manifest.removedOperations.length);
   assert.equal(removed.size, 163);
   for (const [key, id] of removed) {
@@ -134,8 +136,8 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   }
   for (const [key, id] of baseline) {
     if (removed.has(key)) continue;
-    if (retiredSystemRecovery.has(key) || retiredM20.has(key)) {
-      assert.equal(id, retiredSystemRecovery.get(key) ?? retiredM20.get(key));
+    if (retiredSystemRecovery.has(key) || retiredM20.has(key) || retiredM21.has(key)) {
+      assert.equal(id, retiredSystemRecovery.get(key) ?? retiredM20.get(key) ?? retiredM21.get(key));
       assert.equal(current.has(key), false, `obsolete system recovery route remains: ${key}`);
       assert.equal([...current.values()].includes(id), false, `obsolete system recovery ID remains: ${id}`);
       continue;
