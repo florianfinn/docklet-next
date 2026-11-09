@@ -7,6 +7,7 @@
 package updater
 
 import (
+	"strings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	versionDTO "github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestSystemImageHintsAreManualAndCapped(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			feed := releaseFeedObservation{latest: test.latest, best: test.best, code: test.code}
-			out := systemImageHints(test.hub, "docklet-next-agent:"+test.hub, versionDTO.Info{CurrentVersion: test.agent, CurrentImageRef: test.reference}, feed)
+			out := systemImageHints(test.hub, "docklet-next-agent:"+test.hub, "docklet-next-agent", versionDTO.Info{CurrentVersion: test.agent, CurrentImageRef: test.reference}, feed)
 			require.Len(t, out.Images, 2)
 			agent := out.Images[0]
 			require.True(t, agent.ManualOnly)
@@ -44,26 +45,38 @@ func TestSystemImageHintsAreManualAndCapped(t *testing.T) {
 		})
 	}
 }
+func TestSystemImageHintsUseTheStampedReleaseRepository(t *testing.T) {
+	digest := "@sha256:" + strings.Repeat("a", 64)
+	release := "ghcr.io/florianfinn/docklet-next-agent"
+	info := versionDTO.Info{CurrentVersion: "1.0.0", CurrentImageRef: release + ":1.0.0" + digest}
+	feed := releaseFeedObservation{latest: "1.1.0", best: "1.1.0"}
+	out := systemImageHints("1.1.0", release+":1.1.0"+digest, release, info, feed)
+	require.Equal(t, "available", out.Images[0].State)
+	require.Equal(t, "1.1.0", out.Images[0].CandidateVersion)
+	out = systemImageHints("1.1.0", "registry.example.com/mirror/agent:1.1.0", release, versionDTO.Info{CurrentVersion: "1.0.0", CurrentImageRef: "registry.example.com/mirror/agent:1.0.0"}, feed)
+	require.Equal(t, "unknown", out.Images[0].State, "a repository the feed does not describe gets no candidate")
+}
+
 func TestSystemImageHintsCustomConfiguredReferenceRemainsUnknown(t *testing.T) {
 	reference := "registry.example.com/custom-agent:1.9.0"
-	out := systemImageHints("2.0.0", reference, versionDTO.Info{CurrentVersion: "1.9.0", CurrentImageRef: reference}, releaseFeedObservation{latest: "2.1.0", best: "2.0.0"})
+	out := systemImageHints("2.0.0", reference, "docklet-next-agent", versionDTO.Info{CurrentVersion: "1.9.0", CurrentImageRef: reference}, releaseFeedObservation{latest: "2.1.0", best: "2.0.0"})
 	require.Equal(t, "unknown", out.Images[0].State)
 	require.Empty(t, out.Images[0].CandidateVersion)
 }
 
 func TestSystemToolsHintPreservesPinsAndReleaseCompatibility(t *testing.T) {
 	info := versionDTO.Info{CurrentVersion: "2.0.0", CurrentImageRef: "docklet-next-agent:2.0.0", ToolsImage: volumehelper.DefaultToolsImage}
-	out := systemImageHints("2.0.0", "docklet-next-agent:2.0.0", info, releaseFeedObservation{latest: "2.0.0", best: "2.0.0"})
+	out := systemImageHints("2.0.0", "docklet-next-agent:2.0.0", "docklet-next-agent", info, releaseFeedObservation{latest: "2.0.0", best: "2.0.0"})
 	require.Equal(t, "current", out.Images[1].State)
 	require.Equal(t, volumehelper.DefaultToolsImage, out.Images[1].CompatibleReference)
 	info.ToolsImageOverride = true
-	out = systemImageHints("2.0.0", "docklet-next-agent:2.0.0", info, releaseFeedObservation{latest: "2.0.0", best: "2.0.0"})
+	out = systemImageHints("2.0.0", "docklet-next-agent:2.0.0", "docklet-next-agent", info, releaseFeedObservation{latest: "2.0.0", best: "2.0.0"})
 	require.Equal(t, "pinned", out.Images[1].State)
 	require.Empty(t, out.Images[1].CandidateVersion)
 	info.ToolsImageOverride = false
 	info.CurrentVersion = "1.9.0"
 	info.CurrentImageRef = "docklet-next-agent:1.9.0"
-	out = systemImageHints("2.0.0", "docklet-next-agent:2.0.0", info, releaseFeedObservation{latest: "2.0.0", best: "2.0.0"})
+	out = systemImageHints("2.0.0", "docklet-next-agent:2.0.0", "docklet-next-agent", info, releaseFeedObservation{latest: "2.0.0", best: "2.0.0"})
 	require.Equal(t, "unknown", out.Images[1].State)
 	require.Empty(t, out.Images[1].CompatibleReference)
 }

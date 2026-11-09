@@ -44,11 +44,8 @@ func (s *UpdaterService) ConfigureSystemImageHints(envs *environment.Environment
 		if v != nil {
 			feed = observeReleaseFeed(ctx, v, config.Version)
 		}
-		configured := strings.TrimSpace(s.config.AgentImage)
-		if configured == "" {
-			configured = "docklet-next-agent:" + strings.TrimPrefix(config.Version, "v")
-		}
-		return systemImageHints(config.Version, configured, info, feed), nil
+		configured, _ := config.AgentImageReference(s.config.AgentImage)
+		return systemImageHints(config.Version, configured, config.AgentReleaseRepository(), info, feed), nil
 	}
 }
 
@@ -99,7 +96,9 @@ func hintTag(ref string) (string, string) {
 	}
 	return reference.TrimNamed(named).String(), strings.TrimPrefix(tagged.Tag(), "v")
 }
-func systemImageHints(hub, configured string, info versionDTO.Info, feed releaseFeedObservation) dto.SystemImageHints {
+// systemImageHints offers feed versions only for agents running the configured
+// image from the repository the release feed describes.
+func systemImageHints(hub, configured, releaseRepository string, info versionDTO.Info, feed releaseFeedObservation) dto.SystemImageHints {
 	unknown := func(kind, ref string) dto.SystemImageHint {
 		return dto.SystemImageHint{Kind: kind, Reference: ref, State: "unknown", Code: "update.system-version-unknown", ManualOnly: true}
 	}
@@ -107,7 +106,7 @@ func systemImageHints(hub, configured string, info versionDTO.Info, feed release
 	tools := unknown("tools", info.ToolsImage)
 	repository, currentTag := hintTag(info.CurrentImageRef)
 	allowed, _ := hintTag(configured)
-	canonical, _ := hintTag("docklet-next-agent:0.0.0")
+	canonical, _ := hintTag(releaseRepository + ":0.0.0")
 	if allowed != canonical {
 		allowed = ""
 	}

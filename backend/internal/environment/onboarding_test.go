@@ -37,17 +37,29 @@ func TestHubDiscoveryRanksConfiguredURLAndPinsImage(t *testing.T) {
 	require.Equal(t, "http://127.0.0.1:3552", discovery.Candidates[3].URL)
 	require.Equal(t, "same-host", discovery.Candidates[3].Reach)
 	require.Equal(t, "interface", discovery.Candidates[4].Source)
-	require.NotContains(t, discovery.AgentImage, "latest")
-	require.True(t, pinnedAgentImage.MatchString(discovery.AgentImage))
-	cfg.AgentImage = "registry.example.com/docklet/agent:1.2.3@sha256:" + strings.Repeat("a", 64)
-	overridden, err := hubDiscovery(cfg, "", "", nil)
-	require.NoError(t, err)
-	require.Equal(t, cfg.AgentImage, overridden.AgentImage)
-	for _, invalid := range []string{"agent:latest", "agent", "agent:1.2", "agent:1.2.3@sha256:abc"} {
+	require.Equal(t, "docklet-next-agent:0.0.0", discovery.AgentImage, "unstamped builds use the source-build fallback")
+	// K-P3: operator overrides are free, including mutable tags and digest-only references.
+	for _, override := range []string{"registry.example.com/docklet/agent:1.2.3@sha256:" + strings.Repeat("a", 64), "agent:latest", "agent", "registry.example.com:5000/agent@sha256:" + strings.Repeat("b", 64)} {
+		cfg.AgentImage = override
+		overridden, err := hubDiscovery(cfg, "", "", nil)
+		require.NoError(t, err, override)
+		require.Equal(t, override, overridden.AgentImage)
+	}
+	for _, invalid := range []string{"UPPER/Case:tag", "bad ref!", "agent:1.2.3@sha256:abc"} {
 		cfg.AgentImage = invalid
 		_, err = hubDiscovery(cfg, "", "", nil)
-		require.Error(t, err)
+		require.Error(t, err, invalid)
 	}
+	cfg.AgentImage = ""
+	saved := config.DefaultAgentImage
+	defer func() { config.DefaultAgentImage = saved }()
+	config.DefaultAgentImage = "ghcr.io/florianfinn/docklet-next-agent:1.0.0@sha256:" + strings.Repeat("c", 64)
+	stamped, err := hubDiscovery(cfg, "", "", nil)
+	require.NoError(t, err)
+	require.Equal(t, config.DefaultAgentImage, stamped.AgentImage)
+	config.DefaultAgentImage = "ghcr.io/florianfinn/docklet-next-agent:latest"
+	_, err = hubDiscovery(cfg, "", "", nil)
+	require.Error(t, err, "a stamped default must be a release pin")
 }
 
 func TestHubDiscoveryRejectsUnsafeAddressHints(t *testing.T) {
