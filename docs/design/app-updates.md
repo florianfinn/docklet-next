@@ -25,8 +25,11 @@ The helper uses the target image's existing ENTRYPOINT with the arguments
 `self-update --op <operation-id>`. It has no Compose membership labels, no health
 check or restart policy, and explicit daemon-visible project, socket and data
 mounts. The socket source is mapped to `/var/run/docker.sock`; TCP/proxy endpoints
-are unsupported. It runs with the application's effective user and groups, opens
-no database and does not chown any file.
+are unsupported. It runs as root, because the operator's private env file and
+project directory need not be accessible to the application identity. It opens no
+database and changes ownership only of the files it creates itself: the
+replacement env file and the per-operation backup get the original env file's
+owner and mode, and the result file gets the application identity.
 
 Before changing the env file, the helper loads the ordered Compose files with
 only their recorded interpolation file and the explicit project name. It checks
