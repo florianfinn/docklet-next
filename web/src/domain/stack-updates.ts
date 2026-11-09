@@ -2,13 +2,13 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original phase 2a stack update consumer for issue #231.
+// Deviations: Original phase 2a stack update consumer for issue #231. M21 #438: candidate checks and verified updates.
 
 export interface UpdateBaseline {
   targetIdentity: string; savedRevision: string; observedRevision: string;
   available: boolean; autoExcluded: boolean; code?: string; sourceRunId?: string;
 }
-export interface LifecycleInput { expectedRevision: string; pointId?: string; replaceConfiguration?: boolean; services?: string[] }
+export interface LifecycleInput { expectedRevision: string; pointId?: string; replaceConfiguration?: boolean; services?: string[]; service?: string; expectedManifest?: string }
 export interface UpdatePoint {
   id: string; registrationId: string; targetId: string; targetIdentity: string;
   sourceRunId: string; createdAt: string; sourceState: "settled" | "partial-source";

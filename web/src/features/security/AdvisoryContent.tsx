@@ -2,7 +2,7 @@
 // Revision: 2c49b8db789d39b644e27a85a09e277707b4fe12
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original shared plain-text advisory content and exact occurrence actions. M21 #437: advisory detail; R1 NB-5 instant ordering.
+// Deviations: Original shared plain-text advisory content and exact occurrence actions. M21 #437: advisory detail; R1 NB-5 instant ordering. M21 #438: candidate checks and verified updates.
 
 import { ExternalLink } from "lucide-react";
 import { useId, useState } from "react";
@@ -21,6 +21,7 @@ import { Field, FieldGroup, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 import { Skeleton } from "@/shared/ui/skeleton";
 
+import { CandidateChecks, CandidateVerdict } from "./CandidateChecks";
 import { occurrenceSelectionKey, selectionFor } from "./advisory-selection";
 
 function safeReference(value: string) {
@@ -52,7 +53,7 @@ function Occurrence({ hostId, occurrence: o, selected, usageAvailable = true }: 
         return <li key={c.id} className="text-sm">
           <Link className="underline" to={`/containers/${encodeURIComponent(`${hostId}~${c.id}`)}`}>{c.name}</Link> <span className="font-mono text-xs">{c.id}</span> · {c.state}
           {c.project && <p>{t("detail.project", { project: c.project, service: c.service ?? "" })}</p>}
-          <p>{update?.state === "available" ? t("detail.updateAvailable", { version: update.version || t("detail.versionUnknown") }) : update?.state === "none" ? t("detail.noUpdate") : t("detail.updateUnknown")}</p>
+          <CandidateVerdict host={hostId} occurrence={o} container={c} update={update} />
           {c.projectId ? <Link className="underline" to={`/stacks/${encodeURIComponent(`${hostId}~${c.projectId}`)}?tab=overview`}>{t("detail.openUpdates")}</Link> : <Link className="underline" to={`/containers/${encodeURIComponent(`${hostId}~${c.id}`)}`}>{t("detail.openUpdates")}</Link>}
         </li>;
       })}</ul> : <p className="text-sm text-muted-foreground">{t(usageAvailable ? "detail.noContainers" : "detail.usageUnavailable")}</p>}
@@ -88,7 +89,7 @@ export function AdvisoryContent({ data, error, hosts, selected, onRetry }: { dat
     {!data.hosts.length && <p>{t("detail.noHosts")}</p>}
     {data.hosts.map((h) => <section key={h.hostId} className="flex min-w-0 flex-col gap-3" aria-label={hosts.get(h.hostId)?.name ?? h.hostId}>
       <h2 className="font-semibold">{hosts.get(h.hostId)?.name ?? h.hostId}</h2>
-      {!h.detail || h.code ? <Alert><AlertDescription>{t("detail.hostUnknown")}</AlertDescription></Alert> : <>
+      {!h.detail || h.code ? <Alert><AlertDescription>{t("detail.hostUnknown")}</AlertDescription></Alert> : <CandidateChecks key={`${data.key}:${h.hostId}`} host={h.hostId} advisory={h.detail.occurrences[0]?.vulnerabilityId ?? ""}>
         {h.detail.usage.state === "unavailable" && <Alert><AlertDescription>{t("detail.usageUnavailable")}</AlertDescription></Alert>}
         {!h.detail.occurrences.length && <p>{t("detail.noOccurrences")}</p>}
         {h.detail.occurrences.map((o) => {
@@ -96,7 +97,7 @@ export function AdvisoryContent({ data, error, hosts, selected, onRetry }: { dat
           // Unknown usage must not imply an empty set of consumers.
           return <Occurrence key={key} hostId={h.hostId} occurrence={o} selected={selected === key} usageAvailable={h.detail!.usage.state === "ok"} />;
         })}
-      </>}
+      </CandidateChecks>}
     </section>)}
   </div>;
 }
