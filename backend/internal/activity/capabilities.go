@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration; M21 self-update descriptor.
 package activity
 
 import (
@@ -39,7 +39,7 @@ var adapterOperationIDs = []string{
 	"runStackCommand", "redeployStack", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
-	"subscribeMetrics", "updateHost", "uploadFile",
+	"subscribeMetrics", "updateHost", "uploadFile", "selfUpdate",
 	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
@@ -279,6 +279,21 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "selfUpdate":
+			// Hub (hub/0) or one agent (host/<id>); administrators only. No host
+			// status gate: agents in update-required are updated through the
+			// recovery route, and eligibility comes from the update check.
+			ref := descriptors[i].ResourceRef
+			target := (ref.Kind == "hub" && ref.ID == "0") || (ref.Kind == "host" && ref.ID != "" && ref.ID != "0" && !strings.Contains(ref.ID, "~"))
+			descriptors[i].Available = target && permissions.IsGlobalAdmin()
+			switch {
+			case descriptors[i].Available:
+				descriptors[i].DisabledReasonCode = ""
+			case target:
+				descriptors[i].DisabledReasonCode = "access.admin-required"
+			default:
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
 		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":
