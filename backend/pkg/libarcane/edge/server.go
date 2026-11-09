@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Edge protocol marker exchange (#362).
 
 package edge
 
@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/florianfinn/docklet-next/types/notification"
 	"io"
 	"log/slog"
@@ -324,6 +325,11 @@ func (s *TunnelServer) populateSessionMetadata(tunnel *AgentTunnel, registerMsg 
 	if registerMsg != nil {
 		tunnel.AgentInstance = strings.TrimSpace(registerMsg.AgentInstance)
 		tunnel.Capabilities = append([]string(nil), registerMsg.Capabilities...)
+		agentProtocol := contract.ParseEdgeProtocol(registerMsg.Capabilities)
+		if agentProtocol.Malformed {
+			slog.Warn("Edge agent sent a malformed protocol marker; treating it as protocol 1", "environmentId", tunnel.EnvironmentID)
+		}
+		tunnel.EdgeProtocol = agentProtocol.Version
 	}
 
 	if tunnel.Conn != nil {
@@ -433,11 +439,13 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 		"environmentId", tunnel.EnvironmentID,
 		"sessionId", tunnel.SessionID,
 		"securityMode", tunnel.SecurityMode,
+		"edgeProtocol", tunnel.EdgeProtocol,
 	)
 
 	// Echo the agent's capabilities and append the manager's own so the agent
 	// learns what this manager supports (older agents ignore extra strings).
-	capabilities := kit.Unique(append(slices.Clone(tunnel.Capabilities), tunnelCapabilityProtoParity, tunnelCapabilityChunkedRequest))
+	// Protocol markers are never echoed: the reply carries only the manager's own.
+	capabilities := kit.Unique(append(contract.WithoutEdgeProtocol(tunnel.Capabilities), tunnelCapabilityProtoParity, tunnelCapabilityChunkedRequest, contract.EdgeProtocolCapability()))
 
 	if sendErr := tunnel.Conn.Send(&TunnelMessage{
 		Type:          MessageTypeRegisterResponse,
