@@ -17,6 +17,7 @@ test("agent target ships only the agent executable and defaults to agent mode", 
   const agentBuild = dockerfile.split("FROM build-source AS agent-build\n")[1]?.split("\nFROM ")[0];
   assert.ok(agentBuild, "the agent binary has its own build stage");
   assert.doesNotMatch(agentBuild, /--from=web|frontend\/dist/, "the agent build never embeds the web bundle");
+  assert.match(agentBuild, /-tags=exclude_frontend -o \/out\/docklet-agent/, "the agent binary is built without the frontend");
   assert.match(agent, /ENV AGENT_MODE=true EDGE_AGENT=false/);
   assert.match(agent, /ENTRYPOINT \["\/usr\/local\/bin\/docklet-agent"\]/);
   const workflow = readFileSync(".github/workflows/checks.yml", "utf8");

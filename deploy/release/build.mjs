@@ -12,6 +12,8 @@ export function build({ version: v, out, releaseRepository: repo = repository },
   version(v); releaseRepository(repo);
   if (!out) throw new Error("--out is required");
   const revision = execute("git", ["rev-parse", "HEAD"]);
+  // sourceSHA must describe the built bytes: tracked changes refuse the build.
+  if (String(execute("git", ["status", "--porcelain", "--untracked-files=no"]) ?? "").trim()) throw new Error("source tree has uncommitted tracked changes; build from a clean checkout");
   const epoch = process.env.SOURCE_DATE_EPOCH ?? execute("git", ["show", "-s", "--format=%ct", "HEAD"]);
   buildStamp({ version: v, revision, epoch, releaseRepository: repo });
   const destination = resolve(out);

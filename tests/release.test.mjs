@@ -55,7 +55,7 @@ test("version verification rejects mismatch and non-tag publication; dry runs us
 test("build orders agent before hub, stamps pinned default, records and uses repository override", () => temporary(out => {
   const builds = [];
   const manifest = build({ version: v, out, releaseRepository: repo }, (program, args) => {
-    if (program === "git") return args[0] === "rev-parse" ? sha : "1700000000";
+    if (program === "git") return args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "1700000000";
     assert.equal(program, "docker");
     builds.push(args);
     const role = args[args.indexOf("--target") + 1];
@@ -70,6 +70,15 @@ test("build orders agent before hub, stamps pinned default, records and uses rep
   assert.equal(JSON.parse(readFileSync(join(out, "release-manifest.json"))).releaseRepository, repo);
   for (const args of builds) { assert.ok(args.includes("linux/amd64")); assert.ok(args.some(a => a.includes("rewrite-timestamp=true"))); }
   assert.equal(layout(join(out, "agent")).digest, manifest.images.agent.digest);
+}));
+
+test("build refuses a source tree with tracked changes before any image build", () => temporary(out => {
+  let builds = 0;
+  assert.throws(() => build({ version: v, out, releaseRepository: repo }, (program, args) => {
+    if (program === "git") return args[0] === "rev-parse" ? sha : args[0] === "status" ? " M deploy/hub/Dockerfile\n" : "1700000000";
+    builds++;
+  }), /uncommitted tracked changes/);
+  assert.equal(builds, 0);
 }));
 
 test("real Go linker stamps all five config variables into a reading binary", () => temporary(out => {
