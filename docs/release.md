@@ -3,15 +3,18 @@ Source: docklet-next/issues/362
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release packaging and runtime assessment.
+Deviations: Original release packaging and runtime assessment; link operator guides and clarify GPU limit (#363).
 -->
 
 # Release packages
 
+Operator instructions: [install](install.md), [upgrade and recover](upgrade.md),
+and [compatibility](compatibility.md).
+
 The release workflow builds Linux/amd64 hub and agent images from one source
 commit. Runtime images use scratch, static Go binaries, embedded time zones,
 the assessed CA bundle and licence texts. There is no shell or GPU utility;
-GPU metrics require a custom image. ARM targets are outside this release.
+the UI shows no GPU values with these images. ARM targets are outside this release.
 
 Pull requests touching release inputs run a dry build at the PR head with
 `<deploy/release/version.json next>-rc.<run number>`. The workflow uploads two
