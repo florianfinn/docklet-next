@@ -2,8 +2,10 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs.
+// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates.
 
+import { renderWithApp } from "@/test/render";
+import { CandidateState, CandidateRunStatus } from "@/features/security/CandidateChecks";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
@@ -30,6 +32,8 @@ function activityMessage(code: "runtime.wait-timeout" | "runtime.waiter-disconne
 
 // Each row names a representative property of one distinct guarded union and its real consumer.
 const proofs = [
+  { property: "VulnerabilityCandidateResult.state", member: "queued", key: "security.candidates.states.queued", render: () => renderWithApp(<CandidateState state="queued" />).container.textContent ?? "" },
+  { property: "VulnerabilityCandidateRun.status", member: "running", key: "security.historyStatus.running", render: () => renderWithApp(<CandidateRunStatus status="running" />).container.textContent ?? "" },
   { property: "VulnerabilityScanResult.errorCode", member: "candidate.unavailable", key: "images.errors.candidate_unavailable", render: () => imageError("candidate.unavailable") },
   { property: "VulnerabilityScanResult.errorCode", member: "candidate.deferred", key: "images.errors.candidate_deferred", render: () => imageError("candidate.deferred") },
   { property: "UpdaterLifecycleResult.code", member: "update.candidate-changed", key: "images.errors.update_candidate-changed", render: () => imageError("update.candidate-changed") },

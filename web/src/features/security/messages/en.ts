@@ -3,6 +3,17 @@
 import { enBackend } from "@/data/messages/en";
 
 export const enSecurity = {
+  candidates: {
+    check: "Check candidates", update: "Update to verified image", activity: "Activity",
+    closes: "Update to {reference} closes this vulnerability (verified {digest})",
+    doesNotClose: "Update to {reference} does not close this vulnerability",
+    digest: "Full manifest digest", introduces: "Introduces", failed: "Candidate check unavailable. Retry after refreshing.",
+    manual: "Manual candidate check", automatic: "Automatic candidate check",
+    counts: "{scanned} scanned · {cached} cached · {failed} failed · {deferred} not checked yet",
+    confirm: "Update {consumer} to the verified manifest {digest}?", confirmAction: "Confirm update", cancel: "Cancel",
+    states: { unchecked: "Not checked yet", deferred: "Not checked yet", queued: "Candidate check queued", running: "Candidate check running", completed: "Candidate check completed", failed: "Candidate check failed", cancelled: "Candidate check cancelled", interrupted: "Candidate check interrupted" },
+    severity: { unknown: "Unknown", low: "Low", medium: "Medium", high: "High", critical: "Critical" },
+  },
   detail: {
     title: "Vulnerability details",
     scopeAll: "Scope: all permitted hosts. Unreachable hosts remain unknown.",
@@ -57,7 +68,7 @@ export const enSecurity = {
   scanFailed: "Scan could not be started. Inspect the activity for accepted hosts.",
   unknownIntel: "Threat intelligence unavailable for this finding",
   historyEmpty: "No completed scan samples yet.",
-  historyStatus: { completed: "Completed", partial: "Partial", failed: "Failed", cancelled: "Cancelled", interrupted: "Interrupted" },
+  historyStatus: { running: "Running", completed: "Completed", partial: "Partial", failed: "Failed", cancelled: "Cancelled", interrupted: "Interrupted" },
   scheduleSettings: "Scan schedule",
   scan: "Scan now",
   scanning: "Scan running …",

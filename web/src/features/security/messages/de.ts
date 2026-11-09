@@ -4,6 +4,17 @@ import { deBackend } from "@/data/messages/de";
 import type { enSecurity } from "./en";
 
 export const deSecurity: typeof enSecurity = {
+  candidates: {
+    check: "Kandidaten prüfen", update: "Auf verifiziertes Image aktualisieren", activity: "Aktivität",
+    closes: "Update auf {reference} schließt diese Schwachstelle (verifiziert {digest})",
+    doesNotClose: "Update auf {reference} schließt diese Schwachstelle nicht",
+    digest: "Vollständiger Manifest-Digest", introduces: "Führt ein", failed: "Kandidatenprüfung nicht verfügbar. Nach dem Aktualisieren erneut versuchen.",
+    manual: "Manuelle Kandidatenprüfung", automatic: "Automatische Kandidatenprüfung",
+    counts: "{scanned} geprüft · {cached} zwischengespeichert · {failed} fehlgeschlagen · {deferred} noch nicht geprüft",
+    confirm: "{consumer} auf das verifizierte Manifest {digest} aktualisieren?", confirmAction: "Update bestätigen", cancel: "Abbrechen",
+    states: { unchecked: "Noch nicht geprüft", deferred: "Noch nicht geprüft", queued: "Kandidatenprüfung in Warteschlange", running: "Kandidatenprüfung läuft", completed: "Kandidatenprüfung abgeschlossen", failed: "Kandidatenprüfung fehlgeschlagen", cancelled: "Kandidatenprüfung abgebrochen", interrupted: "Kandidatenprüfung unterbrochen" },
+    severity: { unknown: "Unbekannt", low: "Niedrig", medium: "Mittel", high: "Hoch", critical: "Kritisch" },
+  },
   detail: {
     title: "Details zur Schwachstelle",
     scopeAll: "Umfang: alle erlaubten Hosts. Nicht erreichbare Hosts bleiben unbekannt.",
@@ -58,7 +69,7 @@ export const deSecurity: typeof enSecurity = {
   scanFailed: "Scan konnte nicht gestartet werden. Angenommene Hosts sind in der Aktivität sichtbar.",
   unknownIntel: "Bedrohungsdaten für diesen Befund nicht verfügbar",
   historyEmpty: "Noch keine abgeschlossenen Scan-Messwerte.",
-  historyStatus: { completed: "Abgeschlossen", partial: "Teilweise", failed: "Fehlgeschlagen", cancelled: "Abgebrochen", interrupted: "Unterbrochen" },
+  historyStatus: { running: "Läuft", completed: "Abgeschlossen", partial: "Teilweise", failed: "Fehlgeschlagen", cancelled: "Abgebrochen", interrupted: "Unterbrochen" },
   scheduleSettings: "Scan-Zeitplan",
   scan: "Jetzt scannen",
   scanning: "Scan läuft …",

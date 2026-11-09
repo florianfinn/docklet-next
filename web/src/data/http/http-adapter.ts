@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates.
 
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -53,6 +53,7 @@ import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
+import { createVulnerabilityCandidates } from "./vulnerability-candidates";
 import { createVulnerabilityAdvisories } from "./vulnerability-advisory";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
@@ -83,7 +84,7 @@ const IMPLEMENTED = new Set<string>([
   ...BACKUP_OPERATIONS,
   ...NOTIFICATION_SETTINGS_OPERATIONS,
   "getSecurity", "getVulnerabilityAdvisory", "ignore-vulnerability", "unignore-vulnerability",
-  "runScan",
+  "runScan", "scan-vulnerability-candidates", "get-vulnerability-candidates",
   "setScanEnabled",
   "getScanSettings",
   "saveScanSettings",
@@ -501,7 +502,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           } catch (error) { if (isCancelledError(error)) throw error; }
         }
         // Invalidate before publishing terminal status: progress consumers may unmount immediately.
-        if (run.kind === "scan" && !["running", "queued"].includes(run.status)) securityChanged();
+        if ((run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan") && !["running", "queued"].includes(run.status)) securityChanged();
         return run;
       } catch (error) { if (isCancelledError(error)) throw error; throw classifiedError({ code: "activity.invalid-data" }); }
     },
@@ -575,7 +576,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sharedReads.clear();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const notification = envelope.activity;
-      if (notification.type !== "message" && notification.activity?.type === "vulnerability_scan") securityChanged();
+      if (notification.type !== "message" && ["vulnerability_scan", "vulnerability.candidate-scan"].includes(notification.activity?.type ?? "")) securityChanged();
       if (notification.type !== "message"
         && notification.activity?.metadata?.action
         && /backup|restore/.test(String(notification.activity.metadata.action))) backupChanged();
@@ -804,6 +805,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listStacks: (...args) => principal?.isAdmin === false ? userInventory.listStacks(...args) : inventory.listStacks(...args),
     getStack: (id) => principal?.isAdmin === false ? userInventory.getStack(id) : inventory.getStack(id),
     ...resourceReads,
+    ...createVulnerabilityCandidates({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, writeSignal: () => ownedWrites.signal, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
     ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
@@ -884,7 +886,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       let scanTimer: ReturnType<typeof setInterval> | undefined;
       const stopPolling = () => { clearInterval(scanTimer); scanTimer = undefined; };
       const pollScan = (run?: CodedActionRun) => {
-        if (!run || !["scan", "backup", "volume-restore"].includes(run.kind)
+        if (!run || (!["scan", "backup", "volume-restore"].includes(run.kind) && run.sourceOperation !== "vulnerability.candidate-scan")
           || !["running", "queued"].includes(run.status)) {
           stopPolling();
           return;
