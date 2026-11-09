@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety. M19 #349 unreachable agent refused before admission.
+// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety. M19 #349 unreachable agent refused before admission. M21 #438: candidate scans and verified manifest binding.
 
 package activity
 
@@ -27,6 +27,7 @@ import (
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 )
 
 type runtimeProjectHTTPInput struct {
@@ -96,6 +97,12 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 					return nil, huma.Error400BadRequest("Invalid recreate request")
 				}
 				options.Recreate = &request.Edit
+			} else if operation == RuntimeUpdateContainer && len(bytes.TrimSpace(input.RawBody)) != 0 {
+				var request updaterDTO.VerifiedImageRequest
+				if activitytypes.DecodeRuntimeJSON(input.RawBody, &request) != nil || !updaterDTO.ValidManifest(request.ExpectedManifest) {
+					return nil, huma.Error400BadRequest("Invalid verified image update request")
+				}
+				options.ContainerImage = &updaterDTO.ContainerImageRequest{ExpectedManifest: request.ExpectedManifest}
 			} else if len(bytes.TrimSpace(input.RawBody)) != 0 {
 				return nil, huma.Error400BadRequest("Runtime command has no request body")
 			}

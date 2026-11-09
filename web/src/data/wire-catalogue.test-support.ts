@@ -47,6 +47,7 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
+  ...["VulnerabilityCandidateResult.state", "VulnerabilityCandidateRun.status"].map((property) => ({ property, reason: "Backend candidate proof contract without a rendered consumer yet; the separately owned candidate web step adds mappings and real render proofs." })),
   { property: "VulnerabilityAdvisoryUpdate.state", reason: "Consumer update states are translated with security.detail.updateAvailable, noUpdate and updateUnknown in AdvisoryContent." },
   { property: "VulnerabilityAdvisoryUsage.state", reason: "Usage availability controls the explicit security.detail.usageUnavailable message in AdvisoryContent." },
   ...["SystemSelfUpdateEligibility.state", "SystemSelfUpdateEligibility.code", "SystemSelfUpdateOperation.phase", "SystemSelfUpdateOperation.outcome", "SystemSelfUpdateResponse.phase", "SystemSelfUpdateResponse.code"].map((property) => ({ property, reason: "Backend recovery contract without a rendered consumer yet; the separately owned self-update UI step adds render proofs. Frozen typed maps: wire-catalogue-self-update.ts." })),

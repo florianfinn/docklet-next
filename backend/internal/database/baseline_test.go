@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original release startup, refusal, restart and source-boundary proofs.
+// Deviations: M21 #438 uses current schema 2 and a synthetic forward 003. Original release startup, refusal, restart and source-boundary proofs.
 
 package database
 
@@ -35,7 +35,7 @@ func testForwardSource(t *testing.T) fs.FS {
 		require.NoError(t, err)
 		files[entry.Name()] = &fstest.MapFile{Data: data}
 	}
-	files["002_fixture.sql"] = &fstest.MapFile{Data: []byte("-- +goose Up\nCREATE TABLE future_fixture(value TEXT);\n")}
+	files["003_fixture.sql"] = &fstest.MapFile{Data: []byte("-- +goose Up\nCREATE TABLE future_fixture(value TEXT);\n")}
 	return files
 }
 
@@ -52,7 +52,7 @@ func TestReleaseFreshStartHistoryIdentityAndSQLSeeds(t *testing.T) {
 			defer db.Close()
 			var versions []int64
 			require.NoError(t, db.Raw("SELECT version_id FROM goose_db_version ORDER BY id").Scan(&versions).Error)
-			require.Equal(t, []int64{0, 1}, versions)
+			require.Equal(t, []int64{0, 1, 2}, versions)
 			var owner string
 			require.NoError(t, db.Raw("SELECT identity FROM docklet_database_metadata").Scan(&owner).Error)
 			require.Equal(t, "docklet-next:sqlite:2", owner)
@@ -144,7 +144,7 @@ func TestInitialMigrationFailureIsRestartable(t *testing.T) {
 	require.True(t, db.Migrator().HasTable("settings"))
 	var version int64
 	require.NoError(t, db.Raw("SELECT max(version_id) FROM goose_db_version").Scan(&version).Error)
-	require.EqualValues(t, 1, version)
+	require.EqualValues(t, 2, version)
 }
 
 func TestMigrationSourceSurvivesReopenAndMigrate(t *testing.T) {

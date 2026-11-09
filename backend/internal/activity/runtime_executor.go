@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety.
+// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety. M21 #438: candidate scans and verified manifest binding.
 
 package activity
 
@@ -120,6 +120,9 @@ func runtimeFullContainerID(id string) bool {
 // remain outside the application's atomic control.
 func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command RuntimeCommand, output io.Writer) error {
 	if runtimeContainerImageOperation(command.Operation) {
+		if command.Options.ContainerImage != nil {
+			ctx = updaterDTO.WithExpectedManifest(ctx, command.Options.ContainerImage.ExpectedManifest)
+		}
 		ctx = updaterDTO.WithExecutionIdentity(ctx, updaterDTO.ExecutionIdentity{RunID: command.ProposedRunID, RegistrationID: command.Store.RegistrationID})
 		ctx = context.WithValue(ctx, dockertypes.ProgressWriterKey{}, output)
 		port, ok := a.containers.(interface {

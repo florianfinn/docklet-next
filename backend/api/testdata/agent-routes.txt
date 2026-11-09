@@ -98,6 +98,7 @@ GET /environments/{id}/volumes/{volumeName}/workspace/file
 GET /environments/{id}/volumes/{volumeName}/workspace/file/download
 GET /environments/{id}/vulnerabilities/advisories/{key}
 GET /environments/{id}/vulnerabilities/all
+GET /environments/{id}/vulnerabilities/candidates
 GET /environments/{id}/vulnerabilities/export
 GET /environments/{id}/vulnerabilities/ignored
 GET /environments/{id}/vulnerabilities/image-options
@@ -184,6 +185,7 @@ POST /environments/{id}/volumes/{volumeName}/backups/upload
 POST /environments/{id}/volumes/{volumeName}/backups/{backupId}/restore
 POST /environments/{id}/volumes/{volumeName}/backups/{backupId}/restore-files
 POST /environments/{id}/volumes/{volumeName}/rename
+POST /environments/{id}/vulnerabilities/candidates/scan
 POST /environments/{id}/vulnerabilities/ignore
 POST /environments/{id}/vulnerabilities/ignore/bulk
 POST /environments/{id}/vulnerabilities/scan

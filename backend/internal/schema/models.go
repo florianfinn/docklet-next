@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding.
 
 package schema
 
@@ -38,13 +38,14 @@ import (
 	volumebackup "github.com/florianfinn/docklet-next/backend/internal/volume/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
+	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/candidates"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability/children/query"
 	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	vulnerabilityDTO "github.com/florianfinn/docklet-next/types/vulnerability"
 )
 
 // Models includes the release baseline and models added by later forward migrations.
-func Models() []any { return BaselineModels() }
+func Models() []any { return append(BaselineModels(), candidates.Models()...) }
 
 // BaselineModels freezes the model list used to generate release migration 001.
 // Add later models to Models, leaving this list and the baseline proof unchanged.

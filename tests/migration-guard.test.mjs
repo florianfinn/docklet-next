@@ -72,14 +72,14 @@ test("worktree guard rejects all manifest and baseline bypasses", (t) => {
 test("release transition accepts the exact pinned prerelease chain, with manifested forward entries", () => {
   const release = JSON.parse(readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
   const baselinePath = "sqlite/001_baseline.sql";
-  const baselineBytes = readFileSync(new URL(`../backend/resources/migrations/${baselinePath}`, import.meta.url));
-  const forwardPath = "sqlite/002_fixture.sql";
+  const forwardPath = "sqlite/003_fixture.sql";
+  const releaseFiles = Object.keys(release).map((path) => [path, readFileSync(new URL(`../backend/resources/migrations/${path}`, import.meta.url))]);
   const forwardBytes = Buffer.from("-- +goose Up\nCREATE TABLE fixture(id TEXT);\n");
   const forwardHash = createHash("sha256").update(forwardBytes).digest("hex");
   const next = {...release, [forwardPath]: forwardHash};
   assert.deepEqual(baseManifestProblems(prereleaseManifest, release), []);
   assert.deepEqual(baseManifestProblems(prereleaseManifest, next), []);
-  assert.deepEqual(migrationProblems(new Map([[baselinePath, baselineBytes], [forwardPath, forwardBytes]]), next), []);
+  assert.deepEqual(migrationProblems(new Map([...releaseFiles, [forwardPath, forwardBytes]]), next), []);
   assert.deepEqual(baseManifestProblems(release, next), []);
   for (const name of Object.keys(prereleaseManifest)) {
     const altered = {...prereleaseManifest, [name]: "0".repeat(64)};
@@ -91,7 +91,7 @@ test("release transition accepts the exact pinned prerelease chain, with manifes
   delete partial["sqlite/020_remove_webhooks.sql"];
   assert.ok(baseManifestProblems(prereleaseManifest, partial).includes("changed-shipped:sqlite/020_remove_webhooks.sql"));
   assert.ok(baseManifestProblems(prereleaseManifest, {...release, "sqlite/020_remove_webhooks.sql": prereleaseManifest["sqlite/020_remove_webhooks.sql"]}).length);
-  assert.ok(migrationProblems(new Map([[baselinePath, baselineBytes], [forwardPath, forwardBytes]]), release)
+  assert.ok(migrationProblems(new Map([...releaseFiles, [forwardPath, forwardBytes]]), release)
     .includes(`unmanifested:${forwardPath}`));
   assert.ok(baseManifestProblems(release, {}).includes(`changed-shipped:${baselinePath}`));
   assert.ok(baseManifestProblems(release, {...release, [baselinePath]: "0".repeat(64)}).includes(`changed-shipped:${baselinePath}`));

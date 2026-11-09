@@ -16,6 +16,9 @@ export const REQUEST_CODE_KEYS = {
 } satisfies Record<Schema["RequestProblem"]["code"], CatalogueKey>;
 
 export const IMAGE_ERROR_KEYS = {
+  "candidate.unavailable": "images.errors.candidate_unavailable",
+  "candidate.deferred": "images.errors.candidate_deferred",
+  "update.candidate-changed": "images.errors.update_candidate-changed",
   "agent.unavailable": "images.errors.agent_unavailable",
   "container.origin-locked": "images.errors.container_origin-locked",
   "container.recreate-ambiguous": "images.errors.container_recreate-ambiguous",
