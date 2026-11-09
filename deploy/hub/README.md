@@ -6,13 +6,16 @@ License: Apache-2.0
 Deviations: Original SQLite candidate packaging and offline recovery instructions.
 -->
 
-# Hub candidate package
+# Build the hub and agent from source
 
 Build from the repository root with `docker compose -f deploy/hub/compose.yaml build`.
 The template builds a CGO-free hub with its production web bundle and complete
 Go/web licence evidence. The assessed package target is Linux/amd64. Images use
-version and digest pins. `NODE_IMAGE`, `GO_IMAGE` and `RUNTIME_IMAGE` build arguments
-can override those pins; reassess changed dependencies before distributing a package.
+version and digest pins. `NODE_IMAGE` and `GO_IMAGE` build arguments can override the build pins;
+`RUNTIME_IMAGE` names the CA/directory preparation stage. The final runtime is
+`scratch`. Reassess changed dependencies and the CA hash before distribution.
+See [release packages](../../docs/release.md) for the separate release workflow.
+The runtime has no shell or optional GPU utilities; GPU metrics need a custom image.
 `HUB_PORT` overrides the loopback host port. `HUB_IMAGE` overrides the runtime image reference; the local build remains available
 without access to a product registry. No product release is published by this template.
 
@@ -144,7 +147,11 @@ their separate authentication contract.
 For a local candidate check, run `node scripts/smoke-hub-image.mjs IMAGE` after
 building. It checks an empty temporary volume, `/api/health`, the served web
 bundle, second-hub refusal, persistent restart and every extracted licence hash.
-It removes only its own labelled containers and volume. This automated smoke does
+It removes its temporary containers and volumes. Set `SMOKE_DOCKER_LABEL` to
+the test project label when using a shared daemon. Go and OpenSSL on the test
+host provide the static runtime probe and isolated TLS certificates. The probe
+checks directory modes, non-root re-exec and mounted default CA roots; it is
+not shipped in the image. The shipped, unmounted CA bundle hash is checked too. This automated smoke does
 not replace operator approval and practical acceptance of a release package.
 
 ## Database archives and recovery

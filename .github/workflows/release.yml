@@ -1,0 +1,164 @@
+# Source: docklet-next/issues/362
+# Revision: b11b3e70e671dd3c862b966b1d279251842c7319
+# Retrieved: 2026-11-09
+# License: Apache-2.0
+# Deviations: Original offline release packaging and verification.
+
+name: Release package
+on:
+  pull_request:
+    paths:
+      - 'deploy/**'
+      - 'backend/**'
+      - 'web/**'
+      - 'types/**'
+      - '.github/workflows/release.yml'
+      - 'scripts/release*'
+      - 'scripts/smoke-*-image.mjs'
+      - 'tests/release*'
+      - 'LICENSES/**'
+  push:
+    tags: ['v*']
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+      - run: corepack enable && corepack prepare pnpm@11.21.0 --activate
+      - run: pnpm --dir web install --frozen-lockfile
+      - id: version
+        run: node scripts/release-verify.mjs
+      - run: node --test tests/release*.test.mjs
+  build:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Build amd64 agent, then hub with pinned agent default
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: node deploy/release/build.mjs --version "$VERSION" --out bundle
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-oci
+          path: bundle
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+  package:
+    needs: [verify, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+      - run: corepack enable && corepack prepare pnpm@11.21.0 --activate
+      - run: pnpm --dir web install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-oci
+          path: bundle
+      - name: Enable OCI image import for exact-payload smokes
+        run: |
+          sudo mkdir -p /etc/docker
+          if [ ! -f /etc/docker/daemon.json ]; then echo '{}' | sudo tee /etc/docker/daemon.json; fi
+          sudo jq '.features["containerd-snapshotter"] = true' /etc/docker/daemon.json | sudo tee /etc/docker/daemon.json.new
+          sudo mv /etc/docker/daemon.json.new /etc/docker/daemon.json
+          sudo systemctl restart docker
+      - name: Smoke the exact OCI images and render the package
+        env:
+          SMOKE_DOCKER_LABEL: t3.project=docklet-next-release-ci
+          VERSION: ${{ needs.verify.outputs.version }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node scripts/release-load.mjs --dir bundle > images.env
+          set -a
+          . ./images.env
+          set +a
+          node scripts/smoke-agent-image.mjs "$agent"
+          node scripts/smoke-hub-image.mjs "$hub"
+          node scripts/release-package-check.mjs --dir bundle --version "$VERSION" --source "$SOURCE_SHA"
+          node deploy/release/render.mjs --manifest bundle/release-manifest.json --out package
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-package
+          path: package
+          retention-days: 7
+          if-no-files-found: error
+  publish:
+    needs: [verify, build, package]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment: release
+    concurrency:
+      group: release-publish-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-oci
+          path: bundle
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-package
+          path: package
+      - name: Upload unchanged OCI layouts, verify remote digests, then create the release
+        env:
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node scripts/release-package-check.mjs --dir bundle --version "$VERSION" --source "$SOURCE_SHA"
+          (cd package && sha256sum --check SHA256SUMS)
+          node scripts/release-publish.mjs --dir bundle
+          extra=()
+          if [[ "$VERSION" == *-* ]]; then extra+=(--prerelease); fi
+          gh release create "v$VERSION" package/* --verify-tag --generate-notes "${extra[@]}"

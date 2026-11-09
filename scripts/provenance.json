@@ -25,6 +25,7 @@
     ".githooks/pre-push",
     ".github/workflows/checks.yml",
     ".github/workflows/tools-image.yml",
+    ".github/workflows/release.yml",
     ".github/workflows/pr-text.yml",
     ".github/workflows/review-status.yml",
     "scripts/publication-assignments.mjs",
@@ -45,6 +46,10 @@
     "web/src/": {"source": "approved Docklet design prototype (maintainer's own work)/react-opus/src/", "revision": "d75474089b87ab9f77c606cc7aa696d05157d8e9cd902f1ed5a0f2b904722a39", "retrieved": "2026-10-13", "license": "Apache-2.0 AND MIT AND BSD-3-Clause", "deviations": "Historical initial import: 592 byte-identical L4 files. Subsequent product-boundary, catalogue-base and validation changes are recorded by per-file sidecars and web/PROVENANCE.md.", "files": 592, "method": "SHA-256 over byte-sorted <sha256>  <path> lines, LF terminated, with paths relative to web/ and prefixed src/"}
   },
   "sidecars": {
+    "deploy/release/version.json": {"source": "docklet-next/issues/362", "revision": "b11b3e70e671dd3c862b966b1d279251842c7319", "retrieved": "2026-11-09", "license": "Apache-2.0", "deviations": "Original release input metadata.", "sha256": "d0b58e195e280a3df483665688cf5ca20f66626ad11e4efe5fd8eaada8740e9e"},
+    "deploy/release/ca-bundle.json": {"source": "docklet-next/issues/362", "revision": "b11b3e70e671dd3c862b966b1d279251842c7319", "retrieved": "2026-11-09", "license": "Apache-2.0", "deviations": "Original release input metadata.", "sha256": "9f0f83e0e573f92b1971c708aadcec3c5b1af4c87263bef7abb2cf087c73d880"},
+    "LICENSES/NOTICE-Mozilla-CA.txt": {"source": "docklet-next/issues/362", "revision": "b11b3e70e671dd3c862b966b1d279251842c7319", "retrieved": "2026-11-09", "license": "MPL-2.0", "deviations": "Mozilla source-form notice and exact Alpine CA bundle source/artifact identification.", "sha256": "6a6fcdaee319daa0bf44f05ef6584edc1f587d81288b0e907a8082fe88a140da"},
+
     "backend/resources/migrations/sqlite/020_remove_webhooks.sql": {"source": "docklet-next/issues/358", "revision": "32e24a1b5260c98b6ce490ce2c1f6f50413c1e83", "retrieved": "2026-11-07", "license": "Apache-2.0", "deviations": "Original M20 removal and refusal contracts.", "sha256": "3d426fa10628f63e5f2c91a50f02d285cd752012400c775d4b701c01bc00a521"},
     "types/contract/testdata/agent-hub-v16.json": {"source": "docklet-next/issues/358", "revision": "32e24a1b5260c98b6ce490ce2c1f6f50413c1e83", "retrieved": "2026-11-07", "license": "Apache-2.0", "deviations": "Generated M20 agent contract v16 after the webhook removal.", "sha256": "0248cf891b404b0616bb1c5cfdde2190e73ee5d9c10ac6d97bfc4e4052b94dc0"},
 

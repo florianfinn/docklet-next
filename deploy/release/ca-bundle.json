@@ -1,0 +1,8 @@
+{
+  "package": "ca-certificates-bundle",
+  "version": "20260909-r0",
+  "platform": "linux/amd64",
+  "path": "/etc/ssl/certs/ca-certificates.crt",
+  "sha256": "028fca5150ee1915c4474489985d55c54fceaa680c754cc8d1301734f01b2232",
+  "notices": ["LICENSES/MPL-2.0-Mozilla.txt", "LICENSES/NOTICE-Mozilla-CA.txt"]
+}
