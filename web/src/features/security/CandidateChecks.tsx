@@ -2,7 +2,7 @@
 // Revision: cc93f43359147e8e128b2ac00bcd410c055eb423
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original candidate proof consumer and verified update integration.
+// Deviations: Original candidate proof consumer and verified update integration. M21 R1-S12W B2 N1 N3 N5: stable refresh, single refusal text, newest runs.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -55,12 +55,13 @@ export function CandidateChecks({ host, advisory, children }: { host: string; ad
     catch (error) { if (alive.current && lifetime.version() === identity) setError(codeOf(error) ?? "http.error"); }
     finally { if (alive.current && lifetime.version() === identity) setBusy(false); }
   };
-  return <CandidateContext value={{ data: read.data, unavailable: !!read.error || !read.active || read.refreshing, reload: read.reload }}>
+  // A refresh keeps the shown verdict, offer and an open confirmation.
+  return <CandidateContext value={{ data: read.data, unavailable: !!read.error || !read.active, reload: read.reload }}>
     {advisory && read.active && codeOf(read.error) !== "feature-disabled" && capability.available && <Button size="sm" variant="outline" disabled={busy} onClick={() => void check()}>{t("check")}</Button>}
     {advisory && !capability.pending && !capability.available && <p className="text-sm text-muted-foreground">{descriptor.data?.disabledReasonCode === "feature-disabled" ? <CandidateError code="feature-disabled" /> : capability.reason}</p>}
-    {!!(error || read.error) && <Alert><AlertDescription><CandidateError code={error ?? codeOf(read.error)} /></AlertDescription></Alert>}
+    {!!(error || (read.error && capability.available)) && <Alert><AlertDescription><CandidateError code={error ?? codeOf(read.error)} /></AlertDescription></Alert>}
     {read.activityId && <Button variant="link" size="sm" onClick={() => openActivity(read.activityId)}>{t("activity")}</Button>}
-    {read.data?.runs.map((run) => <p key={run.id} className="text-xs text-muted-foreground">
+    {read.data?.runs.slice(0, 3).map((run) => <p key={run.id} className="text-xs text-muted-foreground">
       {t(run.trigger)} · <CandidateRunStatus status={run.status} /> · {t("counts", run)} · <Button variant="link" size="sm" onClick={() => openActivity(run.activityId)}>{t("activity")}</Button>
     </p>)}
     {children}
@@ -89,7 +90,7 @@ export function CandidateVerdict({ host, occurrence: o, container, update: obser
     const stop = adapter.observeActionDetail?.(host, activity.id, (state) => {
       if (!live || lifetime.version() !== identity || !lifetime.active()) return;
       if (state.status !== "ready" || ["running", "queued"].includes(state.run.status)) return;
-      if (state.run.lifecycleCode === "update.candidate-changed" || state.run.error?.code === "images.errors.update_candidate-changed") {
+      if (state.run.lifecycleCode === "update.candidate-changed") {
         setError("update.candidate-changed"); setRejected(activity.digest);
       }
       setActivity(undefined); reload?.();

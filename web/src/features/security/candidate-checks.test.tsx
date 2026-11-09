@@ -111,11 +111,18 @@ it.each(["access.admin-required", "feature-disabled"])("CW-h hides check and upd
   expect(screen.queryByRole("button", { name: "Update to verified image" }) === null).toBe(true);
 });
 it("keeps ignore input and focus during a candidate result refresh", async () => {
-  const f = setup(); f.show(); await screen.findByRole("button", { name: "Update to verified image" });
+  const f = setup();
+  const run = { ...f.data.runs[0]!, id: "auto", activityId: "auto-run", status: "running" as const };
+  f.data.runs = [run];
+  const observers = new Map<string, (detail: unknown) => void>();
+  f.adapter.observeActionDetail = vi.fn((_host: string, id: string, listener: (detail: never) => void) => { observers.set(id, listener as (detail: unknown) => void); return () => {}; }) as never;
+  f.show(); await screen.findByRole("button", { name: "Update to verified image" });
   const input = screen.getByLabelText("Reason (optional)"); await userEvent.type(input, "accepted risk");
   let release!: (data: CandidateResults) => void;
   f.adapter.getVulnerabilityCandidates = vi.fn(() => new Promise<CandidateResults>((resolve) => { release = resolve; }));
-  await act(async () => { f.listeners.forEach((listener) => listener(["security"])); });
+  // A finished run re-reads; stream topics do not.
+  await waitFor(() => expect(observers.has("auto-run")).toBe(true));
+  await act(async () => { observers.get("auto-run")!({ status: "ready", run: { ...run, status: "success" } }); });
   await waitFor(() => expect(f.adapter.getVulnerabilityCandidates).toHaveBeenCalled());
   expect([(input as HTMLInputElement).value, document.activeElement === input]).toEqual(["accepted risk", true]);
   await act(async () => { release(f.data); });
@@ -142,10 +149,10 @@ it("CW-e keeps a newer candidate refetch when an older read completes last", asy
   const old = structuredClone(f.data); old.results[0]!.consumer.containerId = "old-consumer";
   const held = new Promise<CandidateResults>((resolve) => { release = resolve; });
   f.adapter.getVulnerabilityCandidates = vi.fn().mockImplementationOnce(() => held).mockResolvedValue(f.data);
-  function Probe() { const r = useCandidates("example", "CVE-2026-1234"); return <p>{r.data?.results[0]?.consumer.containerId ?? "empty"}</p>; }
+  function Probe() { const r = useCandidates("example", "CVE-2026-1234"); return <><button onClick={r.reload}>reload</button><p>{r.data?.results[0]?.consumer.containerId ?? "empty"}</p></>; }
   renderWithApp(<Probe />, f.adapter);
   await waitFor(() => expect(f.adapter.getVulnerabilityCandidates).toHaveBeenCalledTimes(1));
-  await act(async () => { f.listeners.forEach((listener) => listener(["security"])); });
+  await userEvent.click(screen.getByRole("button", { name: "reload" }));
   await screen.findByText("consumer");
   await act(async () => { release(old); await held; });
   expect(screen.queryByText("old-consumer") === null).toBe(true);

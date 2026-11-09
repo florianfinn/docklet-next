@@ -2,7 +2,7 @@
 // Revision: cc93f43359147e8e128b2ac00bcd410c055eb423
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original candidate proof consumer and verified update integration.
+// Deviations: Original candidate proof consumer and verified update integration. M21 R1-S12W B1: no topic re-reads.
 
 import { useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { isCancelledError } from "@tanstack/react-query";
@@ -19,7 +19,8 @@ export function useCandidates(host: string, advisory: string) {
   const [state, setState] = useState<{ owner: string; data?: CandidateResults; error?: unknown; revision: number }>();
   const [activity, setActivity] = useState<{ owner: string; id: string }>();
   const generation = useRef(0);
-  useEffect(() => adapter.subscribeChanges((topics) => { if (topics.includes("security") || topics.includes("hosts")) reload(); }), [adapter]);
+  // Candidate reads observe the registry, so stream topics never re-read; reads
+  // follow opening, finished runs, explicit gestures and proof expiry only.
   useEffect(() => {
     const sequence = ++generation.current, controller = new AbortController();
     if (active && advisory) void adapter.getVulnerabilityCandidates(host, { advisory }, controller.signal).then(
