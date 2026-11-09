@@ -18,7 +18,7 @@ import { mapActivityDetail } from "./http/map-dto";
 import { renderMessage, renderRun } from "./message-code";
 import { simulationStore } from "./demo/simulation";
 import { GUARDED_WIRE_ENUMS } from "./wire-catalogue.test-support";
-import { de, en, at, imageError, commandError, volumeOrNetworkError, backupStatus, backupTargets, hubBackup, restartPhase, restartFailure, historyState, prune, scanStatus, systemHint, notificationResult } from "./wire-catalogue-render.test-support";
+import { de, en, at, advisoryUsage, imageError, commandError, volumeOrNetworkError, backupStatus, backupTargets, hubBackup, restartPhase, restartFailure, historyState, prune, scanStatus, systemHint, notificationResult } from "./wire-catalogue-render.test-support";
 
 beforeEach(() => { setAppLocale("de"); simulationStore.set((state) => ({ ...state, latency: "instant", live: false })); });
 afterEach(() => { vi.restoreAllMocks(); simulationStore.reset(); });
@@ -30,6 +30,7 @@ function activityMessage(code: "runtime.wait-timeout" | "runtime.waiter-disconne
 
 // Each row names a representative property of one distinct guarded union and its real consumer.
 const proofs = [
+  { property: "VulnerabilityAdvisoryUsage.code", member: "image.usage-unavailable", key: "security.detail.usageUnavailable", render: () => advisoryUsage() },
   { property: "ActivityMessage.code", member: "runtime.wait-timeout", key: "runMessages.codes.runtime.wait-timeout", render: () => activityMessage("runtime.wait-timeout") },
   { property: "UpdaterAutoUpdatePolicy.code", member: "registry.unavailable", key: "images.errors.registry_unavailable", render: () => imageError("registry.unavailable") },
   { property: "ImageProblem.code", member: "image.pull-failed", key: "images.errors.image_pull-failed", render: () => imageError("image.pull-failed") },

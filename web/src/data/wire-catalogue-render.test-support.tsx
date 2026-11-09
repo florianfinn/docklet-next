@@ -21,6 +21,7 @@ import { NotificationsSection } from "@/features/settings/sections/Notifications
 import { HostUpdateSettings } from "@/features/settings/sections/LiveUpdatesSection";
 import HubBackupsPage from "@/features/hub-backups/HubBackupsPage";
 import { PruneVolumesDialog } from "@/features/volumes/PruneVolumesDialog";
+import { AdvisoryContent } from "@/features/security/AdvisoryContent";
 import { OverviewTab } from "@/features/security/SecurityTabs";
 import { HistorySection } from "@/shared/history/HistorySection";
 import type { RuntimeHistory } from "@/domain/history";
@@ -148,4 +149,8 @@ export async function notificationResult() {
   await userEvent.click(button);
   await waitFor(() => expect(error).toHaveBeenCalledOnce());
   return String(error.mock.calls[0]?.[0]);
+}
+
+export function advisoryUsage() {
+ return renderWithApp(<AdvisoryContent data={{key:"example",hosts:[{hostId:"example",detail:{occurrences:[],usage:{state:"unavailable",code:"image.usage-unavailable"}}}]}} hosts={new Map()} onRetry={()=>{}} />).container.textContent ?? "";
 }

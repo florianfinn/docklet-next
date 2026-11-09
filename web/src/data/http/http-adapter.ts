@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail.
 
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -53,6 +53,7 @@ import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
+import { createVulnerabilityAdvisories } from "./vulnerability-advisory";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
 import { activityDeadline } from "./activity-deadline";
@@ -81,7 +82,7 @@ const IMPLEMENTED = new Set<string>([
   ...USER_OPERATIONS,
   ...BACKUP_OPERATIONS,
   ...NOTIFICATION_SETTINGS_OPERATIONS,
-  "getSecurity",
+  "getSecurity", "getVulnerabilityAdvisory", "ignore-vulnerability", "unignore-vulnerability",
   "runScan",
   "setScanEnabled",
   "getScanSettings",
@@ -803,6 +804,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listStacks: (...args) => principal?.isAdmin === false ? userInventory.listStacks(...args) : inventory.listStacks(...args),
     getStack: (id) => principal?.isAdmin === false ? userInventory.getStack(id) : inventory.getStack(id),
     ...resourceReads,
+    ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
     ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...backups.api,

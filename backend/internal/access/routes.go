@@ -153,6 +153,7 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace", "get-volume-workspace"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace/file", "get-volume-workspace-file"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace/file/download", "download-volume-workspace-file"},
+	{"GET", "/environments/{id}/vulnerabilities/advisories/{key}", "get-vulnerability-advisory"},
 	{"GET", "/environments/{id}/vulnerabilities/all", "list-environment-vulnerabilities"},
 	{"GET", "/environments/{id}/vulnerabilities/export", "export-environment-vulnerabilities"},
 	{"GET", "/environments/{id}/vulnerabilities/ignored", "list-ignored-vulnerabilities"},

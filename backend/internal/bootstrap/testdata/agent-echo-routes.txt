@@ -99,6 +99,7 @@ GET /api/environments/:id/volumes/binds
 GET /api/environments/:id/volumes/counts
 GET /api/environments/:id/volumes/prune
 GET /api/environments/:id/volumes/sizes
+GET /api/environments/:id/vulnerabilities/advisories/:key
 GET /api/environments/:id/vulnerabilities/all
 GET /api/environments/:id/vulnerabilities/export
 GET /api/environments/:id/vulnerabilities/ignored

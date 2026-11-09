@@ -27,7 +27,7 @@ var adapterOperationIDs = []string{
 	"getUpdateBaseline", "listRestorePoints", "listUpdatePolicies", "restoreContainerImage", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply",
 	"checkAllUpdates", "checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
-	"getScanSettings", "saveScanSettings", "cancelScan",
+	"getScanSettings", "saveScanSettings", "cancelScan", "ignore-vulnerability", "unignore-vulnerability",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
 	"openContainerShell", "getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
@@ -78,9 +78,12 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "access.admin-required"
 			}
-		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan":
+		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan", "ignore-vulnerability", "unignore-vulnerability":
 			ref := descriptors[i].ResourceRef
 			grant := authz.PermVulnsRead
+			if descriptors[i].OperationID == "ignore-vulnerability" || descriptors[i].OperationID == "unignore-vulnerability" {
+				grant = authz.PermVulnsManage
+			}
 			if descriptors[i].OperationID == "runScan" {
 				grant = authz.PermVulnsScan
 			}

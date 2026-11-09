@@ -204,6 +204,7 @@ var Rules = map[string]Rule{
 	"get-volume-usage-counts":                      Rule{Kind: Admin},
 	"get-volume-workspace":                         Rule{Kind: Admin},
 	"get-volume-workspace-file":                    Rule{Kind: Admin},
+	"get-vulnerability-advisory":                   Rule{Kind: Admin},
 	"get-vulnerability-scan-run":                   Rule{Kind: Admin},
 	"get-vulnerability-scanner-status":             Rule{Kind: Admin},
 	"getAppVersion":                                Rule{Kind: Public},

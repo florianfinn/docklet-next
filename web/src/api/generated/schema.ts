@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: f8129a6845bc1e4f8c98ab5cafa91e8ba4ee12f3debe628bc11c315d901e1fdd
+// Revision: fc45b1ff029ac0af544f708f928bf5a643844d4f0d1a2fdeb70190ed1b39441e
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4244,6 +4244,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/vulnerabilities/advisories/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read all occurrences of an advisory */
+        get: operations["get-vulnerability-advisory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/vulnerabilities/all": {
         parameters: {
             query?: never;
@@ -7388,6 +7405,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["VulnerabilityAcceptedScan"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVulnerabilityAdvisoryDetail: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityAdvisoryDetail.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityAdvisoryDetail"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -12965,6 +12994,104 @@ export interface components {
         };
         VulnerabilityAcceptedScan: {
             activityId: string;
+        };
+        VulnerabilityAdvisoryContainer: {
+            id: string;
+            name: string;
+            project?: string;
+            projectId?: string;
+            service?: string;
+            state: string;
+        };
+        VulnerabilityAdvisoryDetail: {
+            advisory?: components["schemas"]["VulnerabilityAdvisoryMetadata"];
+            nextCursor?: string;
+            occurrences: components["schemas"]["VulnerabilityAdvisoryOccurrence"][];
+            usage: components["schemas"]["VulnerabilityAdvisoryUsage"];
+        };
+        VulnerabilityAdvisoryMetadata: {
+            class?: string;
+            cvss?: components["schemas"]["VulnerabilityCVSSInfo"];
+            description?: string;
+            /** Format: double */
+            epss?: number;
+            fixedVersion?: string;
+            installedVersion: string;
+            kev?: boolean;
+            /** Format: date-time */
+            lastModifiedDate?: string;
+            pkgName: string;
+            /** Format: date-time */
+            publishedDate?: string;
+            references?: string[] | null;
+            /** Format: double */
+            risk?: number;
+            /** @enum {string} */
+            riskBand?: "none" | "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            sourceOccurrence: components["schemas"]["VulnerabilityAdvisoryOccurrenceKey"];
+            title?: string;
+            type?: string;
+            vulnerabilityId: string;
+        };
+        VulnerabilityAdvisoryOccurrence: {
+            class?: string;
+            containers: components["schemas"]["VulnerabilityAdvisoryContainer"][];
+            cvss?: components["schemas"]["VulnerabilityCVSSInfo"];
+            description?: string;
+            /** Format: double */
+            epss?: number;
+            fixedVersion?: string;
+            ignoreId?: string;
+            ignored: boolean;
+            imageId: string;
+            imageRefs: string[];
+            installedVersion: string;
+            kev?: boolean;
+            /** Format: date-time */
+            lastCompletedScanAt: string;
+            /** Format: date-time */
+            lastModifiedDate?: string;
+            /** @enum {string} */
+            latestAttemptStatus: "pending" | "scanning" | "completed" | "failed";
+            pkgName: string;
+            /** Format: date-time */
+            publishedDate?: string;
+            references?: string[] | null;
+            /** Format: double */
+            risk?: number;
+            /** @enum {string} */
+            riskBand?: "none" | "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            title?: string;
+            type?: string;
+            updates: components["schemas"]["VulnerabilityAdvisoryUpdate"][];
+            vulnerabilityId: string;
+        };
+        VulnerabilityAdvisoryOccurrenceKey: {
+            class: string;
+            imageId: string;
+            installed: string;
+            package: string;
+            type: string;
+        };
+        VulnerabilityAdvisoryUpdate: {
+            /** Format: date-time */
+            checkedAt?: string;
+            containerId: string;
+            projectId?: string;
+            service?: string;
+            /** @enum {string} */
+            state: "none" | "available" | "unknown";
+            version?: string;
+        };
+        VulnerabilityAdvisoryUsage: {
+            /** @enum {string} */
+            code?: "image.usage-unavailable";
+            /** @enum {string} */
+            state: "ok" | "unavailable";
         };
         VulnerabilityBulkIgnoreResponse: {
             /** Format: int64 */
@@ -33032,6 +33159,123 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-vulnerability-advisory": {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityAdvisoryDetail"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
