@@ -260,7 +260,8 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if i := strings.IndexAny(scanSuffix, "?#"); i >= 0 {
 		scanSuffix = scanSuffix[:i]
 	}
-	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(scanSuffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
+	// Only installed-image scans carry the hub's unfixed policy; candidate scans are always unfiltered.
+	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(scanSuffix, "/scan") && !strings.HasSuffix(scanSuffix, "/candidates/scan") && m.vulnerabilityIgnoreUnfixed != nil {
 		if handled, err := m.canonicalizeVulnerabilityScan(c); handled {
 			return err
 		}
