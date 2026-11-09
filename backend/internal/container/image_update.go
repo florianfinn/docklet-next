@@ -152,14 +152,17 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if expected == "" || expected != checked.LatestDigest {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
+		// A verified update pulls the scanned digest, but the container keeps its
+		// tag so later update checks and offers still apply to it.
+		pullRef := ref
 		if verified != "" {
 			named, err := reference.ParseNormalizedNamed(ref)
 			if err != nil {
 				return imageDTO.Failure("update.invalid-target", 400)
 			}
-			ref = reference.TrimNamed(named).String() + "@" + verified
+			pullRef = reference.TrimNamed(named).String() + "@" + verified
 		}
-		options, err := s.containerImages.PullOptionsWithAuth(ctx, ref, nil)
+		options, err := s.containerImages.PullOptionsWithAuth(ctx, pullRef, nil)
 		if err != nil {
 			return err
 		}
@@ -179,7 +182,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if _, err := s.imageUpdateInstance(pullCtx, c, id, name); err != nil {
 			return err
 		}
-		reader, err := c.ImagePull(pullCtx, ref, options)
+		reader, err := c.ImagePull(pullCtx, pullRef, options)
 		if err != nil {
 			return imageDTO.Neutral(err, "image.pull-failed", 502)
 		}
@@ -192,7 +195,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if err != nil {
 			return err
 		}
-		pulled, err := c.ImageInspect(ctx, ref)
+		pulled, err := c.ImageInspect(ctx, pullRef)
 		if err != nil {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
@@ -201,6 +204,11 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			return imageDTO.Failure("update.target-changed", 409)
 		}
 		expected = pulled.ID
+		if pullRef != ref {
+			if _, err := c.ImageTag(ctx, client.ImageTagOptions{Source: expected, Target: ref}); err != nil {
+				return imageDTO.Neutral(err, "image.tag-failed", 502)
+			}
+		}
 		if _, err := s.imageUpdateInstance(ctx, c, id, name); err != nil {
 			return err
 		}

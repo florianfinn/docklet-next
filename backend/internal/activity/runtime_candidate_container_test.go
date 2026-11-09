@@ -101,6 +101,8 @@ func TestVerifiedContainerDirectEdgeMovedAndPinned(t *testing.T) {
 					require.True(t, snapshot.ImageLifecycle.Verified)
 					require.Equal(t, 1, daemon.pulls)
 					require.Equal(t, 1, daemon.creates)
+					// The pull is pinned, but the container keeps its tag for later checks.
+					require.Equal(t, []string{daemon.ref, daemon.ref}, []string{daemon.createdImage, daemon.tagTarget})
 				}
 			})
 		}
