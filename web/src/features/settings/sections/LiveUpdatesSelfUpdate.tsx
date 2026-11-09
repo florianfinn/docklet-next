@@ -45,7 +45,7 @@ export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?:
       {state.candidate && <p>{t("targetVersion", { version: state.candidate.version })}</p>}
       {op && <p>{all(SELF_UPDATE_PHASE_KEYS[op.phase])}{op.outcome && <> · {all(SELF_UPDATE_OUTCOME_KEYS[op.outcome])}</>}{opCodeKey && <> · {all(opCodeKey)}</>}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={!enabled} onClick={() => setConfirm(state.candidate!.version)}>{title}</Button>
+        <Button type="button" variant="outline" disabled={!enabled} aria-label={title} onClick={() => setConfirm(state.candidate!.version)}>{t(hostId === "0" ? "hub" : "agent")}</Button>
         <Button type="button" variant="outline" disabled={query.isFetching} aria-label={name ? t("checkFor", { name }) : undefined} onClick={() => { void query.refetch(); }}>{t("check")}</Button>
         {runId && <Button type="button" variant="outline" onClick={() => openActivity(runId)}>{t("viewRun")}</Button>}
       </div>

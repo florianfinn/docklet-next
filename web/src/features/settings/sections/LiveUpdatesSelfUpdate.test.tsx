@@ -113,9 +113,17 @@ it("explains a changed target while confirmation is open and sends no stale star
 it("names the host in agent controls and the confirmation", async () => {
   mount("en-US", check, { hostId: "example", name: "Example host" }); const user = userEvent.setup();
   const button = await screen.findByRole("button", { name: "Update agent on Example host" });
+  expect(button.textContent === "Update agent").toBe(true);
   expect(screen.getByRole("button", { name: "Check again for Example host" }) !== null).toBe(true);
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); await user.click(button);
   expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Update agent on Example host" }) !== null).toBe(true);
+});
+
+it("gives two host cards distinct region names", async () => {
+  mount("en-US", check, { hostId: "example", name: "Example host" });
+  mount("en-US", check, { hostId: "second", name: "Second host" });
+  expect(!!await screen.findByRole("region", { name: "Update agent on Example host" })).toBe(true);
+  expect(!!screen.getByRole("region", { name: "Update agent on Second host" })).toBe(true);
 });
 
 it("checks again on its own only while an operation is unsettled", async () => {
