@@ -29,13 +29,15 @@ func TestSystemImageHintsConsumeTheRealAppVersionImageMetadata(t *testing.T) {
 	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		path := strings.TrimPrefix(r.URL.Path, "/v1.49")
+		// Without a container hostname (CI runners) self-detection lists by label,
+		// so the list path must not fall into the inspect case.
 		switch {
+		case path == "/containers/json":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"Id": strings.Repeat("b", 64), "Names": []string{"/docklet-agent"}}})
 		case strings.HasPrefix(path, "/containers/") && strings.HasSuffix(path, "/json"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"Id": strings.Repeat("b", 64), "Name": "/docklet-agent", "Image": digest, "Config": map[string]any{"Image": repo + ":1.0.0@" + digest}})
 		case strings.HasPrefix(path, "/images/") && strings.HasSuffix(path, "/json"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"Id": digest, "RepoDigests": []string{repo + "@" + digest}})
-		case path == "/containers/json":
-			_ = json.NewEncoder(w).Encode([]map[string]any{{"Id": strings.Repeat("b", 64), "Names": []string{"/docklet-agent"}}})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
