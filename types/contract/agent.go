@@ -7,4 +7,4 @@ package contract
 
 const AgentHubVersion = 17
 const MinimumAgentVersion = 17
-const AgentHubFingerprint = "f7b5499f6c2a34991511db8cf49badfd645eab23168d2c45cda4716b6fb154e1"
+const AgentHubFingerprint = "221ff863722bf4dab6cca4e019f5ba5a8fb66b097a7e4a150ddee1e760379450"

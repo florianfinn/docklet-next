@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding.
 
 package access
 
@@ -154,6 +154,8 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace/file", "get-volume-workspace-file"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace/file/download", "download-volume-workspace-file"},
 	{"GET", "/environments/{id}/vulnerabilities/advisories/{key}", "get-vulnerability-advisory"},
+	{"GET", "/environments/{id}/vulnerabilities/candidates", "get-vulnerability-candidates"},
+	{"POST", "/environments/{id}/vulnerabilities/candidates/scan", "scan-vulnerability-candidates"},
 	{"GET", "/environments/{id}/vulnerabilities/all", "list-environment-vulnerabilities"},
 	{"GET", "/environments/{id}/vulnerabilities/export", "export-environment-vulnerabilities"},
 	{"GET", "/environments/{id}/vulnerabilities/ignored", "list-ignored-vulnerabilities"},

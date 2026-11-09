@@ -8,6 +8,9 @@ import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "candidate_unavailable": enBackend.errors.candidate.unavailable,
+  "candidate_deferred": enBackend.errors.candidate.deferred,
+  "update_candidate-changed": enBackend.errors.update["candidate-changed"],
   "update_self-not-compose": "This installation is not managed by Compose. Use the manual update commands.",
   "update_self-unsupported-layout": "This Compose layout cannot be replayed safely. Use the manual update commands.",
   "update_self-custom-image": "This installation uses a custom or floating image. Update it manually.",

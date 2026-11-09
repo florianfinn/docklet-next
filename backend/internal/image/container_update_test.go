@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original fresh-check and classic/containerd native identity bridge proofs.
+// Deviations: Original fresh-check and classic/containerd native identity bridge proofs. M21 #438: candidate scans and verified manifest binding.
 
 package image
 
@@ -157,6 +157,11 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expected, id)
 			require.Equal(t, "linux/amd64", platform)
+			native, observedPlatform, manifest, err := s.CandidateContainerImage(t.Context(), inspected, targetRef)
+			require.NoError(t, err)
+			require.Equal(t, expected, native)
+			require.Equal(t, platform, observedPlatform)
+			require.Equal(t, newManifest.String(), manifest, "a manifest is never a classic config/native key")
 		})
 	}
 }

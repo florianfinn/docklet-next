@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original prerelease archive refusal and forward migration through the real restore receiver.
+// Deviations: M21 #438 includes current schema 2 before the synthetic forward 003. Original prerelease archive refusal and forward migration through the real restore receiver.
 
 package backup
 
@@ -128,12 +128,14 @@ func TestPrereleaseArchiveRefusedByUploadAndOfflineRestore(t *testing.T) {
 
 func forwardRestoreSource(t *testing.T) fs.FS {
 	t.Helper()
-	data, err := resources.FS.ReadFile("migrations/sqlite/001_baseline.sql")
-	require.NoError(t, err)
-	return fstest.MapFS{
-		"001_baseline.sql": &fstest.MapFile{Data: data},
-		"002_fixture.sql":  &fstest.MapFile{Data: []byte("-- +goose Up\nCREATE TABLE forward_restore_witness(value TEXT);\nINSERT INTO forward_restore_witness SELECT value FROM settings WHERE key='forward-restore';\n")},
+	files := fstest.MapFS{}
+	for _, name := range []string{"001_baseline.sql", "002_candidate_scans.sql"} {
+		data, err := resources.FS.ReadFile("migrations/sqlite/" + name)
+		require.NoError(t, err)
+		files[name] = &fstest.MapFile{Data: data}
 	}
+	files["003_fixture.sql"] = &fstest.MapFile{Data: []byte("-- +goose Up\nCREATE TABLE forward_restore_witness(value TEXT);\nINSERT INTO forward_restore_witness SELECT value FROM settings WHERE key='forward-restore';\n")}
+	return files
 }
 
 func TestRestoreAppliesForwardMigrationFromProcessSource(t *testing.T) {
@@ -162,7 +164,7 @@ func TestRestoreAppliesForwardMigrationFromProcessSource(t *testing.T) {
 	require.Equal(t, "saved-from-archive", value)
 	var version int64
 	require.NoError(t, target.db.Raw("SELECT max(version_id) FROM goose_db_version").Scan(&version).Error)
-	require.EqualValues(t, 2, version)
+	require.EqualValues(t, 3, version)
 	// Newer supported archives must use the process source at the upload receiver too.
 	name, _, err := fixtureArchive(t, target.db, target.cfg, "forward", 2<<30)
 	require.NoError(t, err)
@@ -171,7 +173,7 @@ func TestRestoreAppliesForwardMigrationFromProcessSource(t *testing.T) {
 	defer file.Close()
 	_, info, err := service.receiveArchive(t.Context(), "forward-upload", file)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, info.migration)
+	require.EqualValues(t, 3, info.migration)
 }
 
 func TestOfflineRestoreRefusesPrereleaseDestinationWithoutWrites(t *testing.T) {

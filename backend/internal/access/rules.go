@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding.
 
 package access
 
@@ -205,6 +205,8 @@ var Rules = map[string]Rule{
 	"get-volume-workspace":                         Rule{Kind: Admin},
 	"get-volume-workspace-file":                    Rule{Kind: Admin},
 	"get-vulnerability-advisory":                   Rule{Kind: Admin},
+	"get-vulnerability-candidates":                 Rule{Kind: Admin},
+	"scan-vulnerability-candidates":                Rule{Kind: Admin},
 	"get-vulnerability-scan-run":                   Rule{Kind: Admin},
 	"get-vulnerability-scanner-status":             Rule{Kind: Admin},
 	"getAppVersion":                                Rule{Kind: Public},

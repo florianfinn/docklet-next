@@ -2,6 +2,7 @@ import type { enBackend } from "./en";
 
 export const deBackend: typeof enBackend = {
   errors: {
+    "candidate": {"unavailable": "Der Kandidat konnte nicht aus der Registry geprüft werden.", "deferred": "Dieser Kandidat wurde noch nicht geprüft."},
     "agent": {"unavailable": "Der Host ist nicht erreichbar. Prüfe die Verbindung."},
     "container": {"origin-locked": "Docklet verwaltet keine Updates für diesen Container.", "recreate-ambiguous": "Der Ersatz-Container konnte nicht eindeutig ermittelt werden.", "recreate-recovered": "Die Container-Neuerstellung wurde wiederhergestellt."},
     "deploy": {"point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen."},
@@ -96,6 +97,7 @@ export const deBackend: typeof enBackend = {
       "deploy-failed": "Die Bereitstellung zur Wiederherstellung ist fehlgeschlagen. Das Teilergebnis vor einem weiteren Wiederherstellungsversuch prüfen."
     },
     "update": {
+      "candidate-changed": "Das Kandidaten-Image hat sich geändert. Prüfe es vor dem Update erneut.",
       "service-coupled": "Dieser Dienst muss zusammen mit seinem Stack aktualisiert werden.",
       "permission-denied": "Die gespeicherte Identität hat nicht mehr die erforderlichen Berechtigungen.",
       "schedule-owner-unset": "Speichere den Host-Zeitplan mit einer berechtigten Identität, bevor du die Jobs aktivierst.",

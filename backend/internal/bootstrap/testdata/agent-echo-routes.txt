@@ -101,6 +101,7 @@ GET /api/environments/:id/volumes/prune
 GET /api/environments/:id/volumes/sizes
 GET /api/environments/:id/vulnerabilities/advisories/:key
 GET /api/environments/:id/vulnerabilities/all
+GET /api/environments/:id/vulnerabilities/candidates
 GET /api/environments/:id/vulnerabilities/export
 GET /api/environments/:id/vulnerabilities/ignored
 GET /api/environments/:id/vulnerabilities/image-options
@@ -192,6 +193,7 @@ POST /api/environments/:id/volumes/backups/targets/:targetId/test
 POST /api/environments/:id/volumes/backups/targets/probe
 POST /api/environments/:id/volumes/binds/size
 POST /api/environments/:id/volumes/prune
+POST /api/environments/:id/vulnerabilities/candidates/scan
 POST /api/environments/:id/vulnerabilities/ignore
 POST /api/environments/:id/vulnerabilities/ignore/bulk
 POST /api/environments/:id/vulnerabilities/scan

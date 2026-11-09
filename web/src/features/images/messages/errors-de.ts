@@ -8,6 +8,9 @@ import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "candidate_unavailable": deBackend.errors.candidate.unavailable,
+  "candidate_deferred": deBackend.errors.candidate.deferred,
+  "update_candidate-changed": deBackend.errors.update["candidate-changed"],
   "update_self-not-compose": "Diese Installation wird nicht mit Compose verwaltet. Verwende die manuellen Update-Befehle.",
   "update_self-unsupported-layout": "Diese Compose-Konfiguration lässt sich nicht sicher übernehmen. Verwende die manuellen Update-Befehle.",
   "update_self-custom-image": "Diese Installation verwendet ein eigenes Image oder einen veränderlichen Tag. Aktualisiere sie manuell.",
