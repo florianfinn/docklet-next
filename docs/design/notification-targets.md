@@ -86,7 +86,9 @@ homelab tool with normally one administrator. Extends [notification delivery](no
 
 One English text per outbox event; title, email subject and first line are the same:
 
-- `deploy_failed`: "Deployment failed: stack {stack} on {host}" + reason phrase;
+- `deploy_failed`: "Deployment failed: stack {stack} on {host}" + reason phrase; a failed
+  standalone-container image update or restore reads "Update failed: container {container}
+  on {host}" (restore: "Restore failed: …") and links to Containers;
 - `backup_failed`: "Backup failed: volume {volume} on {host}" (restore: "Restore failed: …");
 - `host_offline`: "Host {host} is offline" / "Host {host} is back online";
 - `auto_heal`: "Auto Heal restarted {container} on {host}" / "Auto Heal could not restart …" /

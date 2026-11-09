@@ -369,7 +369,7 @@ export const deSettings: typeof enSettings = {
     noEvents: "Keine Ereignisse gewählt",
     eventNames: {
       containerUnhealthy: "Container ungesund",
-      deployFailed: "Deploy fehlgeschlagen",
+      deployFailed: "Deploy oder Update fehlgeschlagen",
       hostOffline: "Host offline oder wieder online",
       backupFailed: "Backup oder Wiederherstellung fehlgeschlagen",
       autoHeal: "Auto Heal",

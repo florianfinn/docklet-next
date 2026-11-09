@@ -168,3 +168,39 @@ func TestRemoteDeployInterruptedByAgentRestartStaysSilent(t *testing.T) {
 	require.NoError(t, f.store.svc.db.Find(&rows).Error)
 	require.Empty(t, rows)
 }
+
+// A container image update or restore failure notifies like a stack update, with
+// the container name; other container operations and silent endings stay quiet.
+func TestContainerImageFailureNotifiesOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name, operation string
+		silent, want    bool
+	}{
+		{"update", "update-container", false, true},
+		{"restore", "restore-container-image", false, true},
+		{"update interrupted by restart", "update-container", true, false},
+		{"other container operation", "restart-container", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := b1Fixture(t)
+			row := &RuntimeReceipt{RunID: "example-run", EnvironmentID: "0", OperationID: new(tc.operation), TargetKind: new("container"), TargetName: new("app")}
+			for range 2 {
+				require.NoError(t, f.store.svc.db.Transaction(func(tx *gorm.DB) error {
+					return runtimeNotifyFailureTx(tx, f.store.now, row, string(dto.CodeRuntimeFailed), tc.silent, false)
+				}))
+			}
+			var rows []notificationoutbox.Row
+			require.NoError(t, f.store.svc.db.Find(&rows).Error)
+			if !tc.want {
+				require.Empty(t, rows)
+				return
+			}
+			require.Len(t, rows, 1)
+			require.Equal(t, "deploy_failed", rows[0].Event)
+			require.Equal(t, "deploy:0:example-run", rows[0].DedupKey)
+			require.Equal(t, "app", rows[0].Payload["container"])
+			require.Equal(t, tc.operation, rows[0].Payload["operation"])
+			require.NotContains(t, rows[0].Payload, "stack")
+		})
+	}
+}

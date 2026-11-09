@@ -368,7 +368,7 @@ export const enSettings = {
     noEvents: "No events selected",
     eventNames: {
       containerUnhealthy: "Container unhealthy",
-      deployFailed: "Deploy failed",
+      deployFailed: "Deploy or update failed",
       hostOffline: "Host offline or back online",
       backupFailed: "Backup or restore failed",
       autoHeal: "Auto Heal",
