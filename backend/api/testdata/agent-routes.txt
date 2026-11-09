@@ -96,6 +96,7 @@ GET /environments/{id}/volumes/{volumeName}/usage
 GET /environments/{id}/volumes/{volumeName}/workspace
 GET /environments/{id}/volumes/{volumeName}/workspace/file
 GET /environments/{id}/volumes/{volumeName}/workspace/file/download
+GET /environments/{id}/vulnerabilities/advisories/{key}
 GET /environments/{id}/vulnerabilities/all
 GET /environments/{id}/vulnerabilities/export
 GET /environments/{id}/vulnerabilities/ignored

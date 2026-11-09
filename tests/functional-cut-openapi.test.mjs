@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["GET /environments/{id}/vulnerabilities/advisories/{key}", "get-vulnerability-advisory"],
   ["POST /stack-import", "import-stack-source"],
   ["PUT /environments/{id}/notifications/settings/{targetId}", "update-notification-settings"],
   ["GET /environments/{id}/notifications/settings/{targetId}", "get-notification-settings"],

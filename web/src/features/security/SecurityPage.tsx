@@ -1,5 +1,5 @@
 import { Activity, AlertTriangle, Package, ScanSearch, Shield } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -24,6 +24,9 @@ import { Spinner } from "@/shared/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 import { ScanScheduleLink, ScanToggle } from "./ScanControls";
+import { advisoryKey } from "@/data/vulnerability-advisory";
+import { AdvisorySheet } from "./AdvisorySheet";
+import { occurrenceSelectionKey } from "./advisory-selection";
 import { weightOf } from "./severity";
 import { FindingsTab, ImagesTab, OverviewTab } from "./SecurityTabs";
 
@@ -65,8 +68,9 @@ export default function SecurityPage() {
   const animate = useMotionEnabled();
   const runs = useActionRuns();
   const [params, setParams] = useSearchParams();
+  const origin = useRef<HTMLElement | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
-  const tab = (["overview", "findings", "images"].includes(params.get("tab") ?? "") ? params.get("tab") : "overview") as "overview" | "findings" | "images";
+  const tab = (["overview", "findings", "images"].includes(params.get("tab") ?? (params.has("finding") ? "findings" : "")) ? (params.get("tab") ?? "findings") : "overview") as "overview" | "findings" | "images";
   const scan = runs.find((r) => r.kind === "scan" && r.status === "running" && isHostVisible(hosts.selection, r.hostId ?? "0"));
 
   const data = useMemo(() => {
@@ -143,13 +147,17 @@ export default function SecurityPage() {
             />
           </TabsContent>
           <TabsContent value="findings">
-            <FindingsTab findings={data.findings} hosts={hosts.byId} highlight={highlight} />
+            <FindingsTab findings={data.findings} hosts={hosts.byId} highlight={highlight} onOpen={(f, element) => {
+              origin.current = element;
+              setParams((current) => { const p = new URLSearchParams(current); p.set("finding", advisoryKey(f.id)); p.set("occ", occurrenceSelectionKey({ host: f.hostId, imageId: f.imageId ?? "", package: f.pkg, installed: f.installed, class: (f as { class?: string }).class ?? "", type: (f as { type?: string }).type ?? "" })); return p; });
+            }} />
           </TabsContent>
           <TabsContent value="images">
             <ImagesTab images={data.images} stacks={stacks.data ?? []} hosts={hosts.byId} containers={containers.data} />
           </TabsContent>
         </Tabs>
       )}
+      <AdvisorySheet finding={params.get("finding")} selected={params.get("occ")} hostIds={hosts.selection} hosts={hosts.byId} origin={origin} onClose={() => setParams((current) => { const p = new URLSearchParams(current); if (!p.has("tab")) p.set("tab", tab); p.delete("finding"); p.delete("occ"); return p; })} />
     </>
   );
 }
