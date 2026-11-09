@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: fea13dd80333f3b2f609210d21a550265be9d9525de2f76ee8b7a018da08264a
+// Revision: d2686d04e42bced428b5899bcdf0ba66aaaf87fe861d7fda8c1eafcbea085b09
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1606,26 +1606,6 @@ export interface paths {
          * @description Returns the dashboard first-paint snapshot in a single response
          */
         get: operations["get-dashboard"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/deployment": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get deployment snippets
-         * @description Get Docker run and compose snippets for environment deployment
-         */
-        get: operations["getDeploymentSnippets"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6523,18 +6503,6 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        BaseApiResponseDeploymentSnippet: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseDeploymentSnippet.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["DeploymentSnippet"];
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
         BaseApiResponseEnvironmentAgentPairResponse: {
             /**
              * Format: uri
@@ -8737,38 +8705,6 @@ export interface components {
             restart_policy?: components["schemas"]["RestartPolicy"];
             rollback_config?: components["schemas"]["UpdateConfig"];
             update_config?: components["schemas"]["UpdateConfig"];
-        };
-        DeploymentSnippet: {
-            /** @description Docker compose YAML snippet */
-            dockerCompose: string;
-            /** @description Docker run command snippet */
-            dockerRun: string;
-            /** @description Optional Arcane-generated mTLS deployment assets for edge agents */
-            mtls?: components["schemas"]["DeploymentSnippetMTLS"];
-        };
-        DeploymentSnippetFile: {
-            /** @description Container mount path expected by the mTLS snippet */
-            containerPath: string;
-            /** @description PEM file contents. Omitted for sensitive files such as private keys; use downloadUrl instead. */
-            content?: string;
-            /** @description Pairing-permission endpoint to download this file when content is withheld */
-            downloadUrl?: string;
-            /** @description Suggested filename */
-            name: string;
-            /** @description Suggested file mode */
-            permissions: string;
-            /** @description True when this file is sensitive and must be fetched via downloadUrl */
-            sensitive?: boolean;
-        };
-        DeploymentSnippetMTLS: {
-            /** @description Docker compose snippet using Arcane-generated mTLS assets */
-            dockerCompose: string;
-            /** @description Docker run snippet using Arcane-generated mTLS assets */
-            dockerRun: string;
-            /** @description Generated PEM files to place on the edge host */
-            files: components["schemas"]["DeploymentSnippetFile"][] | null;
-            /** @description Suggested host directory containing the generated PEM files */
-            hostDirHint: string;
         };
         DetailSummaryConfigStruct: {
             argsEscaped?: boolean;
@@ -19850,47 +19786,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseDashboardSnapshot"];
-                };
-            };
-            /** @description Invalid request path */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    getDeploymentSnippets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseDeploymentSnippet"];
                 };
             };
             /** @description Invalid request path */

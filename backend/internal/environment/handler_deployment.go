@@ -14,11 +14,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/version"
 )
 
-// GetDeploymentSnippets refuses stored-token reads; the browser generates installers.
-func (h *EnvironmentHandler) GetDeploymentSnippets(ctx context.Context, input *GetDeploymentSnippetsInput) (*handlerutil.Out[DeploymentSnippet], error) {
-	return nil, huma.Error410Gone("Installation credentials are returned only on host creation or token rotation")
-}
-
 // GetEnvironmentVersion returns the version of a remote environment.
 func (h *EnvironmentHandler) GetEnvironmentVersion(ctx context.Context, input *GetEnvironmentVersionInput) (*handlerutil.Out[version.Info], error) {
 	info, err := h.environmentService.CheckAgentCompatibility(ctx, input.ID)

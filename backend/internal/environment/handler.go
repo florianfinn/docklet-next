@@ -108,16 +108,6 @@ type PairEnvironmentInput struct {
 	XAPIKey string `header:"X-API-Key" doc:"API key for environment pairing"`
 }
 
-type DeploymentSnippet struct {
-	DockerRun     string                 `json:"dockerRun" doc:"Docker run command snippet"`
-	DockerCompose string                 `json:"dockerCompose" doc:"Docker compose YAML snippet"`
-	MTLS          *DeploymentSnippetMTLS `json:"mtls,omitempty" doc:"Optional Arcane-generated mTLS deployment assets for edge agents"`
-}
-
-type GetDeploymentSnippetsInput struct {
-	ID string `path:"id" doc:"Environment ID"`
-}
-
 type GetEnvironmentVersionInput struct {
 	ID string `path:"id" doc:"Environment ID"`
 }

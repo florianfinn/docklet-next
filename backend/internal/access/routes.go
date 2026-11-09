@@ -78,7 +78,6 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/containers/{containerId}/logs/download", "download-container-logs"},
 	{"GET", "/environments/{id}/containers/{containerId}/processes", "get-container-processes"},
 	{"GET", "/environments/{id}/dashboard", "get-dashboard"},
-	{"GET", "/environments/{id}/deployment", "getDeploymentSnippets"},
 	{"GET", "/environments/{id}/deployment/mtls/bundle", "downloadEnvironmentMTLSBundle"},
 	{"GET", "/environments/{id}/deployment/mtls/{fileName}", "downloadEnvironmentMTLSFile"},
 	{"GET", "/environments/{id}/diagnostics/actors", "get-environment-actor-diagnostics"},

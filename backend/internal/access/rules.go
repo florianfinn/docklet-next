@@ -209,7 +209,6 @@ var Rules = map[string]Rule{
 	"getAppVersion":                                Rule{Kind: Public},
 	"getContainerRegistry":                         Rule{Kind: Admin},
 	"getContainerRegistryPullUsage":                Rule{Kind: Admin},
-	"getDeploymentSnippets":                        Rule{Kind: Admin},
 	"getEnvironment":                               Rule{Kind: Admin},
 	"getEnvironmentAgentRestart":                   Rule{Kind: Admin},
 	"getEnvironmentVersion":                        Rule{Kind: Admin},

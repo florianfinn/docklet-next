@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original installer security and shell regression tests.
+// Deviations: Original installer security and shell regression tests. #245 restart policy moved here with the backend snippet removal (#362).
 
 // @vitest-environment node
 import { execFileSync, spawnSync } from "node:child_process";
@@ -198,4 +198,10 @@ it("D5 generates BusyBox-compatible preflight for every installer entry point", 
   }
   expect(a.readme).toContain("BusyBox is supported");
   expect(a.readme).not.toContain("realpath");
+});
+
+// #245: a fatal actor-host loss exits the agent; only the shipped restart policy brings it back.
+it.each(["direct", "edge"] as const)("keeps the restart policy in the %s installation file", (connection) => {
+  const compose = buildInstallArtifacts({ ...plan, connection }).compose;
+  expect(compose).toMatch(/^ {4}restart: unless-stopped$/m);
 });

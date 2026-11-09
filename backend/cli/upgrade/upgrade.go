@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; explicit --image required (no implicit latest), Docklet role-label detection and Compose drift warning (#362).
 
 package upgrade
 
@@ -23,9 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.getarcane.app/docker"
 	"go.getarcane.app/docker/compat"
-	kit "go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/cgroup"
-	"go.getarcane.app/updater/labels"
 	"go.getarcane.app/updater/refs"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
@@ -37,23 +35,31 @@ var (
 	targetImage   string
 	pullImageRef  string
 	autoDetect    bool
+	targetRole    string
 )
 
-// UpgradeCmd recreates a running Arcane container with a newer image while
-// preserving its configuration.
+// dockletSystemLabel and dockletHelperLabel identify Docklet's own containers
+// and its short-lived helpers, which are never upgrade targets.
+const (
+	dockletSystemLabel = "io.docklet.system"
+	dockletHelperLabel = "io.docklet.helper"
+	composeProjectKey  = "com.docker.compose.project"
+)
+
+// UpgradeCmd recreates a running Docklet Next hub or agent container with an
+// explicitly given image while preserving its configuration.
 var UpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Upgrade an Arcane container to the latest version",
-	Long: `Upgrade an Arcane container by pulling the latest image and recreating the container.
-This command should be run from outside the container (e.g., from the host or another container).`,
-	Example: `  # Auto-detect and upgrade the Arcane container
-  arcane upgrade --auto
+	Short: "Recreate the Docklet Next hub or agent container with a given image",
+	Long: `Recreate a Docklet Next hub or agent container with the image given by --image.
+There is no implicit target: the image reference is always explicit. Compose installations
+should upgrade with their package instead (docs/upgrade.md); this command does not update
+Compose or .env files. Run it from outside the target container.`,
+	Example: `  # Recreate the hub container with a release image
+  docklet-hub upgrade --auto --image ghcr.io/florianfinn/docklet-next-hub:1.0.0@sha256:<digest>
 
-  # Upgrade a specific container
-  arcane upgrade --container arcane
-
-  # Upgrade to a specific image tag
-  arcane upgrade --container arcane --image ghcr.io/getarcaneapp/arcane:v1.2.3`,
+  # Recreate a named agent container
+  docklet-hub upgrade --container docklet-agent --image ghcr.io/florianfinn/docklet-next-agent:1.0.0`,
 	// Use background context to ignore signals during upgrade
 	// This prevents the upgrade from being interrupted when the target container stops
 	RunE: runUpgrade,
@@ -61,17 +67,42 @@ This command should be run from outside the container (e.g., from the host or an
 
 func init() {
 	UpgradeCmd.Flags().StringVarP(&containerName, "container", "c", "", "Name of the container to upgrade")
-	UpgradeCmd.Flags().StringVarP(&targetImage, "image", "i", "", "Target image to upgrade to (defaults to current tag)")
+	UpgradeCmd.Flags().StringVarP(&targetImage, "image", "i", "", "Target image reference (required)")
 	UpgradeCmd.Flags().StringVar(&pullImageRef, "pull-image", "", "Immutable reference to pull and tag as --image (defaults to --image)")
-	UpgradeCmd.Flags().BoolVarP(&autoDetect, "auto", "a", false, "Auto-detect Arcane container")
+	UpgradeCmd.Flags().BoolVarP(&autoDetect, "auto", "a", false, "Auto-detect the Docklet container by its role label")
+	UpgradeCmd.Flags().StringVar(&targetRole, "role", "hub", "Role to auto-detect: hub or agent")
+}
+
+// validateUpgradeTargetInternal checks the operator input before any Engine
+// request. Any valid reference is accepted; there is no implicit default.
+func validateUpgradeTargetInternal(image, pull, role string) error {
+	if strings.TrimSpace(image) == "" {
+		return errors.New("--image is required: give the exact image reference to run (docs/upgrade.md)")
+	}
+	if _, err := refs.NormalizeReference(strings.TrimSpace(image)); err != nil {
+		return fmt.Errorf("invalid --image %q: %w", image, err)
+	}
+	if strings.TrimSpace(pull) != "" {
+		if _, err := refs.NormalizeReference(strings.TrimSpace(pull)); err != nil {
+			return fmt.Errorf("invalid --pull-image %q: %w", pull, err)
+		}
+	}
+	if role != "hub" && role != "agent" {
+		return fmt.Errorf("invalid --role %q: use hub or agent", role)
+	}
+	return nil
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Use background context instead of command context to ignore signals
 	// This prevents interruption when stopping the target container
 	ctx := context.WithoutCancel(cmd.Context())
+	if err := validateUpgradeTargetInternal(targetImage, pullImageRef, targetRole); err != nil {
+		return err
+	}
+	targetImage = strings.TrimSpace(targetImage)
 
-	logFile, err := SetupMessageOnlyLogFile(libarcane.UpgradeLogDirectory, "arcane-upgrade", slog.LevelInfo)
+	logFile, err := SetupMessageOnlyLogFile(libarcane.UpgradeLogDirectory, "docklet-upgrade", slog.LevelInfo)
 	if err != nil {
 		slog.WarnContext(ctx, "Failed to setup file logging", "error", err)
 	} else {
@@ -88,13 +119,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Find the container
 	var targetContainer container.InspectResponse
 	if autoDetect || containerName == "" {
-		slog.InfoContext(ctx, "Auto-detecting Arcane container...")
-		targetContainer, err = findArcaneContainer(ctx, dockerClient)
+		slog.InfoContext(ctx, "Auto-detecting Docklet container...", "role", targetRole)
+		targetContainer, err = findDockletContainer(ctx, dockerClient, targetRole)
 		if err != nil {
-			return fmt.Errorf("failed to find Arcane container: %w", err)
+			return fmt.Errorf("failed to find Docklet %s container: %w", targetRole, err)
 		}
 		containerName = strings.TrimPrefix(targetContainer.Name, "/")
-		slog.InfoContext(ctx, "Found Arcane container", "name", containerName, "id", targetContainer.ID[:12])
+		slog.InfoContext(ctx, "Found Docklet container", "name", containerName, "id", targetContainer.ID[:12])
 	} else {
 		inspectResult, inspectErr := compat.ContainerInspectWithCompatibility(ctx, dockerClient, containerName, client.ContainerInspectOptions{})
 		if inspectErr != nil {
@@ -103,12 +134,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		targetContainer = inspectResult.Container
 	}
 
-	// Determine the reference the container should run as, and what to pull.
-	newImage := targetImage
-	if newImage == "" {
-		newImage = determineImageName(ctx, dockerClient, targetContainer)
-		slog.InfoContext(ctx, "Determined image to pull", "image", newImage)
+	if project := composeProjectInternal(targetContainer); project != "" {
+		slog.WarnContext(ctx, "This container belongs to a Compose project; its Compose and .env files are not updated and a later compose up reverts this change (docs/upgrade.md)",
+			"container", containerName, "project", project)
 	}
+
+	// The reference the container should run as, and what to pull.
+	newImage := targetImage
 	imageToPull := cmp.Or(strings.TrimSpace(pullImageRef), newImage)
 
 	// Pull the new image
@@ -181,90 +213,52 @@ func tagPulledImage(ctx context.Context, dockerClient *client.Client, pulled, se
 	return nil
 }
 
-func findArcaneContainer(ctx context.Context, dockerClient *client.Client) (container.InspectResponse, error) {
-	// Prefer explicit Arcane labels; fall back to image name heuristics.
+// findDockletContainer returns the single running container labelled with the
+// requested Docklet role, skipping this process and Docklet helpers.
+func findDockletContainer(ctx context.Context, dockerClient *client.Client, role string) (container.InspectResponse, error) {
 	filter := make(client.Filters)
 	filter = filter.Add("status", "running")
+	filter = filter.Add("label", dockletSystemLabel+"="+role)
 
 	containers, err := dockerClient.ContainerList(ctx, client.ContainerListOptions{Filters: filter})
 	if err != nil {
 		return container.InspectResponse{}, err
 	}
-
 	selfID, _ := cgroup.CurrentContainerID()
-	slog.InfoContext(ctx, "Searching for Arcane container", "selfId", selfID, "totalContainers", len(containers.Items))
-
-	now := time.Now()
-
+	var matches []container.Summary
 	for _, c := range containers.Items {
-		if shouldSkipContainer(ctx, c, selfID, now) {
+		if selfID != "" && strings.HasPrefix(c.ID, selfID) {
 			continue
 		}
-
-		inspectResult, containerInspectWithCompatibilityErr := compat.ContainerInspectWithCompatibility(ctx, dockerClient, c.ID, client.ContainerInspectOptions{})
-		if containerInspectWithCompatibilityErr != nil {
+		if _, helper := c.Labels[dockletHelperLabel]; helper {
 			continue
 		}
-		inspect := inspectResult.Container
-
-		if isAgentContainer(inspect) {
-			slog.DebugContext(ctx, "Skipping agent container", "id", c.ID[:12], "names", c.Names)
-			continue
-		}
-
-		containerLabels := map[string]string{}
-		if inspect.Config != nil && inspect.Config.Labels != nil {
-			containerLabels = inspect.Config.Labels
-		}
-
-		// New label: com.getarcaneapp.arcane=true
-		if labels.IsArcaneContainer(containerLabels) {
-			slog.InfoContext(ctx, "Found Arcane container by label", "id", c.ID[:12], "image", c.Image, "names", c.Names)
-			return inspect, nil
-		}
-
-		// Legacy label (pre-migration): com.getarcaneapp.arcane.server=true
-		// NOTE: older agent images also used this label, so we must additionally exclude AGENT_MODE=true.
-		if isLegacyServerLabel(containerLabels) {
-			slog.InfoContext(ctx, "Found Arcane container by legacy label", "id", c.ID[:12], "image", c.Image, "names", c.Names)
-			return inspect, nil
-		}
-
-		// Fallback: image name heuristic
-		if strings.Contains(strings.ToLower(c.Image), "arcane") {
-			slog.InfoContext(ctx, "Found matching container by image name", "id", c.ID[:12], "image", c.Image, "names", c.Names)
-			return inspect, nil
-		}
+		matches = append(matches, c)
 	}
-
-	return container.InspectResponse{}, errors.New("no running Arcane container found")
+	switch len(matches) {
+	case 0:
+		return container.InspectResponse{}, fmt.Errorf("no running container labelled %s=%s", dockletSystemLabel, role)
+	case 1:
+		inspectResult, inspectErr := compat.ContainerInspectWithCompatibility(ctx, dockerClient, matches[0].ID, client.ContainerInspectOptions{})
+		if inspectErr != nil {
+			return container.InspectResponse{}, inspectErr
+		}
+		return inspectResult.Container, nil
+	default:
+		names := make([]string, 0, len(matches))
+		for _, c := range matches {
+			names = append(names, strings.TrimPrefix(strings.Join(c.Names, ","), "/"))
+		}
+		return container.InspectResponse{}, fmt.Errorf("several running %s containers (%s); choose one with --container", role, strings.Join(names, ", "))
+	}
 }
 
-func isLegacyServerLabel(containerLabels map[string]string) bool {
-	if containerLabels == nil {
-		return false
+// composeProjectInternal names the Compose project a container belongs to.
+func composeProjectInternal(inspect container.InspectResponse) string {
+	if inspect.Config == nil {
+		return ""
 	}
-	for k, v := range containerLabels {
-		if strings.EqualFold(k, labels.LabelArcaneLegacyServer) {
-			return strings.EqualFold(strings.TrimSpace(v), "true")
-		}
-	}
-	return false
-}
-
-func normalizeRecreatedArcaneLabelsInternal(containerLabels map[string]string) map[string]string {
-	normalized := maps.Clone(containerLabels)
-	if normalized == nil {
-		return nil
-	}
-	if labels.IsArcaneContainer(containerLabels) || isLegacyServerLabel(containerLabels) {
-		normalized[labels.LabelArcane] = "true"
-	}
-	if labels.IsArcaneAgentContainer(containerLabels) {
-		normalized[labels.LabelArcaneAgent] = "true"
-		normalized[labels.LabelArcane] = "true"
-	}
-	return normalized
+	return inspect.Config.Labels[composeProjectKey]
 }
 
 func refreshRecreatedImageLabelsInternal(containerLabels, previousImageLabels, imageLabels map[string]string, imageDigest string) map[string]string {
@@ -350,134 +344,6 @@ func hasOCIImageLabelInternal(containerLabels map[string]string) bool {
 	return false
 }
 
-func isAgentContainer(inspect container.InspectResponse) bool {
-	if inspect.Config == nil {
-		return false
-	}
-	// New label for agent containers
-	if inspect.Config.Labels != nil {
-		for k, v := range inspect.Config.Labels {
-			if strings.EqualFold(k, "com.getarcaneapp.arcane.agent") {
-				return strings.EqualFold(strings.TrimSpace(v), "true")
-			}
-		}
-	}
-	// Legacy agent detection: AGENT_MODE=true in env
-	for _, env := range inspect.Config.Env {
-		if strings.EqualFold(env, "AGENT_MODE=true") {
-			return true
-		}
-	}
-	return false
-}
-
-// shouldSkipContainer determines if a container should be skipped during search
-func shouldSkipContainer(ctx context.Context, c container.Summary, selfID string, now time.Time) bool {
-	// Skip ourselves (the upgrader container) by ID
-	if selfID != "" && strings.HasPrefix(c.ID, selfID) {
-		slog.InfoContext(ctx, "Skipping self by ID", "id", c.ID[:12], "names", c.Names)
-		return true
-	}
-
-	// Skip very recently created containers (likely the upgrader)
-	if c.Created > 0 {
-		createdTime := time.Unix(c.Created, 0)
-		age := now.Sub(createdTime)
-		if age < 30*time.Second {
-			slog.InfoContext(ctx, "Skipping recently created container", "id", c.ID[:12], "age", age, "names", c.Names)
-			return true
-		}
-	}
-
-	// Skip containers with "upgrader" in the name
-	for _, name := range c.Names {
-		if strings.Contains(strings.ToLower(name), "upgrader") {
-			slog.InfoContext(ctx, "Skipping upgrader container by name", "name", name)
-			return true
-		}
-	}
-
-	return false
-}
-
-func determineImageName(ctx context.Context, dockerClient *client.Client, cont container.InspectResponse) string {
-	imageName := extractImageNameFromConfig(cont)
-	imageName = stripDigest(imageName)
-
-	// If no explicit tag, try to infer from image RepoTags
-	if !hasExplicitTag(imageName) {
-		if inferredName := inferImageNameFromDocker(ctx, dockerClient, cont.Image); inferredName != "" {
-			imageName = inferredName
-		}
-	}
-
-	// Default to :latest if still no tag
-	if !hasExplicitTag(imageName) {
-		imageName = kit.Ternary(imageName == "", "ghcr.io/getarcaneapp/arcane:latest", imageName+":latest")
-	}
-
-	return imageName
-}
-
-// extractImageNameFromConfig gets the image name from container config
-func extractImageNameFromConfig(cont container.InspectResponse) string {
-	if cont.Config == nil {
-		return ""
-	}
-	return strings.TrimSpace(cont.Config.Image)
-}
-
-// stripDigest removes digest from image reference
-func stripDigest(imageName string) string {
-	if before, _, ok := strings.Cut(imageName, "@"); ok {
-		return before
-	}
-	return imageName
-}
-
-// hasExplicitTag checks if image reference has a tag
-func hasExplicitTag(ref string) bool {
-	if ref == "" {
-		return false
-	}
-	slash := strings.LastIndex(ref, "/")
-	colon := strings.LastIndex(ref, ":")
-	return colon > slash
-}
-
-// inferImageNameFromDocker attempts to find the best tag from Docker image inspect
-func inferImageNameFromDocker(ctx context.Context, dockerClient *client.Client, imageID string) string {
-	ii, err := dockerClient.ImageInspect(ctx, imageID)
-	if err != nil {
-		return ""
-	}
-
-	var arcaneNonLatest string
-	var arcaneAny string
-
-	for _, t := range ii.RepoTags {
-		if t == "" || t == "<none>:<none>" {
-			continue
-		}
-
-		t = stripDigest(t)
-
-		if strings.Contains(t, "arcane") {
-			arcaneAny = cmp.Or(arcaneAny, t)
-			if !strings.HasSuffix(t, ":latest") && arcaneNonLatest == "" {
-				arcaneNonLatest = t
-			}
-		}
-	}
-
-	// Prefer non-latest tags
-	return kit.Ternary(arcaneNonLatest != "", arcaneNonLatest, arcaneAny)
-}
-
-// pulledImageAlreadyRunning reports whether the freshly pulled reference resolves to
-// the image the target container is already running, along with the resolved image ID.
-// An inspect failure reports false and an empty ID; callers must resolve the
-// expected image before recreating the container.
 func pulledImageAlreadyRunning(ctx context.Context, dockerClient *client.Client, imageRef, runningImageID string) (bool, string) {
 	if runningImageID == "" {
 		return false, ""
@@ -514,7 +380,6 @@ func UpgradeContainer(ctx context.Context, dockerClient *client.Client, oldConta
 	// Create new container config
 	config := *oldContainer.Config
 	config.Image = newImage
-	config.Labels = normalizeRecreatedArcaneLabelsInternal(config.Labels)
 	if len(environment) > 0 {
 		config.Env = applyRecoveredEnvironmentInternal(config.Env, environment)
 	}

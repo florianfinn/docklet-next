@@ -105,7 +105,10 @@ func TestOnboardingHTTPTokenLifecycle(t *testing.T) {
 				require.NotContains(t, listed.Body.String(), "apiKey")
 				require.NotContains(t, listed.Body.String(), "accessToken")
 			}
-			require.Equal(t, 410, send("GET", "/environments/"+id+"/deployment", "").Code)
+			// The former stored-token snippet route no longer exists.
+			gone := send("GET", "/environments/"+id+"/deployment", "")
+			require.Equal(t, 404, gone.Code)
+			require.NotContains(t, gone.Body.String(), token)
 			rotated := send("PUT", "/environments/"+id, `{"regenerateApiKey":true}`)
 			require.Equal(t, 200, rotated.Code, rotated.Body.String())
 			require.NoError(t, json.Unmarshal(rotated.Body.Bytes(), &payload))

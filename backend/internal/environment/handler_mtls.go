@@ -226,22 +226,17 @@ func (h *EnvironmentHandler) loadEnvironmentMTLSFilesInternal(ctx context.Contex
 		return nil, nil, err
 	}
 
-	snippets, err := h.environmentService.GenerateEdgeDeploymentSnippets(ctx, env.ID, h.cfg.GetAppURL(), *env.AccessToken, &edge.Config{
+	mtls := h.environmentService.GenerateEdgeMTLSFiles(ctx, env.ID, h.cfg.GetAppURL(), &edge.Config{
 		EdgeMTLSMode:      h.cfg.EdgeMTLSMode,
 		EdgeMTLSCAFile:    h.cfg.EdgeMTLSCAFile,
 		EdgeMTLSAssetsDir: h.cfg.EdgeMTLSAssetsDir,
 		AppURL:            h.cfg.GetAppURL(),
 	})
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to generate environment mTLS assets", "environmentId", environmentID, "error", err.Error())
-		return nil, nil, huma.Error500InternalServerError("Failed to generate environment mTLS assets")
-	}
-
-	if snippets.MTLS == nil || len(snippets.MTLS.Files) == 0 {
+	if mtls == nil || len(mtls.Files) == 0 {
 		return nil, nil, huma.Error404NotFound("mTLS assets are not available for this environment")
 	}
 
-	return env, snippets.MTLS.Files, nil
+	return env, mtls.Files, nil
 }
 
 func (h *EnvironmentHandler) loadEnvironmentMTLSFileInternal(ctx context.Context, environmentID, fileName string) (*Environment, DeploymentSnippetFile, error) {
