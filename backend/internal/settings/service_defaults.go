@@ -42,7 +42,6 @@ func DefaultSettingsConfig() *Settings {
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
 		BackupDefaultRetentionCount:           SettingVariable{Value: "7"},
-		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		KeepActionOutput:                      SettingVariable{Value: "true"},
 		ActionPresentation:                    SettingVariable{Value: "dialog"},

@@ -371,7 +371,6 @@ var expectedSettingOverrideKeys = []string{
 	"trivyResourceLimitsEnabled",
 	"trivyScanTimeout",
 	"trivySecurityOpts",
-	"upgradeLogRetentionDays",
 	"volumeHelperIdleTimeout",
 	"vulnerabilityNotifyCritical",
 	"vulnerabilityNotifyFailed",

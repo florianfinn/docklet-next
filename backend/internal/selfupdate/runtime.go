@@ -10,8 +10,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -125,17 +123,15 @@ func HelperMounts(current container.InspectResponse, endpoint, data string, repl
 	return []mount.Mount{*socketMount, {Type: mount.TypeBind, Source: replay.WorkingDir, Target: replay.WorkingDir}, *dataMount}, nil
 }
 
+// HelperCreate runs the helper as root: the operator's env file and project
+// directory need not be accessible to the application identity. The helper
+// gives its own new files the original owners (files.go ownLike).
 func HelperCreate(request Request, mounts []mount.Mount) client.ContainerCreateOptions {
-	groups, _ := os.Getgroups()
-	supplementary := make([]string, 0, len(groups))
-	for _, group := range groups {
-		supplementary = append(supplementary, strconv.Itoa(group))
-	}
 	return client.ContainerCreateOptions{Name: HelperName(request.OpID), Config: &container.Config{
 		Image: request.TargetReference, Cmd: []string{"self-update", "--op", request.OpID},
 		Env:         []string{"DOCKER_HOST=unix:///var/run/docker.sock"},
-		User:        strconv.Itoa(os.Geteuid()) + ":" + strconv.Itoa(os.Getegid()),
+		User:        "0:0",
 		Labels:      map[string]string{"io.docklet.helper": "self-update", "io.docklet.operation": request.OpID},
 		Healthcheck: &container.HealthConfig{Test: []string{"NONE"}},
-	}, HostConfig: &container.HostConfig{Mounts: mounts, GroupAdd: supplementary, RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled}}}
+	}, HostConfig: &container.HostConfig{Mounts: mounts, RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled}}}
 }

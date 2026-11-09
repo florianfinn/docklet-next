@@ -120,7 +120,7 @@ func (s *Service) Check(ctx context.Context, id string) (dto.SelfUpdateCheck, er
 	if err == nil && installation.Config != nil {
 		host.CurrentReference = installation.Config.Image
 		replay, replayErr := core.ReplayFromLabels(installation.Config.Labels, s.role(), installation.Config.Image)
-		host.Compose = replayErr == nil
+		host.Compose = replayErr == nil || core.HasCode(replayErr, core.CodeLayout)
 		if replayErr == nil {
 			_, mountErr := core.HelperMounts(installation, s.endpoint(), s.data, replay)
 			host.Replayable = mountErr == nil
@@ -148,7 +148,7 @@ func (s *Service) Check(ctx context.Context, id string) (dto.SelfUpdateCheck, er
 	}
 	if err != nil {
 		out.Eligibility.State = "unavailable"
-		out.Eligibility.Code = "agent.unavailable"
+		out.Eligibility.Code = map[bool]string{false: "agent.unavailable", true: "update.check-unavailable"}[s.role() == "hub"]
 	}
 	return out, nil
 }

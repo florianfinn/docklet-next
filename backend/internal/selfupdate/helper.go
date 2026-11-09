@@ -29,6 +29,10 @@ type Request struct {
 	TargetReference string    `json:"targetReference"`
 	TargetVersion   string    `json:"targetVersion"`
 	Deadline        time.Time `json:"deadline"`
+	// AppUID/AppGID own the result file so the application can read it after
+	// the swap; the helper itself runs as root (HelperCreate).
+	AppUID int `json:"appUid"`
+	AppGID int `json:"appGid"`
 }
 
 type Result struct {
@@ -72,7 +76,7 @@ func (h Helper) Run(ctx context.Context, data, id string) (err error) {
 	phase := func(value string) error {
 		result.Phase = value
 		result.UpdatedAt = time.Now().UTC()
-		if err := WriteJSON(ResultPath(data, id), result); err != nil {
+		if err := writeOwnedJSON(ResultPath(data, id), result, request.AppUID, request.AppGID); err != nil {
 			return err
 		}
 		if h.Phase != nil {
@@ -114,19 +118,24 @@ func (h Helper) Run(ctx context.Context, data, id string) (err error) {
 		return Refuse(CodeLayout)
 	}
 	backup := request.Replay.EnvFile + ".docklet-previous." + id
-	if err = backupEnv(backup, original, info.Mode()); err != nil {
+	if err = backupEnv(backup, original, info.Mode(), owner); err != nil {
 		_ = phase("failed-pre-effect")
 		return err
 	}
 	restore := func(cause error) error {
-		restoreErr := atomicFile(request.Replay.EnvFile, original, info.Mode(), owner)
+		// The rename is the last step of a replacement: unchanged bytes mean the
+		// env file was never replaced, which is a pre-effect failure.
+		if envBytesEqual(request.Replay.EnvFile, original) {
+			return errors.Join(cause, phase("failed-pre-effect"))
+		}
+		restoreErr := replaceEnv(request.Replay.EnvFile, original, info.Mode(), owner)
 		// A failed restore is ambiguous, never advertised as pre-effect recovery.
 		if restoreErr != nil {
 			return errors.Join(cause, restoreErr)
 		}
 		return errors.Join(cause, phase("failed-pre-effect"))
 	}
-	if err = atomicFile(request.Replay.EnvFile, writePin(original, request.Replay.Variable, request.TargetReference), info.Mode(), owner); err != nil {
+	if err = replaceEnv(request.Replay.EnvFile, writePin(original, request.Replay.Variable, request.TargetReference), info.Mode(), owner); err != nil {
 		return restore(err)
 	}
 	if err = phase("env-written"); err != nil {

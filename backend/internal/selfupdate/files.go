@@ -42,8 +42,42 @@ func WriteJSON(path string, value any) error {
 	return atomicFile(path, raw, 0640, nil)
 }
 
-// atomicFile never chowns. A same-owner temporary file is required before the
-// rename, preserving the original mode/owner or refusing before replacement.
+// writeOwnedJSON writes a helper record owned by the application identity.
+func writeOwnedJSON(path string, value any, uid, gid int) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return atomicFile(path, raw, 0640, &syscall.Stat_t{Uid: uint32(uid), Gid: uint32(gid)})
+}
+
+// replaceEnv is atomicFile for the env file; tests inject a failing write.
+var replaceEnv = atomicFile
+
+// chownFile is the only ownership change the helper makes, and only on files
+// it created itself; tests observe it because they cannot run as root.
+var chownFile = func(f *os.File, uid, gid int) error { return f.Chown(uid, gid) }
+
+func ownLike(f *os.File, owner *syscall.Stat_t) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return Refuse(CodeLayout)
+	}
+	if stat.Uid == owner.Uid && stat.Gid == owner.Gid {
+		return nil
+	}
+	if err := chownFile(f, int(owner.Uid), int(owner.Gid)); err != nil {
+		return Refuse(CodeLayout)
+	}
+	return nil
+}
+
+// atomicFile gives its own temporary file the original mode and owner before
+// the rename, or refuses before any replacement.
 func atomicFile(path string, raw []byte, mode os.FileMode, owner *syscall.Stat_t) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".docklet-self-update-*")
 	if err != nil {
@@ -55,13 +89,8 @@ func atomicFile(path string, raw []byte, mode os.FileMode, owner *syscall.Stat_t
 		return err
 	}
 	if owner != nil {
-		info, err := f.Stat()
-		if err != nil {
+		if err = ownLike(f, owner); err != nil {
 			return err
-		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || stat.Uid != owner.Uid || stat.Gid != owner.Gid {
-			return Refuse(CodeLayout)
 		}
 	}
 	if _, err = f.Write(raw); err != nil {
@@ -100,13 +129,16 @@ func writePin(raw []byte, variable, target string) []byte {
 	}
 	return []byte(text + variable + "=" + target + "\n")
 }
-func backupEnv(path string, raw []byte, mode os.FileMode) error {
+func backupEnv(path string, raw []byte, mode os.FileMode, owner *syscall.Stat_t) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	if err := f.Chmod(mode.Perm()); err != nil {
+		return err
+	}
+	if err := ownLike(f, owner); err != nil {
 		return err
 	}
 	if _, err = f.Write(raw); err != nil {

@@ -7,6 +7,7 @@
 package selfupdate
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -32,6 +33,12 @@ type Problem struct {
 func (e *Problem) Error() string  { return e.Code }
 func (e *Problem) GetStatus() int { return e.Status }
 func Refuse(code string) error    { return &Problem{Code: code, Status: 409} }
+
+// HasCode reports whether err is a refusal with the given stable code.
+func HasCode(err error, code string) bool {
+	var problem *Problem
+	return errors.As(err, &problem) && problem.Code == code
+}
 
 // Installation describes one inspected container. RepoDigests are deliberately
 // absent: Config.Image and the running binary are the sources of identity.

@@ -106,7 +106,7 @@ func (s *Service) StartUpdate(ctx context.Context, id string, input dto.SelfUpda
 		return dto.SelfUpdateResponse{}, err
 	}
 	if created {
-		request := core.Request{OpID: op.OpID, Role: op.Role, OldContainerID: op.OldContainerID, Replay: replay, TargetReference: op.TargetRef, TargetVersion: op.TargetVersion, Deadline: op.Deadline}
+		request := core.Request{OpID: op.OpID, Role: op.Role, OldContainerID: op.OldContainerID, Replay: replay, TargetReference: op.TargetRef, TargetVersion: op.TargetVersion, Deadline: op.Deadline, AppUID: os.Geteuid(), AppGID: os.Getegid()}
 		s.launch("local-"+op.OpID, func(ctx context.Context) {
 			if err := s.dispatchLocal(ctx, op, request, mounts); err != nil {
 				// A failed create/start reply can follow a real effect. Only a failure

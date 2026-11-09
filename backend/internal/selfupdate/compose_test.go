@@ -117,6 +117,21 @@ func TestReplayLabelsAndAbsentPin(t *testing.T) {
 	labels[api.EnvironmentFileLabel] = "a,b"
 	_, err = ReplayFromLabels(labels, "hub", r.CurrentReference)
 	require.Error(t, err)
+	// Paths outside the project, relative or unclean are refused from the labels
+	// alone, before the action is offered.
+	for _, tc := range []struct{ env, config string }{
+		{env: "/etc/example/hub.env"},
+		{config: "/srv/other/compose.yaml"},
+		{config: "compose.yaml"},
+		{env: r.WorkingDir + "/../outside.env"},
+	} {
+		bad := map[string]string{api.ProjectLabel: r.Project, api.ServiceLabel: r.Service, api.WorkingDirLabel: r.WorkingDir, api.ConfigFilesLabel: r.ConfigFiles[0], api.EnvironmentFileLabel: tc.env}
+		if tc.config != "" {
+			bad[api.ConfigFilesLabel] = r.ConfigFiles[0] + "," + tc.config
+		}
+		_, err = ReplayFromLabels(bad, "hub", r.CurrentReference)
+		require.ErrorContains(t, err, CodeLayout, tc)
+	}
 	pin := writePin([]byte("# HUB_IMAGE=example\nOTHER=value\n"), "HUB_IMAGE", "example.com/hub:1.0.1")
 	require.Contains(t, string(pin), "HUB_IMAGE=example.com/hub:1.0.1\n")
 	require.Contains(t, string(pin), "OTHER=value")

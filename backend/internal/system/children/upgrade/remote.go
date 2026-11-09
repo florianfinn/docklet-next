@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	core "github.com/florianfinn/docklet-next/backend/internal/selfupdate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	dto "github.com/florianfinn/docklet-next/types/system"
 	product "github.com/florianfinn/docklet-next/types/version"
 	"github.com/google/uuid"
@@ -154,14 +155,44 @@ func (s *Service) startRemote(ctx context.Context, id string, input dto.SelfUpda
 			sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			sendErr := s.environments.ProxyJSONRequestForEnvironment(sendCtx, env, http.MethodPost, "/api/environments/0/system/upgrade", body, &accepted)
 			cancel()
-			if sendErr == nil && accepted.OpID == op.OpID && !accepted.Accepted {
-				_ = s.finishRemote(ctx, store, op, "failed-pre-effect", accepted.Code)
+			if code, refused := agentRefusal(sendErr); refused {
+				// The agent refuses only before or at its own reservation, so a
+				// decoded 4xx problem is definitive and nothing has run yet.
+				_ = s.finishRemote(ctx, store, op, "failed-pre-effect", code)
+				return
 			}
 		}
 		s.observeRemote(ctx, store)
 	})
 	return response(op), nil
 }
+
+// agentRefusal reports a decoded HTTP 4xx problem from the agent and its
+// stable code. Transport errors, 5xx and timeouts are not refusals: the
+// request may have been executed, so the hub keeps observing.
+func agentRefusal(err error) (string, bool) {
+	var status *remenv.StatusError
+	if !errors.As(err, &status) || status.StatusCode < 400 || status.StatusCode >= 500 {
+		return "", false
+	}
+	var problem struct {
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
+	}
+	_ = json.Unmarshal(status.Body, &problem)
+	for _, code := range []string{problem.Code, problem.Detail} {
+		if refusalCodes[code] {
+			return code, true
+		}
+	}
+	return core.CodeFailed, true
+}
+
+var refusalCodes = map[string]bool{
+	"host.busy": true, "update.invalid-target": true, "update.check-unavailable": true, "update.system-version-unknown": true, "feature-disabled": true,
+	core.CodeNotCompose: true, core.CodeLayout: true, core.CodeCustom: true, core.CodeHub: true,
+}
+
 func (s *Service) resumeRemote(key string) {
 	store := &core.Store{DB: s.db, Key: key}
 	s.launch(key, func(ctx context.Context) { s.observeRemote(ctx, store) })

@@ -25,7 +25,7 @@ func requestFixture(t *testing.T) (string, Request, []byte) {
 	r, old := replayFixture(t)
 	data := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(data, "self-update"), 0750))
-	request := Request{OpID: "helper-operation", Role: "hub", OldContainerID: "old-container", Replay: r, TargetReference: "example.com/docklet-hub:1.0.1@sha256:" + digestHex, TargetVersion: "1.0.1", Deadline: time.Now().Add(OperationTimeout)}
+	request := Request{OpID: "helper-operation", Role: "hub", OldContainerID: "old-container", Replay: r, TargetReference: "example.com/docklet-hub:1.0.1@sha256:" + digestHex, TargetVersion: "1.0.1", Deadline: time.Now().Add(OperationTimeout), AppUID: os.Geteuid(), AppGID: os.Getegid()}
 	require.NoError(t, WriteJSON(RequestPath(data, request.OpID), request))
 	return data, request, old
 }
@@ -91,6 +91,8 @@ func TestHelperMountsAndCreateContract(t *testing.T) {
 			require.Equal(t, "self-update", create.Config.Labels["io.docklet.helper"])
 			require.NotContains(t, create.Config.Labels, "com.docker.compose.project")
 			require.False(t, create.HostConfig.AutoRemove)
+			require.Equal(t, "0:0", create.Config.User, "the helper must reach operator-owned project files")
+			require.Empty(t, create.HostConfig.GroupAdd)
 			_, err = HelperMounts(current, "tcp://example.com:2375", "/app/data", replay)
 			require.Error(t, err)
 			current.Mounts[0].Type = mount.TypeVolume

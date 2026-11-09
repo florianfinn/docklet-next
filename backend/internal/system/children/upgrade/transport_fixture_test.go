@@ -66,6 +66,7 @@ type updateDaemon struct {
 	created   chan struct{}
 	creates   []map[string]any
 	mutations []string
+	envFile   string // optional Compose environment_file label
 }
 
 func (d *updateDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +86,11 @@ func (d *updateDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/_ping":
 		_, _ = w.Write([]byte("OK"))
 	case path == "/containers/current/json":
-		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "current", "Config": map[string]any{"Image": repository("agent") + ":1.0.0", "Labels": map[string]string{api.ProjectLabel: "example", api.ServiceLabel: "agent", api.WorkingDirLabel: "/opt/example", api.ConfigFilesLabel: "/opt/example/compose.yaml"}}, "Mounts": []any{map[string]any{"Type": "bind", "Source": "/host/docker.sock", "Destination": "/var/run/docker.sock", "RW": true}, map[string]any{"Type": "bind", "Source": "/host/data", "Destination": d.data, "RW": true}}})
+		labels := map[string]string{api.ProjectLabel: "example", api.ServiceLabel: "agent", api.WorkingDirLabel: "/opt/example", api.ConfigFilesLabel: "/opt/example/compose.yaml"}
+		if d.envFile != "" {
+			labels[api.EnvironmentFileLabel] = d.envFile
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "current", "Config": map[string]any{"Image": repository("agent") + ":1.0.0", "Labels": labels}, "Mounts": []any{map[string]any{"Type": "bind", "Source": "/host/docker.sock", "Destination": "/var/run/docker.sock", "RW": true}, map[string]any{"Type": "bind", "Source": "/host/data", "Destination": d.data, "RW": true}}})
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/containers/docklet-self-update-"):
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "helper", "State": map[string]any{"Running": true}})
 	case path == "/images/create":

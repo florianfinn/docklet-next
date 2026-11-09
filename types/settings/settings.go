@@ -96,11 +96,6 @@ type Update struct {
 	// Required: false
 	EnvironmentHealthInterval *string `json:"environmentHealthInterval,omitzero"`
 
-	// UpgradeLogRetentionDays is the upgrade log retention in days. Zero disables cleanup.
-	//
-	// Required: false
-	UpgradeLogRetentionDays *string `json:"upgradeLogRetentionDays,omitzero"`
-
 	//
 	// Required: false
 

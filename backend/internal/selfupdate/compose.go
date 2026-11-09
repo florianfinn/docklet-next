@@ -47,7 +47,22 @@ func ReplayFromLabels(labels map[string]string, role, current string) (Replay, e
 	if strings.Contains(r.EnvFile, ",") || !filepath.IsAbs(r.WorkingDir) {
 		return r, Refuse(CodeLayout)
 	}
+	// The parent cannot read daemon-host files, but the label paths alone show
+	// layouts the helper refuses later; report them before the button is offered.
+	for _, path := range append([]string{r.EnvFile}, r.ConfigFiles...) {
+		if !lexicallyInside(r.WorkingDir, path) {
+			return r, Refuse(CodeLayout)
+		}
+	}
 	return r, nil
+}
+
+func lexicallyInside(root, path string) bool {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return false
+	}
+	relative, err := filepath.Rel(root, path)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator))
 }
 
 // regularInside refuses symlinks in every component, not only in the final file.

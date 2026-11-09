@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 1ca200a3390d8f36103a4ba64f140cdc288bdcf7a1890beb0b9726750b1fa5da
+// Revision: f8129a6845bc1e4f8c98ab5cafa91e8ba4ee12f3debe628bc11c315d901e1fdd
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11729,7 +11729,6 @@ export interface components {
             updateCheckInterval?: "6h" | "12h" | "24h" | null;
             /** @enum {string|null} */
             updateNotify?: "true" | "false" | null;
-            upgradeLogRetentionDays?: string | null;
             volumeHelperIdleTimeout?: string | null;
             /** @enum {string|null} */
             vulnerabilityNotifyCritical?: "true" | "false" | null;

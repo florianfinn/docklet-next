@@ -96,12 +96,6 @@ func validateSettingValueInternal(key, value string) error {
 			return common.Classify(common.ErrValidation, errors.New("backupDefaultRetentionCount must be a whole number between 0 and 3650"))
 		}
 	}
-	if key == "upgradeLogRetentionDays" && value != "" {
-		days, err := strconv.Atoi(value)
-		if err != nil || days < 0 || days > 3650 {
-			return common.Classify(common.ErrValidation, errors.New("upgradeLogRetentionDays must be a whole number between 0 and 3650"))
-		}
-	}
 	for _, definition := range features.All() {
 		if definition.SettingKey == key && value != "true" && value != "false" {
 			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be true or false", key))
