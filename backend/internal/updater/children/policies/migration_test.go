@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Forward 008-to-009 keeps existing lifecycle data and enforces policy constraints.
+// Deviations: Forward 008-to-009 keeps existing lifecycle data and enforces policy constraints; M21 seeds the release baseline before reopening.
 
 package policies
 
@@ -27,7 +27,7 @@ func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
 	require.NoError(t, err)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, files)
 	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 8)
+	_, err = provider.Up(t.Context())
 	require.NoError(t, err)
 	_, err = pool.ExecContext(t.Context(), `INSERT INTO restore_points (id,target_id,target_identity,registration_id,source_run_id,created_at,failed_attempt,source_state,revision,payload,available) VALUES ('preserved-point','example-stack','identity','registration','source',CURRENT_TIMESTAMP,0,'settled','revision','synthetic-encrypted-payload',1)`)
 	require.NoError(t, err)

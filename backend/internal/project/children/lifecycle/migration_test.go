@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Migration 006 to 007 with live receipt/key rows, encrypted snapshot reopen and key refusal.
+// Deviations: Migration 006 to 007 with live receipt/key rows, encrypted snapshot reopen and key refusal; M21 seeds the release baseline before reopening.
 
 package lifecycle_test
 
@@ -34,7 +34,7 @@ func TestLifecycleForwardMigrationPreservesLiveReceiptsAndReopens(t *testing.T) 
 	require.NoError(t, err)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, files)
 	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 6)
+	_, err = provider.Up(t.Context())
 	require.NoError(t, err)
 	run, key := uuid.NewString(), uuid.NewString()
 	_, err = pool.ExecContext(t.Context(), `INSERT INTO runtime_receipts (run_id,kind,store_generation,manager_id,registration_id,environment_id,executor_generation,request_digest,caller_id,operation_id,target_kind,target_id,gate_scope,gate_key,admitted_at,dispatch_state,executor_state,cancel_requested,release_acknowledged,final_write_at) VALUES (?,'receipt','store','manager','registration','0','store','digest','operator','deploy-project','stack','example-stack','stack:example-stack','deploy',CURRENT_TIMESTAMP,'pending','pending',0,0,CURRENT_TIMESTAMP)`, run)

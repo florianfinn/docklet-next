@@ -85,6 +85,7 @@ func TestSettingsService_PruneUnknownSettings_KeepsHubTargetState(t *testing.T) 
 // Every backend file outside this package that touches the settings table, with its reviewed role. A new file fails
 // until it is classified here; writers must keep their keys in internalSettingKeys or internalSettingPrefixes.
 var reviewedSettingFilesInternal = map[string]string{
+	"cmd/schema-baseline/main.go":                         "development generator; emits the reviewed updateNotify and vulnerabilityScanSchedule baseline seeds",
 	"internal/activity/runtime_restore.go":                "reads instanceId",
 	"internal/backuptarget/delivery_state.go":             "writes backupTargetDelivery:<host>",
 	"internal/backuptarget/service.go":                    "writes backup_target_set_version",
