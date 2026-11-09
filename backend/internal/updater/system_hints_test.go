@@ -7,17 +7,17 @@
 package updater
 
 import (
-	"strings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	versionDTO "github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 )
 
 func TestSystemImageHintsAreManualAndCapped(t *testing.T) {
 	for _, test := range []struct {
 		name, hub, agent, latest, best, code, reference, candidate, state, wantCode string
-		requires                                                                bool
+		requires                                                                    bool
 	}{
 		{"capped", "2.0.0", "1.9.0", "2.1.0", "2.0.0", "", "docklet-next-agent:1.9.0", "2.0.0", "available", "", true},
 		{"no release at or below hub is current", "2.0.0", "1.9.0", "2.1.0", "", "", "docklet-next-agent:1.9.0", "", "current", "", true},

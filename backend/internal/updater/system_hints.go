@@ -96,6 +96,7 @@ func hintTag(ref string) (string, string) {
 	}
 	return reference.TrimNamed(named).String(), strings.TrimPrefix(tagged.Tag(), "v")
 }
+
 // systemImageHints offers feed versions only for agents running the configured
 // image from the repository the release feed describes.
 func systemImageHints(hub, configured, releaseRepository string, info versionDTO.Info, feed releaseFeedObservation) dto.SystemImageHints {
