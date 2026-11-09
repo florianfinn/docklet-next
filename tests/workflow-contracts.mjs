@@ -58,6 +58,7 @@ export function assertWorkflow(file, text) {
       "run: pnpm run ${{ matrix.stage }}",
     ]) assert.ok(full.includes(entry), `full checks missing ${entry}`);
     assert.match(image, /^    timeout-minutes: 30$/m);
+    assert.ok(image.indexOf("go-version-file: backend/go.mod") >= 0 && image.indexOf("go-version-file: backend/go.mod") < image.indexOf("smoke-hub-image.mjs"), "package-image smokes need pinned Go");
     assert.match(checks, /^    needs: \[scope, verify, full-checks, package-image\]$/m);
     assert.match(checks, /^    if: always\(\)$/m);
     for (const gate of [verify, checks]) {
@@ -82,7 +83,7 @@ export function assertWorkflow(file, text) {
   assert.equal(permissions, PERMISSIONS[file]);
   assert.equal(/^ +permissions:/m.test(text), false);
   const actions = [...text.matchAll(/^\s+- uses: ([^\s]+)/gm)];
-  assert.equal(actions.length, file === "checks" ? 9 : 2);
+  assert.equal(actions.length, file === "checks" ? 10 : 2);
   for (const match of actions) assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.equal(/actions\/cache\b/.test(text), false);
   assert.equal(text.includes("secrets."), false);

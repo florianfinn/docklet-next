@@ -122,5 +122,9 @@ test("workflow evaluates tag-only publish, protected environment, least permissi
   assert.equal(publish.permissions.contents, "write"); assert.equal(publish.permissions.packages, "write");
   assert.deepEqual(publish.needs, ["verify", "build", "package"]);
   assert.ok(workflow.jobs.package.steps.some(s => s.run?.includes("smoke-hub-image.mjs")));
+  const buildSteps = workflow.jobs.build.steps.map(s => s.run ?? "");
+  const store = buildSteps.findIndex(r => r.includes('features["containerd-snapshotter"] = true') && r.includes("systemctl restart docker"));
+  assert.ok(store >= 0 && store < buildSteps.findIndex(r => r.includes("deploy/release/build.mjs")), "OCI export needs the containerd image store before the build");
+  for (const input of ["third_party/**", "go.work", ".dockerignore", "LICENSE", "NOTICE", "package.json", "scripts/core-license-files.go", "scripts/package-web-licenses.mjs"]) assert.ok(workflow.on.pull_request.paths.includes(input), `release dry run ignores ${input}`);
   assert.doesNotMatch(JSON.stringify(workflow), /pull_request_target|workflow_dispatch|docker push/);
 });
