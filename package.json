@@ -19,6 +19,9 @@
     "check:structure": "node scripts/check-structure.mjs",
     "check:pr": "node scripts/check-pr-publication.mjs",
     "check:review": "node scripts/review-status.mjs",
-    "test:text": "node scripts/change-scope.mjs --run-text-tests"
+    "test:text": "node scripts/change-scope.mjs --run-text-tests",
+    "release:build": "node deploy/release/build.mjs",
+    "release:render": "node deploy/release/render.mjs",
+    "test:release": "node --test tests/release*.test.mjs"
   }
 }
