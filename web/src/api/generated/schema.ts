@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 587a19c7fb8a0076a3292f2354ed8d11aaf8caa5a02564b7c7ab8923dd744c09
+// Revision: 8a4c5556badd2ffe79fcc72496267a6c82693b6dd2634c2d309358d16d7c9c7f
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -2774,7 +2774,7 @@ export interface paths {
         post?: never;
         /**
          * Destroy a project
-         * @description Destroy a Docker Compose project and optionally remove files/volumes
+         * @description Destroy a Docker Compose project. Files and volumes are removed only when the body sets removeFiles or removeVolumes to true; Edge hosts refuse bodies over 64 KiB with 413 request.too-large.
          */
         delete: operations["destroy-project"];
         options?: never;

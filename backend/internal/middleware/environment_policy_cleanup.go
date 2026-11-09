@@ -10,6 +10,7 @@ import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/labstack/echo/v5"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -36,7 +37,25 @@ func (m *EnvironmentMiddleware) cleanupStack(c *echo.Context, status int) {
 	}
 }
 
+// stackDestroyBodyLimit bounds the destroy flags body forwarded through the Edge tunnel.
+const stackDestroyBodyLimit = 64 << 10
+
 func (m *EnvironmentMiddleware) proxyStackDestroy(c *echo.Context, tunnel *edge.AgentTunnel, env string) error {
+	var body []byte
+	if c.Request().Body != nil {
+		read, err := io.ReadAll(io.LimitReader(c.Request().Body, stackDestroyBodyLimit+1))
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "failed to read request body"})
+		}
+		if len(read) > stackDestroyBodyLimit {
+			return c.JSON(http.StatusRequestEntityTooLarge, map[string]any{
+				"success": false,
+				"code":    "request.too-large",
+				"data":    map[string]any{"error": "Request body is too large"},
+			})
+		}
+		body = read
+	}
 	ctx, cancel := context.WithTimeout(c.Request().Context(), edge.DefaultProxyTimeout)
 	defer cancel()
 	headers := map[string]string{}
@@ -45,7 +64,7 @@ func (m *EnvironmentMiddleware) proxyStackDestroy(c *echo.Context, tunnel *edge.
 			headers[key] = values[0]
 		}
 	}
-	status, reply, body, err := edge.ProxyRequest(ctx, tunnel, c.Request().Method, m.buildProxyPath(c, env), c.Request().URL.RawQuery, headers, nil)
+	status, reply, body, err := edge.ProxyRequest(ctx, tunnel, c.Request().Method, m.buildProxyPath(c, env), c.Request().URL.RawQuery, headers, body)
 	if err != nil {
 		return m.abortEdgeTunnelUnavailable(c)
 	}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation; M21 destroy flags keep files when omitted.
 
 package project
 
@@ -613,9 +613,9 @@ type Details struct {
 
 // Destroy is used to destroy a project.
 type Destroy struct {
-	// RemoveFiles indicates if project files should be removed. Defaults to true when omitted.
-	// When false and the project is stored under the projects directory, files are renamed
-	// to a hidden .arcane-trash-* directory so filesystem discovery does not re-import them.
+	// RemoveFiles removes the project files only when explicitly true. When false or omitted,
+	// a project stored under the projects directory has its files renamed to a hidden
+	// .arcane-trash-* directory so filesystem discovery does not re-import them.
 	//
 	// Required: false
 	RemoveFiles *bool `json:"removeFiles,omitempty"`
@@ -624,6 +624,14 @@ type Destroy struct {
 	//
 	// Required: false
 	RemoveVolumes bool `json:"removeVolumes,omitempty"`
+}
+
+// Flags resolves a destroy request; a missing body or field keeps files and volumes.
+func (d *Destroy) Flags() (removeFiles, removeVolumes bool) {
+	if d == nil {
+		return false, false
+	}
+	return d.RemoveFiles != nil && *d.RemoveFiles, d.RemoveVolumes
 }
 
 // StatusCounts contains counts of projects by status.
