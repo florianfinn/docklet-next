@@ -2,13 +2,13 @@
 // Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Node-only staged/worktree/history scans, strict identities, local denylist and sanitized failures.
+// Deviations: Node-only staged/worktree/history scans, strict identities, local denylist, sanitized failures and exact commit-message exceptions.
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { files, git, main, run, finish } from "./repository.mjs";
 import { inspectText, inspectPath, safePath, publicIdentity } from "./publication-patterns.mjs";
 import { ALLOWLIST_PATH, reviewedFindings, parseAllowlist } from "./publication-allowlist-core.mjs";
-import { messageProblems } from "./commit-subject.mjs";
+import { subjectAccepted } from "./commit-subject.mjs";
 export { inspectText } from "./publication-patterns.mjs";
 
 export function loadDenylist(root) {
@@ -40,6 +40,18 @@ function inspectFiles(list, denylist) {
   });
   return reviewedFindings(allowlist, findings).map((f) => ({ ...f, path: safePath(f.path, denylist) }));
 }
+// Exact reviewed exceptions for published commit messages. A commit cannot name its own
+// SHA in its tree, so the checked-out policy applies; entries for unscanned commits wait.
+export const COMMIT_ALLOWLIST_PATH = "scripts/publication-commit-allowlist.json";
+function commitExceptions(root, commits) {
+  const path = resolve(root, COMMIT_ALLOWLIST_PATH);
+  const list = existsSync(path) ? parseAllowlist(readFileSync(path, "utf8")) : [];
+  reviewedFindings(list, []);
+  if (list.some((entry) => !/^commit\/[a-f0-9]{40}$/.test(entry.path) || !entry.lineSha256))
+    throw new Error("publication-commit-allowlist-entry");
+  const scanned = new Set(commits.map((commit) => `commit/${commit}`));
+  return list.filter((entry) => scanned.has(entry.path));
+}
 export function inspectRepository(root, { staged = false, history = false, revisions = [] } = {}) {
   const denylist = loadDenylist(root);
   const findings = inspectFiles(files(root, { staged }), denylist);
@@ -49,6 +61,7 @@ export function inspectRepository(root, { staged = false, history = false, revis
       .trim()
       .split("\n")
       .filter(Boolean);
+    const messages = [];
     for (const commit of commits) {
       const fields = git(["show", "-s", "--format=%an%x00%ae%x00%cn%x00%ce%x00%P%x00%B", commit], root).split(
         "\0",
@@ -56,11 +69,14 @@ export function inspectRepository(root, { staged = false, history = false, revis
       const [author, authorEmail, committer, committerEmail, parents, body] = fields;
       if (!publicIdentity(author, authorEmail) || !publicIdentity(committer, committerEmail))
         findings.push({ path: "commit", category: "private-commit-identity" });
-      findings.push(...messageProblems(body, parents.trim().split(" ").filter(Boolean).length));
-      findings.push(...inspectText(body, "commit-message", denylist));
+      if (!subjectAccepted(body.split(/\r?\n/)[0], parents.trim().split(" ").filter(Boolean).length))
+        findings.push({ path: "commit-message", category: "commit-subject" });
+      messages.push(...inspectText(body, `commit/${commit}`, denylist, { detailed: true }));
       const list = files(root, { revision: commit });
       findings.push(...inspectFiles(list, denylist));
     }
+    for (const finding of reviewedFindings(commitExceptions(root, commits), messages))
+      findings.push({ path: finding.path === ALLOWLIST_PATH ? COMMIT_ALLOWLIST_PATH : "commit-message", category: finding.category });
   }
   return findings;
 }
