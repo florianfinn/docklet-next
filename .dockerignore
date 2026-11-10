@@ -13,3 +13,6 @@
 
 **/*.restore
 **/*.restore-*
+# Release outputs written by deploy/release/build.mjs and render.mjs in CI.
+/bundle
+/package

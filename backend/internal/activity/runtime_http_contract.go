@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered compatibility routes advertise their actual response variants; M18 standalone image update and restore safety.
+// Deviations: Registered compatibility routes advertise their actual response variants; M18 standalone image update and restore safety. M21 #438: candidate scans and verified manifest binding.
 
 package activity
 
@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/base"
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"reflect"
 	"strconv"
 )
@@ -54,6 +55,8 @@ func runtimeHTTPBodyContract(api huma.API, operation RuntimeOperation, op *huma.
 	} else if operation == RuntimeRecreateContainer {
 		op.RequestBody.Required = true
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerDTO.RecreateRequest](), true, "")}}
+	} else if operation == RuntimeUpdateContainer {
+		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[updaterDTO.VerifiedImageRequest](), true, "")}}
 	} else {
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{Not: &huma.Schema{}}}}
 	}

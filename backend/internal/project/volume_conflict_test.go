@@ -2,7 +2,7 @@
 // Revision: 1c1597f131fdbd87d6043a44fa32b7d2149388f3
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Real project update name clash through HTTP and Edge; reuse storage transport fixture pattern.
+// Deviations: Real project update name clash through HTTP and Edge; reuse storage transport fixture pattern; M21 also grants project delete for the destroy chain.
 
 package project
 
@@ -118,6 +118,7 @@ func projectConflictRouter(t *testing.T, svc *ProjectService) http.Handler {
 		return func(c *echo.Context) error {
 			grants := authz.NewPermissionSet()
 			grants.AddEnv("0", authz.PermProjectsUpdate)
+			grants.AddEnv("0", authz.PermProjectsDelete)
 			ctx := context.WithValue(c.Request().Context(), middleware.ContextKeyUserPermissions, grants)
 			ctx = context.WithValue(ctx, user.CurrentUserContextKey{}, &user.Actor{ID: "example-user", Username: "example-user"})
 			c.SetRequest(c.Request().WithContext(ctx))

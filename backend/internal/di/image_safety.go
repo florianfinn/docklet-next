@@ -13,20 +13,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-	imageDTO "github.com/florianfinn/docklet-next/types/image"
-	"strings"
 )
 
 func wireImageSafety(images *image.ImageService, sys *system.SystemService, gate *runs.Admission, cfg *config.Config, settings *settings.SettingsService) {
 	refs := func() []string {
-		agent := strings.TrimSpace(cfg.AgentImage)
-		if agent == "" {
-			tag := strings.TrimPrefix(config.Version, "v")
-			if _, ok := imageDTO.CompareRelease(tag, tag); !ok {
-				tag = "0.0.0"
-			}
-			agent = "docklet-next-agent:" + tag
-		}
+		agent, _ := config.AgentImageReference(cfg.AgentImage)
 		return []string{agent, volumehelper.ToolsImage(settings.GetSettingsConfig().ToolsImage.Value)}
 	}
 	images.SetImageAdmission(gate, refs)

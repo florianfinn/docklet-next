@@ -1,3 +1,4 @@
+import { advisoryKey } from "@/data/vulnerability-advisory";
 import { SCAN_STATUS_KEYS } from "@/data/wire-catalogue-states";
 import { scopedKey } from "@/data/wire-catalogue";
 import { useMemo, useState } from "react";
@@ -148,7 +149,7 @@ const byValue = <T,>(rows: T[], dir: SortState<string>["dir"], value: (r: T) => 
 
 const worst = (i: ScannedImage) => SEVERITIES.find((s) => (i.counts[s.key] ?? 0) > 0)?.color ?? "var(--border)";
 
-export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings" | "hosts"> & { highlight: string | null }) {
+export function FindingsTab({ findings, hosts, highlight, onOpen }: Pick<Data, "findings" | "hosts"> & { highlight: string | null; onOpen?: (finding: Finding, element: HTMLElement) => void }) {
   const t = useTranslations("security");
   // Serialised once per data change, not per keystroke; cell text widths decide the measured view.
   const findingsKey = useMemo(() => JSON.stringify([findings, [...hosts.values()].map((h) => h.name)]), [findings, hosts]);
@@ -183,6 +184,8 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
         return {
           id: `${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${index}`,
           selected: highlight === f.id,
+          advisoryKey: advisoryKey(f.id),
+          onOpen: onOpen ? (element: HTMLElement) => onOpen(f, element) : undefined,
           color: sev?.color ?? "var(--border)",
           cells: {
             id: <span className="font-mono" title={f.title}>{f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}</span>,

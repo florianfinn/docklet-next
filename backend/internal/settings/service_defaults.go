@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.; inert Arcane tools sentinel removed (#362).
 
 package settings
 
@@ -42,14 +42,12 @@ func DefaultSettingsConfig() *Settings {
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
 		BackupDefaultRetentionCount:           SettingVariable{Value: "7"},
-		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		KeepActionOutput:                      SettingVariable{Value: "true"},
 		ActionPresentation:                    SettingVariable{Value: "dialog"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
 		ToolsImage:                            SettingVariable{Value: ""},
-		UpdateCheckRegistry:                   SettingVariable{Value: "auto"},
 		ScheduledPruneEnabled:                 SettingVariable{Value: "false"},
 		ScheduledPruneInterval:                SettingVariable{Value: "0 0 0 * * *"},
 		PruneContainerMode:                    SettingVariable{Value: "stopped"},
@@ -142,7 +140,7 @@ func DefaultSettingsConfig() *Settings {
 var retiredSettingValuesInternal = map[string][]string{
 	// Closed list: only values persisted before override-only storage. Bump PRs
 	// must not extend it or include the current release default.
-	"toolsImage":                  {"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"},
+	"toolsImage":                  {"ghcr.io/florianfinn/docklet-tools:0.1.0"},
 	"dockerClientRefreshInterval": {"*/30 * * * * *"},
 	"autoHealInterval":            {"*/30 * * * * *"},
 }

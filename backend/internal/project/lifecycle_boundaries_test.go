@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Tag/file/deploy barriers, failed rebuild and baseline capture effects.
+// Deviations: Tag/file/deploy barriers, failed rebuild and baseline capture effects; explicit system-protection code assertion.
 
 package project
 
@@ -492,6 +492,8 @@ func TestLifecycleSystemImageReferenceRefusesBeforeMutation(t *testing.T) {
 	require.Zero(t, f.tagWrites)
 	require.Zero(t, f.deploys)
 	require.Equal(t, activityDTO.StatusFailed, out.Status)
+	require.NotNil(t, out.ImageLifecycle)
+	require.Equal(t, "image.system-protected", out.ImageLifecycle.Code)
 }
 
 func TestLifecycleSnapshotRefusesUnsafeImageReferenceWithoutEcho(t *testing.T) {

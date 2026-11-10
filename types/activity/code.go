@@ -10,6 +10,8 @@ package activity
 type Code string
 
 const (
+	CodeSelfUpdateFailed           Code = "update.self-failed"
+	CodeSelfUpdateUnknown          Code = "update.outcome-unknown"
 	CodeLoadSustained              Code = "load.sustained"
 	CodeConditionDown              Code = "container.condition.down"
 	CodeConditionUnhealthy         Code = "container.condition.unhealthy"
@@ -238,7 +240,7 @@ func Values() []Code {
 		CodeAutoHealLimitReached,
 		CodeAutoHealInterrupted,
 		CodeNotificationDeliveryFailed,
-		CodeLoadSustained, CodeConditionDown, CodeConditionUnhealthy, CodeConditionRestartLoop, CodeConditionRunningAgain,
+		CodeLoadSustained, CodeConditionDown, CodeConditionUnhealthy, CodeConditionRestartLoop, CodeConditionRunningAgain, CodeSelfUpdateFailed, CodeSelfUpdateUnknown,
 	}
 }
 

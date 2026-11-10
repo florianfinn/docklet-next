@@ -1,10 +1,16 @@
-import { spawnSync } from "node:child_process";
+// Source: docklet-next/issues/362
+// Revision: b11b3e70e671dd3c862b966b1d279251842c7319
+// Retrieved: 2026-11-09
+// License: Apache-2.0
+// Deviations: Original offline release packaging and verification.
+
+import { docker, smokeRuntime } from "./release-smoke.mjs";
 import { randomBytes, createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const image = process.argv[2];
-const hostPort=Number(process.argv[3]??0);
+const hostPort=Number(process.argv[3]??process.env.SMOKE_PORT??0);
 if(!Number.isInteger(hostPort)||hostPort<0||hostPort>65535)throw new Error("invalid smoke port");
 if (!image) throw new Error("expected candidate image");
 const suffix = randomBytes(6).toString("hex"), volume = `docklet-sqlite-smoke-${suffix}`;
@@ -12,11 +18,7 @@ const encryption = randomBytes(32).toString("hex");
 const adminKey = "arc_" + randomBytes(32).toString("hex"), backups = `${volume}-backups`;
 const labels = process.env.SMOKE_DOCKER_LABEL ? ["--label", process.env.SMOKE_DOCKER_LABEL] : [];
 const common = [...labels, "-v", `${volume}:/app/data`, "-v", `${backups}:/var/lib/docklet/backups`, "-e", `ADMIN_STATIC_API_KEY=${adminKey}`, "-e", `ENCRYPTION_KEY=${encryption}`, "-e", "APP_URL=http://localhost:3552", "-e", "TZ=Europe/Berlin"];
-function docker(args, required = true) {
-  const result = spawnSync("docker", args, { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
-  if (required && result.status !== 0) throw new Error("candidate image operation failed");
-  return result;
-}
+
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let id;
 try {
@@ -39,6 +41,7 @@ try {
     throw new Error("candidate never became healthy");
   }
   await ready();
+  smokeRuntime(image, "hub", id);
   const html = await (await fetch(base)).text();
   const asset = html.match(/src="(\/assets\/[^\"]+\.js)"/);
   if (!asset || !(await fetch(base + asset[1])).ok) throw new Error("production web bundle was not served");

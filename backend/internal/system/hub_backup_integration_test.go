@@ -198,7 +198,9 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	latest, err := system.backupStoreInternal().Run(t.Context(), run.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, latest.ArchiveVersion)
-	require.GreaterOrEqual(t, latest.MigrationVersion, int64(2))
+	supported, err := database.LatestMigrationVersion()
+	require.NoError(t, err)
+	require.Equal(t, supported, latest.MigrationVersion)
 	params := pagination.QueryParams{SortParams: pagination.SortParams{Sort: "createdAt", Order: pagination.SortDesc}, Params: pagination.Params{Limit: 10}}
 	listed, _, err := service.ListBackups(t.Context(), params)
 	require.NoError(t, err)

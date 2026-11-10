@@ -2,7 +2,7 @@
 // Revision: c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Explicit metadata reads only; no watcher, image pull or replacement.
+// Deviations: Explicit metadata reads only; no watcher, image pull or replacement. Product release feed states (#235).
 
 package updater
 
@@ -40,17 +40,47 @@ func (s *UpdaterService) ConfigureSystemImageHints(envs *environment.Environment
 				return dto.SystemImageHints{}, imageDTO.Failure("update.check-unavailable", 503)
 			}
 		}
-		latest, best := "", ""
+		feed := releaseFeedObservation{code: "update.check-unavailable"}
 		if v != nil {
-			latest, _ = v.GetLatestVersion(ctx)
-			best, _ = v.PublishedReleaseAtMost(ctx, config.Version)
+			feed = observeReleaseFeed(ctx, v, config.Version)
 		}
-		configured := strings.TrimSpace(s.config.AgentImage)
-		if configured == "" {
-			configured = "docklet-next-agent:" + strings.TrimPrefix(config.Version, "v")
-		}
-		return systemImageHints(config.Version, configured, info, latest, best), nil
+		configured, _ := config.AgentImageReference(s.config.AgentImage)
+		return systemImageHints(config.Version, configured, config.AgentReleaseRepository(), info, feed), nil
 	}
+}
+
+func newerThan(candidate, current string) bool {
+	c, ok := versionDTO.CompareProduct(candidate, current)
+	return ok && c > 0
+}
+
+// releaseFeedObservation carries both selectors' results; a non-empty code
+// (feature-disabled, update.check-unavailable, update.system-version-unknown)
+// means the feed could not answer and the agent hint stays unknown.
+type releaseFeedObservation struct {
+	latest, best string
+	code         string
+}
+
+func observeReleaseFeed(ctx context.Context, v *version.VersionService, hub string) releaseFeedObservation {
+	var out releaseFeedObservation
+	capped, found, err := v.ReleaseAtMost(ctx, hub)
+	if err != nil {
+		out.code = imageDTO.Neutral(err, "update.check-unavailable", 503).Problem.Code
+		return out
+	}
+	if found {
+		out.best = capped.Version
+	}
+	newest, found, err := v.NewestRelease(ctx)
+	if err != nil {
+		out.code = imageDTO.Neutral(err, "update.check-unavailable", 503).Problem.Code
+		return out
+	}
+	if found {
+		out.latest = newest.Version
+	}
+	return out
 }
 func hintTag(ref string) (string, string) {
 	named, err := reference.ParseNormalizedNamed(ref)
@@ -61,24 +91,47 @@ func hintTag(ref string) (string, string) {
 	if !ok {
 		return "", ""
 	}
-	if _, valid := imageDTO.CompareRelease(tagged.Tag(), tagged.Tag()); !valid {
+	if _, valid := versionDTO.ParseProduct(tagged.Tag()); !valid {
 		return "", ""
 	}
 	return reference.TrimNamed(named).String(), strings.TrimPrefix(tagged.Tag(), "v")
 }
-func systemImageHints(hub, configured string, info versionDTO.Info, latest, best string) dto.SystemImageHints {
+
+// runningAgentImage reads the app-version producer's shape: RepoDigests give a
+// repository-only CurrentImageRef with the tag in CurrentTag; a tagged
+// reference (config fallback) carries its own tag.
+func runningAgentImage(info versionDTO.Info) (string, string) {
+	if repository, tag := hintTag(info.CurrentImageRef); repository != "" {
+		return repository, tag
+	}
+	named, err := reference.ParseNormalizedNamed(info.CurrentImageRef)
+	if err != nil {
+		return "", ""
+	}
+	if _, tagged := named.(reference.Tagged); tagged {
+		return "", ""
+	}
+	if _, valid := versionDTO.ParseProduct(info.CurrentTag); !valid {
+		return "", ""
+	}
+	return reference.TrimNamed(named).String(), strings.TrimPrefix(info.CurrentTag, "v")
+}
+
+// systemImageHints offers feed versions only for agents running the configured
+// image from the repository the release feed describes.
+func systemImageHints(hub, configured, releaseRepository string, info versionDTO.Info, feed releaseFeedObservation) dto.SystemImageHints {
 	unknown := func(kind, ref string) dto.SystemImageHint {
 		return dto.SystemImageHint{Kind: kind, Reference: ref, State: "unknown", Code: "update.system-version-unknown", ManualOnly: true}
 	}
 	agent := unknown("agent", info.CurrentImageRef)
 	tools := unknown("tools", info.ToolsImage)
-	repository, currentTag := hintTag(info.CurrentImageRef)
+	repository, currentTag := runningAgentImage(info)
 	allowed, _ := hintTag(configured)
-	canonical, _ := hintTag("docklet-next-agent:0.0.0")
+	canonical, _ := hintTag(releaseRepository + ":0.0.0")
 	if allowed != canonical {
 		allowed = ""
 	}
-	comparison, valid := imageDTO.CompareRelease(info.CurrentVersion, hub)
+	comparison, valid := versionDTO.CompareProduct(info.CurrentVersion, hub)
 	if valid && repository != "" && repository == allowed && strings.TrimPrefix(info.CurrentVersion, "v") == currentTag {
 		agent.CurrentVersion = currentTag
 		if comparison > 0 {
@@ -87,17 +140,15 @@ func systemImageHints(hub, configured string, info versionDTO.Info, latest, best
 		} else {
 			agent.State = "current"
 			agent.Code = ""
-			if c, ok := imageDTO.CompareRelease(latest, hub); ok && c > 0 {
+			if c, ok := versionDTO.CompareProduct(feed.latest, hub); ok && c > 0 {
 				agent.RequiresHubUpdate = true
 			}
-			upper, ok := imageDTO.CompareRelease(best, hub)
-			newer, observed := imageDTO.CompareRelease(best, currentTag)
-			if ok && observed && upper <= 0 && newer > 0 {
-				agent.State = "available"
-				agent.CandidateVersion = strings.TrimPrefix(best, "v")
-			} else if !ok {
+			if feed.code != "" {
 				agent.State = "unknown"
-				agent.Code = "update.check-unavailable"
+				agent.Code = feed.code
+			} else if upper, ok := versionDTO.CompareProduct(feed.best, hub); ok && upper <= 0 && newerThan(feed.best, currentTag) {
+				agent.State = "available"
+				agent.CandidateVersion = feed.best
 			}
 		}
 	}

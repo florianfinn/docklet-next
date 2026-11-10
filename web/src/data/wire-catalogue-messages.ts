@@ -13,6 +13,8 @@ const HOST_CREDENTIAL_MESSAGE = "environment.api_key.regenerated" satisfies Cata
 const HOST_CREDENTIAL_EVENT_TITLE = "runMessages.events.labels.environment_host_key_regenerated" satisfies CatalogueKey;
 
 export const MESSAGE_CODE_KEYS = {
+  "update.self-failed": "images.errors.update_self-failed",
+  "update.outcome-unknown": "images.errors.update_outcome-unknown",
   "container.recreate-recovered": "images.errors.container_recreate-recovered",
   "container.recreate-ambiguous": "images.errors.container_recreate-ambiguous",
   "container.origin-locked": "images.errors.container_origin-locked",

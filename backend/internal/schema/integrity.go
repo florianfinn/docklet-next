@@ -33,7 +33,12 @@ type integrityRules struct {
 
 // ApplyIntegrity is development-only: it refuses data and rebuilds empty model
 // tables with the independently retained constraints before producing a baseline.
-func ApplyIntegrity(db *gorm.DB) error {
+func ApplyIntegrity(db *gorm.DB) error { return applyIntegrity(db, Models()) }
+
+// ApplyBaselineIntegrity uses only the frozen baseline models for JSON constraints.
+func ApplyBaselineIntegrity(db *gorm.DB) error { return applyIntegrity(db, BaselineModels()) }
+
+func applyIntegrity(db *gorm.DB, models []any) error {
 	data, err := integrityFS.ReadFile("retained_integrity.json")
 	if err != nil {
 		return err
@@ -66,11 +71,25 @@ func ApplyIntegrity(db *gorm.DB) error {
 		if strings.HasPrefix(table, "sqlite_") {
 			continue
 		}
-		if err = rebuildEmpty(db, table, rules); err != nil {
+		if err = rebuildEmpty(db, table, rules, models); err != nil {
 			return err
 		}
 	}
 	for _, statement := range rules.Indexes {
+		// Future-model indexes must not change generation of the frozen baseline.
+		_, target, ok := strings.Cut(statement, " ON ")
+		if !ok {
+			return fmt.Errorf("invalid integrity index: missing target")
+		}
+		target, _, _ = strings.Cut(target, "(")
+		target = strings.Trim(strings.TrimSpace(target), "\"`")
+		present := false
+		for _, table := range tables {
+			present = present || table == target
+		}
+		if !present {
+			continue
+		}
 		statement = strings.Replace(statement, " INDEX ", " INDEX IF NOT EXISTS ", 1)
 		if err = db.Exec(statement).Error; err != nil {
 			return err
@@ -88,7 +107,7 @@ type column struct {
 	PK        int
 }
 
-func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
+func rebuildEmpty(db *gorm.DB, table string, rules integrityRules, models []any) error {
 	var columns []column
 	if err := db.Raw("PRAGMA table_info(" + quote(table) + ")").Scan(&columns).Error; err != nil {
 		return err
@@ -143,7 +162,7 @@ func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
 	}
 	definitions = append(definitions, rules.Constraints[table]...)
 	// JSON fields retain SQL NULL separately from valid JSON null, arrays and objects.
-	for _, model := range Models() {
+	for _, model := range models {
 		stmt := &gorm.Statement{DB: db}
 		if err := stmt.Parse(model); err != nil {
 			return err

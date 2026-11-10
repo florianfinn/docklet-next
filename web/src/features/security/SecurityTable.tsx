@@ -2,9 +2,10 @@
 // Revision: 5f56262875af9a8ec0fe9007cb889bd3a513085d
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original measured security table, compact filters and labelled card fields.
+// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail.
 
 import type { CSSProperties, ReactNode } from "react";
+import { CircleHelp } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { ColumnFilterRow, ColumnFilterSummary } from "@/shared/components/column-filters";
@@ -16,15 +17,19 @@ import { securityColumnGroups } from "./security-layout";
 import type { SortState } from "@/shared/lib/table-sort";
 import { cn } from "@/shared/lib/utils";
 import { Card } from "@/shared/ui/card";
+import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { BareTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 export interface SecurityColumn<K extends string> { id: K; label: string; short?: string }
 export interface SecurityRow<K extends string> {
   id: string;
   color: string;
   selected?: boolean;
+  advisoryKey?: string;
+  onOpen?: (element: HTMLElement) => void;
   cells: Record<K, ReactNode>;
 }
 interface Props<T, K extends string> {
@@ -40,6 +45,22 @@ interface Props<T, K extends string> {
   onSort: (key: K) => void;
   summary: { shown: number; total: number; noun: string; nounOf: string };
   empty: ReactNode;
+}
+
+const HEADER_HELP = {
+  cvss: "cvss", risk: "risk", epss: "epss", installed: "installed", fixed: "fixed", usage: "usage",
+  critical: "count", high: "count", medium: "count", low: "count", unknown: "count",
+} as const;
+
+function FieldLabel({ label, help }: { label: string; help?: string }) {
+  const t = useTranslations("security");
+  return <span className="inline-flex items-center gap-1">
+    {label}
+    {help && <Tooltip>
+      <TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-xs" aria-label={t("headerHelp.label", { column: label })}><CircleHelp aria-hidden /></Button></TooltipTrigger>
+      <TooltipContent className="max-w-xs">{help}</TooltipContent>
+    </Tooltip>}
+  </span>;
 }
 
 function CompactFilters<T, K extends string>({ columns, filters, values, onChange }: Pick<Props<T, K>, "columns" | "filters" | "values"> & { onChange: (id: string, value: string) => void }) {
@@ -69,13 +90,20 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
   // Filter values only remeasure: a reset would unmount the compact filter being typed into.
   const { view, ref } = useFitView<HTMLElement>(JSON.stringify([fitKey, columns]), undefined, JSON.stringify(values));
   const groups = securityColumnGroups(view, columns.map((c) => c.id), condensed);
+  const help = new Map(Object.entries(HEADER_HELP).map(([id, key]) => [id, t(`headerHelp.${key}`, { severity: columns.find((c) => c.id === id)?.label ?? "" })]));
   const onChange = (id: string, value: string) => setValues((cur) => ({ ...cur, [id]: value }));
   const labelled = (row: SecurityRow<K>, ids: readonly K[]) => <dl className="grid min-w-0 gap-2">{ids.map((id) => <div key={id} className="min-w-0" data-field={id}>
-    <dt className="text-[11px] text-muted-foreground">{columns.find((c) => c.id === id)!.label}</dt>
+    <dt className="text-[11px] text-muted-foreground"><FieldLabel label={columns.find((c) => c.id === id)!.label} help={view === "cards" ? help.get(id) : undefined} /></dt>
     <dd className="min-w-0 text-xs [overflow-wrap:anywhere]">{row.cells[id]}</dd>
   </div>)}</dl>;
+  const gestures = (row: SecurityRow<K>) => ({
+    tabIndex: row.onOpen ? 0 : undefined,
+    "data-advisory-key": row.advisoryKey,
+    onClick: (event: React.MouseEvent<HTMLElement>) => { if (!(event.target as Element).closest("button,a,input,[role=combobox]")) row.onOpen?.(event.currentTarget); },
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => { if (event.key === "Enter" && event.target === event.currentTarget) { event.preventDefault(); row.onOpen?.(event.currentTarget); } },
+  });
   const edge = (row: SecurityRow<K>) => ({ "--host": row.color }) as CSSProperties;
-  return <Card className="min-w-0 gap-2 p-4" data-slot="security-table" data-view={view}>
+  return <Card tabIndex={-1} className="min-w-0 gap-2 p-4" data-slot="security-table" data-view={view}>
     <ColumnFilterSummary {...summary} values={values} onReset={() => setValues(() => ({}))} className="px-1" />
     {view !== "table" && <>
       <CardSortBar columns={columns.map((c) => ({ ...c, sorts: [{ key: c.id, label: c.label }] }))} sort={sort} onSort={onSort} />
@@ -84,21 +112,21 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
     <div className="min-w-0" data-slot="security-fit">
       {view === "cards" ? <ul ref={ref as React.Ref<HTMLUListElement>} aria-label={label} className="flex min-w-0 flex-col gap-2">
         {!rows.length && <li className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">{empty}</li>}
-        {rows.map((row) => <li key={row.id} data-security-row data-state={row.selected ? "selected" : undefined} style={edge(row)} className="min-w-0 rounded-xl border border-l-[3px] border-border/70 border-l-(--host) bg-card/50 p-3 data-[state=selected]:bg-primary/10">
+        {rows.map((row) => <li key={row.id} {...gestures(row)} data-security-row data-state={row.selected ? "selected" : undefined} style={edge(row)} className="min-w-0 rounded-xl border border-l-[3px] border-border/70 border-l-(--host) bg-card/50 p-3 data-[state=selected]:bg-primary/10">
           {labelled(row, groups.flat())}
         </li>)}
       </ul> : <BareTable ref={ref as React.Ref<HTMLTableElement>} aria-label={label} className="border-separate border-spacing-y-1">
         <TableHeader className="[&_tr]:border-0">
           <TableRow className="hover:bg-transparent">
-            {view === "table" ? columns.map((c) => <SortableHead key={c.id} sortKey={c.id} sort={sort} onSort={onSort} label={t("filters.sortBy", { column: c.label })} filtered={!!values[c.id]?.trim()} filteredLabel={tf("filtered")}>
+            {view === "table" ? columns.map((c) => <SortableHead key={c.id} sortKey={c.id} sort={sort} onSort={onSort} help={help.get(c.id)} label={t("filters.sortBy", { column: c.label })} filtered={!!values[c.id]?.trim()} filteredLabel={tf("filtered")}>
               {c.short ? <abbr title={c.label} className="no-underline">{c.short}</abbr> : c.label}
-            </SortableHead>) : groups.map((ids) => <TableHead key={ids[0]} className="whitespace-normal">{ids.map((id) => columns.find((c) => c.id === id)!.label).join(" / ")}</TableHead>)}
+            </SortableHead>) : groups.map((ids) => <TableHead key={ids[0]} className="whitespace-normal"><span className="flex flex-wrap items-center gap-x-2">{ids.map((id) => <FieldLabel key={id} label={columns.find((c) => c.id === id)!.label} help={help.get(id)} />)}</span></TableHead>)}
           </TableRow>
           {view === "table" && <ColumnFilterRow columns={columns} filters={filters} values={values} onChange={onChange} />}
         </TableHeader>
         <TableBody>
           {!rows.length && <TableRow><TableCell colSpan={groups.length} className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">{empty}</TableCell></TableRow>}
-          {rows.map((row) => <TableRow key={row.id} data-security-row data-state={row.selected ? "selected" : undefined} style={edge(row)} className={cn("transition-colors duration-(--dur-fast) [&>td]:py-1.5", ROW_SURFACE, ROW_EDGES)}>
+          {rows.map((row) => <TableRow key={row.id} {...gestures(row)} data-security-row data-state={row.selected ? "selected" : undefined} style={edge(row)} className={cn("transition-colors duration-(--dur-fast) [&>td]:py-1.5", ROW_SURFACE, ROW_EDGES)}>
             {groups.map((ids) => <TableCell key={ids[0]} className={cn("whitespace-normal text-xs [overflow-wrap:anywhere]", view === "condensed" && "min-w-40")}>
               {view === "table" ? row.cells[ids[0]!] : labelled(row, ids)}
             </TableCell>)}

@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original narrow bridge to existing fresh checks and native image identity.
+// Deviations: Original narrow bridge to existing fresh checks and native image identity; additive read-only manifest evidence for verified candidate updates. M21 #438: candidate scans and verified manifest binding.
 
 package image
 
@@ -110,4 +110,34 @@ func (s *ImageService) ExpectedContainerImage(ctx context.Context, current conta
 	}
 	expected, err := local.Expected(candidate)
 	return expected.String(), local.Platform.String(), err
+}
+
+// CandidateContainerImage keeps the pullable manifest distinct from the host's
+// native comparison key. It performs only local and registry observations.
+func (s *ImageService) CandidateContainerImage(ctx context.Context, current container.InspectResponse, ref string) (native, platform, manifest string, resultErr error) {
+	if s == nil || s.registryService == nil || s.dockerService == nil {
+		return "", "", "", dto.Failure("update.check-unavailable", 503)
+	}
+	c, err := s.dockerService.GetClient(ctx)
+	if err != nil {
+		return "", "", "", err
+	}
+	img, err := c.ImageInspect(ctx, current.Image)
+	if err != nil {
+		return "", "", "", err
+	}
+	local, err := identity.ResolveContainer(ctx, c, img.InspectResponse, "", current.ImageManifestDescriptor)
+	if err != nil {
+		return "", "", "", err
+	}
+	observed, err := s.registryService.PlatformImage(ctx, ref, local.Platform.Registry())
+	if err != nil {
+		return "", "", "", err
+	}
+	candidate, err := identity.NewCandidate(observed.Digest, observed.ConfigDigest, local.Platform)
+	if err != nil {
+		return "", "", "", err
+	}
+	expected, err := local.Expected(candidate)
+	return expected.String(), local.Platform.String(), observed.Digest, err
 }

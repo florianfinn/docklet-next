@@ -1,0 +1,21 @@
+Mozilla CA certificate store, distributed without modification.
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.
+The complete MPL-2.0 text accompanies this notice as MPL-2.0-Mozilla.txt.
+
+Source form: certdata.txt in the Alpine ca-certificates 20260909 archive:
+https://distfiles.alpinelinux.org/distfiles/v3.22/ca-certificates-20260909.tar.bz2
+Archive SHA-512:
+d235529da679f14e2e8df4175bc8189507add1382fe0ef8493824b07a49763a2a3af8201f43d30a0260eb8357a10bb0d7054d9b012abf3b74ecf889551cf0dd7
+Packaging source:
+https://github.com/alpinelinux/aports/tree/19b56f610f4f0055f155e99e1666cddcd000d01c/main/ca-certificates
+
+The copied artifact is /etc/ssl/certs/ca-certificates.crt from
+ca-certificates-bundle 20260909-r0 (x86_64), from the pinned Alpine image.
+Artifact SHA-256:
+028fca5150ee1915c4474489985d55c54fceaa680c754cc8d1301734f01b2232
+The source package declares MPL-2.0 AND MIT. Only the Mozilla certificate
+data is copied into the scratch runtime; package utilities and scripts
+(including the source archive's GPL script) are not shipped in the runtime.

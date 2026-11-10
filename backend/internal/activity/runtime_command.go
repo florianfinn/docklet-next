@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Trusted command normalization shared by active HTTP admission and executor intake.
+// Deviations: Trusted command normalization shared by active HTTP admission and executor intake. M21 #438: candidate scans and verified manifest binding.
 
 package activity
 
@@ -153,6 +153,12 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		owned := updaterDTO.ContainerImageRequest{}
+		if command.Options.ContainerImage != nil {
+			owned.ExpectedManifest = command.Options.ContainerImage.ExpectedManifest
+			if owned.ExpectedManifest != "" && (command.Operation != RuntimeUpdateContainer || !updaterDTO.ValidManifest(owned.ExpectedManifest)) {
+				return invalid()
+			}
+		}
 		if command.Options.ContainerImage != nil && command.Options.ContainerImage.Policy != nil {
 			binding := *command.Options.ContainerImage.Policy
 			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
@@ -186,6 +192,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		var owned = *command.Options.Lifecycle
+		if !owned.Request.VerifiedService() {
+			return invalid()
+		}
 		if len(owned.Request.Services) > updaterDTO.MaxLifecycleServices {
 			return invalid()
 		}
@@ -223,6 +232,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		if len(owned.Selections) > updaterDTO.MaxLifecycleServices {
+			return invalid()
+		}
+		if owned.Request.ExpectedManifest != "" && (len(owned.Selections) != 1 || owned.Selections[0].Service != owned.Request.Service || owned.Selections[0].Digest != owned.Request.ExpectedManifest) {
 			return invalid()
 		}
 		names := map[string]bool{}

@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums.
+// Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail.
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -16,6 +16,9 @@ export const REQUEST_CODE_KEYS = {
 } satisfies Record<Schema["RequestProblem"]["code"], CatalogueKey>;
 
 export const IMAGE_ERROR_KEYS = {
+  "candidate.unavailable": "images.errors.candidate_unavailable",
+  "candidate.deferred": "images.errors.candidate_deferred",
+  "update.candidate-changed": "images.errors.update_candidate-changed",
   "agent.unavailable": "images.errors.agent_unavailable",
   "container.origin-locked": "images.errors.container_origin-locked",
   "container.recreate-ambiguous": "images.errors.container_recreate-ambiguous",
@@ -224,3 +227,7 @@ export const WIDGET_CODE_KEYS = {
 } satisfies Record<NonNullable<
   | Schema["WidgetProblem"]["code"]
 >, CatalogueKey>;
+
+export const ADVISORY_USAGE_CODE_KEYS = {
+  "image.usage-unavailable": "security.detail.usageUnavailable",
+} satisfies Record<NonNullable<Schema["VulnerabilityAdvisoryUsage"]["code"]>, CatalogueKey>;

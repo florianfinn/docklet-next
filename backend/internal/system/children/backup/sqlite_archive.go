@@ -46,7 +46,7 @@ type archiveManifest struct {
 
 // Sources are reserved writer connections, with admissions and transactions
 // drained for both files before either VACUUM starts. SQLite includes all WAL data.
-func createSQLiteArchive(ctx, snapshotCtx context.Context, dir, id string, hub, francis *sql.Conn, limit int64, release ...func()) (string, int64, error) {
+func createSQLiteArchive(ctx, snapshotCtx context.Context, dir, id string, hub, francis *sql.Conn, limit int64, options database.MigrationOptions, release ...func()) (string, int64, error) {
 	if err := archiveContextError(ctx); err != nil {
 		return "", 0, err
 	}
@@ -103,11 +103,11 @@ func createSQLiteArchive(ctx, snapshotCtx context.Context, dir, id string, hub, 
 			return "", 0, err
 		}
 	}
-	newest, err := newestMigration()
+	newest, err := newestMigration(options)
 	if err != nil {
 		return "", 0, errMigration
 	}
-	version, err := validateImages(ctx, stage, newest)
+	version, err := validateImages(ctx, stage, newest, options)
 	if err != nil {
 		return "", 0, err
 	}
@@ -161,7 +161,7 @@ func createSQLiteArchive(ctx, snapshotCtx context.Context, dir, id string, hub, 
 		return "", 0, ErrSystemBackupUnavailable
 	}
 	// Re-read the finished tar rather than publishing based only on the inputs.
-	if _, err = validateArchive(ctx, file.Name(), newest); err != nil {
+	if _, err = validateArchive(ctx, file.Name(), newest, options); err != nil {
 		return "", 0, err
 	}
 	if err = os.Rename(file.Name(), filepath.Join(dir, name)); err != nil {
@@ -246,7 +246,7 @@ func checkImage(ctx context.Context, pool *sql.DB) error {
 	}
 	return nil
 }
-func validateImages(ctx context.Context, dir string, newest int64) (int64, error) {
+func validateImages(ctx context.Context, dir string, newest int64, options ...database.MigrationOptions) (int64, error) {
 	hub, err := openImage(filepath.Join(dir, hubImageName))
 	if err != nil {
 		return 0, errInvalidArchive
@@ -255,7 +255,7 @@ func validateImages(ctx context.Context, dir string, newest int64) (int64, error
 	if err = checkImage(ctx, hub); err != nil {
 		return 0, err
 	}
-	if err = database.ValidateSnapshot(ctx, hub, newest); err != nil {
+	if err = database.ValidateSnapshot(ctx, hub, newest, options...); err != nil {
 		return 0, errMigration
 	}
 	var version int64

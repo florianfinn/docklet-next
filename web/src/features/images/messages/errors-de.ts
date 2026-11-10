@@ -8,6 +8,14 @@ import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "candidate_unavailable": deBackend.errors.candidate.unavailable,
+  "candidate_deferred": deBackend.errors.candidate.deferred,
+  "update_candidate-changed": deBackend.errors.update["candidate-changed"],
+  "update_self-not-compose": "Diese Installation wird nicht mit Compose verwaltet. Verwende die manuellen Update-Befehle.",
+  "update_self-unsupported-layout": "Diese Compose-Konfiguration lässt sich nicht sicher übernehmen. Verwende die manuellen Update-Befehle.",
+  "update_self-custom-image": "Diese Installation verwendet ein eigenes Image oder einen veränderlichen Tag. Aktualisiere sie manuell.",
+  "update_self-failed": "Das Update ist fehlgeschlagen. Bewahre die vorherige Konfiguration auf und stelle sie manuell wieder her.",
+  "update_outcome-unknown": "Das Update-Ergebnis konnte nicht bestätigt werden. Prüfe den Host vor einem erneuten Versuch.",
   "agent_unavailable": deBackend.errors.agent.unavailable,
   "container_origin-locked": "Docklet verwaltet keine Updates für diesen Container.",
   "container_recreate-ambiguous": "Der Ersatzcontainer konnte nicht eindeutig ermittelt werden.",

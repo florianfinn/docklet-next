@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func TestSimpleUsersMigrationPreservesM14IdentityData(t *testing.T) {
+func TestSimpleUsersBaselinePreservesIdentityData(t *testing.T) {
 	for _, mode := range []string{"hub", "agent"} {
 		t.Run(mode, func(t *testing.T) {
 			db, err := connectDatabaseInternal(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "fixture.db")))
@@ -21,7 +21,7 @@ func TestSimpleUsersMigrationPreservesM14IdentityData(t *testing.T) {
 			defer db.Close()
 			pool, err := db.SQLDB()
 			require.NoError(t, err)
-			require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), pool, dbProviderSQLite, MigrationOptions{}, 14))
+			require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), pool, dbProviderSQLite, MigrationOptions{}, 1))
 			require.NoError(t, db.Exec("INSERT INTO users(id,username,password_hash,time_format) VALUES('operator','operator','retained','auto')").Error)
 			require.NoError(t, db.Exec("INSERT INTO roles(id,name,permissions,built_in) VALUES('role_admin','Administrator','[\"users:read\"]',1)").Error)
 			require.NoError(t, db.Exec("INSERT INTO user_role_assignments(id,user_id,role_id,source) VALUES('assignment','operator','role_admin','manual')").Error)

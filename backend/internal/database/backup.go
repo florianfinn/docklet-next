@@ -13,15 +13,27 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 )
 
-func LatestMigrationVersion() (int64, error) {
-	return getHighestEmbeddedMigrationVersionInternal(dbProviderSQLite)
+func LatestMigrationVersion(options ...MigrationOptions) (int64, error) {
+	return getHighestEmbeddedMigrationVersionInternal(dbProviderSQLite, options...)
+}
+
+func (db *DB) LatestMigrationVersion() (int64, error) {
+	return LatestMigrationVersion(db.MigrationOptions())
+}
+
+// MigrationOptions preserves the process migration source across restore validation.
+func (db *DB) MigrationOptions() MigrationOptions {
+	if db == nil {
+		return MigrationOptions{}
+	}
+	return db.migrations
 }
 func (db *DB) Migrate(ctx context.Context) error {
 	pool, err := db.SQLDB()
 	if err != nil {
 		return err
 	}
-	return migrateDatabaseInternal(ctx, pool, dbProviderSQLite, MigrationOptions{})
+	return migrateDatabaseInternal(ctx, pool, dbProviderSQLite, db.migrations)
 }
 
 // OpenHubForRestore acquires the lifetime lock before opening either database.
@@ -33,6 +45,10 @@ func OpenHubForRestore(ctx context.Context, databaseURL string) (*DB, error) {
 	}
 	lock, err := acquireHubLock(ctx, path)
 	if err != nil {
+		return nil, err
+	}
+	if err := preflightDatabase(ctx, path, MigrationOptions{}); err != nil {
+		_ = lock.Stop()
 		return nil, err
 	}
 	db, err := connectDatabaseInternal(ctx, databaseURL)
@@ -55,6 +71,9 @@ func (db *DB) SuspendOrdinaryConnections() error {
 // Preserve the GORM root pointer used by domain services; all old handles have
 // been drained and closed before replacement under the maintenance barrier.
 func (db *DB) ResumeOrdinaryConnections() error {
+	if err := preflightDatabase(context.Background(), db.path, db.migrations); err != nil {
+		return err
+	}
 	next, err := connectDatabaseInternal(context.Background(), sqlitestore.URL(db.path))
 	if err != nil {
 		return err
@@ -62,12 +81,12 @@ func (db *DB) ResumeOrdinaryConnections() error {
 	*db.DB = *next.DB
 	return nil
 }
-func ValidateSnapshot(ctx context.Context, pool *sql.DB, newest int64) error {
+func ValidateSnapshot(ctx context.Context, pool *sql.DB, newest int64, options ...MigrationOptions) error {
 	var count int
 	if err := pool.QueryRowContext(ctx, "SELECT count(*) FROM docklet_database_metadata").Scan(&count); err != nil || count != 1 {
 		return errors.New("backup.invalid_archive")
 	}
-	return validateIdentity(ctx, pool, newest)
+	return validateIdentity(ctx, pool, newest, options...)
 }
 
 func AcquireRestoreLock(ctx context.Context, databaseURL string) (*HubLock, string, error) {
@@ -79,6 +98,9 @@ func AcquireRestoreLock(ctx context.Context, databaseURL string) (*HubLock, stri
 	return lock, path, err
 }
 func OpenLockedForRestore(ctx context.Context, path string, lock *HubLock) (*DB, error) {
+	if err := preflightDatabase(ctx, path, MigrationOptions{}); err != nil {
+		return nil, err
+	}
 	db, err := connectDatabaseInternal(ctx, sqlitestore.URL(path))
 	if err != nil {
 		return nil, err

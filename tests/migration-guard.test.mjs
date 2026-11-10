@@ -6,7 +6,7 @@ import { readFileSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cleanEnvironment } from "./helpers.mjs";
-import { migrationProblems, baseManifestProblems } from "../scripts/check-migrations.mjs";
+import { migrationProblems, baseManifestProblems, prereleaseManifest } from "../scripts/check-migrations.mjs";
 
 test("shipped migration hash and version order are immutable", () => {
   const baseline = Buffer.from("-- baseline\n");
@@ -69,39 +69,36 @@ test("worktree guard rejects all manifest and baseline bypasses", (t) => {
   assert.match(absentBase.stderr, /unreadable base manifest/);
 });
 
-test("one-time transition accepts only the exact seven-hash PostgreSQL base", () => {
- const prior = {"001_baseline.sql": "c39ff6da5f2a456e6f63261c4ec6ad13b584dc53fd5d4b501b6ca9638f573554", "002_run_traces.sql": "0f5b2c64b41be772a14b1231434d67ea21f28df3eca6ff2b952a2bbdb378d48b", "003_sync_receipt_lifecycle.sql": "671bcfc6ac6486430b793bf3d6c178a0c1c6f1fb18cc5b7eff61e1bb5180a578", "004_gate_owner.sql": "f3c8fdb6a543a7af2b70a8bea81354d9251e1214fe50a1bbe1f9081a64f08709", "005_gate_lease.sql": "61c4116c28a808fe45a4577a366835e8d842e67428302c3b213aa3cb733d9f89", "006_single_hub_gate.sql": "dbf959161d6b5554d211007cb84669843b3044a63b2b073d86434b2fccb8e67a", "007_activity_raw_output.sql": "51c48b1468886cb1725eadeb4f463ffc07c7f6b725466afe138728fed107efa8"};
- const next = JSON.parse(readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
- assert.deepEqual(baseManifestProblems(prior, next), []);
- assert.ok(baseManifestProblems({}, next).includes("invalid-transition-base"));
- assert.ok(baseManifestProblems({...prior, "001_baseline.sql": "0".repeat(64)}, next).length);
- assert.ok(baseManifestProblems({...prior, "008_unrelated.sql": "1".repeat(64)}, next).length);
- assert.ok(baseManifestProblems(prior, {...next, "sqlite/001_baseline.sql": "0".repeat(64)}).length);
- assert.ok(baseManifestProblems(next, {}).length);
- assert.ok(baseManifestProblems(next, {...next, "sqlite/001_baseline.sql": "0".repeat(64)}).length);
+test("release transition accepts the exact pinned prerelease chain, with manifested forward entries", () => {
+  const release = JSON.parse(readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
+  const baselinePath = "sqlite/001_baseline.sql";
+  const forwardPath = "sqlite/003_fixture.sql";
+  const releaseFiles = Object.keys(release).map((path) => [path, readFileSync(new URL(`../backend/resources/migrations/${path}`, import.meta.url))]);
+  const forwardBytes = Buffer.from("-- +goose Up\nCREATE TABLE fixture(id TEXT);\n");
+  const forwardHash = createHash("sha256").update(forwardBytes).digest("hex");
+  const next = {...release, [forwardPath]: forwardHash};
+  assert.deepEqual(baseManifestProblems(prereleaseManifest, release), []);
+  assert.deepEqual(baseManifestProblems(prereleaseManifest, next), []);
+  assert.deepEqual(migrationProblems(new Map([...releaseFiles, [forwardPath, forwardBytes]]), next), []);
+  assert.deepEqual(baseManifestProblems(release, next), []);
+  for (const name of Object.keys(prereleaseManifest)) {
+    const altered = {...prereleaseManifest, [name]: "0".repeat(64)};
+    assert.ok(baseManifestProblems(altered, release).includes(`changed-shipped:${name}`));
+  }
+  assert.ok(baseManifestProblems(prereleaseManifest, {...release, [baselinePath]: "0".repeat(64)})
+    .includes(`changed-shipped:${baselinePath}`));
+  const partial = {...prereleaseManifest};
+  delete partial["sqlite/020_remove_webhooks.sql"];
+  assert.ok(baseManifestProblems(prereleaseManifest, partial).includes("changed-shipped:sqlite/020_remove_webhooks.sql"));
+  assert.ok(baseManifestProblems(prereleaseManifest, {...release, "sqlite/020_remove_webhooks.sql": prereleaseManifest["sqlite/020_remove_webhooks.sql"]}).length);
+  assert.ok(migrationProblems(new Map([...releaseFiles, [forwardPath, forwardBytes]]), release)
+    .includes(`unmanifested:${forwardPath}`));
+  assert.ok(baseManifestProblems(release, {}).includes(`changed-shipped:${baselinePath}`));
+  assert.ok(baseManifestProblems(release, {...release, [baselinePath]: "0".repeat(64)}).includes(`changed-shipped:${baselinePath}`));
+  assert.deepEqual(baseManifestProblems({}, release), ["invalid-transition-base"]);
 });
 
-
-test("SQLite comparison base protects both shipped migrations against deletion and rehashing", () => {
-  const shipped = JSON.parse(readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
-  const previous = Object.fromEntries([
-    "sqlite/001_baseline.sql", "sqlite/002_hub_backup_archive.sql",
-  ].map((name) => [name, shipped[name]]));
-  assert.deepEqual(Object.keys(previous).sort(), ["sqlite/001_baseline.sql", "sqlite/002_hub_backup_archive.sql"]);
-  assert.deepEqual(baseManifestProblems(previous, shipped), []);
-  assert.deepEqual(baseManifestProblems(previous, { ...shipped, "sqlite/999_future.sql": "f".repeat(64) }), []);
-  for (const name of Object.keys(previous)) {
-    const deleted = { ...shipped };
-    delete deleted[name];
-    assert.ok(baseManifestProblems(previous, deleted).includes(`changed-shipped:${name}`));
-    assert.ok(baseManifestProblems(previous, { ...shipped, [name]: "0".repeat(64) }).includes(`changed-shipped:${name}`));
-    const files = new Map(Object.keys(shipped).map((path) => [path,
-      readFileSync(new URL(`../backend/resources/migrations/${path}`, import.meta.url))]));
-    files.delete(name);
-    assert.ok(migrationProblems(files, shipped).includes(`deleted:${name}`));
-    files.set(name, Buffer.from("-- altered shipped SQL\n"));
-    assert.ok(migrationProblems(files, shipped).includes(`changed:${name}`));
-    const rehashed = { ...shipped, [name]: createHash("sha256").update(files.get(name)).digest("hex") };
-    assert.ok(baseManifestProblems(previous, rehashed).includes(`changed-shipped:${name}`));
-  }
+test("frozen prerelease fixture hashes match the independent transition pin", () => {
+  const hashes = JSON.parse(readFileSync(new URL("../backend/internal/schema/testdata/prerelease-chain/hashes.json", import.meta.url)));
+  assert.deepEqual(Object.fromEntries(Object.entries(hashes).map(([name, hash]) => [`sqlite/${name}`, hash])), prereleaseManifest);
 });

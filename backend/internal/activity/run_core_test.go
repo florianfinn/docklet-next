@@ -280,7 +280,7 @@ func TestEveryTerminalPathSetsMatchingMessageCode(t *testing.T) {
 			require.EqualValues(t, 1, count)
 			return run.ID
 		}},
-		{"stale auto update success", activity.StatusSuccess, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+		{"legacy self-swap marker is not success", activity.StatusFailed, func(t *testing.T, s *ActivityService, _ *database.DB) string {
 			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeAutoUpdate})
 			require.NoError(t, err)
 			require.NoError(t, s.PatchActivityMetadata(t.Context(), run.ID, database.JSON{"selfUpdateTriggered": true}))

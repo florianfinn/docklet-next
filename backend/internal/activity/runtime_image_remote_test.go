@@ -2,11 +2,24 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Real Direct/Edge lifecycle execution, query and lost-ack receipt recovery.
+// Deviations: Real Direct/Edge lifecycle execution, query and lost-ack receipt recovery; M21 selects a pattern tag. M21 #438: candidate scans and verified manifest binding.
 
 package activity_test
 
 import (
+	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/project"
+	"github.com/florianfinn/docklet-next/backend/internal/registry"
+	"github.com/google/go-containerregistry/pkg/name"
+	registryHTTP "github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"io"
+	"log"
+
 	"context"
 	"encoding/json"
 	"github.com/danielgtaylor/huma/v2"
@@ -59,7 +72,7 @@ func TestRuntimeARMPlatformCaptureBaselinePolicyRead(t *testing.T) {
 		}
 	}
 }
-func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested string, baselineOnly bool) {
+func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested string, baselineOnly bool, verifiedMode ...string) {
 	arch, variant := "amd64", ""
 	if strings.Contains(requested, "arm64") {
 		arch, variant = "arm64", "v8"
@@ -97,8 +110,48 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		}
 		return id
 	}
-	oldRef := "registry.example.com/app:1.0.0"
-	newRef := "registry.example.com/app:1.1.0"
+	verified := len(verifiedMode) > 0
+	repository := "registry.example.com/app"
+	var candidateTag name.Tag
+	var movedImage v1.Image
+	if verified {
+		server := httptest.NewServer(registryHTTP.New(registryHTTP.Logger(log.New(io.Discard, "", 0))))
+		t.Cleanup(server.Close)
+		repository = strings.TrimPrefix(server.URL, "http://") + "/app"
+		makeImage := func(generation string) v1.Image {
+			img, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Config: v1.Config{Labels: map[string]string{"generation": generation}}})
+			require.NoError(t, err)
+			return img
+		}
+		oldImage, nextImage := makeImage("old"), makeImage("next")
+		movedImage = makeImage("moved")
+		oldConfig, err := oldImage.ConfigName()
+		require.NoError(t, err)
+		oldManifest, err := oldImage.Digest()
+		require.NoError(t, err)
+		nextConfig, err := nextImage.ConfigName()
+		require.NoError(t, err)
+		nextManifest, err := nextImage.Digest()
+		require.NoError(t, err)
+		oldID, oldNative, newID, digest = oldConfig.String(), oldManifest.String(), nextConfig.String(), nextManifest.String()
+		if store != "classic" {
+			oldID = oldManifest.String()
+			newID = nextManifest.String()
+		}
+		oldTag, err := name.NewTag(repository+":release-1.0.0", name.Insecure)
+		require.NoError(t, err)
+		candidateTag, err = name.NewTag(repository+":release-1.1.0", name.Insecure)
+		require.NoError(t, err)
+		require.NoError(t, remote.Write(oldTag, oldImage))
+		require.NoError(t, remote.Write(candidateTag, nextImage))
+		require.NoError(t, f.agent.db.Create(&registry.ContainerRegistry{URL: server.URL, Enabled: true, Insecure: true, RegistryType: "generic"}).Error)
+		reg := registry.NewContainerRegistryService(f.agent.db, nil, nil, f.agent.settings, server.Client())
+		events := event.NewEventService(f.agent.db, nil, server.Client())
+		*f.agent.projects = *project.NewProjectService(f.agent.db, f.agent.settings, events, f.agent.images, f.agent.docker, nil, reg, &config.Config{ProjectsDirectory: f.agent.root}, nil, nil)
+	}
+	// A tag-pattern selection travels literally to the Engine create call.
+	oldRef := repository + ":release-1.0.0"
+	newRef := repository + ":release-1.1.0"
 	tags := map[string]string{oldID: oldID, newID: newID, oldRef: oldID}
 	reference := oldRef
 	var mu sync.Mutex
@@ -149,7 +202,14 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 			w.WriteHeader(201)
 			return true
 		case path == "/images/create":
-			tags["registry.example.com/app@"+digest] = newID
+			if verified {
+				require.Equal(t, repository, r.URL.Query().Get("fromImage"))
+				require.Equal(t, digest, r.URL.Query().Get("tag"), "the Engine pull must use the scanned manifest")
+				if verifiedMode[0] == "stable" {
+					require.NoError(t, remote.Write(candidateTag, movedImage))
+				}
+			}
+			tags[repository+"@"+digest] = newID
 			_, _ = w.Write([]byte(`{"status":"downloaded"}`))
 			return true
 		case strings.HasPrefix(path, "/images/") && r.Method == http.MethodDelete:
@@ -205,9 +265,12 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	}
 	target := activity.RuntimeTarget{Kind: "stack", ID: "example-project"}
 	source := "name: example_stack\nservices:\n  app:\n    platform: " + requested + "\n    image: " + oldRef + "\n"
+	if verified {
+		source += "    labels:\n      com.getarcaneapp.arcane.updater.strategy: tag\n      com.getarcaneapp.arcane.updater.tag-pattern: 'release-(?P<version>.*)'\n"
+	}
 	path := f.agent.project(target.ID, target.ID, source)
 	if baselineOnly {
-		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
+		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
 		require.NoError(t, e)
 		router := echo.New()
 		api := runtimeImageAPI(router)
@@ -243,7 +306,7 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	require.NoError(t, err, "baseline code=%s events=%s", imageDTO.Neutral(err, "unknown", 500).Problem.Code, f.agent.debugEvents())
 	require.True(t, baseline.Available)
 	if baselineOnly {
-		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
+		owner, e := updater.NewUpdaterService(f.db, f.agent.settings, f.agent.docker, f.agent.projects, nil, nil, nil, f.agent.images, nil, f.hubActivity, &config.Config{}, nil, nil, nil)
 		require.NoError(t, e)
 		owner.ConfigureImagePolicies(nil, nil)
 		router := echo.New()
@@ -264,10 +327,25 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	var row life.Baseline
 	require.NoError(t, f.agent.db.First(&row, "target_id = ?", target.ID).Error)
 	intent := &dto.LifecycleIntent{Request: dto.LifecycleRequest{ExpectedRevision: baseline.SavedRevision}, TargetIdentity: row.TargetIdentity, SavedRevision: baseline.SavedRevision, ObservedRevision: baseline.ObservedRevision, BaselineRevision: row.Revision, Selections: []dto.ImageSelection{{Service: "app", SourceReference: oldRef, Reference: newRef, Digest: digest, ImageID: newID, Platform: "linux/amd64", Kind: "version"}}}
+	if verified {
+		f.agent.projects.SetLifecycleChecker(func(context.Context, string) (*projectDTO.UpdateInfo, error) {
+			return &projectDTO.UpdateInfo{ServiceUpdates: map[string]projectDTO.ServiceUpdateInfo{"app": {UpdateInfo: &imageDTO.UpdateInfo{HasUpdate: true, State: "version", LatestVersion: "1.1.0"}}}}, nil
+		})
+		request := dto.LifecycleRequest{Service: "app", ExpectedManifest: digest, ExpectedRevision: baseline.SavedRevision}
+		meta, err := f.sender.Resolve(t.Context(), activityDTO.RuntimeTargetRequest{Registration: activityDTO.RuntimeExecutorIdentity{ManagerID: f.store.ManagerID, RegistrationID: f.store.RegistrationID, ExecutorGeneration: f.store.ExecutorGeneration}, Target: target, Lifecycle: &request})
+		require.NoError(t, err)
+		require.NotNil(t, meta.Lifecycle)
+		intent = meta.Lifecycle
+		require.Equal(t, request.ExpectedManifest, intent.Request.ExpectedManifest)
+		if verifiedMode[0] == "moved" {
+			require.NoError(t, remote.Write(candidateTag, movedImage))
+		}
+	}
+	beforeEffects := len(runtimeEffectEvents(f.agent.http.snapshot()))
 	run := func(op activity.RuntimeOperation, intent *dto.LifecycleIntent) activityDTO.RuntimeSnapshot {
 		command := f.command(op, target)
 		command.Options.Lifecycle = intent
-		if op == activity.RuntimeUpdateProject {
+		if op == activity.RuntimeUpdateProject && !verified {
 			store := policy.Store{DB: f.db.DB}
 			one, err := store.Policy(t.Context(), command.Store.EnvironmentID, command.Store.RegistrationID, target.ID)
 			require.NoError(t, err)
@@ -295,6 +373,13 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		require.NoError(t, f.control.WaitDispatch(ctx, ref.RunID))
 		agent, err := f.agent.waitLocal(ref.RunID)
 		require.NoError(t, err)
+		if verified && verifiedMode[0] == "moved" {
+			require.Equal(t, activityDTO.StatusFailed, agent.Status)
+			require.NotNil(t, agent.ImageLifecycle)
+			require.Equal(t, "update.candidate-changed", agent.ImageLifecycle.Code)
+			require.Equal(t, beforeEffects, len(runtimeEffectEvents(f.agent.http.snapshot())), "moved tag must make zero mutating Engine requests")
+			return agent
+		}
 		require.Equal(t, activityDTO.StatusSuccess, agent.Status, f.agent.debugEvents())
 		out, err := f.control.Wait(ctx, ref, nil)
 		require.NoError(t, err)
@@ -310,9 +395,15 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	}
 	f.loseAck.Store(true)
 	updated := run(activity.RuntimeUpdateProject, intent)
+	if verified {
+		return
+	}
 	body, err := os.ReadFile(filepath.Join(path, "compose.yaml"))
 	require.NoError(t, err)
 	require.Contains(t, string(body), newRef)
+	mu.Lock()
+	require.Equal(t, newRef, reference, "the container is created from the selected literal tag")
+	mu.Unlock()
 	baseline, err = f.agent.projects.ImageBaselineStatus(t.Context(), target.ID, f.store.RegistrationID)
 	require.NoError(t, err)
 	meta, err := f.sender.Resolve(t.Context(), activityDTO.RuntimeTargetRequest{Registration: activityDTO.RuntimeExecutorIdentity{ManagerID: f.store.ManagerID, RegistrationID: f.store.RegistrationID, ExecutorGeneration: f.store.ExecutorGeneration}, Target: target, Lifecycle: &dto.LifecycleRequest{PointID: updated.ImageLifecycle.RestorePointID, ExpectedRevision: baseline.SavedRevision, ReplaceConfiguration: true}})
@@ -337,4 +428,12 @@ func runtimeImageAPI(router *echo.Echo) huma.API {
 		return strings.NewReplacer("/", "_", ".", "_", "-", "_").Replace(typ.PkgPath()) + "_" + huma.DefaultSchemaNamer(typ, hint)
 	})
 	return humaecho.New(router, config)
+}
+
+func TestVerifiedServiceDirectEdgeMovedAndPinned(t *testing.T) {
+	for _, edge := range []bool{false, true} {
+		for _, mode := range []string{"moved", "stable"} {
+			t.Run(fmt.Sprint(edge)+"/"+mode, func(t *testing.T) { testRuntimeImagePlatform(t, "classic", edge, "linux/amd64", false, mode) })
+		}
+	}
 }

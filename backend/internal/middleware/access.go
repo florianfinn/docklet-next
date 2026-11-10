@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; extract the single activity read ID.
 
 package middleware
 
@@ -28,6 +28,9 @@ func AccessMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
 			params.ProjectID = ctx.Param("projectId")
 			params.ContainerID = ctx.Param("containerId")
 			params.RunID = ctx.Param("runId")
+			if ctx.Operation().OperationID == "get-activity" {
+				params.RunID = ctx.Param("activityId")
+			}
 			params.PolicyKind, params.PolicyTarget = ctx.Param("kind"), ctx.Param("targetId")
 			if ctx.Operation().OperationID == "deploy-project" || ctx.Operation().OperationID == "set-auto-update-policy" {
 				req := humaecho.Unwrap(ctx).Request()

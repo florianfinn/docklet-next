@@ -76,6 +76,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
     const key = s.stackId ? `check:stack:${s.stackId}` : s.containerId ? `check:container:${s.containerId}` : "check:all";
     return { key, freshMs: CHECK_FRESH_MS, coveredBy: key === "check:all" ? [] : ["check:all"] };
   },
+  scanVulnerabilityCandidates: ([host, input]) => ({ key: `candidate-scan:${str(host)}:${contentHash(JSON.stringify(input))}` }),
   runScan: () => ({ key: "scan:all", freshMs: CHECK_FRESH_MS }),
   reconnectHost: ([hostId]) => ({ key: `reconnect:${str(hostId)}`, freshMs: CHECK_FRESH_MS }),
   runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}`, kind: STACK_RUN_KINDS[str(command)] }),
@@ -90,7 +91,8 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
   runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}`, kind: CONTAINER_RUN_KINDS[str(command)] }),
   recreateContainer: ([id, input]) => ({ key: `container:${str(id)}:recreate:${contentHash(JSON.stringify(input ?? null))}`, scope: `container:${str(id)}` }),
   restoreContainerImage: ([id]) => ({ key: `container:${str(id)}:restore-image`, scope: `container:${str(id)}` }),
-  installContainerUpdate: ([id]) => ({ key: `container:${str(id)}:update`, scope: `container:${str(id)}` }),
+  installContainerUpdate: ([id, input]) => ({ key: `container:${str(id)}:update${input ? `:${contentHash(JSON.stringify(input))}` : ""}`, scope: `container:${str(id)}` }),
+  selfUpdate: ([hostId]) => ({ key: hostId === "0" ? "hub:self-update" : `host:${str(hostId)}:self-update`, scope: hostId === "0" ? "hub" : `host:${str(hostId)}` }),
   restartAgent: ([hostId]) => ({ key: `host:${str(hostId)}:agent-restart`, scope: `host:${str(hostId)}` }),
   connectHost: ([hostId]) => ({ key: `host:${str(hostId)}:connect`, scope: `host:${str(hostId)}` }),
   runBackup: ([volumeId]) => ({ key: `volume:${str(volumeId)}:backup`, scope: `volume:${str(volumeId)}` }),
@@ -136,6 +138,8 @@ const active = (s: Status) => s === "pending" || s === "queued" || s === "runnin
 /** Target scopes of a run, also for runs started outside the gate (schedules, other tabs). */
 function scopesOf(run: CodedActionRun): string[] {
   if (run.kind === "check-updates" || run.kind === "scan") return [];
+  if (run.sourceOperation === "hub.update") return ["hub"];
+  if (run.sourceOperation === "agent.update" && run.hostId) return [`host:${run.hostId}`];
   return [run.stackId && `stack:${run.stackId}`, run.containerId && `container:${run.containerId}`].filter((x): x is string => !!x);
 }
 
@@ -317,7 +321,7 @@ export class RunGate {
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "installContainerUpdate" || method === "restoreContainerImage" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService") };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "installContainerUpdate" || method === "restoreContainerImage" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService" || method === "selfUpdate") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {

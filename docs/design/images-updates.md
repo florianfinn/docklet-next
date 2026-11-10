@@ -130,8 +130,8 @@ agent modes. An H mutation reaching an agent outside trusted admission refuses.
 | delete-restore-point (new) | DELETE E/updater/{kind}/{targetId}/restore-points/{pointId} | H→A / proposed `updater.restore.delete` | Update rights; refuse a point held by an active/unknown restore |
 | restore-update (new) | POST E/updater/{kind}/{targetId}/restore-points/{pointId}/restore | H admission only | Update/restore rights; executor uses trusted runtime execute |
 | get-system-image-hints (new) | GET E/updater/system-image-hints | H aggregation; proposed A observation `updater.system.hints` | `image-updates:read`; hub applies version cap |
-| trigger-upgrade / trigger-update-all | POST E/system/upgrade or /upgrade/all | Existing operator routes; `system.upgrade.run` / existing update-all forwarding | `system:upgrade`; every agent dispatch is capped server-side at running hub version |
-| check-upgrade / update-all-status | GET E/system/upgrade/check or /upgrade/all/status | Existing operator reads; no watcher rollout | Existing rights; capped/blocked targets grant no replacement authority |
+| trigger-upgrade | POST E/system/upgrade | Hub-owned self-update envelope; `system.upgrade.run` (docs/design/app-updates.md) | `system:upgrade`, administrators; every agent target is capped at the running hub version |
+| check-upgrade | GET E/system/upgrade/check | Self-update check; `system.upgrade.check` | Existing rights; eligibility grants no replacement authority |
 
 Project manual updates reuse `run-updater` with `type=project` and the exact
 selected project ID. Batch options remain bounded and permission-checked per

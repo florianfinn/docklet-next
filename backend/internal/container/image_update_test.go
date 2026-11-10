@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original per-source update, failure, restore and instance regressions.
+// Deviations: Original per-source update, failure, restore and instance regressions; compensated failure manual recovery.
 
 package container
 
@@ -108,7 +108,7 @@ func TestContainerImageFailuresReplaceSlotBeforeRecreate(t *testing.T) {
 				require.True(t, old.State.Running)
 				details := dto.Details{ID: updateOldID, Name: "app", ImageID: updateOldImage}
 				require.NoError(t, s.projectPreviousImage(t.Context(), &details))
-				require.Nil(t, details.PreviousImage)
+				require.NotNil(t, details.PreviousImage)
 				reasons, e := p.g.Reasons(t.Context(), updateOtherImage)
 				require.NoError(t, e)
 				require.Empty(t, reasons)
@@ -149,7 +149,7 @@ func TestContainerImageUpdateRestoreSameTagAndConfiguration(t *testing.T) {
 	require.Equal(t, 1, d.counts["pull"], "restore must not pull")
 }
 func TestContainerImageStaleSlotAndFrozenInstance(t *testing.T) {
-	for _, tc := range []string{"outside-slot", "other-recreate", "admission-instance", "renamed", "same-image"} {
+	for _, tc := range []string{"outside-slot", "other-recreate", "admission-instance", "renamed"} {
 		t.Run(tc, func(t *testing.T) {
 			s, d, _, _ := updateFixture(t)
 			owner := updateNewID
@@ -163,10 +163,7 @@ func TestContainerImageStaleSlotAndFrozenInstance(t *testing.T) {
 				restore = false
 			}
 			slotImage := updateOtherImage
-			if tc == "same-image" {
-				// The slot already holds the running image: nothing to restore.
-				owner, slotImage = updateOldID, updateOldImage
-			}
+
 			require.NoError(t, s.replacePreviousImage(t.Context(), "app", slotImage, updateRef, owner, "old-run"))
 			details := dto.Details{ID: updateOldID, Name: "app", ImageID: updateOldImage}
 			require.NoError(t, s.projectPreviousImage(t.Context(), &details))
@@ -344,4 +341,31 @@ func TestContainerImageUpdateComparesNativeKeyOnContainerdStore(t *testing.T) {
 	require.NoError(t, s.ExecuteContainerImage(updateContext(t), updateOldID, "app", false, user.Actor{}))
 	require.Equal(t, updateNewImage, d.containers[updateNewID].Image)
 	require.Equal(t, 1, d.counts["create"])
+}
+
+func TestFailedContainerUpdateManualRecoveryAfterRestart(t *testing.T) {
+	for _, failure := range []string{"create", "start"} {
+		t.Run(failure, func(t *testing.T) {
+			s, d, _, db := updateFixture(t)
+			d.fail = failure
+			err := s.ExecuteContainerImage(updateContext(t), updateOldID, "app", false, user.Actor{})
+			require.Equal(t, "update.deploy-failed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+			require.True(t, d.containers[updateOldID].State.Running)
+			// A new service instance reads the durable slot, without in-memory outcome state.
+			restarted := &ContainerService{dockerService: s.dockerService, containerImages: s.containerImages}
+			restarted.ConfigureOperations(db.DB, "registration", true, nil, nil)
+			details, err := restarted.GetContainerDetails(t.Context(), updateOldID)
+			require.NoError(t, err)
+			require.NotNil(t, details.PreviousImage)
+			require.Equal(t, updateOldImage, details.PreviousImage.ImageID)
+			d.fail = ""
+			require.NoError(t, restarted.ExecuteContainerImage(updateContext(t), updateOldID, "app", true, user.Actor{}))
+			restored := d.containers[updateRestoreID]
+			require.True(t, restored.State.Running)
+			require.Equal(t, updateOldImage, restored.Image)
+			require.Equal(t, []string{"EXAMPLE=kept"}, restored.Config.Env)
+			require.Equal(t, []string{"data:/data"}, restored.HostConfig.Binds)
+			require.Equal(t, 1, d.counts["pull"], "manual recovery uses the retained image, never another pull")
+		})
+	}
 }

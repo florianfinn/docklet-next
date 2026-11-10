@@ -16,9 +16,9 @@ func TestInvalidEnvironmentOverrideDoesNotFailInitialization(t *testing.T) {
 	db := setupSettingsTestDB(t)
 	svc, err := newSettingsServiceForTestInternal(t, t.Context(), db)
 	require.NoError(t, err)
-	t.Setenv("UPGRADE_LOG_RETENTION_DAYS", "invalid")
+	t.Setenv("BACKUP_DEFAULT_RETENTION_COUNT", "invalid")
 	_, err = svc.loadDatabaseConfigFromEnv(t.Context(), db)
 	require.NoError(t, err)
-	require.NoError(t, svc.upsertEnvSetting(t.Context(), db.DB, "upgradeLogRetentionDays", "invalid"))
-	require.Equal(t, 3, svc.GetIntSetting(t.Context(), "upgradeLogRetentionDays", 3))
+	require.NoError(t, svc.upsertEnvSetting(t.Context(), db.DB, "backupDefaultRetentionCount", "invalid"))
+	require.Equal(t, 7, svc.GetIntSetting(t.Context(), "backupDefaultRetentionCount", 7))
 }

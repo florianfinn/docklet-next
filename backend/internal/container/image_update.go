@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original standalone image update and manual previous-image restore.
+// Deviations: Original standalone image update and manual previous-image restore. M21 #438: candidate scans and verified manifest binding; allow owned same-image manual recovery.
 
 package container
 
@@ -81,7 +81,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if e != nil {
 			return e
 		}
-		if slot == nil || slot.OwnerContainerID != old.ID || slot.ImageID == old.Image {
+		if slot == nil || slot.OwnerContainerID != old.ID {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
 		ref, expected = slot.ImageRef, slot.ImageID
@@ -108,7 +108,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if checked == nil || checked.State == "unknown" || checked.State == "error" || checked.Error != "" {
 			return imageDTO.Failure("update.check-unavailable", 503)
 		}
-		if !checked.HasUpdate {
+		if !checked.HasUpdate && updaterDTO.ExpectedManifestFromContext(ctx) == "" {
 			return imageDTO.Failure("job.skipped", 409)
 		}
 		ref = old.Config.Image
@@ -127,14 +127,42 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if err := guard.ValidateReference(ref); err != nil {
 			return err
 		}
-		expected, platform, err = s.containerImages.ExpectedContainerImage(ctx, *old, ref)
+		verified := updaterDTO.ExpectedManifestFromContext(ctx)
+		if verified != "" {
+			resolver, ok := s.containerImages.(interface {
+				CandidateContainerImage(context.Context, dockercontainer.InspectResponse, string) (string, string, string, error)
+			})
+			if !ok || !updaterDTO.ValidManifest(verified) {
+				return imageDTO.Failure("update.check-unavailable", 503)
+			}
+			var manifest string
+			expected, platform, manifest, err = resolver.CandidateContainerImage(ctx, *old, ref)
+			if err == nil && manifest != verified {
+				return imageDTO.Failure("update.candidate-changed", 409)
+			}
+		} else {
+			expected, platform, err = s.containerImages.ExpectedContainerImage(ctx, *old, ref)
+		}
 		if err != nil {
 			return err
+		}
+		if !checked.HasUpdate {
+			return imageDTO.Failure("job.skipped", 409)
 		}
 		if expected == "" || expected != checked.LatestDigest {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
-		options, err := s.containerImages.PullOptionsWithAuth(ctx, ref, nil)
+		// A verified update pulls the scanned digest, but the container keeps its
+		// tag so later update checks and offers still apply to it.
+		pullRef := ref
+		if verified != "" {
+			named, err := reference.ParseNormalizedNamed(ref)
+			if err != nil {
+				return imageDTO.Failure("update.invalid-target", 400)
+			}
+			pullRef = reference.TrimNamed(named).String() + "@" + verified
+		}
+		options, err := s.containerImages.PullOptionsWithAuth(ctx, pullRef, nil)
 		if err != nil {
 			return err
 		}
@@ -154,7 +182,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if _, err := s.imageUpdateInstance(pullCtx, c, id, name); err != nil {
 			return err
 		}
-		reader, err := c.ImagePull(pullCtx, ref, options)
+		reader, err := c.ImagePull(pullCtx, pullRef, options)
 		if err != nil {
 			return imageDTO.Neutral(err, "image.pull-failed", 502)
 		}
@@ -167,7 +195,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if err != nil {
 			return err
 		}
-		pulled, err := c.ImageInspect(ctx, ref)
+		pulled, err := c.ImageInspect(ctx, pullRef)
 		if err != nil {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
@@ -176,6 +204,11 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			return imageDTO.Failure("update.target-changed", 409)
 		}
 		expected = pulled.ID
+		if pullRef != ref {
+			if _, err := c.ImageTag(ctx, client.ImageTagOptions{Source: expected, Target: ref}); err != nil {
+				return imageDTO.Neutral(err, "image.tag-failed", 502)
+			}
+		}
 		if _, err := s.imageUpdateInstance(ctx, c, id, name); err != nil {
 			return err
 		}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed GitOps and saved repositories; flush error output before run completion.
+// Deviations: Local module namespace; removed GitOps and saved repositories; flush error output before run completion; M21 destroy keeps files unless removeFiles is true.
 
 package project
 
@@ -605,21 +605,12 @@ func (h *ProjectHandler) DestroyProject(ctx context.Context, input *DestroyProje
 		return nil, err
 	}
 
-	removeFiles := true
-	removeVolumes := false
-	if input.Body != nil {
-		if input.Body.RemoveFiles != nil {
-			removeFiles = *input.Body.RemoveFiles
-		}
-		removeVolumes = input.Body.RemoveVolumes
-		slog.DebugContext(ctx, "DestroyProject handler received body",
-			"removeFiles", removeFiles,
-			"removeVolumes", removeVolumes,
-			"projectId", input.ProjectID)
-	} else {
-		slog.DebugContext(ctx, "DestroyProject handler received nil body",
-			"projectId", input.ProjectID)
-	}
+	removeFiles, removeVolumes := input.Body.Flags()
+	slog.DebugContext(ctx, "DestroyProject handler resolved flags",
+		"bodyPresent", input.Body != nil,
+		"removeFiles", removeFiles,
+		"removeVolumes", removeVolumes,
+		"projectId", input.ProjectID)
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	activityID, runtimeCtx := activitylib.StartHandlerActivity(

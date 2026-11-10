@@ -9,10 +9,12 @@ package config
 import "runtime"
 
 var (
-	Version     = "dev"
-	Revision    = "unknown"
-	BuildTime   = "unknown"
-	NodeVersion = "unknown"
+	Version           = "dev"
+	Revision          = "unknown"
+	BuildTime         = "unknown"
+	NodeVersion       = "unknown"
+	DefaultAgentImage = ""
+	ReleaseRepository = "ghcr.io/florianfinn/docklet-next"
 )
 
 // ShortRevision returns the first 8 characters of the revision hash

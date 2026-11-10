@@ -103,7 +103,7 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, model.AutoMigrate(Models()...))
 	require.NoError(t, ApplyIntegrity(model))
-	require.NoError(t, model.Exec("CREATE TABLE docklet_database_metadata (identity TEXT PRIMARY KEY NOT NULL CHECK (identity = 'docklet-next:sqlite:1'))").Error)
+	require.NoError(t, model.Exec("CREATE TABLE docklet_database_metadata (identity TEXT PRIMARY KEY NOT NULL CHECK (identity = 'docklet-next:sqlite:2'))").Error)
 	actual, err := migrated.SQLDB()
 	require.NoError(t, err)
 	require.Equal(t, catalog(t, pool), catalog(t, actual))

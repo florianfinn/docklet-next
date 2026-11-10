@@ -183,16 +183,6 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 	}, h.PairEnvironment)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "getDeploymentSnippets",
-		Method:      "GET",
-		Path:        "/environments/{id}/deployment",
-		Summary:     "Get deployment snippets",
-		Description: "Get Docker run and compose snippets for environment deployment",
-		Tags:        []string{"Environments"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermEnvironmentsPair, h.GetDeploymentSnippets)
-
-	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "downloadEnvironmentMTLSBundle",
 		Method:      "GET",
 		Path:        "/environments/{id}/deployment/mtls/bundle",

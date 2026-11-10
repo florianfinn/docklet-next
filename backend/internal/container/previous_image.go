@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original transactional previous-image slot and conditional ownership.
+// Deviations: Original transactional previous-image slot and conditional ownership; offer compensated failed-update recovery.
 
 package container
 
@@ -61,7 +61,7 @@ func (s *ContainerService) projectPreviousImage(ctx context.Context, details *dt
 	if err != nil {
 		return err
 	}
-	if slot != nil && slot.OwnerContainerID == details.ID && slot.ImageID != details.ImageID {
+	if slot != nil && slot.OwnerContainerID == details.ID {
 		details.PreviousImage = &dto.PreviousImage{ImageRef: slot.ImageRef, ImageID: slot.ImageID, CreatedAt: slot.CreatedAt}
 	}
 	return nil

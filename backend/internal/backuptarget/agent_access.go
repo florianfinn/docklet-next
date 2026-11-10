@@ -2,7 +2,7 @@
 // Revision: e5218d798f5302f7fa568a6059a70901bcc83219
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original agent compatibility refusal and typed agent problems for central backup routes;
+// Deviations: Reconstruct only validated remote host.busy/409 admission refusals;  Original agent compatibility refusal and typed agent problems for central backup routes;
 // the access envelope type is shared with the proxy translation (#292).
 
 package backuptarget
@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	host "github.com/florianfinn/docklet-next/types/environment"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -82,6 +83,13 @@ func RemoteJSON[T any](ctx context.Context, proxy handlerutil.RemoteJSONProxy, e
 	})
 	output, err := record.JSON[T](ctx, environmentID, method, path, body)
 	if err != nil && raw != nil {
+		var upstream *remenv.StatusError
+		if errors.As(raw, &upstream) && upstream.StatusCode == 409 {
+			var problem host.HostProblem
+			if json.Unmarshal(upstream.Body, &problem) == nil && problem.Status == 409 && problem.Code == "host.busy" {
+				return nil, &problem
+			}
+		}
 		if access := AgentAccess(raw); access != nil {
 			return nil, access
 		}

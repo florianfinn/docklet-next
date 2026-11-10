@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification.
+// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification. M21 #438: candidate scans and verified manifest binding.
 
 package project
 
@@ -57,7 +57,13 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	if intent == nil || current.TargetIdentity != intent.TargetIdentity || current.SavedRevision != intent.SavedRevision || lifecycleObserved(current) != intent.ObservedRevision {
 		return result, lifecycleFailure("update.target-changed")
 	}
-	services := intent.Request.Services
+	if !intent.Request.VerifiedService() {
+		return result, lifecycleFailure("update.invalid-target")
+	}
+	services := intent.Request.SelectedServices()
+	if err := s.verifyExpectedCandidate(ctx, intent); err != nil {
+		return result, err
+	}
 	if intent.Request.PointID != "" {
 		services = nil // Restore points always describe the complete stack.
 	}

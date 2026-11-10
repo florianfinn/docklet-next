@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding.
 
 package access
 
@@ -78,7 +78,6 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/containers/{containerId}/logs/download", "download-container-logs"},
 	{"GET", "/environments/{id}/containers/{containerId}/processes", "get-container-processes"},
 	{"GET", "/environments/{id}/dashboard", "get-dashboard"},
-	{"GET", "/environments/{id}/deployment", "getDeploymentSnippets"},
 	{"GET", "/environments/{id}/deployment/mtls/bundle", "downloadEnvironmentMTLSBundle"},
 	{"GET", "/environments/{id}/deployment/mtls/{fileName}", "downloadEnvironmentMTLSFile"},
 	{"GET", "/environments/{id}/diagnostics/actors", "get-environment-actor-diagnostics"},
@@ -124,7 +123,6 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/settings", "get-settings"},
 	{"GET", "/environments/{id}/settings/public", "get-public-settings"},
 	{"GET", "/environments/{id}/system/docker/info", "get-docker-info"},
-	{"GET", "/environments/{id}/system/upgrade/all/status", "update-all-status"},
 	{"GET", "/environments/{id}/system/upgrade/check", "check-upgrade"},
 	{"GET", "/environments/{id}/updater/history", "get-updater-history"},
 	{"GET", "/environments/{id}/updater/policies", "list-update-policies"},
@@ -155,6 +153,9 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace", "get-volume-workspace"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace/file", "get-volume-workspace-file"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/workspace/file/download", "download-volume-workspace-file"},
+	{"GET", "/environments/{id}/vulnerabilities/advisories/{key}", "get-vulnerability-advisory"},
+	{"GET", "/environments/{id}/vulnerabilities/candidates", "get-vulnerability-candidates"},
+	{"POST", "/environments/{id}/vulnerabilities/candidates/scan", "scan-vulnerability-candidates"},
 	{"GET", "/environments/{id}/vulnerabilities/all", "list-environment-vulnerabilities"},
 	{"GET", "/environments/{id}/vulnerabilities/export", "export-environment-vulnerabilities"},
 	{"GET", "/environments/{id}/vulnerabilities/ignored", "list-ignored-vulnerabilities"},
@@ -266,7 +267,6 @@ var Routes = []Route{
 	{"POST", "/environments/{id}/system/convert", "convert-docker-run"},
 	{"POST", "/environments/{id}/system/prune", "prune-all"},
 	{"POST", "/environments/{id}/system/upgrade", "trigger-upgrade"},
-	{"POST", "/environments/{id}/system/upgrade/all", "trigger-update-all"},
 	{"POST", "/environments/{id}/test", "testConnection"},
 	{"POST", "/environments/{id}/updater/projects/{projectId}/check", "check-project-updates"},
 	{"POST", "/environments/{id}/updater/projects/{projectId}/update", "update-project-images"},
