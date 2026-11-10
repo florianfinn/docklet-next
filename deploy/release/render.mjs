@@ -32,7 +32,9 @@ export function checkImageDefaults(compose, manifest) {
     defaults.push(fallback ? fallback[1] : image);
   }
   const visit = (value) => {
-    if (typeof value === "string") for (const [, fallback] of value.matchAll(/\$\{[A-Za-z_][A-Za-z0-9_]*_IMAGE:?-([^}]*)\}/g)) defaults.push(fallback);
+    if (typeof value === "string") {
+      for (const [, name, fallback] of value.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*):?-([^}]*)\}/g)) if (name.endsWith("_IMAGE")) defaults.push(fallback);
+    }
     else if (value && typeof value === "object") for (const item of Object.values(value)) visit(item);
   };
   visit(compose);

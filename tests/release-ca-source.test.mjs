@@ -62,6 +62,8 @@ for (const [label, edit] of [
   ["an interpolated service image default", (c) => { c.services.extra = { image: "${EXTRA_IMAGE:-example/extra:1.0}" }; }],
   ["a service image without a usable default", (c) => { c.services.extra = { image: "${EXTRA_IMAGE}" }; }],
   ["an environment *_IMAGE fallback", (c) => { c.services.hub.environment.HELPER_IMAGE = "${HELPER_IMAGE:-example/helper:1}"; }],
+  ["a fallback of the variable named _IMAGE", (c) => { c.services.hub.environment.EXTRA = "${_IMAGE:-example/helper:latest}"; }],
+  ["a dash fallback of the variable named _IMAGE", (c) => { c.services.hub.environment.EXTRA = "${_IMAGE-example/helper:latest}"; }],
   ["a list-form environment *_IMAGE fallback", (c) => { c.services.extra = { image: pin("hub"), environment: ["FOO_IMAGE=${FOO_IMAGE:-example/foo:1}"] }; }],
 ]) {
   test(`rendering refuses ${label} before writing any file`, () => temporary((dir) => {
@@ -73,6 +75,7 @@ for (const [label, edit] of [
 test("the pin guard accepts only the manifest's hub and agent pins", () => {
   assert.deepEqual(checkImageDefaults({ services: { hub: { image: `\${HUB_IMAGE:-${pin("hub")}}`, environment: { DOCKLET_AGENT_IMAGE: `\${DOCKLET_AGENT_IMAGE:-${pin("agent")}}` } } } }, manifest).sort(),
     [pin("agent"), pin("hub"), pin("hub")].sort());
+  assert.deepEqual(checkImageDefaults({ services: { hub: { image: pin("hub"), environment: { EXTRA: `\${_IMAGE:-${pin("agent")}}`, PLAIN: "${OTHER:-x}" } } } }, manifest), [pin("hub"), pin("agent")]);
   const other = `${repo}-hub:1.0.0@sha256:${"c".repeat(64)}`;
   assert.throws(() => checkImageDefaults({ services: { hub: { image: `\${HUB_IMAGE:-${other}}` } } }, manifest), /pinned package reference/);
 });
