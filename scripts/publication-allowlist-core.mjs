@@ -8,7 +8,8 @@ export const categories = new Set([
   "private-hostname", "non-example-email", "network-address",
 ]);
 export const findingKey = (entry) => JSON.stringify([entry.path, entry.category, entry.lineSha256 ?? entry.sha256]);
-export function reviewedFindings(list, findings) {
+// reportStale: false keeps validation and matching but skips unused entries (historical trees keep their own policy).
+export function reviewedFindings(list, findings, { reportStale = true } = {}) {
   if (!Array.isArray(list)) throw new Error("publication-allowlist-format");
   const unused = new Map();
   for (const entry of list) {
@@ -31,7 +32,7 @@ export function reviewedFindings(list, findings) {
     else unused.set(id, count - 1);
     return false;
   });
-  for (const entry of unused.values()) remaining.push({ path: ALLOWLIST_PATH, category: "stale-publication-allowlist" });
+  if (reportStale) for (const entry of unused.values()) remaining.push({ path: ALLOWLIST_PATH, category: "stale-publication-allowlist" });
   return remaining.map(({ path, category }) => ({ path, category }));
 }
 

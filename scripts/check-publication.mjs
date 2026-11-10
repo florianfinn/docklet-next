@@ -2,7 +2,7 @@
 // Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Node-only staged/worktree/history scans, strict identities, local denylist, sanitized failures and exact commit-message exceptions.
+// Deviations: Node-only staged/worktree/history scans, strict identities, local denylist, sanitized failures, exact commit-message exceptions and stale policy entries reported for the current tree only.
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { files, git, main, run, finish } from "./repository.mjs";
@@ -19,7 +19,7 @@ export function loadDenylist(root) {
     throw new Error("denylist-format");
   return list;
 }
-function inspectFiles(list, denylist) {
+function inspectFiles(list, denylist, { reportStale = true } = {}) {
   const allowlist = parseAllowlist(list.find((file) => file.path === ALLOWLIST_PATH)?.content.toString("utf8") ?? "[]");
   const findings = list.flatMap(({ path, mode, content }) => {
     const findings = inspectPath(path, denylist);
@@ -38,7 +38,7 @@ function inspectFiles(list, denylist) {
     }
     return findings;
   });
-  return reviewedFindings(allowlist, findings).map((f) => ({ ...f, path: safePath(f.path, denylist) }));
+  return reviewedFindings(allowlist, findings, { reportStale }).map((f) => ({ ...f, path: safePath(f.path, denylist) }));
 }
 // Exact reviewed exceptions for published commit messages. A commit cannot name its own
 // SHA in its tree, so the checked-out policy applies; entries for unscanned commits wait.
@@ -73,7 +73,8 @@ export function inspectRepository(root, { staged = false, history = false, revis
         findings.push({ path: "commit-message", category: "commit-subject" });
       messages.push(...inspectText(body, `commit/${commit}`, denylist, { detailed: true }));
       const list = files(root, { revision: commit });
-      findings.push(...inspectFiles(list, denylist));
+      // Each historical tree applies its own policy; stale entries are reported for the current tree only.
+      findings.push(...inspectFiles(list, denylist, { reportStale: false }));
     }
     for (const finding of reviewedFindings(commitExceptions(root, commits), messages))
       findings.push({ path: finding.path === ALLOWLIST_PATH ? COMMIT_ALLOWLIST_PATH : "commit-message", category: finding.category });

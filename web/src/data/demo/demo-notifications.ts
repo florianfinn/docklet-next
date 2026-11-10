@@ -1,10 +1,10 @@
-import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/297
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
 // Deviations: Original demo notification targets and per-host Auto Heal settings. M14 host maintenance and availability; M19 backend contracts and target identity integration.
 
+import { isHostAvailable } from "@/domain/hosts";
 import type { AutoHealApi, NotificationsApi } from "../api";
 import { SettingsProblemError } from "../settings-error";
 import { autoHealFieldError } from "@/domain/auto-heal";

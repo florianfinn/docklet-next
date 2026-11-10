@@ -1,11 +1,11 @@
-import { BACKUP_OPERATIONS } from "./data/http/backups";
-import { overview, entry } from "./data/http/backups.test-support";
 // Source: docklet-next/docs/design/adapter-live-capabilities.md
 // Revision: 3d2d4f27b524b3422d010d6a69a22fe57225a78f
 // Retrieved: 2026-10-22
 // License: Apache-2.0
 // Deviations: Original production boundary and regression coverage for issue #27.
 
+import { BACKUP_OPERATIONS } from "./data/http/backups";
+import { overview, entry } from "./data/http/backups.test-support";
 import type { ResourceRef } from "@/data/capability";
 import { vi } from "vitest";
 

@@ -72,13 +72,24 @@ smoke proves Go reads the system CA path and refuses an unrelated test CA.
 
 The exact [Alpine packaging source](https://github.com/alpinelinux/aports/tree/19b56f610f4f0055f155e99e1666cddcd000d01c/main/ca-certificates)
 declares MPL-2.0 AND MIT for the source package. The copied bundle consists of
-Mozilla certificate data generated from MPL-2.0 `certdata.txt`; MIT package
-utilities and the source archive's GPL script are excluded. The
-[unmodified source form](https://distfiles.alpinelinux.org/distfiles/v3.22/ca-certificates-20260909.tar.bz2)
-is identified by SHA-512 in `LICENSES/NOTICE-Mozilla-CA.txt`. Recipients receive
-that notice, source URL and the complete `LICENSES/MPL-2.0-Mozilla.txt` in
-`/usr/share/licenses/docklet-next/ca/`. The [MPL distribution terms](https://www.mozilla.org/en-US/MPL/2.0/)
-permit the larger work while preserving the covered file's licence and source
+Mozilla certificate data generated from MPL-2.0 `certdata.txt`; the archive's
+utilities are not copied into the runtime. The unmodified source archive
+`ca-certificates-20260909.tar.bz2` is kept in the repository under
+`third_party/mozilla-ca/` and attached to every GitHub Release, so its source
+form stays available when the upstream distfile is pruned. Its SHA-512, the
+[upstream copy](https://distfiles.alpinelinux.org/distfiles/v3.22/ca-certificates-20260909.tar.bz2)
+and the release location are named in `LICENSES/NOTICE-Mozilla-CA.txt`.
+Recipients of an image receive that notice and the complete
+`LICENSES/MPL-2.0-Mozilla.txt` in `/usr/share/licenses/docklet-next/ca/`.
+
+The archive also contains `c_rehash.c` (MIT) and `mk-ca-bundle.pl` (curl
+licence) without a licence file. Because the whole archive is redistributed,
+the release attaches `LICENSES/MIT-ca-certificates-c_rehash.txt` and
+`LICENSES/curl-ca-certificates-mk-ca-bundle.txt` with the exact copyright
+notices of those files. The release renderer refuses a package whose archive
+does not match `deploy/release/ca-bundle.json`. The
+[MPL distribution terms](https://www.mozilla.org/en-US/MPL/2.0/) permit the
+larger work while preserving the covered file's licence and source
 availability. No Mozilla code or certificate data is modified here.
 
 A new CA hash, runtime payload or platform requires a refreshed assessment and

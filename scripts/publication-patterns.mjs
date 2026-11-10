@@ -2,7 +2,7 @@
 // Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Reserved networks only; IPv6, POSIX paths, corrupt text and literal credentials; no prose spelling guard.
+// Deviations: Reserved networks only; canonical IPv6, POSIX paths, corrupt text and literal credentials; no prose spelling guard.
 import { lineHash } from "./publication-allowlist-core.mjs";
 import { isIP } from "node:net";
 import { scanAssignments } from "./publication-assignments.mjs";
@@ -107,10 +107,11 @@ const PATTERNS = {
     /(?:claude\.ai\/code\/session[_/]|chatgpt\.com\/(?:s|share|codex\/tasks)\/|chat\.openai\.com\/share\/)/gi,
 };
 function safeAddress(value) {
-  if (value === "0.0.0.0" || value === "::") return true;
+  if (value === "0.0.0.0") return true;
   if (isIP(value) === 4) return /^(?:192\.0\.2\.|198\.51\.100\.|203\.0\.113\.|127\.)/.test(value);
+  // IPv6 compares in canonical form, so zero-padded spellings of :: (cgroup v2 "0::/") are safe too.
   const canonical = new URL(`http://[${value}]/`).hostname.slice(1, -1);
-  return canonical === "::1" || canonical.startsWith("2001:db8:");
+  return canonical === "::" || canonical === "::1" || canonical.startsWith("2001:db8:");
 }
 export function inspectText(text, path = "text", denylist = [], { detailed = false } = {}) {
   const findings = [];

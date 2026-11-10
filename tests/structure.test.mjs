@@ -67,6 +67,35 @@ test("every adopted path needs a complete provenance header", (t) => {
   stage(root, "backend/example.go", header.replace("a".repeat(40), "abc") + "package example\n");
   fails(check(root, "provenance"), "provenance-header");
 });
+test("an inline provenance header precedes code", (t) => {
+  const root = scratch(t);
+  stage(root, "web/src/example.ts", 'import { a } from "./a";\n' + header + "export const b = a;\n");
+  fails(check(root, "provenance"), "provenance-header-order");
+  stage(root, "web/src/example.ts", header + '\nimport { a } from "./a";\nexport const b = a;\n');
+  ok(check(root, "provenance"));
+  stage(root, "web/src/example.ts", "/*\n * Licence notice kept above the header.\n */\n\n" + header + "export const b = 1;\n");
+  ok(check(root, "provenance"));
+  stage(root, "backend/resources/email-templates/example.tmpl", "{{/*\n" + header.replaceAll("// ", "") + "*/}}\nbody\n");
+  ok(check(root, "provenance"));
+});
+test("a sidecar-backed file cannot hide code above a later inline header", (t) => {
+  const root = scratch(t);
+  const path = "web/src/late.ts";
+  const sidecar = (content) => {
+    const policy = readJSON(root, "scripts/provenance.json");
+    policy.sidecars[path] = { source: "example/core/late.ts", revision: "a".repeat(40), retrieved: "2026-10-13", license: "Apache-2.0", deviations: "None", sha256: sha256(content) };
+    writeJSON(root, "scripts/provenance.json", policy);
+    stage(root, path, content);
+    git(root, "add", "scripts/provenance.json");
+  };
+  for (const lead of [39, 78]) {
+    sidecar("export const early = 1;\n" + "// note\n".repeat(lead) + header);
+    fails(check(root, "provenance"), "provenance-header-order");
+    fails(check(root, "provenance", "--staged"), "provenance-header-order");
+  }
+  sidecar("// note\n".repeat(60) + header + "export const late = 1;\n");
+  ok(check(root, "provenance"));
+});
 test("JSON provenance sidecars bind exact file bytes", (t) => {
   const root = scratch(t);
   const content = readFileSync(`${root}/.claude/settings.json`);
