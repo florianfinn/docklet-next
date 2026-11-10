@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Self-target tests assert refusal before pull and Engine mutations.
 
 package updater
 
@@ -635,6 +635,12 @@ func runTagSelectionScenarioInternal(t *testing.T, scenario tagSelectionScenario
 	}
 	if scenario.excluded != "" && (len(settings.excluded) != 1 || settings.excluded[0] != scenario.excluded) {
 		t.Fatalf("settings exclusion changed: %v", settings.excluded)
+	}
+	if scenario.self {
+		if result.Failed != 1 || len(result.Items) != 1 || !strings.Contains(result.Items[0].Error, "image.system-protected") || len(puller.pulled) != 0 || docker.mutations != 0 || len(self.targets) != 0 {
+			t.Fatalf("self target was not safely declined: %+v pulls=%v mutations=%d", result, puller.pulled, docker.mutations)
+		}
+		return
 	}
 	if scenario.wantFailure {
 		if result.Failed != 1 || docker.mutations != 0 || len(puller.pulled) != 0 {

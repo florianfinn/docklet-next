@@ -2,16 +2,12 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original forward widget migration and persisted restart checks.
+// Deviations: Original widget persistence and restart checks; M21 runs them on the release baseline.
 
 package widget
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"io/fs"
-	"os"
 	"testing"
 	"time"
 
@@ -21,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSW12ForwardMigrationFromPreviousSchema(t *testing.T) {
+func TestSW12BaselinePersistsWidgetsAcrossRestart(t *testing.T) {
 	s := testService(t)
 	require.NoError(t, s.db.Migrator().DropTable(&row{}))
 	sqlDB, err := s.db.DB.DB()
@@ -30,14 +26,10 @@ func TestSW12ForwardMigrationFromPreviousSchema(t *testing.T) {
 	require.NoError(t, err)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, sqlDB, migrations)
 	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 15)
-	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 17)
+	_, err = provider.Up(t.Context())
 	require.NoError(t, err)
 	r := row{Kind: "plex", Enabled: true, Address: "https://plex.example.com", Revision: 1, UpdatedAt: time.Now().UTC()}
 	require.NoError(t, save(t.Context(), s.db, r))
-	_, err = provider.UpTo(t.Context(), 17)
-	require.NoError(t, err)
 	got, err := load(t.Context(), s.db, "plex")
 	require.NoError(t, err)
 	require.Equal(t, r.Address, got.Address)
@@ -59,12 +51,4 @@ func TestSW12ForwardMigrationFromPreviousSchema(t *testing.T) {
 	require.Equal(t, "migration-synthetic-token", value)
 	r.Kind = "invalid"
 	require.Error(t, save(t.Context(), s.db, r), "SQL kind CHECK must constrain external writes")
-	bytes, err := fs.ReadFile(migrations, "017_service_widgets.sql")
-	require.NoError(t, err)
-	manifestBytes, err := os.ReadFile("../../../scripts/migration-hashes.json")
-	require.NoError(t, err)
-	var manifest map[string]string
-	require.NoError(t, json.Unmarshal(manifestBytes, &manifest))
-	sum := sha256.Sum256(bytes)
-	require.Equal(t, manifest["sqlite/017_service_widgets.sql"], hex.EncodeToString(sum[:]))
 }

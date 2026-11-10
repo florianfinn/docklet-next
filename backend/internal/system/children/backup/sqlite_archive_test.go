@@ -24,10 +24,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func archiveFixture(t *testing.T) (*database.DB, *config.Config) {
+func archiveFixture(t *testing.T, options ...database.MigrationOptions) (*database.DB, *config.Config) {
 	t.Helper()
 	cfg := &config.Config{DatabaseURL: sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db")), BackupDir: t.TempDir()}
-	db, err := database.InitializeHub(t.Context(), cfg.DatabaseURL, database.MigrationOptions{})
+	migrationOptions := database.MigrationOptions{}
+	if len(options) > 0 {
+		migrationOptions = options[0]
+	}
+	db, err := database.InitializeHub(t.Context(), cfg.DatabaseURL, migrationOptions)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	require.NoError(t, francis.InitializeStore(t.Context(), cfg.DatabaseURL))
@@ -48,7 +52,7 @@ func fixtureArchive(t *testing.T, db *database.DB, cfg *config.Config, id string
 	defer conn.Close()
 	snapshotCtx, cancel := context.WithTimeout(t.Context(), snapshotDeadline)
 	defer cancel()
-	return createSQLiteArchive(t.Context(), snapshotCtx, cfg.BackupDir, id, hub, conn, limit)
+	return createSQLiteArchive(t.Context(), snapshotCtx, cfg.BackupDir, id, hub, conn, limit, db.MigrationOptions())
 }
 func TestSQLiteSnapshotIncludesCommittedWALAndValidatesPair(t *testing.T) {
 	db, cfg := archiveFixture(t)

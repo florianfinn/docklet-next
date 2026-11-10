@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences; hub-only service widget routes and neutral errors; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences; hub-only service widget routes and neutral errors; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Docklet Next API title (#362).
 
 package api
 
@@ -68,7 +68,7 @@ const (
 	scalarDocsHTML = `<!doctype html>
 <html>
   <head>
-    <title>Arcane API Reference</title>
+    <title>Docklet Next API Reference</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
@@ -279,7 +279,7 @@ type HandlerDeps struct {
 func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityAppContext, cfg *config.Config, deps HandlerDeps) huma.API {
 	e.JSONSerializer = jsonV2Serializer{}
 
-	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
+	humaConfig := huma.DefaultConfig("Docklet Next API", config.Version)
 	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
@@ -394,7 +394,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	e := echo.New()
 	apiGroup := e.Group("/api")
 
-	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
+	humaConfig := huma.DefaultConfig("Docklet Next API", config.Version)
 	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format

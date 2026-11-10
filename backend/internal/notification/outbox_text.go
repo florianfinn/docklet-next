@@ -2,7 +2,7 @@
 // Revision: 8696c990fba68be0dd3ca9ac4de61434f6c56131
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original readable outbox notice templates.
+// Deviations: Original readable outbox notice templates; M21 container update failure subject and link.
 
 package notification
 
@@ -45,7 +45,7 @@ var reasonPhrases = map[string]string{
 
 const unknownReasonPhrase = "an unexpected error occurred"
 
-var operationTitles = map[string]string{"deploy-project": "Deployment", "redeploy-project": "Redeploy", "update-project": "Update", "restore-project": "Restore"}
+var operationTitles = map[string]string{"deploy-project": "Deployment", "redeploy-project": "Redeploy", "update-project": "Update", "restore-project": "Restore", "update-container": "Update", "restore-container-image": "Restore"}
 
 // outboxLinkPaths point notices to the web page that lists the affected resource.
 var outboxLinkPaths = map[string]string{"deploy_failed": "/stacks", "backup_failed": "/backups", "host_offline": "/hosts", "auto_heal": "/containers", "sustained_load": "/dashboard", "container_unhealthy": "/containers"}
@@ -78,7 +78,11 @@ func outboxText(eventType, host string, payload database.JSON, linkBase string) 
 		if title == "" {
 			title = "Deployment"
 		}
-		lines = append(lines, fmt.Sprintf("%s failed: stack %s on %s", title, str("stack"), host), "Reason: "+reasonPhrase(str("reason")))
+		subject := "stack " + str("stack")
+		if container := str("container"); container != "" {
+			subject = "container " + container
+		}
+		lines = append(lines, fmt.Sprintf("%s failed: %s on %s", title, subject, host), "Reason: "+reasonPhrase(str("reason")))
 	case "backup_failed":
 		title := "Backup"
 		if str("operation") == "restore" {
@@ -124,7 +128,11 @@ func outboxText(eventType, host string, payload database.JSON, linkBase string) 
 		lines = append(lines, fmt.Sprintf("Docklet notice on %s", host))
 	}
 	if linkBase != "" {
-		lines = append(lines, "Open Docklet: "+linkBase+outboxLinkPaths[eventType])
+		path := outboxLinkPaths[eventType]
+		if eventType == "deploy_failed" && str("container") != "" {
+			path = "/containers"
+		}
+		lines = append(lines, "Open Docklet: "+linkBase+path)
 	}
 	return strings.Join(lines, "\n")
 }

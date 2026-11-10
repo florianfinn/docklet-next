@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Actual Fx runtime construction, registered Huma/Echo APIs and Direct/Edge SDK matrix. M18 initialize the real image admission before startup reconciliation.
+// Deviations: Actual Fx runtime construction, registered Huma/Echo APIs and Direct/Edge SDK matrix. M18 initialize the real image admission before startup reconciliation; share the real role invalidator with authorization tests.
 
 package activity_test
 
@@ -56,6 +56,7 @@ type activationFixture struct {
 	receiver *activity.RuntimeReceiver
 	remote   *activity.RuntimeRemoteCoordinator
 	cfg      *config.Config
+	roles    *role.RoleService
 }
 
 type activationSetup struct {
@@ -142,11 +143,11 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 		Environment: environment.New(environments, f.settings, keys, nil, cfg, local),
 		Project:     project.New(f.projects, local), Container: container.New(f.containers, f.docker, f.settings, local),
 		System:  system.New(nil, f.docker, environments, local, cfg),
-		Version: version.NewVersionService(client, true, "0.0.0", "", nil, f.docker, nil, f.settings),
+		Version: version.NewVersionService(client, true, "", "0.0.0", "", f.docker, f.settings),
 	})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
-	return &activationFixture{f, environments, registry, router, server, httpService, receiver, remote, cfg}
+	return &activationFixture{f, environments, registry, router, server, httpService, receiver, remote, cfg, roles}
 }
 
 func activationRemote(t *testing.T, hub, agent *activationFixture, transport string, registration ...string) string {

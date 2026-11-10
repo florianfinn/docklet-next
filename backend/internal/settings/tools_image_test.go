@@ -62,7 +62,7 @@ func TestReview179ToolsImageDefaultFollowsHubRelease(t *testing.T) {
 	for _, key := range []string{"TOOLS_IMAGE", "TOOLS_IMAGE_FILE", "TOOLS_IMAGE__FILE"} {
 		t.Setenv(key, "")
 	}
-	for _, old := range []string{"", "ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"} {
+	for _, old := range []string{"", "ghcr.io/florianfinn/docklet-tools:0.1.0"} {
 		t.Run(old, func(t *testing.T) {
 			db := setupSettingsTestDB(t)
 			first, err := newSettingsServiceForTestInternal(t, t.Context(), db)
@@ -145,7 +145,7 @@ func TestToolsImageInvalidEnvironmentReferenceFailsInitialization(t *testing.T) 
 }
 
 func TestToolsImageRetirementListIsClosed(t *testing.T) {
-	require.Equal(t, []string{"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"}, retiredSettingValuesInternal["toolsImage"], "the pre-override-only retirement list is closed: release image bump PRs must not extend it or explicit rollback pins would reset on restart")
+	require.Equal(t, []string{"ghcr.io/florianfinn/docklet-tools:0.1.0"}, retiredSettingValuesInternal["toolsImage"], "the pre-override-only retirement list is closed: release image bump PRs must not extend it or explicit rollback pins would reset on restart")
 }
 
 func TestToolsImageRetirementListExcludesReleaseDefault(t *testing.T) {

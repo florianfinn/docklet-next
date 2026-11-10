@@ -2,42 +2,24 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Decline Docklet self targets; retain identity routing without the Arcane self-updater path.
 
 package updater
 
 import (
 	"context"
-	"maps"
+	"errors"
 	"strings"
 )
 
 func (s *Service) triggerSelfUpdate(ctx context.Context, containerID, containerName, newImageRef string, labels map[string]string) error {
-	if s.config.SelfUpdater == nil {
-		return ErrSelfUpdaterRequired
-	}
-	instanceType := "server"
-	if s.config.LabelPolicy.IsAgent(labels) {
-		instanceType = "agent"
-	}
-	_ = s.recordEvent(ctx, "self_update_trigger", containerID, containerName, map[string]any{
-		"instanceType": instanceType,
-		"newImage":     newImageRef,
-	})
-	return s.config.SelfUpdater.TriggerSelfUpdate(ctx, SelfUpdateTarget{
-		ContainerID:   containerID,
-		ContainerName: containerName,
-		InstanceType:  instanceType,
-		Labels:        maps.Clone(labels),
-		NewImageRef:   newImageRef,
-	})
+	return errors.New("image.system-protected: use the Docklet update action")
 }
 
-// isSelfUpdateCandidate reports whether a container must be handled by
-// the host SelfUpdater, either by label policy or because it is the container
-// the host application itself runs in.
+// isSelfUpdateCandidate identifies protected host containers by Docklet role,
+// legacy policy or the current process container ID. Workload updates decline them.
 func (s *Service) isSelfUpdateCandidate(containerID string, labels map[string]string) bool {
-	if s.config.LabelPolicy.IsSelfUpdateTarget(labels) {
+	if labels["io.docklet.system"] == "hub" || labels["io.docklet.system"] == "agent" || s.config.LabelPolicy.IsSelfUpdateTarget(labels) {
 		return true
 	}
 	selfID := strings.TrimSpace(s.config.SelfContainerID)

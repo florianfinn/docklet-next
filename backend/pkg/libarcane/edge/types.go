@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery; register ACK publication ordering for #347.
+// Deviations: Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery; register ACK publication ordering for #347; Edge protocol fields (#362).
 
 package edge
 
@@ -75,6 +75,8 @@ type TunnelClient struct {
 
 type clientRegistrationInternal struct {
 	sessionID string
+	// hubEdgeProtocol is the protocol the manager advertised in its reply.
+	hubEdgeProtocol int
 }
 
 // connBox wraps the active TunnelConnection so it can be swapped atomically on
@@ -223,6 +225,8 @@ type AgentTunnel struct {
 	Transport     string
 	SecurityMode  string
 	Capabilities  []string
+	// EdgeProtocol is the agent's advertised protocol (missing marker = 1).
+	EdgeProtocol  int
 	State         string
 	DisconnectErr string
 	mu            sync.RWMutex

@@ -17,7 +17,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
@@ -732,91 +731,6 @@ func TestEnvironmentService_ResolveEnvironmentByAccessToken(t *testing.T) {
 	_, err = svc.ResolveEnvironmentByAccessToken(ctx, "missing-token")
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidEnvironmentAccessToken)
-}
-
-func TestEnvironmentService_GenerateDeploymentSnippets_ExplicitlyUsePollTransport(t *testing.T) {
-	svc := NewEnvironmentService(nil, nil, nil, nil, nil, nil)
-
-	standard, err := svc.GenerateDeploymentSnippets(t.Context(), "env-1", "https://manager.example.com", "https://agent.example.com", "token-123")
-	require.NoError(t, err)
-	require.NotNil(t, standard)
-	require.NotContains(t, standard.DockerRun, "EDGE_TRANSPORT=websocket")
-	require.NotContains(t, standard.DockerCompose, "EDGE_TRANSPORT=websocket")
-	require.Contains(t, standard.DockerRun, "EDGE_TRANSPORT=poll")
-	require.Contains(t, standard.DockerCompose, "EDGE_TRANSPORT=poll")
-	require.Contains(t, standard.DockerRun, "AGENT_TOKEN=token-123")
-	require.Contains(t, standard.DockerRun, "-v arcane-data:/app/data")
-	require.Contains(t, standard.DockerCompose, "- arcane-data:/app/data")
-	require.NotContains(t, standard.DockerRun, "-v arcane-data:/data")
-
-	edgeSnippets, err := svc.GenerateEdgeDeploymentSnippets(t.Context(), "env-2", "https://manager.example.com", "token-456", nil)
-	require.NoError(t, err)
-	require.NotNil(t, edgeSnippets)
-	require.NotContains(t, edgeSnippets.DockerRun, "EDGE_TRANSPORT=websocket")
-	require.NotContains(t, edgeSnippets.DockerCompose, "EDGE_TRANSPORT=websocket")
-	require.Contains(t, edgeSnippets.DockerRun, "EDGE_TRANSPORT=poll")
-	require.Contains(t, edgeSnippets.DockerCompose, "EDGE_TRANSPORT=poll")
-	require.Contains(t, edgeSnippets.DockerRun, "AGENT_TOKEN=token-456")
-	require.Contains(t, edgeSnippets.DockerRun, "-v arcane-data:/app/data")
-	require.Contains(t, edgeSnippets.DockerCompose, "- arcane-data:/app/data")
-	require.NotContains(t, edgeSnippets.DockerRun, "-v arcane-data:/data")
-}
-
-func TestEnvironmentService_GenerateDeploymentSnippets_PublishesAgentURLPort(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name        string
-		agentURL    string
-		portMapping string
-	}{
-		{name: "default port", agentURL: "http://agent.example.com:3553", portMapping: "3553:3553"},
-		{name: "custom port", agentURL: "http://agent.example.com:1234", portMapping: "1234:3553"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			svc := NewEnvironmentService(nil, nil, nil, nil, nil, nil)
-
-			deploymentSnippets, err := svc.GenerateDeploymentSnippets(t.Context(), "env-1", "https://manager.example.com", tt.agentURL, "token-123")
-			require.NoError(t, err)
-			require.NotNil(t, deploymentSnippets)
-			require.Contains(t, deploymentSnippets.DockerRun, "  -p "+tt.portMapping+" \\")
-			require.Contains(t, deploymentSnippets.DockerCompose, fmt.Sprintf("    ports:\n      - %q\n", tt.portMapping))
-			require.Contains(t, deploymentSnippets.DockerRun, "MANAGER_API_URL=https://manager.example.com")
-			require.Contains(t, deploymentSnippets.DockerCompose, "MANAGER_API_URL=https://manager.example.com")
-			if tt.portMapping != "3553:3553" {
-				require.NotContains(t, deploymentSnippets.DockerRun, "-p 3553:3553")
-				require.NotContains(t, deploymentSnippets.DockerCompose, "3553:3553")
-			}
-		})
-	}
-}
-
-func TestAgentHostPortInternal(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		url  string
-		want string
-	}{
-		{name: "explicit custom port", url: "http://agent.example.com:1234", want: "1234"},
-		{name: "default agent port", url: "http://agent.example.com:3553", want: "3553"},
-		{name: "http without port uses 80", url: "http://agent.example.com", want: "80"},
-		{name: "https without port uses 443", url: "https://agent.example.com", want: "443"},
-		{name: "ipv6 with port", url: "http://[2001:db8::1]:9999", want: "9999"},
-		{name: "empty falls back to container port", url: "", want: "3553"},
-		{name: "invalid falls back to container port", url: "not a url", want: "3553"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.want, snippets.AgentHostPort(tt.url))
-		})
-	}
 }
 
 func TestEnvironmentService_ListEnvironmentsPaginated_FiltersByAccessibleEnvIDs(t *testing.T) {

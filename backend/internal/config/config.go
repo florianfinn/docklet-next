@@ -83,6 +83,7 @@ type Config struct {
 	AgentToken                    string `env:"AGENT_TOKEN" default:"" options:"file"`
 	ManagerApiUrl                 string `env:"MANAGER_API_URL" default:""`
 	UpdateCheckDisabled           bool   `env:"UPDATE_CHECK_DISABLED" default:"false"`
+	ReleaseFeedURL                string `env:"DOCKLET_RELEASE_FEED_URL" default:""`
 	UIConfigurationDisabled       bool   `env:"UI_CONFIGURATION_DISABLED" default:"false"`
 	GPUMonitoringEnabled          bool   `env:"GPU_MONITORING_ENABLED" default:"false"`
 	GPUType                       string `env:"GPU_TYPE" default:"auto"`

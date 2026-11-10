@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original UI lifecycle and role boundary proofs. M19 web consumer integration.
+// Deviations: Original UI lifecycle and role boundary proofs. M19 web consumer integration; exact and prefix ranking before group truncation.
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,6 +21,30 @@ afterEach(() => { setAppLocale("de"); simulationStore.reset(); });
 it("matching searches all candidates before limiting each group to eight", () => {
   const entries = Array.from({ length: 20 }, (_, i) => ({ id: String(i), label: `Stack ${i}`, host: i > 9 ? "Needle host" : "Other" }));
   expect(matchSearch(entries, "Needle").map((row) => row.id)).toEqual(["10", "11", "12", "13", "14", "15", "16", "17"]);
+});
+it("ranks exact labels before prefixes and fuzzy metadata before truncating", () => {
+  const fuzzy = Array.from({ length: 9 }, (_, i) => ({ id: `fuzzy-${i}`, label: `Earlier ${i}`, keywords: ["needle"] }));
+  const prefix = { id: "prefix", label: "Needle child" }, exact = { id: "exact", label: "NEEDLE" };
+  const entries = [...fuzzy, prefix, exact];
+  expect(matchSearch(entries, " needle ").map(row => row.id)).toEqual(["exact", "prefix", ...fuzzy.slice(0, 6).map(row => row.id)]);
+  expect(entries.at(-1)).toBe(exact);
+  expect(matchSearch(entries, "")).toEqual(entries.slice(0, 8));
+});
+it.each(["containers", "volumes"] as const)("shows an exact %s target after eight earlier fuzzy matches in the palette", async kind => {
+  const demo = createDemoAdapter();
+  const rows = kind === "containers" ? await demo.listContainers() : await demo.listVolumes();
+  const target = { ...rows[0]!, id: "exact-resource", name: "needle", hostId: "atlas" };
+  const crowded = Array.from({ length: 9 }, (_, i) => ({ ...target, id: `earlier-${i}`, name: `earlier-${i}`, dockerLabels: { search: "needle" }, labels: { search: "needle" } }));
+  const adapter = kind === "containers" ? { ...demo, listContainers: async () => [...crowded, target] as Awaited<ReturnType<typeof demo.listContainers>> } : { ...demo, listVolumes: async () => [...crowded, target] as Awaited<ReturnType<typeof demo.listVolumes>> };
+  renderWithApp(<GlobalSearch />, adapter);
+  await userEvent.keyboard("{Control>}k{/Control}");
+  const dialog = await screen.findByRole("dialog");
+  await userEvent.type(within(dialog).getByRole("combobox"), "needle");
+  const heading = await within(dialog).findByText(kind === "containers" ? "Containers" : "Volumes", { selector: "[cmdk-group-heading]" });
+  const group = heading.closest("[cmdk-group]") as HTMLElement;
+  await waitFor(() => expect(within(group).queryAllByRole("status").length).toBe(0));
+  await waitFor(() => expect(within(group).getAllByRole("option")[0]!.textContent?.startsWith("needle")).toBe(true));
+  expect(within(group).getAllByRole("option").length).toBe(9);
 });
 it("keyboard opens with Ctrl/Meta K, Escape closes and editor keeps its shortcut", async () => {
   renderWithApp(<><GlobalSearch /><div data-slot="code-editor"><textarea aria-label="Code" /></div></>);

@@ -5,6 +5,7 @@ The [design index](../design/README.md) holds the current contracts.
 
 | Record | Historical scope |
 | --- | --- |
+| [Pre-release SQLite chain](prerelease-sqlite-chain.md) | Frozen migrations 001–020 and the release baseline reset |
 | [M1 PostgreSQL baseline](m1-postgresql-baseline.md) | Pre-SQLite schema generation and retained-integrity proof |
 | [M1 SQLite removal map](m1-sqlite-removal.md) | Pinned Arcane source, test, migration and build inventory for the original removal |
 | [M6 runtime acceptance](m6-runtime-acceptance.md) | Exact merged package, sandbox acceptance, coordination lessons and follow-up boundary on 2026-10-21 |
@@ -22,3 +23,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M18 updates and schedules acceptance](m18-updates-schedules-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-05 |
 | [M19 import, bulk actions and settings parity acceptance](m19-import-bulk-settings-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-07 |
 | [M20 pre-release hardening acceptance](m20-pre-release-hardening-acceptance.md) | Merged package, sandbox-found defects, maintainer readings, method and limits on 2026-11-08 |
+| [M21 first release readiness acceptance](m21-first-release-readiness-acceptance.md) | Merged package, sandbox-found defects, two acceptance fix packages, method and limits on 2026-11-10 |

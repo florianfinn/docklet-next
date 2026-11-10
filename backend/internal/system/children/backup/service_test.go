@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,7 +39,7 @@ func TestArchiveTimeoutAndCancellation(t *testing.T) {
 	deadline, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
 	require.ErrorIs(t, archiveContextError(deadline), errArchiveTimeout)
-	_, _, err := createSQLiteArchive(deadline, deadline, t.TempDir(), "backup-1", nil, nil, 64)
+	_, _, err := createSQLiteArchive(deadline, deadline, t.TempDir(), "backup-1", nil, nil, 64, database.MigrationOptions{})
 	require.ErrorIs(t, err, errArchiveTimeout)
 	require.NotContains(t, err.Error(), "test-only")
 	cancelled, stop := context.WithCancel(t.Context())

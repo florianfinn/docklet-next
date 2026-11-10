@@ -2,7 +2,7 @@
 // Revision: cb93d80db5b6979f6ae3f3253884563643ea35ba57ac2588a380d7ed63713312
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration. M21 #439: Compose self-update controls and capability integration.
 
 import { usersDe, keysDe } from "./users-de";
 // German texts of hub settings and the profile page.
@@ -209,6 +209,25 @@ export const deSettings: typeof enSettings = {
     noChown: "Docklet ändert keine Besitzrechte auf Hosts.",
   },
   updates: {
+    selfUpdate: {
+      hub: "Docklet aktualisieren",
+      agent: "Agent aktualisieren",
+      agentOn: "Agent auf {name} aktualisieren",
+      checkFor: "Für {name} erneut prüfen",
+      currentVersion: "Installierte Version: {version}",
+      targetVersion: "Zielversion: {version}",
+      check: "Erneut prüfen",
+      viewRun: "Update-Aktivität anzeigen",
+      manual: "Manueller Befehl {number}",
+      confirmHub: "Docklet auf {version} aktualisieren. Ein Hilfscontainer aktualisiert diesen Compose-Dienst und seine Image-Referenz. Die Verbindung pausiert beim Neustart von Docklet. Diese Seite wird neu geladen, sobald die neue Version als gesund bestätigt ist.",
+      confirmAgent: "Diesen Agent auf {version} aktualisieren. Ein Hilfscontainer aktualisiert seinen Compose-Dienst und seine Image-Referenz. Der Agent trennt kurz die Verbindung; der Fortschritt bleibt unter Aktivitäten verfügbar.",
+      noRollback: "Es gibt kein automatisches Rollback. Falls das Update fehlschlägt, nutze die gespeicherte vorherige Konfiguration zur manuellen Wiederherstellung.",
+      backupAdvice: "Sichere den Hub vor dem Update.",
+      backupLink: "Hub-Backups öffnen",
+      cancel: "Abbrechen",
+      changed: "Die Update-Verfügbarkeit hat sich geändert. Schließe diesen Dialog und prüfe erneut.",
+      confirm: "Update starten",
+    },
     title: "Updates",
     missing: "Ziel fehlt",
     remove: "Zeitplan entfernen",
@@ -369,7 +388,7 @@ export const deSettings: typeof enSettings = {
     noEvents: "Keine Ereignisse gewählt",
     eventNames: {
       containerUnhealthy: "Container ungesund",
-      deployFailed: "Deploy fehlgeschlagen",
+      deployFailed: "Deploy oder Update fehlgeschlagen",
       hostOffline: "Host offline oder wieder online",
       backupFailed: "Backup oder Wiederherstellung fehlgeschlagen",
       autoHeal: "Auto Heal",

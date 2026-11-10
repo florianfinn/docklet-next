@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration; M21 self-update descriptor. M21 #438: candidate scans and verified manifest binding.
 package activity
 
 import (
@@ -16,10 +16,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/capability"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
+
+const TypeVulnerabilityCandidateScan activitytypes.Type = "vulnerability.candidate-scan"
 
 var adapterOperationIDs = []string{
 	"listContainerRegistries", "getContainerRegistry", "createContainerRegistry", "updateContainerRegistry",
@@ -27,7 +30,7 @@ var adapterOperationIDs = []string{
 	"getUpdateBaseline", "listRestorePoints", "listUpdatePolicies", "restoreContainerImage", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply",
 	"checkAllUpdates", "checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
-	"getScanSettings", "saveScanSettings", "cancelScan",
+	"getScanSettings", "saveScanSettings", "cancelScan", "ignore-vulnerability", "unignore-vulnerability",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
 	"openContainerShell", "getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
@@ -35,11 +38,11 @@ var adapterOperationIDs = []string{
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
 	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
-	"restoreRestorePoint", "runContainerCommand", "runScan",
+	"restoreRestorePoint", "runContainerCommand", "runScan", "scan-vulnerability-candidates", "get-vulnerability-candidates",
 	"runStackCommand", "redeployStack", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
-	"subscribeMetrics", "updateHost", "uploadFile",
+	"subscribeMetrics", "updateHost", "uploadFile", "selfUpdate",
 	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
@@ -78,10 +81,13 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "access.admin-required"
 			}
-		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan":
+		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan", "ignore-vulnerability", "unignore-vulnerability", "scan-vulnerability-candidates", "get-vulnerability-candidates":
 			ref := descriptors[i].ResourceRef
 			grant := authz.PermVulnsRead
-			if descriptors[i].OperationID == "runScan" {
+			if descriptors[i].OperationID == "ignore-vulnerability" || descriptors[i].OperationID == "unignore-vulnerability" {
+				grant = authz.PermVulnsManage
+			}
+			if descriptors[i].OperationID == "runScan" || descriptors[i].OperationID == "scan-vulnerability-candidates" {
 				grant = authz.PermVulnsScan
 			}
 			if descriptors[i].OperationID == "cancelScan" {
@@ -279,6 +285,21 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "selfUpdate":
+			// Hub (hub/0) or one agent (host/<id>); administrators only. No host
+			// status gate: agents in update-required are updated through the
+			// recovery route, and eligibility comes from the update check.
+			ref := descriptors[i].ResourceRef
+			target := (ref.Kind == "hub" && ref.ID == "0") || (ref.Kind == "host" && ref.ID != "" && ref.ID != "0" && !strings.Contains(ref.ID, "~"))
+			descriptors[i].Available = target && permissions.IsGlobalAdmin()
+			switch {
+			case descriptors[i].Available:
+				descriptors[i].DisabledReasonCode = ""
+			case target:
+				descriptors[i].DisabledReasonCode = "access.admin-required"
+			default:
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
 		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":

@@ -2,8 +2,10 @@
 // Revision: 93a1bd85562f9c156a80280dc7b450877d71881b45f83cf5b901d6ac993ffd71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #437: advisory detail. M21 #438: candidate checks and verified updates.
 
+import { demoVulnerabilityCandidates } from "./demo-vulnerability-candidates";
+import { demoVulnerabilityAdvisories } from "./demo-vulnerability-advisory";
 import { createDemoBulkUpdates } from "./demo-bulk-updates";
 import { SettingsProblemError } from "../settings-error";
 import { isHostAvailable } from "@/domain/hosts";
@@ -171,7 +173,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         (resourceRef.kind === "image" && (await adapter.listImages()).some((item) => item.id === resourceRef.id)) ||
         (resourceRef.kind === "registry" && (await adapter.listContainerRegistries()).some((item) => item.id === resourceRef.id));
       const reason = maintenanceReason(operationId, resourceRef) || containerOperations.capabilityReason(operationId, resourceRef);
-      const available = knownResource && supportedOperations.has(operationId) && !reason;
+      const available = knownResource && (supportedOperations.has(operationId) || ["ignore-vulnerability", "unignore-vulnerability", "scan-vulnerability-candidates", "get-vulnerability-candidates"].includes(operationId)) && !reason;
       return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: reason || GENERIC_REASON }) };
     },
     ...createHostsApi(ctx),
@@ -202,6 +204,8 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         }));
       }),
     listContainers: () => simulateRead("containers", () => (empty() ? [] : clone(db.containers()))),
+    ...demoVulnerabilityCandidates(db, runner),
+    ...demoVulnerabilityAdvisories(db, () => db.changed("security")),
     getSecurity: () => simulateRead("security", () => (empty() ? { ...clone(db.security), images: [], findings: [], history: [] } : clone(db.security))),
     listEvents: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.events).map(encodeDemoEvent))),
     listSchedule: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.schedule))),

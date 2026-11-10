@@ -2,13 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite history, scheduling and separate volume recovery-key checks.
+// Deviations: Local module namespace; SQLite history, scheduling and separate volume recovery-key checks; old resolver tests replaced by the narrow selfupdate mount contract.
 
 package system
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -16,9 +15,6 @@ import (
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/crypto"
@@ -33,91 +29,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 )
-
-func TestResolveSystemUpgraderRuntimeOptionsInternal_TCPDockerHost(t *testing.T) {
-	currentContainer := &container.InspectResponse{
-		HostConfig: &container.HostConfig{NetworkMode: "bridge"},
-		NetworkSettings: &container.NetworkSettings{
-			Networks: map[string]*network.EndpointSettings{
-				"bridge":      {},
-				"arcane-test": {},
-			},
-		},
-	}
-
-	containerEnv, mounts, networkMode, err := resolveUpgraderRuntimeOptionsInternal(
-		t.Context(),
-		"tcp://docker-socket-proxy:2375",
-		currentContainer,
-		nil,
-		func() bool { return true },
-		nil,
-	)
-	require.NoError(t, err)
-	require.Equal(t, []string{"DOCKER_HOST=tcp://docker-socket-proxy:2375"}, containerEnv)
-	require.Empty(t, mounts)
-	require.Equal(t, container.NetworkMode("arcane-test"), networkMode)
-}
-
-func TestResolveSystemUpgraderRuntimeOptionsInternal_UnixDockerHost(t *testing.T) {
-	containerEnv, mounts, networkMode, err := resolveUpgraderRuntimeOptionsInternal(
-		t.Context(),
-		"unix:///var/run/docker.sock",
-		nil,
-		func(context.Context, string) (string, error) {
-			return "/host/run/docker.sock", nil
-		},
-		func() bool { return true },
-		nil,
-	)
-	require.NoError(t, err)
-	require.Equal(t, []string{"DOCKER_HOST=unix:///var/run/docker.sock"}, containerEnv)
-	require.Equal(t, container.NetworkMode(""), networkMode)
-	require.Equal(t, []mount.Mount{
-		{
-			Type:   mount.TypeBind,
-			Source: "/host/run/docker.sock",
-			Target: "/var/run/docker.sock",
-		},
-	}, mounts)
-}
-
-func TestResolveSystemUpgraderRuntimeOptionsInternal_DefaultDockerHost(t *testing.T) {
-	containerEnv, mounts, _, err := resolveUpgraderRuntimeOptionsInternal(
-		t.Context(),
-		"",
-		nil,
-		func(context.Context, string) (string, error) {
-			return "/var/run/docker.sock", nil
-		},
-		func() bool { return true },
-		nil,
-	)
-	require.NoError(t, err)
-	require.Nil(t, containerEnv)
-	require.Equal(t, []mount.Mount{
-		{
-			Type:   mount.TypeBind,
-			Source: "/var/run/docker.sock",
-			Target: "/var/run/docker.sock",
-		},
-	}, mounts)
-}
-
-func TestResolveSystemUpgraderRuntimeOptionsInternal_UnixDockerHostResolutionError(t *testing.T) {
-	_, _, _, err := resolveUpgraderRuntimeOptionsInternal(
-		t.Context(),
-		"unix:///var/run/docker.sock",
-		nil,
-		func(context.Context, string) (string, error) {
-			return "", errors.New("inspect failed")
-		},
-		func() bool { return true },
-		nil,
-	)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "resolve unix socket source")
-}
 
 func TestListBackupHistoryClassifiesAndFiltersOrigins(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:system-volume-history?mode=memory&cache=shared"), &gorm.Config{})

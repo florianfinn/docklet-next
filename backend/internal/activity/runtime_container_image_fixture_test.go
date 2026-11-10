@@ -38,6 +38,7 @@ type containerImageHTTP struct {
 	ref, repo, oldImage, newImage, oldManifest, tag string
 	images                                          map[string]string
 	creates, tags, pulls                            int
+	createdImage, tagTarget                         string // last create body Image and tag target
 }
 
 func newContainerImageHTTP(t *testing.T) (*containerImageHTTP, *httptest.Server) {
@@ -83,6 +84,7 @@ func (d *containerImageHTTP) serve(w http.ResponseWriter, r *http.Request) bool 
 	case strings.HasPrefix(p, "/images/") && strings.HasSuffix(p, "/tag"):
 		d.tags++
 		d.tag = strings.TrimSuffix(strings.TrimPrefix(p, "/images/"), "/tag")
+		d.tagTarget = r.URL.Query().Get("repo") + ":" + r.URL.Query().Get("tag")
 		w.WriteHeader(201)
 		return true
 	case strings.HasPrefix(p, "/images/") && strings.HasSuffix(p, "/json"):
@@ -130,6 +132,7 @@ func (d *containerImageHTTP) serve(w http.ResponseWriter, r *http.Request) bool 
 			return true
 		}
 		d.creates++
+		d.createdImage = body.Image
 		id := recreateNewID
 		if d.creates > 1 {
 			id = strings.Repeat("e", 64)

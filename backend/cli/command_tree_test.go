@@ -17,7 +17,7 @@ func TestM20HubCommandTreeAndAliases(t *testing.T) {
 	for _, cmd := range rootCmd.Commands() {
 		names = append(names, cmd.Name())
 	}
-	require.ElementsMatch(t, []string{"health", "restore-hub", "version", "generate", "upgrade", "openapi", "config-schema"}, names)
+	require.ElementsMatch(t, []string{"health", "restore-hub", "version", "generate", "upgrade", "self-update", "openapi", "config-schema"}, names)
 	generate, _, err := rootCmd.Find([]string{"generate"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"gen", "g"}, generate.Aliases)

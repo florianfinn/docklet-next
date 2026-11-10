@@ -44,10 +44,44 @@ header exceptions assessed for the pre-cut inventory. The
 a fresh compiled-graph and notice assessment before distribution; the former
 removal gate does not approve restored dependencies. The historical assessments exclude the web runtime and image contents. The
 [current SQLite assessment](sqlite-license-assessment.md) records the selected
-Linux/amd64 compiled Go graph and complete Go/web notice bundles; image OS
-packages and other targets remain release-assessment boundaries.
+Linux/amd64 compiled Go graph and complete Go/web notice bundles; the scratch runtime CA assessment below closes the image-payload boundary for
+Linux/amd64. Other targets remain release-assessment boundaries.
 
 M0 established the immutable Arcane licence copy before product-code adoption.
 The current [inventory](../provenance/core-import.md) and
 [extracted package checks](provenance.md#distribution-hook-points) extend that
 foundation; they do not authorise a product release without practical acceptance.
+
+## Scratch hub and agent runtime (Linux/amd64)
+
+The release Dockerfile uses `scratch` for both runtime stages. Its payload is
+the static, CGO-free Go binary, the hub's embedded web assets, the existing
+Go/web licence bundle, directory metadata and one CA certificate file. No
+Alpine executable, libc, shell, package manager or optional GPU tool is copied.
+Build-stage utilities are not part of the distributed runtime. This assessment
+does not cover the separately maintained tools/helper images.
+
+The copied `/etc/ssl/certs/ca-certificates.crt` comes from Alpine
+`ca-certificates-bundle 20260909-r0`, x86_64, in
+`alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8`.
+Its SHA-256 is
+`028fca5150ee1915c4474489985d55c54fceaa680c754cc8d1301734f01b2232`.
+The build checks the hash; each image smoke extracts the unmounted file and
+compares it with `deploy/release/ca-bundle.json`. A separate mounted-root TLS
+smoke proves Go reads the system CA path and refuses an unrelated test CA.
+
+The exact [Alpine packaging source](https://github.com/alpinelinux/aports/tree/19b56f610f4f0055f155e99e1666cddcd000d01c/main/ca-certificates)
+declares MPL-2.0 AND MIT for the source package. The copied bundle consists of
+Mozilla certificate data generated from MPL-2.0 `certdata.txt`; MIT package
+utilities and the source archive's GPL script are excluded. The
+[unmodified source form](https://distfiles.alpinelinux.org/distfiles/v3.22/ca-certificates-20260909.tar.bz2)
+is identified by SHA-512 in `LICENSES/NOTICE-Mozilla-CA.txt`. Recipients receive
+that notice, source URL and the complete `LICENSES/MPL-2.0-Mozilla.txt` in
+`/usr/share/licenses/docklet-next/ca/`. The [MPL distribution terms](https://www.mozilla.org/en-US/MPL/2.0/)
+permit the larger work while preserving the covered file's licence and source
+availability. No Mozilla code or certificate data is modified here.
+
+A new CA hash, runtime payload or platform requires a refreshed assessment and
+matching smoke evidence before distribution. The current binary-graph and web
+notice requirements still apply independently; this is not product-release or
+deployment approval.

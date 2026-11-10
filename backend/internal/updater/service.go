@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Local module namespace; Decline self targets and remove CLI self-swap metadata; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package updater
 
@@ -31,7 +31,6 @@ import (
 
 	"go.getarcane.app/sys/cgroup"
 	"go.getarcane.app/updater"
-	"go.getarcane.app/updater/labels"
 
 	"go.getarcane.app/updater/refs"
 
@@ -87,16 +86,9 @@ type updaterDependenciesInternal struct {
 	RegistryDigestResolver *registry.ContainerRegistryService
 	Events                 *event.EventService
 	Notifications          *notification.NotificationService
-	SelfUpgrade            selfUpgradeServiceInternal
 	Activity               *activity.ActivityService
 	SystemUser             usertypes.Actor
 	Logger                 *slog.Logger
-}
-
-type selfUpgradeServiceInternal interface {
-	// TriggerUpgradeViaCLI returns the spawned upgrader container's ID, which this
-	// service does not need — only update-all's manager step uses it.
-	TriggerUpgradeViaCLI(ctx context.Context, user usertypes.Actor, target updater.SelfUpdateTarget) (string, error)
 }
 
 // NewUpdaterService constructs the Arcane updater facade.
@@ -110,7 +102,6 @@ func NewUpdaterService(
 	events *event.EventService,
 	imageSvc *image.ImageService,
 	localNotifications *notification.NotificationService,
-	upgrade selfUpgradeServiceInternal,
 	activityService *activity.ActivityService,
 	cfg *config.Config,
 	coordinator *runs.Coordinator,
@@ -129,7 +120,6 @@ func NewUpdaterService(
 			RegistryDigestResolver: registries,
 			Events:                 events,
 			Notifications:          localNotifications,
-			SelfUpgrade:            upgrade,
 			Activity:               activityService,
 			SystemUser:             usertypes.SystemUser,
 		},
@@ -179,7 +169,6 @@ func (s *UpdaterService) configInternal() updater.Config {
 		RegistryDigestResolver: s.registryDigestResolverInternal(),
 		RegistryTagLister:      s,
 		ProjectUpdater:         s,
-		SelfUpdater:            s,
 		Notifier:               s,
 		EventRecorder:          s,
 		UsedImageCollector:     updater.UsedImageCollectorFunc(s.CollectUsedImages),
@@ -190,7 +179,7 @@ func (s *UpdaterService) configInternal() updater.Config {
 }
 
 // selfContainerIDInternal returns the ID of the container Arcane runs in, so
-// the updater engine routes it through the CLI self-updater even when the
+// the updater engine protects it even when the
 // container is missing the Arcane labels. Empty when not running in Docker.
 func selfContainerIDInternal() string {
 	id, err := cgroup.CurrentContainerID()
@@ -417,19 +406,6 @@ func (s *UpdaterService) RestartContainersUsingOldIDs(ctx context.Context, oldID
 	return resourceResultsFromModuleInternal(results), err
 }
 
-// TriggerSelfUpdateViaCLI triggers Arcane's detached CLI self-update path.
-func (s *UpdaterService) TriggerSelfUpdateViaCLI(ctx context.Context, source, containerID, containerName string, labelMap map[string]string) error {
-	if !labels.IsArcaneContainer(labelMap) {
-		return fmt.Errorf("%s: container is not an Arcane self-update target", source)
-	}
-	return s.TriggerSelfUpdate(ctx, updater.SelfUpdateTarget{
-		ContainerID:   containerID,
-		ContainerName: containerName,
-		InstanceType:  kit.Ternary(labels.IsArcaneAgentContainer(labelMap), "agent", "server"),
-		Labels:        labelMap,
-	})
-}
-
 // BeginContainerUpdate marks a container as updating.
 func (s *UpdaterService) BeginContainerUpdate(containerID string) func() {
 	return s.engineInternal().BeginContainerUpdate(containerID)
@@ -596,54 +572,9 @@ func (s *UpdaterService) UpdateServices(ctx context.Context, projectID string, s
 	return s.deps.Projects.UpdateProjectServices(ctx, projectID, services, s.deps.SystemUser, false)
 }
 
-// TriggerSelfUpdate runs Arcane's CLI-backed self-update hook.
-func (s *UpdaterService) TriggerSelfUpdate(ctx context.Context, target updater.SelfUpdateTarget) error {
-	// The frozen digest is only what gets pulled; the recreated container keeps
-	// the selected tag so later runs do not treat it as an immutable reference.
-	if target.NewImageRef != "" {
-		pinned, err := s.recovery.PreparePull(ctx, target.NewImageRef)
-		if err != nil {
-			return err
-		}
-		target.PullImageRef = pinned
-	}
-	if s == nil || s.deps.SelfUpgrade == nil {
-		instanceType := cmp.Or(strings.TrimSpace(target.InstanceType), "server")
-		return fmt.Errorf("%s self-update requires CLI upgrade service", instanceType)
-	}
-
-	// A server self-update stops this process before the run can complete its
-	// activity, so annotate the activity first; startup reconciliation uses
-	// the metadata flag to finalize it after the restart.
-	if target.InstanceType != "agent" {
-		s.markSelfUpdateTriggeredInternal(ctx, target.NewImageRef)
-	}
-
-	if _, err := s.deps.SelfUpgrade.TriggerUpgradeViaCLI(ctx, s.deps.SystemUser, target); err != nil {
-		return fmt.Errorf("CLI upgrade failed: %w", err)
-	}
-	if progress, ok := ctx.Value(updateProgressKeyInternal{}).(*updateProgressInternal); ok {
-		progress.mu.Lock()
-		progress.selfTriggered = true
-		progress.selfID = target.ContainerID
-		progress.mu.Unlock()
-	}
-	return nil
-}
-
-func (s *UpdaterService) markSelfUpdateTriggeredInternal(ctx context.Context, imageRef string) {
-	activityID := activityIDFromContextInternal(ctx)
-	if s.deps.Activity == nil || activityID == "" {
-		return
-	}
-	message := "Self-update initiated — Arcane will restart"
-	if ref := strings.TrimSpace(imageRef); ref != "" {
-		message = "Self-update initiated — Arcane will restart with " + ref
-	}
-	s.appendAutoUpdateActivityMessageInternal(ctx, activityID, message, "Self-update", 90)
-	if err := s.deps.Activity.PatchActivityMetadata(ctx, activityID, database.JSON{"selfUpdateTriggered": true}); err != nil {
-		slog.DebugContext(ctx, "failed to mark self-update on activity", "activityId", activityID, "error", err)
-	}
+// TriggerSelfUpdate declines workload actions targeting the running system.
+func (s *UpdaterService) TriggerSelfUpdate(context.Context, updater.SelfUpdateTarget) error {
+	return imageDTO.Failure("image.system-protected", 409)
 }
 
 // Notify buffers Arcane's container update notification when called within an

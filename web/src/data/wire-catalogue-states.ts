@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums.
+// Deviations: Original total catalogue maps for rendered contract enums. M21 #438: candidate checks and verified updates.
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -132,3 +132,15 @@ export const SYSTEM_HINT_KIND_KEYS = {
 } satisfies Record<NonNullable<
   | Schema["UpdaterSystemImageHint"]["kind"]
 >, CatalogueKey>;
+
+export const CANDIDATE_STATE_KEYS = {
+  unchecked: "security.candidates.states.unchecked", queued: "security.candidates.states.queued",
+  running: "security.candidates.states.running", completed: "security.candidates.states.completed",
+  failed: "security.candidates.states.failed", cancelled: "security.candidates.states.cancelled",
+  interrupted: "security.candidates.states.interrupted", deferred: "security.candidates.states.deferred",
+} satisfies Record<Schema["VulnerabilityCandidateResult"]["state"], CatalogueKey>;
+export const CANDIDATE_RUN_STATUS_KEYS = {
+  running: "security.historyStatus.running", completed: "security.historyStatus.completed",
+  partial: "security.historyStatus.partial", failed: "security.historyStatus.failed",
+  cancelled: "security.historyStatus.cancelled", interrupted: "security.historyStatus.interrupted",
+} satisfies Record<Schema["VulnerabilityCandidateRun"]["status"], CatalogueKey>;

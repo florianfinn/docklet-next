@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original fresh-check and classic/containerd native identity bridge proofs.
+// Deviations: Original fresh-check and classic/containerd native identity bridge proofs. M21 #438: candidate scans and verified manifest binding.
 
 package image
 
@@ -30,7 +30,7 @@ import (
 )
 
 func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
-	for _, store := range []string{"classic", "containerd", "pattern", "version", "v-version", "label-bump"} {
+	for _, store := range []string{"classic", "containerd", "pattern", "suffix", "version", "v-version", "label-bump"} {
 		t.Run(store, func(t *testing.T) {
 			regServer := httptest.NewServer(registryHTTP.New())
 			defer regServer.Close()
@@ -38,6 +38,8 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 			ref := repo + ":stable"
 			if store == "pattern" {
 				ref = repo + ":release-1.0.0"
+			} else if store == "suffix" {
+				ref = repo + ":1.0.00"
 			} else if store == "version" {
 				ref = repo + ":1.0.0"
 			} else if store == "v-version" {
@@ -78,6 +80,10 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 			}
 			if store == "pattern" {
 				consumerLabels = map[string]string{"com.getarcaneapp.arcane.updater.strategy": "tag", "com.getarcaneapp.arcane.updater.tag-pattern": "release-(?P<version>.*)", "com.getarcaneapp.arcane.updater.constraint": "~1.0"}
+			}
+			if store == "suffix" {
+				// The literal suffix also ends the normalised version.
+				consumerLabels = map[string]string{"com.getarcaneapp.arcane.updater.strategy": "tag", "com.getarcaneapp.arcane.updater.tag-pattern": `(?P<version>\d+\.\d+\.\d+)0`, "com.getarcaneapp.arcane.updater.constraint": "^1.0.0"}
 			}
 			inspected := container.InspectResponse{ID: "consumer", Image: localID, Config: &container.Config{Image: ref, Labels: consumerLabels}, ImageManifestDescriptor: desc}
 			daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,12 +130,20 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 				tag, err = name.NewTag(targetRef, name.Insecure)
 				require.NoError(t, err)
 			}
+			if store == "suffix" {
+				targetRef = repo + ":1.1.00"
+				tag, err = name.NewTag(targetRef, name.Insecure)
+				require.NoError(t, err)
+			}
 			require.NoError(t, remote.Write(tag, next, remote.WithContext(t.Context())))
 			fresh, err := s.CheckContainerImage(t.Context(), inspected)
 			require.NoError(t, err)
 			require.True(t, fresh.HasUpdate, "check must not reuse the earlier current observation")
 			if store == "pattern" {
 				require.Equal(t, "release-1.0.1", fresh.LatestVersion)
+			} else if store == "suffix" {
+				require.Equal(t, "version", fresh.State)
+				require.Equal(t, "1.1.00", fresh.LatestVersion)
 			} else if store == "version" {
 				require.Equal(t, "1.1.0", fresh.LatestVersion)
 			} else if store == "v-version" {
@@ -143,6 +157,11 @@ func TestContainerImageBridgeFreshAndNativeIdentity(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expected, id)
 			require.Equal(t, "linux/amd64", platform)
+			native, observedPlatform, manifest, err := s.CandidateContainerImage(t.Context(), inspected, targetRef)
+			require.NoError(t, err)
+			require.Equal(t, expected, native)
+			require.Equal(t, platform, observedPlatform)
+			require.Equal(t, newManifest.String(), manifest, "a manifest is never a classic config/native key")
 		})
 	}
 }

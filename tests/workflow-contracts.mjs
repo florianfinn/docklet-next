@@ -28,6 +28,17 @@ export function assertWorkflow(file, text) {
     assert.match(verify, /^    timeout-minutes: 15$/m);
     assert.match(verify, /run: node scripts\/check-publication\.mjs --history/);
     assert.match(verify, /if: needs\.scope\.outputs\.value == 'text'\n        run: node scripts\/change-scope\.mjs --run-text-tests/);
+    // Text-scope Node tests need the frozen web dependencies and pinned Go of the full checks.
+    for (const entry of [
+      "if: needs.scope.outputs.value == 'text'\n        name: Enable pinned pnpm",
+      "corepack prepare pnpm@11.21.0 --activate",
+      "if: needs.scope.outputs.value == 'text'\n        name: Install frozen web dependencies\n        run: pnpm --dir web install --frozen-lockfile",
+      "go-version-file: backend/go.mod",
+    ]) assert.ok(verify.includes(entry), `text verify missing ${entry}`);
+    const textTests = verify.indexOf("--run-text-tests");
+    for (const prerequisite of ["corepack prepare pnpm@11.21.0 --activate", "pnpm --dir web install --frozen-lockfile", "go-version-file: backend/go.mod"])
+      assert.ok(verify.indexOf(prerequisite) < textTests, `text tests need ${prerequisite} first`);
+    assert.match(verify, /- uses: actions\/setup-go@[a-f0-9]{40} # v[\d.]+\n        if: needs\.scope\.outputs\.value == 'text'\n/);
     assert.match(full, /^    name: full-\$\{\{ matrix\.stage \}\}$/m);
     assert.match(full, /^    needs: scope$/m);
     assert.match(full, /^    if: needs\.scope\.outputs\.value == 'full'$/m);
@@ -58,6 +69,7 @@ export function assertWorkflow(file, text) {
       "run: pnpm run ${{ matrix.stage }}",
     ]) assert.ok(full.includes(entry), `full checks missing ${entry}`);
     assert.match(image, /^    timeout-minutes: 30$/m);
+    assert.ok(image.indexOf("go-version-file: backend/go.mod") >= 0 && image.indexOf("go-version-file: backend/go.mod") < image.indexOf("smoke-hub-image.mjs"), "package-image smokes need pinned Go");
     assert.match(checks, /^    needs: \[scope, verify, full-checks, package-image\]$/m);
     assert.match(checks, /^    if: always\(\)$/m);
     for (const gate of [verify, checks]) {
@@ -82,7 +94,7 @@ export function assertWorkflow(file, text) {
   assert.equal(permissions, PERMISSIONS[file]);
   assert.equal(/^ +permissions:/m.test(text), false);
   const actions = [...text.matchAll(/^\s+- uses: ([^\s]+)/gm)];
-  assert.equal(actions.length, file === "checks" ? 9 : 2);
+  assert.equal(actions.length, file === "checks" ? 11 : 2);
   for (const match of actions) assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.equal(/actions\/cache\b/.test(text), false);
   assert.equal(text.includes("secrets."), false);

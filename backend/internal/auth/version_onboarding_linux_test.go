@@ -48,7 +48,7 @@ func TestVersionOnboardingCredentialBoundary(t *testing.T) {
 			directory := t.TempDir()
 			_, err = settingsService.UpdateSettings(t.Context(), settingstypes.Update{ProjectsDirectory: &directory})
 			require.NoError(t, err)
-			versionService := version.NewVersionService(nil, true, "dev", "unknown", nil, nil, nil, settingsService)
+			versionService := version.NewVersionService(nil, true, "", "dev", "unknown", nil, settingsService)
 			router := echo.New()
 			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
 			api.UseMiddleware(auth.NewHumaMiddleware(api, svc, nil, nil, nil, cfg))

@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding; single activity reads defer to the owner/target check.
 
 package access
 
@@ -136,7 +136,7 @@ var Rules = map[string]Rule{
 	"export-environment-vulnerabilities":           Rule{Kind: Admin},
 	"export-image":                                 Rule{Kind: Admin},
 	"generate-compose":                             Rule{Kind: Admin},
-	"get-activity":                                 Rule{Kind: Admin},
+	"get-activity":                                 Rule{Kind: Self}, // Handler checks the persisted run actor or exact current target.
 	"get-all-notification-settings":                Rule{Kind: Admin},
 	"get-api-key":                                  Rule{Kind: Admin},
 	"get-auto-heal-settings":                       Rule{Kind: Admin},
@@ -204,12 +204,14 @@ var Rules = map[string]Rule{
 	"get-volume-usage-counts":                      Rule{Kind: Admin},
 	"get-volume-workspace":                         Rule{Kind: Admin},
 	"get-volume-workspace-file":                    Rule{Kind: Admin},
+	"get-vulnerability-advisory":                   Rule{Kind: Admin},
+	"get-vulnerability-candidates":                 Rule{Kind: Admin},
+	"scan-vulnerability-candidates":                Rule{Kind: Admin},
 	"get-vulnerability-scan-run":                   Rule{Kind: Admin},
 	"get-vulnerability-scanner-status":             Rule{Kind: Admin},
 	"getAppVersion":                                Rule{Kind: Public},
 	"getContainerRegistry":                         Rule{Kind: Admin},
 	"getContainerRegistryPullUsage":                Rule{Kind: Admin},
-	"getDeploymentSnippets":                        Rule{Kind: Admin},
 	"getEnvironment":                               Rule{Kind: Admin},
 	"getEnvironmentAgentRestart":                   Rule{Kind: Admin},
 	"getEnvironmentVersion":                        Rule{Kind: Admin},
@@ -327,12 +329,10 @@ var Rules = map[string]Rule{
 	"test-notification":                            Rule{Kind: Admin},
 	"testConnection":                               Rule{Kind: Admin},
 	"testContainerRegistry":                        Rule{Kind: Admin},
-	"trigger-update-all":                           Rule{Kind: Admin},
 	"trigger-upgrade":                              Rule{Kind: Admin},
 	"unarchive-project":                            Rule{Kind: App, Ref: ProjectPath, Level: Full},
 	"unignore-vulnerability":                       Rule{Kind: Admin},
 	"unpause-container":                            Rule{Kind: Admin},
-	"update-all-status":                            Rule{Kind: Admin},
 	"update-api-key":                               Rule{Kind: Admin},
 	"update-auto-heal-settings":                    Rule{Kind: Admin},
 	"update-backup-target":                         Rule{Kind: Admin},

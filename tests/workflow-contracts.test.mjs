@@ -120,7 +120,18 @@ for (const file of ["checks", "pr-text", "review-status"]) {
       ["full stage omitted from checks needs", (text) => text.replace("needs: [scope, verify, full-checks, package-image]", "needs: [scope, verify, package-image]")],
       ["Docker isolation removed", (text) => text.replace("sudo systemctl stop docker.service docker.socket containerd.service", "true")],
       ["Docker socket check removed", (text) => text.replace("test ! -S /run/docker.sock", "true")],
-      ["frozen install removed", (text) => text.replace("pnpm --dir web install --frozen-lockfile", "pnpm --dir web install")],
+      ["text frozen install removed", (text) => text.replace("pnpm --dir web install --frozen-lockfile", "pnpm --dir web install")],
+      ["full frozen install removed", (text) => {
+        const at = text.lastIndexOf("pnpm --dir web install --frozen-lockfile");
+        return text.slice(0, at) + "pnpm --dir web install" + text.slice(at + "pnpm --dir web install --frozen-lockfile".length);
+      }],
+      ["text Go pin removed", (text) => text.replace("go-version-file: backend/go.mod", "go-version: stable")],
+      ["text install after the text tests", (text) => {
+        const install = "      - if: needs.scope.outputs.value == 'text'\n        name: Install frozen web dependencies\n        run: pnpm --dir web install --frozen-lockfile\n";
+        const tests = "        run: node scripts/change-scope.mjs --run-text-tests\n";
+        return text.replace(install, "").replace(tests, tests + install);
+      }],
+      ["text Go step gated on the full scope", (text) => text.replace("# v7.0.0\n        if: needs.scope.outputs.value == 'text'", "# v7.0.0\n        if: needs.scope.outputs.value == 'full'")],
       ["base SHA removed", (text) => text.replace("PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}", "PR_BASE_SHA: ''")],
       ["feature merge base removed", (text) => text.replace("base=$(git merge-base origin/main HEAD)", "base=")],
       ["base not exported", (text) => text.replace('echo "CHECK_BASE_SHA=$base" >> "$GITHUB_ENV"', "true")],

@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; M21 checks protection constraints and reopen on the release baseline.
 
 package guard
 
@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-func TestImageProtectionForwardMigrationAndReopen(t *testing.T) {
+func TestImageProtectionBaselineConstraintsAndReopen(t *testing.T) {
 	raw := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	localPath, err := sqlitestore.Path(raw)
 	require.NoError(t, err)
@@ -27,7 +27,7 @@ func TestImageProtectionForwardMigrationAndReopen(t *testing.T) {
 	require.NoError(t, err)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, files)
 	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 5)
+	_, err = provider.Up(t.Context())
 	require.NoError(t, err)
 	_, err = pool.ExecContext(t.Context(), "INSERT INTO kv(key,value) VALUES('retained','unchanged')")
 	require.NoError(t, err)

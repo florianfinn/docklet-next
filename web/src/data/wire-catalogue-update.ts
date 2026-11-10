@@ -12,6 +12,9 @@ type Schema = components["schemas"];
 
 // Update admission accepts this contract family, independently of other image-error consumers.
 export const UPDATE_REASON_KEYS = {
+  "candidate.unavailable": IMAGE_ERROR_KEYS["candidate.unavailable"],
+  "candidate.deferred": IMAGE_ERROR_KEYS["candidate.deferred"],
+  "update.candidate-changed": IMAGE_ERROR_KEYS["update.candidate-changed"],
   "agent.unavailable": IMAGE_ERROR_KEYS["agent.unavailable"],
   "container.origin-locked": IMAGE_ERROR_KEYS["container.origin-locked"],
   "container.recreate-ambiguous": IMAGE_ERROR_KEYS["container.recreate-ambiguous"],

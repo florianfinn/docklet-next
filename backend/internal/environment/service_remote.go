@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/proxy"
-	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"strings"
@@ -73,11 +72,10 @@ func (s *EnvironmentService) ProxyRequest(ctx context.Context, envID, method, pa
 	return resp.Body, resp.StatusCode, nil
 }
 
-// DeploymentSnippets contains deployment configuration snippets for an environment.
-type DeploymentSnippets struct {
-	DockerRun     string
-	DockerCompose string
-	MTLS          *DeploymentSnippetMTLS
+// EdgeMTLSFiles are the generated PEM files an edge agent enrolls with.
+type EdgeMTLSFiles struct {
+	Files       []DeploymentSnippetFile
+	HostDirHint string
 }
 
 type DeploymentSnippetFile struct {
@@ -89,32 +87,10 @@ type DeploymentSnippetFile struct {
 	Permissions   string `json:"permissions" doc:"Suggested file mode"`
 }
 
-type DeploymentSnippetMTLS struct {
-	DockerRun     string                  `json:"dockerRun" doc:"Docker run snippet using Arcane-generated mTLS assets"`
-	DockerCompose string                  `json:"dockerCompose" doc:"Docker compose snippet using Arcane-generated mTLS assets"`
-	Files         []DeploymentSnippetFile `json:"files" doc:"Generated PEM files to place on the edge host"`
-	HostDirHint   string                  `json:"hostDirHint" doc:"Suggested host directory containing the generated PEM files"`
-}
-
-// GenerateDeploymentSnippets generates Docker deployment snippets for an environment.
-func (s *EnvironmentService) GenerateDeploymentSnippets(ctx context.Context, envID, managerURL, agentURL, apiKey string) (*DeploymentSnippets, error) {
-	dockerRun, dockerCompose := snippets.Direct(strings.TrimRight(managerURL, "/"), agentURL, apiKey)
-	return &DeploymentSnippets{
-		DockerRun:     dockerRun,
-		DockerCompose: dockerCompose,
-	}, nil
-}
-
-// GenerateEdgeDeploymentSnippets generates Docker deployment snippets for an edge agent.
-// Edge agents connect outbound to the manager and don't require exposed ports.
-func (s *EnvironmentService) GenerateEdgeDeploymentSnippets(ctx context.Context, envID, managerURL, apiKey string, edgeCfg *edge.Config) (*DeploymentSnippets, error) {
+// GenerateEdgeMTLSFiles issues the edge mTLS assets for an environment. Nil
+// means mTLS generation is off or failed.
+func (s *EnvironmentService) GenerateEdgeMTLSFiles(ctx context.Context, envID, managerURL string, edgeCfg *edge.Config) *EdgeMTLSFiles {
 	managerURL = strings.TrimRight(managerURL, "/")
-	dockerRun, dockerCompose := snippets.Edge(managerURL, apiKey)
-	result := &DeploymentSnippets{
-		DockerRun:     dockerRun,
-		DockerCompose: dockerCompose,
-	}
-
 	envName := ""
 	if s != nil && s.db != nil {
 		if env, getErr := s.GetEnvironmentByID(ctx, envID); getErr == nil && env != nil {
@@ -125,9 +101,9 @@ func (s *EnvironmentService) GenerateEdgeDeploymentSnippets(ctx context.Context,
 		edgeCfg.AppURL = managerURL
 	}
 
-	generatedAssets, mtlsDockerRun, mtlsDockerCompose := s.snippets.GenerateMTLS(ctx, edgeCfg, envID, envName, managerURL, apiKey)
+	generatedAssets := s.snippets.GenerateMTLS(ctx, edgeCfg, envID, envName)
 	if generatedAssets == nil {
-		return result, nil
+		return nil
 	}
 
 	files := make([]DeploymentSnippetFile, 0, len(generatedAssets.Files))
@@ -139,11 +115,5 @@ func (s *EnvironmentService) GenerateEdgeDeploymentSnippets(ctx context.Context,
 			Permissions:   file.Permissions,
 		})
 	}
-	result.MTLS = &DeploymentSnippetMTLS{
-		DockerRun:     mtlsDockerRun,
-		DockerCompose: mtlsDockerCompose,
-		Files:         files,
-		HostDirHint:   strings.TrimSpace(generatedAssets.HostDirHint),
-	}
-	return result, nil
+	return &EdgeMTLSFiles{Files: files, HostDirHint: strings.TrimSpace(generatedAssets.HostDirHint)}
 }

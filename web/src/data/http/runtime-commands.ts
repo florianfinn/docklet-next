@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 web consumer integration.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 web consumer integration. M21 #438: candidate checks and verified updates.
 
 import { readStackStopMode } from "./settings-core";
 import type { components } from "@/api/generated/schema";
@@ -194,13 +194,13 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">): Promise<RuntimeAdmission> {
+  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">, verified?: { expectedManifest: string }): Promise<RuntimeAdmission> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
     const imageOperation = kind === "stack" && (command === "update" || command === "restore");
     const suffix = imageOperation || command === "recreate" || (kind === "container" && (command === "update" || command === "restore")) ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
-    const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : ""}`;
+    const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : verified ? JSON.stringify(verified) : ""}`;
     if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing.then((result) => ({ ...result, outcome: "joined" }));
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
@@ -243,8 +243,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
             const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${commandSuffix}${service ? `?${new URLSearchParams(service.restartServices?.map((name) => ["services", name]) ?? [])}` : ""}`;
             response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
-              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate ? { "Content-Type": "application/json" } : {}) },
-              ...(recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify(lifecycle) } : {}),
+              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate || verified ? { "Content-Type": "application/json" } : {}) },
+              ...(recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify(lifecycle) } : verified ? { body: JSON.stringify(verified) } : {}),
             });
           } catch (error) {
             check(version);
@@ -317,7 +317,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   }
   return {
     admitRuntimeCommand: (request: RuntimeCommandRequest) => admit(request.kind, request.id, request.command, request.input),
-    installContainerUpdate: (id: string) => command("container", id, "update"),
+    installContainerUpdate: (id: string, input?: { expectedManifest: string }) => command("container", id, "update", undefined, undefined, undefined, input),
     restoreContainerImage: (id: string) => command("container", id, "restore"),
     installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
     restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),

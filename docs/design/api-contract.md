@@ -53,7 +53,7 @@ the mapping and its contract tests before that feature claims live data.
 | --- | --- | --- | --- |
 | `EnvironmentEnvironment`, `EnvironmentAgentPairResponse` | `Host`, `AgentReport`, `HostsApi` | Identity, connection state, last successful contact and nullable agent checks map through the host HTTP reader. Onboarding writes and installation metadata remain separate. | M5 #81 reads and state; #84 onboarding |
 | `SystemActorHostInfo`, `SystemActorInstance` | `SystemComponent`, `HostsApi` | Actor diagnostics need a host component projection and availability state. | Planned M5 Hosts, transport and read inventory |
-| `EnvironmentHubDiscovery` | `HubDiscovery`, `HubApi` | Admin-only inspection supplies a pinned agent image and configured-first URL candidates with unverified reachability hints. | M5 #84 onboarding |
+| `EnvironmentHubDiscovery` | `HubDiscovery`, `HubApi` | Admin-only inspection supplies the agent image (operator override, else the release pin) and configured-first URL candidates with unverified reachability hints. | M5 #84 onboarding |
 | `ProjectDetails`, `ProjectRuntimeService`, `ProjectTag` | `Stack`, `StackDetail`, `Service` | Host-scoped IDs, runtime service status/health/ports and project tags map into stack reads; retained observations accompany disconnected reads. | M5 #82 |
 | `ContainerDetails`, `ContainerSummary`, `ContainerComposeInfo` | `ContainerInfo`, `DockletAdapter` | Container summaries map host-scoped IDs, compose/run/unclear origin, protected recreation restrictions and display state. | M5 #82 |
 | `DashboardSnapshot`, `DashboardSnapshotContainers`, `DashboardSnapshotImages` | `HostMetrics`, `ContainerMetrics`, `MetricsSnapshot` | Aggregate dashboard payloads do not directly provide the per-host view and metric units. | Planned M5 Hosts, transport and read inventory |
@@ -391,3 +391,8 @@ environment route and of the Edge command table uses unreserved characters only.
 An agent restart refused by a busy agent (a running volume backup, bind snapshot or
 restore) ends as a failed restart run with code `host.busy`; migration 020 admits that
 code in `agent_restart_requests`. Details: [host maintenance](host-maintenance.md).
+
+The unreleased v17 self-update recovery envelope is described in [in-app updates](app-updates.md).
+Terminal health failures use `update.self-failed`; an unconfirmed interrupted
+operation uses `update.outcome-unknown`. Both retain the existing failed activity
+status and are separate from the immutable helper phase evidence.

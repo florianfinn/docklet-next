@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation; M21 destroy flags keep files when omitted. M21 #438: candidate scans and verified manifest binding.
 
 package project
 
@@ -247,7 +247,7 @@ type ServiceUpdateInfo struct {
 // UpdateInfo contains aggregated image update status for a project.
 type UpdateInfo struct {
 	// PolicyCode reports optional policy bookkeeping separately from the successful observation.
-	PolicyCode     imagetypes.ReasonCode        `json:"policyCode,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,vulnerability.storage-unavailable"`
+	PolicyCode     imagetypes.ReasonCode        `json:"policyCode,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,candidate.deferred,candidate.unavailable,vulnerability.storage-unavailable"`
 	ServiceUpdates map[string]ServiceUpdateInfo `json:"serviceUpdates,omitempty"`
 	// Status is the aggregate update status for the project.
 	//
@@ -613,9 +613,9 @@ type Details struct {
 
 // Destroy is used to destroy a project.
 type Destroy struct {
-	// RemoveFiles indicates if project files should be removed. Defaults to true when omitted.
-	// When false and the project is stored under the projects directory, files are renamed
-	// to a hidden .arcane-trash-* directory so filesystem discovery does not re-import them.
+	// RemoveFiles removes the project files only when explicitly true. When false or omitted,
+	// a project stored under the projects directory has its files renamed to a hidden
+	// .arcane-trash-* directory so filesystem discovery does not re-import them.
 	//
 	// Required: false
 	RemoveFiles *bool `json:"removeFiles,omitempty"`
@@ -624,6 +624,14 @@ type Destroy struct {
 	//
 	// Required: false
 	RemoveVolumes bool `json:"removeVolumes,omitempty"`
+}
+
+// Flags resolves a destroy request; a missing body or field keeps files and volumes.
+func (d *Destroy) Flags() (removeFiles, removeVolumes bool) {
+	if d == nil {
+		return false, false
+	}
+	return d.RemoveFiles != nil && *d.RemoveFiles, d.RemoveVolumes
 }
 
 // StatusCounts contains counts of projects by status.
