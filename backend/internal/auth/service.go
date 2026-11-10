@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts; preserve authenticated sessions across application releases.
 
 package auth
 
@@ -319,10 +319,8 @@ func (s *AuthService) VerifyBrowserToken(ctx context.Context, browserToken strin
 
 func (s *AuthService) verifyTokenClaimsInternal(ctx context.Context, tokenHash string, claims *accessTokenClaims) (*user.User, string, error) {
 	gen := s.cacheGen.Load()
-	if claims.AppVersion != "" && claims.AppVersion != config.Version {
-		slog.InfoContext(ctx, "Token version mismatch detected", "tokenVersion", claims.AppVersion, "currentVersion", config.Version, "user", claims.Username)
-		return nil, "", common.ErrTokenVersionMismatch
-	}
+	// The release version is informational. Signature, expiry, current user and
+	// persisted session state remain the authentication boundary across updates.
 	if s.sessionService == nil {
 		return nil, "", common.Classify(common.ErrUnavailable, errors.New("Session service is not configured")) //nolint:staticcheck // Preserve the existing error message.
 	}

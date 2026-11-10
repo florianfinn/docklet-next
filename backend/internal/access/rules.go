@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding; single activity reads defer to the owner/target check.
 
 package access
 
@@ -136,7 +136,7 @@ var Rules = map[string]Rule{
 	"export-environment-vulnerabilities":           Rule{Kind: Admin},
 	"export-image":                                 Rule{Kind: Admin},
 	"generate-compose":                             Rule{Kind: Admin},
-	"get-activity":                                 Rule{Kind: Admin},
+	"get-activity":                                 Rule{Kind: Self}, // Handler checks the persisted run actor or exact current target.
 	"get-all-notification-settings":                Rule{Kind: Admin},
 	"get-api-key":                                  Rule{Kind: Admin},
 	"get-auto-heal-settings":                       Rule{Kind: Admin},

@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original live host credential lifecycle and discovery mapping. M14 host maintenance and availability.
+// Deviations: Original live host credential lifecycle and discovery mapping. M14 host maintenance and availability; accept hub-validated operator image overrides.
 
 import { discardResponse } from "./identity-reads";
 import { runtimeResponseError } from "./runtime-mapping";
@@ -16,7 +16,9 @@ import { mapHost } from "./hosts";
 
 type Environment = components["schemas"]["EnvironmentEnvironment"];
 type Discovery = components["schemas"]["EnvironmentHubDiscovery"];
-const PINNED_IMAGE = /^[a-zA-Z0-9./:_-]+:\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:@sha256:[a-f0-9]{64})?$/;
+// The hub validates reference syntax and pins its own default. Keep overrides
+// inert in generated Compose/shell text without imposing a release-version tag.
+const IMAGE_REFERENCE = /^(?:\[[0-9A-Fa-f:.]+\](?::\d{1,5})?\/)?[A-Za-z0-9][A-Za-z0-9._/:-]*(?:@sha256:[a-f0-9]{64})?$/;
 
 export function createHostCommands(baseUrl: string, client: CsrfClient, requireCapability: (operation: string) => Promise<void>, changed: () => void, capability?: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>, generation: () => number = () => 0): Pick<HostsApi, "registerHost" | "issueAgentToken" | "removeHost" | "updateHost"> & HubApi {
   async function request<T>(path: string, method = "GET", body?: object): Promise<T> {
@@ -90,7 +92,7 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
     async discoverHub() {
       await access("discoverHub");
       const discovery = await request<Discovery>("/hub/discovery");
-      if (!Number.isFinite(Date.parse(discovery.detectedAt)) || !PINNED_IMAGE.test(discovery.agentImage) || !Array.isArray(discovery.candidates)) throw new Error("hosts.invalid-discovery");
+      if (!Number.isFinite(Date.parse(discovery.detectedAt)) || (typeof discovery.agentImage !== "string" || discovery.agentImage.length > 512 || !IMAGE_REFERENCE.test(discovery.agentImage)) || !Array.isArray(discovery.candidates)) throw new Error("hosts.invalid-discovery");
       for (const candidate of discovery.candidates) {
         const url = new URL(candidate.url);
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !["", "/"].includes(url.pathname) || !["unknown", "same-host"].includes(candidate.reach) || !["configured", "interface"].includes(candidate.source)) throw new Error("hosts.invalid-candidate");
