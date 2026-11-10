@@ -141,7 +141,7 @@ Each exclusion was backed by named tests on the exact CI run.
   Chromium only.
 - After the merge, the main push check of PR text read a line in the squash
   message as a network address. An exact reviewed commit-message exception fixed
-  it, and #450 tracks the guard correction.
+  it in #451 (`180b94c8`), and #450 tracks the guard correction.
 
 ## Open follow-ups
 
