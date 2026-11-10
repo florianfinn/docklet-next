@@ -95,7 +95,7 @@ test("the interpolation scan sees every expression, nested ones included", () =>
     [["A", ":-", "${B_IMAGE-x}"], ["B_IMAGE", "-", "x"], ["C", "", ""], ["D", ":?", "m"], ["E", "+", "y"]]);
   assert.equal(interpolations("${A:-x}")[0].whole, true);
   assert.equal(interpolations("a ${A:-x}")[0].whole, false);
-  for (const bad of ["${", "${1A}", "${A:-x", "${:-x}"]) assert.throws(() => interpolations(bad), /interpolation/, bad);
+  for (const bad of ["${", "${1A}", "${A:-x", "${:-x}", "${A/foo/bar}", "${A:bad}"]) assert.throws(() => interpolations(bad), /interpolation/, bad);
 });
 test("a dash default gets an env example entry like a colon default", () => temporary((out) => {
   const template = withExtra((c) => { c.services.hub.environment.EXTRA = "${EXTRA_SETTING-on}"; });

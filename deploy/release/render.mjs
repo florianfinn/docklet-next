@@ -34,6 +34,7 @@ export function interpolations(value) {
     }
     if (depth) throw new Error("unbalanced Compose interpolation");
     const operator = value.slice(start + 2 + name.length, from);
+    if (!operator && end - 1 !== from) throw new Error("unsupported Compose interpolation");
     found.push({ name, operator, argument: value.slice(from, end - 1), whole: start === 0 && end === value.length });
   }
   return found;
