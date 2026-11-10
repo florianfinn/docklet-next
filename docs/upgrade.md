@@ -8,7 +8,8 @@ Deviations: Original upgrade and manual recovery instructions verified against s
 
 # Upgrade Docklet Next
 
-Create and download a hub archive from **Hub backups** (`/hub-backups`) before
+Create and download a hub archive from **Hub database** › Hub database backups
+(`/hub-backups`) before
 upgrading. Keep the external encryption key and the current Compose/env files
 with protected recovery material. Hub archives contain the two SQLite databases;
 they do not contain workload volumes, project files or external secrets.
@@ -21,7 +22,7 @@ installations need a fresh baseline as described in [installation](install.md).
 
 ## Update from the application
 
-As an administrator, open **Settings › Live updates**. Select **Update Docklet**
+As an administrator, open **Hub settings › Updates** (`/settings/updates`). Select **Update Docklet**
 for the hub or **Update agent** for a host. Review the target and confirm. The
 hub's confirmation links to Hub backups. Follow the run in the activity view;
 the browser reconnects and reloads after a confirmed successful hub update.
@@ -64,6 +65,8 @@ replayable Compose installation. The main reasons are:
 | `feature-disabled` | Release checks are disabled by `UPDATE_CHECK_DISABLED`. |
 | `update.check-unavailable` | Release, image or installation information could not be checked. Restore access and check again, or use the manual path. |
 | `update.system-version-unknown` | The running build has no usable product version. Use a versioned image manually. |
+| `update.self-failed` | The update failed. Keep the previous configuration and recover manually; see [Recover a failed in-app update](#recover-a-failed-in-app-update). |
+| `update.outcome-unknown` | The outcome could not be confirmed. Inspect the running service before trying again; see [Recover a failed in-app update](#recover-a-failed-in-app-update). |
 
 The supported layout has a Compose working directory and ordered config files
 recorded in container labels, and one interpolation env file inside that directory
@@ -102,7 +105,7 @@ Check `/api/health`, startup migration results, the served UI and sign-in.
 Changing `.env` requires recreation with `up`; `restart` alone does not load it.
 
 For agents, set the target `DOCKLET_AGENT_IMAGE` in the agent installation's env
-file, then use the exact commands shown by the hub in Settings › Live updates.
+file, then use the exact commands shown by the hub in Hub settings › Updates.
 Those commands include the recorded project name, config files, env file and
 service. For an unchanged generated agent project, the equivalent is:
 

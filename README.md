@@ -38,5 +38,6 @@ is an optional general reference; project instructions take precedence. Current 
 and [milestones](https://github.com/florianfinn/docklet-next/milestones).
 
 The hub uses `TZ` for schedules and date display, defaulting to `UTC`. Configure
-an IANA zone in the deployment environment and restart the hub after changes;
+an IANA zone in the deployment environment and recreate the hub
+(`docker compose … up -d hub`) after changes;
 General settings show the effective zone read-only.

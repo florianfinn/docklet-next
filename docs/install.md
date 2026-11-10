@@ -10,10 +10,11 @@ Deviations: Original release installation instructions verified against the pack
 
 Install the hub from a package on [GitHub Releases](https://github.com/florianfinn/docklet-next/releases),
 then add agents through the hub. Check [compatibility](compatibility.md) first.
-The published image targets are **linux/amd64**:
+Release images target **linux/amd64**:
 `ghcr.io/florianfinn/docklet-next-hub` and
 `ghcr.io/florianfinn/docklet-next-agent`.
-For local builds without a product registry, use the [source-build guide](../deploy/hub/README.md).
+Until a release is published, and for local builds without a product registry,
+use the [source-build guide](../deploy/hub/README.md).
 
 ## Prepare the host and public address
 
@@ -140,7 +141,7 @@ hub setup flow. Proxy mode uses the proxy identity; none mode opens directly.
 The `hub-data` volume holds the database pair under `/app/data`; `hub-backups`
 holds hub archives under `/var/lib/docklet/backups`. Keep both across container
 replacement. Never delete live SQLite WAL/SHM files or copy just a live main
-database file as a backup. Use the **Hub backups** page (`/hub-backups`) to create
+database file as a backup. Use **Hub database** › Hub database backups (`/hub-backups`) to create
 and download a coordinated archive.
 
 ## Add Direct and Edge agents
@@ -170,7 +171,7 @@ sh install.sh
 ```
 
 The installer requires a POSIX shell, Docker Compose v2, `stat` with `-c`, `awk`,
-`mktemp` and standard file utilities; BusyBox is supported. It proposes the
+`mktemp` and standard file utilities; BusyBox is supported. It uses the
 project directory's owner as `PUID`/`PGID` unless an explicit owner was selected.
 The agent detects the socket group at every start before dropping privileges;
 an explicitly selected manual group is emitted as `group_add`. The installer
@@ -191,6 +192,6 @@ delete the downloaded archive after installation. Copyable commands contain
 the token and can leave it in shell history; prefer the archive.
 
 Wait for the hub's next successful health check to confirm compatibility and
-directory access (default interval: two minutes). New agents start at the
+report directory access (default interval: two minutes). New agents start at the
 package's agent version; use **Update agent** afterwards if the hub has already
 been upgraded. See [upgrading and recovery](upgrade.md).
