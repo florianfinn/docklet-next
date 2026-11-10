@@ -37,7 +37,8 @@ const FOUNDATION_FILES = new Set([
 ]);
 const PRODUCT_NOTICES = new Set([
   "LICENSES/MIT-icu-type-parser.txt", "LICENSES/MIT-react-remove-scroll-bar.txt",
-  "LICENSES/MIT-victory-vendor.txt",
+  "LICENSES/MIT-victory-vendor.txt", "LICENSES/MIT-ca-certificates-c_rehash.txt",
+  "LICENSES/curl-ca-certificates-mk-ca-bundle.txt",
 ]);
 function foundationPath(path) {
   if (PRODUCT_NOTICES.has(path) || path.startsWith("LICENSES/tools/")) return false;

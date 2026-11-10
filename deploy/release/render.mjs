@@ -2,27 +2,58 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original offline release packaging and verification.
+// Deviations: Original offline release packaging and verification; M22 #446: CA source asset and rendered image-default pin guard.
 
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { isMain, options, releaseReference, releaseRepository, sha256, version } from "./common.mjs";
 const { parse, stringify } = createRequire(new URL("../../web/package.json", import.meta.url))("yaml");
-export function render(manifest, out) {
+// The CA bundle's source archive and every licence its contents need travel with each release (MPL-2.0 §3.2(a)).
+export function caSourceFiles(assessed = JSON.parse(readFileSync("deploy/release/ca-bundle.json", "utf8"))) {
+  const { file, sha512, licenses } = assessed.source ?? {};
+  if (typeof file !== "string" || !existsSync(file)) throw new Error("CA source archive missing");
+  const archive = readFileSync(file);
+  if (createHash("sha512").update(archive).digest("hex") !== sha512) throw new Error("CA source archive SHA-512 mismatch");
+  const files = { [basename(file)]: archive };
+  for (const path of [...assessed.notices, ...licenses]) files[basename(path)] = readFileSync(path);
+  return files;
+}
+// Every image default in the rendered Compose (service images and any *_IMAGE fallback) must be a package pin.
+export function checkImageDefaults(compose, manifest) {
+  const pins = new Set(["hub", "agent"].map((role) => manifest.images[role].reference));
+  const defaults = [];
+  for (const [name, service] of Object.entries(compose.services ?? {})) {
+    const image = service?.image;
+    if (typeof image !== "string") throw new Error(`service ${name} has no image default`);
+    const fallback = /^\$\{[A-Za-z_][A-Za-z0-9_]*:?-([^}]*)\}$/.exec(image);
+    if (!fallback && image.includes("$")) throw new Error(`service ${name} image has no usable default`);
+    defaults.push(fallback ? fallback[1] : image);
+  }
+  const visit = (value) => {
+    if (typeof value === "string") for (const [, fallback] of value.matchAll(/\$\{[A-Za-z_][A-Za-z0-9_]*_IMAGE:?-([^}]*)\}/g)) defaults.push(fallback);
+    else if (value && typeof value === "object") for (const item of Object.values(value)) visit(item);
+  };
+  visit(compose);
+  for (const value of defaults) if (!pins.has(value)) throw new Error("image default is not a pinned package reference");
+  return defaults;
+}
+export function render(manifest, out, { template = readFileSync("deploy/hub/compose.yaml", "utf8") } = {}) {
   const v = version(manifest.version);
   releaseRepository(manifest.releaseRepository);
   for (const role of ["hub", "agent"]) {
     const ref = releaseReference(manifest.images[role].reference);
     if (ref.tag !== v || ref.digest !== manifest.images[role].digest || `${ref.registry}/${ref.path}` !== `${manifest.releaseRepository}-${role}`) throw new Error("manifest image identity mismatch");
   }
-  const template = readFileSync("deploy/hub/compose.yaml", "utf8");
   const compose = parse(template);
   delete compose.services.hub.build;
   compose.services.hub.image = `\${HUB_IMAGE:-${manifest.images.hub.reference}}`;
   compose.services.hub.environment.DOCKLET_AGENT_IMAGE = `\${DOCKLET_AGENT_IMAGE:-${manifest.images.agent.reference}}`;
   const header = template.match(/^(?:#[^\n]*\n)+/)?.[0] ?? "";
   const yaml = header + "# Generated release package: source build removed; image defaults digest-pinned.\n" + stringify(compose, { lineWidth: 0 });
+  checkImageDefaults(parse(yaml), manifest);
+  const caFiles = caSourceFiles();
   const variables = new Map([...yaml.matchAll(/\$\{([A-Z_][A-Z0-9_]*)(?:(:-|:\?)([^}]*))?\}/g)].map(([, key, mode, fallback]) => [key, { mode, fallback: fallback ?? "" }]));
   const comments = { HUB_IMAGE: "Optional hub image override; the default is pinned below.", DOCKLET_AGENT_IMAGE: "Optional agent image override; blank uses the pinned package default.", ENCRYPTION_KEY: "Required: generate a private 32-byte hexadecimal key. Keep it with your backups.", APP_URL: "Dedicated public domain root (sub-path hosting is unsupported).", PUID: "Numeric runtime user; startup prepares the data volume then drops privileges.", PGID: "Numeric runtime group.", TZ: "IANA time zone for schedules and display." };
   const env = ["# Docklet Next " + v, "# Copy to a private .env and pass --env-file consistently."];
@@ -33,6 +64,7 @@ export function render(manifest, out) {
   mkdirSync(out, { recursive: true });
   const files = { [`docklet-next-${v}-compose.yaml`]: yaml, [`docklet-next-${v}.env.example`]: env.join("\n") + "\n", "release-manifest.json": JSON.stringify(manifest, null, 2) + "\n" };
   for (const [name, path] of [["LICENSE", "LICENSE"], ["NOTICE", "NOTICE"], ["BSD-3-Clause-Arcane.txt", "LICENSES/BSD-3-Clause-Arcane.txt"]]) files[name] = readFileSync(path);
+  Object.assign(files, caFiles);
   for (const [path, content] of Object.entries(files)) writeFileSync(join(out, path), content);
   writeFileSync(join(out, "SHA256SUMS"), Object.entries(files).map(([path, content]) => `${sha256(content).slice(7)}  ${path}\n`).join(""));
   return files;

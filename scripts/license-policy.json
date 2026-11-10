@@ -86,6 +86,14 @@
     {
       "path": "LICENSES/GPL-2.0-only-BusyBox.txt",
       "sha256": "4cda70b4b121da4473b4fec52de4e779f11ae2616d3b27538946898d4e78e374"
+    },
+    {
+      "path": "LICENSES/MIT-ca-certificates-c_rehash.txt",
+      "sha256": "22d8b9211deaf17c053e70b0eb55645b6efb8cef2b03757389bf9dfae71e6bd8"
+    },
+    {
+      "path": "LICENSES/curl-ca-certificates-mk-ca-bundle.txt",
+      "sha256": "243ecfc2caebae09ccc315cec80d4a974789faa14d0c3bd534f53f5030d40749"
     }
   ]
 }

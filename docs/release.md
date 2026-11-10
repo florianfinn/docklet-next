@@ -3,7 +3,7 @@ Source: docklet-next/issues/362
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release packaging and runtime assessment; link operator guides and clarify GPU limit (#363).
+Deviations: Original release packaging and runtime assessment; link operator guides and clarify GPU limit (#363); CA source asset and redirected blob retries (#446).
 -->
 
 # Release packages
@@ -19,7 +19,8 @@ the UI shows no GPU values with these images. ARM targets are outside this relea
 Pull requests touching release inputs run a dry build at the PR head with
 `<deploy/release/version.json next>-rc.<run number>`. The workflow uploads two
 OCI layouts and an installation package containing the versioned Compose file,
-`.env.example`, `release-manifest.json`, licence/notice texts and `SHA256SUMS`. These runs publish
+`.env.example`, `release-manifest.json`, licence/notice texts, the unchanged CA
+source archive with its MPL-2.0, MIT and curl licence texts, and `SHA256SUMS`. These runs publish
 nothing. The manifest records the source SHA, version, source timestamp,
 release repository, index and platform digests. Review the checks and practical
 acceptance evidence for the exact candidate before authorising a release.
@@ -66,9 +67,13 @@ shell in the runtime. Repository unit tests need no Docker daemon.
    for the accepted candidate. Only the publish job receives packages/contents
    write permission. It uploads the unchanged OCI blobs, platform manifest and
    index, verifies remote bytes/digests, then creates the GitHub Release.
-5. Download the assets and verify `SHA256SUMS`. Retain the manifest with release
+5. Download the assets and verify `SHA256SUMS`. Confirm the CA source archive
+   is attached and its SHA-512 matches `NOTICE-Mozilla-CA.txt`; release creation
+   runs after the image upload, so restore a missing asset before announcing the
+   release. Retain the manifest with release
    evidence and confirm the published image index digests match it. A failed
-   upload may leave untagged blobs; identical retries are safe, while a tag
+   upload may leave untagged blobs; retries are safe, also against registries
+   that redirect blob reads to storage, while a tag
    pointing to different bytes is refused. Never replace a version tag.
 
 `deploy/release/push-oci.mjs --layout DIR --reference PIN` transfers an OCI

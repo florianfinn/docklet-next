@@ -194,5 +194,12 @@
     "source": "logo-next/src/shapes.js",
     "license": "Apache-2.0",
     "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "third_party/mozilla-ca/ca-certificates-20260909.tar.bz2",
+    "sha256": "dc460c535f3833432be4e561d214a5fe816b05ede5a2ade64787e501671cd082",
+    "source": "distfiles.alpinelinux.org/distfiles/v3.22/ca-certificates-20260909.tar.bz2",
+    "license": "MPL-2.0 AND MIT AND curl",
+    "purpose": "Unchanged source archive of the Mozilla CA bundle shipped in the runtime images; attached to every release for MPL-2.0 source availability."
   }
 ]

@@ -2,13 +2,14 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original offline release packaging and verification.
+// Deviations: Original offline release packaging and verification; M22 #446: a redirected blob HEAD counts as present and is never followed.
 
 import { lookup } from "node:dns/promises";
 import { createReadStream } from "node:fs";
 import { isIP } from "node:net";
 import { isMain, layout, options, releaseReference, sha256 } from "./common.mjs";
 
+const BLOB_REDIRECTS = new Set([301, 302, 303, 307, 308]);
 function bearer(value) {
   if (typeof value !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(value)) throw new Error("invalid registry bearer credential");
   return `Bearer ${value}`;
@@ -54,7 +55,7 @@ export async function pushOCI({ directory, reference, scheme = "https", env = pr
     const target = new URL(url, origin);
     if (target.origin !== origin) throw new Error("registry upload location changed origin");
     const response = await fetch(target, { ...init, headers: { ...init.headers, ...(authorization ? { Authorization: authorization } : {}) },
-      redirect: "error", signal: AbortSignal.timeout(120000), ...(init.body ? { duplex: "half" } : {}) });
+      redirect: init.redirect ?? "error", signal: AbortSignal.timeout(120000), ...(init.body ? { duplex: "half" } : {}) });
     if (response.status === 401 && retry) {
       await response.body?.cancel();
       const challenge = response.headers.get("www-authenticate") ?? "";
@@ -100,8 +101,10 @@ export async function pushOCI({ directory, reference, scheme = "https", env = pr
   const exists = await checkManifest(ref.tag, source.digest, true);
   if (!exists) {
     for (const blob of source.blobs) {
-      const present = await request(`${base}/blobs/${blob.digest}`, { method: "HEAD" });
-      if (present.status === 200) { await present.body?.cancel(); continue; }
+      // Registries with redirecting blob storage answer an existing blob with a redirect. It counts as present and is
+      // never followed, so credentials stay with the registry origin.
+      const present = await request(`${base}/blobs/${blob.digest}`, { method: "HEAD", redirect: "manual" });
+      if (present.status === 200 || BLOB_REDIRECTS.has(present.status)) { await present.body?.cancel(); continue; }
       await requireStatus(present, [404]);
       const start = await request(`${base}/blobs/uploads/`, { method: "POST" });
       const location = start.headers.get("location");
