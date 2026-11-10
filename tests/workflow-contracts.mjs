@@ -28,6 +28,14 @@ export function assertWorkflow(file, text) {
     assert.match(verify, /^    timeout-minutes: 15$/m);
     assert.match(verify, /run: node scripts\/check-publication\.mjs --history/);
     assert.match(verify, /if: needs\.scope\.outputs\.value == 'text'\n        run: node scripts\/change-scope\.mjs --run-text-tests/);
+    // Text-scope Node tests need the frozen web dependencies and pinned Go of the full checks.
+    for (const entry of [
+      "if: needs.scope.outputs.value == 'text'\n        name: Enable pinned pnpm",
+      "corepack prepare pnpm@11.21.0 --activate",
+      "if: needs.scope.outputs.value == 'text'\n        name: Install frozen web dependencies\n        run: pnpm --dir web install --frozen-lockfile",
+      "go-version-file: backend/go.mod",
+    ]) assert.ok(verify.includes(entry), `text verify missing ${entry}`);
+    assert.ok(verify.indexOf("go-version-file: backend/go.mod") < verify.indexOf("--run-text-tests"), "text tests need pinned Go first");
     assert.match(full, /^    name: full-\$\{\{ matrix\.stage \}\}$/m);
     assert.match(full, /^    needs: scope$/m);
     assert.match(full, /^    if: needs\.scope\.outputs\.value == 'full'$/m);
@@ -83,7 +91,7 @@ export function assertWorkflow(file, text) {
   assert.equal(permissions, PERMISSIONS[file]);
   assert.equal(/^ +permissions:/m.test(text), false);
   const actions = [...text.matchAll(/^\s+- uses: ([^\s]+)/gm)];
-  assert.equal(actions.length, file === "checks" ? 10 : 2);
+  assert.equal(actions.length, file === "checks" ? 11 : 2);
   for (const match of actions) assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.equal(/actions\/cache\b/.test(text), false);
   assert.equal(text.includes("secrets."), false);
