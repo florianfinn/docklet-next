@@ -126,6 +126,12 @@ for (const file of ["checks", "pr-text", "review-status"]) {
         return text.slice(0, at) + "pnpm --dir web install" + text.slice(at + "pnpm --dir web install --frozen-lockfile".length);
       }],
       ["text Go pin removed", (text) => text.replace("go-version-file: backend/go.mod", "go-version: stable")],
+      ["text install after the text tests", (text) => {
+        const install = "      - if: needs.scope.outputs.value == 'text'\n        name: Install frozen web dependencies\n        run: pnpm --dir web install --frozen-lockfile\n";
+        const tests = "        run: node scripts/change-scope.mjs --run-text-tests\n";
+        return text.replace(install, "").replace(tests, tests + install);
+      }],
+      ["text Go step gated on the full scope", (text) => text.replace("# v7.0.0\n        if: needs.scope.outputs.value == 'text'", "# v7.0.0\n        if: needs.scope.outputs.value == 'full'")],
       ["base SHA removed", (text) => text.replace("PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}", "PR_BASE_SHA: ''")],
       ["feature merge base removed", (text) => text.replace("base=$(git merge-base origin/main HEAD)", "base=")],
       ["base not exported", (text) => text.replace('echo "CHECK_BASE_SHA=$base" >> "$GITHUB_ENV"', "true")],

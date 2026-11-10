@@ -35,7 +35,10 @@ export function assertWorkflow(file, text) {
       "if: needs.scope.outputs.value == 'text'\n        name: Install frozen web dependencies\n        run: pnpm --dir web install --frozen-lockfile",
       "go-version-file: backend/go.mod",
     ]) assert.ok(verify.includes(entry), `text verify missing ${entry}`);
-    assert.ok(verify.indexOf("go-version-file: backend/go.mod") < verify.indexOf("--run-text-tests"), "text tests need pinned Go first");
+    const textTests = verify.indexOf("--run-text-tests");
+    for (const prerequisite of ["corepack prepare pnpm@11.21.0 --activate", "pnpm --dir web install --frozen-lockfile", "go-version-file: backend/go.mod"])
+      assert.ok(verify.indexOf(prerequisite) < textTests, `text tests need ${prerequisite} first`);
+    assert.match(verify, /- uses: actions\/setup-go@[a-f0-9]{40} # v[\d.]+\n        if: needs\.scope\.outputs\.value == 'text'\n/);
     assert.match(full, /^    name: full-\$\{\{ matrix\.stage \}\}$/m);
     assert.match(full, /^    needs: scope$/m);
     assert.match(full, /^    if: needs\.scope\.outputs\.value == 'full'$/m);
