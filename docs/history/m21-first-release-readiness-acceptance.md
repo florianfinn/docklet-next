@@ -36,7 +36,7 @@ and implementation and review always came from different providers:
 | #438 | S12 candidate scans and verified updates | Backend: R1 failed with 1 blocker; the verify passed. Web: R1 failed with 2 blockers; the verify passed. Deferrals went to #445. |
 | #443 | Failure notice for failed container updates | Checked in the closing review. |
 | #363 | Installation, upgrade and compatibility documentation | The closing review checked about 110 claims against the code. Six wording findings were fixed in `7f6ce39b`. |
-| #364 | Two acceptance fix packages | The risk review passed with 3 non-blockers, tracked in #447. |
+| #364 | Two acceptance fix packages | The risk review passed with 3 non-blockers. Two are tracked in #447; one needed no change. |
 | #365 | Closing integration (#442) | Both closing reviews passed without blockers. |
 
 ## Defects found before acceptance
@@ -108,16 +108,20 @@ Playwright Chromium drove the production UI in German and English at 1440 and
 390 px. API calls, Docker readbacks and read-only database copies prepared
 fixtures and verified the effects.
 
-The agreed exclusions replaced only these:
+The agreed substitutions covered:
 
-- publication itself;
-- real Unraid hardware;
-- DST transitions;
-- the 30-day capacity line;
-- notification providers other than webhook and SMTP;
-- the public Docker Hub service and live third-party apps.
+- **publication itself:** sandbox OCI digest readback and a workflow-structure test;
+- **real Unraid hardware:** live synthetic-label actions and named origin tests;
+- **DST transitions, the 30-day capacity line and notification providers other
+  than webhook and SMTP:** named tests on each exact-head CI run. For Discord,
+  Signal, Slack, Pushover, Matrix and Google Chat, that evidence covers URL
+  building only;
+- **the public Docker Hub service and live third-party apps:** approved local
+  fixtures;
+- **other reverse proxies:** documentation only, backed by named
+  authentication-mode tests.
 
-Each exclusion was backed by named tests on the exact CI run.
+No vulnerability-database or candidate-proof substitution was used.
 
 ## Result
 
@@ -137,6 +141,8 @@ Each exclusion was backed by named tests on the exact CI run.
 - The run gate can still refuse a command for a few seconds after the blocking
   run finished, until its next observation (#431).
 - On touch screens the condensed and card help icons do not open (#449).
+- The scratch images contain no GPU utilities, so the UI shows no GPU values; this
+  is a product decision, not a tested cell.
 - Direct and Edge agents ran on separate Docker daemons on one shared kernel.
   Chromium only.
 - After the merge, the main push check of PR text read a line in the squash
