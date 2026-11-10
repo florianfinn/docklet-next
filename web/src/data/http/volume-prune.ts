@@ -1,10 +1,10 @@
-import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/docs/design/storage-workspace.md
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
 // Deviations: Stateless plan and exact-candidate execution mapping for #181. M14 host maintenance and availability.
 
+import { isHostAvailable } from "@/domain/hosts";
 import type { components } from "@/api/generated/schema";
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterError, type VolumePrunePlan, type VolumePruneResult } from "@/data/api";

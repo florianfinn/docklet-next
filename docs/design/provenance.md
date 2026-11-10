@@ -21,7 +21,9 @@ Deviations: <specific adaptations and their reason, or None>
 Use repository-relative source names, never workstation paths. Markdown uses an
 HTML comment; JavaScript/Go use comments; shell/YAML use #. The provenance guard
 checks these fields at the start of files in the configured adopted prefixes or
-exact file list. Missing/malformed headers fail. Register imported paths before
+exact file list. Missing/malformed headers fail. Only blank lines and comment
+lines (legal notices, directives) may precede an inline `Source:` field, also in
+files whose record is a sidecar; code above the header fails. Register imported paths before
 import and retain whole-prefix coverage as files arrive. A header describes
 provenance, not an implementation history.
 

@@ -1,11 +1,11 @@
-import { sameImageReference, imageReferenceValue } from "@/domain/docker-reference";
-import { checkResult } from "./update-decoders";
 // Source: docklet-next/issues/82
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
 // Deviations: Original inventory DTO projections.
 
+import { sameImageReference, imageReferenceValue } from "@/domain/docker-reference";
+import { checkResult } from "./update-decoders";
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, ContainerState, Health, ImageVersion, InventoryObservation, Service, Stack } from "@/domain/model";
 import { SYSTEM_LABEL } from "@/domain/system";

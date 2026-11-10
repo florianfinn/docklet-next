@@ -1,10 +1,10 @@
-import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/docs/design/images-updates.md
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
 // Deviations: Original production image and registry UI implementation for issue #230. M14 host maintenance and availability.
 
+import { isHostAvailable } from "@/domain/hosts";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";

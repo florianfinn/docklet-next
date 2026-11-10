@@ -1,10 +1,10 @@
-import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/82
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
 // Deviations: Original localized inventory observation notices. M14 host maintenance and availability.
 
+import { isHostAvailable } from "@/domain/hosts";
 import { useFormatter, useTranslations } from "use-intl";
 import type { Host, InventoryObservation } from "@/domain/model";
 

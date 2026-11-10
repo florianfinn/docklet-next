@@ -67,6 +67,17 @@ test("every adopted path needs a complete provenance header", (t) => {
   stage(root, "backend/example.go", header.replace("a".repeat(40), "abc") + "package example\n");
   fails(check(root, "provenance"), "provenance-header");
 });
+test("an inline provenance header precedes code", (t) => {
+  const root = scratch(t);
+  stage(root, "web/src/example.ts", 'import { a } from "./a";\n' + header + "export const b = a;\n");
+  fails(check(root, "provenance"), "provenance-header-order");
+  stage(root, "web/src/example.ts", header + '\nimport { a } from "./a";\nexport const b = a;\n');
+  ok(check(root, "provenance"));
+  stage(root, "web/src/example.ts", "/*\n * Licence notice kept above the header.\n */\n\n" + header + "export const b = 1;\n");
+  ok(check(root, "provenance"));
+  stage(root, "backend/resources/email-templates/example.tmpl", "{{/*\n" + header.replaceAll("// ", "") + "*/}}\nbody\n");
+  ok(check(root, "provenance"));
+});
 test("JSON provenance sidecars bind exact file bytes", (t) => {
   const root = scratch(t);
   const content = readFileSync(`${root}/.claude/settings.json`);

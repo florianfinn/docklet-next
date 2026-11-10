@@ -1,10 +1,10 @@
-import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/297
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
 // Deviations: Original per-host Auto Heal overview with read-only and unavailable states. M14 host maintenance and availability. M19 web consumer integration.
 
+import { isHostAvailable } from "@/domain/hosts";
 import { HeartPulse, Pencil } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";

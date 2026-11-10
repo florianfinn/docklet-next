@@ -1,10 +1,10 @@
-import { isHostAvailable } from "@/domain/hosts";
 // Source: docklet-next/issues/284
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
 // Deviations: Original development-only backup model matching live target and restore contracts. M14 host maintenance and availability.
 
+import { isHostAvailable } from "@/domain/hosts";
 import type { VolumesApi } from "../api";
 import { BackupError } from "../backup-error";
 import type { BackupPolicy, BackupRun, RestoreRun, Volume } from "@/domain/volumes";
