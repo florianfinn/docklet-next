@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; explicit incomplete remote activity-list signal; validate exported lifecycle evidence.
+// Deviations: Local module namespace; explicit incomplete remote activity-list signal; validate exported lifecycle evidence; retain permission checks on non-runtime detail reads with uniform simple-user denials.
 
 package activity
 
@@ -26,7 +26,9 @@ import (
 	"go.getarcane.app/streams/agg"
 	"gorm.io/gorm"
 
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
@@ -133,6 +135,14 @@ func (h *ActivityHandler) GetActivity(ctx context.Context, input *GetActivityInp
 			return nil, err
 		}
 		return &handlerutil.Out[activity.Detail]{Body: base.ApiResponse[activity.Detail]{Success: true, Data: *detail}}, nil
+	}
+	ps, _ := middleware.PermissionsFromContext(ctx)
+	if access.FromPermissions(ps).IsUser() {
+		// Match runtime denials so this route cannot disclose receipt presence.
+		return nil, huma.Error404NotFound("activity not found")
+	}
+	if !ps.Allows(authz.PermActivitiesRead, input.EnvironmentID) {
+		return nil, huma.Error403Forbidden("Activity access required")
 	}
 	detail, err := h.activityService.GetActivityDetail(ctx, input.EnvironmentID, input.ActivityID, input.Limit)
 	if err != nil {

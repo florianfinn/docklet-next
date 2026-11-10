@@ -2,10 +2,11 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original live onboarding adapter lifecycle tests.
+// Deviations: Original live onboarding adapter lifecycle tests; operator override transport into generated files.
 
 import { CancelledError } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { buildInstallArtifacts } from "@/domain/agent-install";
 import { createHttpAdapter } from "./http-adapter";
 
 const base = { id: "example-host", name: "Example", apiUrl: "http://agent.example.com:3552", enabled: true, isEdge: false, status: "pending" };
@@ -79,8 +80,19 @@ describe("host creation HTTP adapter", () => {
     expect(await f.adapter.discoverHub()).toMatchObject({ ...discovery, simulated: false });
   });
 
-  it.each(["latest", "unsafe-url", "invalid-reach"])("rejects %s metadata", async mode => {
-    const f = fixture(true, { ...discovery, ...(mode === "latest" ? { agentImage: "agent:latest" } : { candidates: [{ ...discovery.candidates[0], ...(mode === "unsafe-url" ? { url: "https://operator:example@hub.example.com" } : { reach: "lan" }) }] }) });
+  it.each(["registry.example.com/agent:latest", "agent", `registry.example.com/agent@sha256:${"a".repeat(64)}`, `registry.example.com/agent:1.2.3@sha256:${"a".repeat(64)}`])("keeps the hub-validated image %s in Direct and Edge install files", async agentImage => {
+    const f = fixture(true, { ...discovery, agentImage });
+    const pending = f.adapter.discoverHub();
+    await expect(pending).resolves.toMatchObject({ agentImage });
+    const metadata = await pending;
+    for (const connection of ["direct", "edge"] as const) {
+      const files = buildInstallArtifacts({ hostName: "Example", connection, address: "agent.example.com", port: 3552, hubUrl: "https://hub.example.com", projectDir: "/srv/projects", installDir: "/srv/agent", image: metadata.agentImage, token: "example", timeZone: "UTC" });
+      expect(files.compose).toContain(`image: \${DOCKLET_AGENT_IMAGE:-${agentImage}}`);
+    }
+  });
+
+  it.each(["invalid-image", "unsafe-url", "invalid-reach"])("rejects %s metadata", async mode => {
+    const f = fixture(true, { ...discovery, ...(mode === "invalid-image" ? { agentImage: "agent:latest\nservices: {}" } : { candidates: [{ ...discovery.candidates[0], ...(mode === "unsafe-url" ? { url: "https://operator:example@hub.example.com" } : { reach: "lan" }) }] }) });
     await expect(f.adapter.discoverHub()).rejects.toBeDefined();
   });
 });
