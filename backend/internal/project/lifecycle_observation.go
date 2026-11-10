@@ -2,7 +2,7 @@
 // Revision: 48915fde5d95ed00c757116410f76617e23e8a50
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Separate deployed configuration bindings from partial-source runtime evidence.
+// Deviations: Separate deployed configuration bindings from partial-source runtime evidence; report system protection explicitly.
 
 package project
 
@@ -91,7 +91,7 @@ func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapsh
 		old, modeled := snap.Services[key]
 		id := inspected.Container.Image
 		if modeled && !oneOff && (lifecycleSystemLabels(inspected.Container.Config.Labels) || protected[id] || (len(self) >= 12 && strings.HasPrefix(item.ID, self))) {
-			return lifecycleFailure("update.invalid-target")
+			return lifecycleFailure("image.system-protected")
 		}
 		observed := life.ServiceImage{Reference: inspected.Container.Config.Image, ImageID: id, ContainerID: item.ID, ContainerName: strings.TrimPrefix(inspected.Container.Name, "/"), Service: key, ConfigHash: inspected.Container.Config.Labels["com.docker.compose.config-hash"], OneOff: oneOff, Present: true, Running: inspected.Container.State != nil && inspected.Container.State.Running}
 		if guard.ValidateReference(observed.Reference) != nil {

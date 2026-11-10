@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original standalone image update and manual previous-image restore. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Original standalone image update and manual previous-image restore. M21 #438: candidate scans and verified manifest binding; allow owned same-image manual recovery.
 
 package container
 
@@ -81,7 +81,7 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		if e != nil {
 			return e
 		}
-		if slot == nil || slot.OwnerContainerID != old.ID || slot.ImageID == old.Image {
+		if slot == nil || slot.OwnerContainerID != old.ID {
 			return imageDTO.Failure("update.target-changed", 409)
 		}
 		ref, expected = slot.ImageRef, slot.ImageID

@@ -2,7 +2,7 @@
 // Revision: fcf8c8d3a079154c299912a7e22e0e903e5e4e38
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Review correction with real producer and behavioral guard proofs.
+// Deviations: Review correction with real producer and behavioral guard proofs; consumer-scoped durable native evidence.
 
 package imageupdate
 
@@ -61,7 +61,7 @@ func TestConsumerVersionNativeCandidateStores(t *testing.T) {
 					return
 				}
 				if strings.Contains(r.URL.Path, "/containers/consumer/json") {
-					row := map[string]any{"Image": local, "Config": map[string]any{"Image": ref, "Labels": labels}}
+					row := map[string]any{"Id": "consumer", "Image": local, "Config": map[string]any{"Image": ref, "Labels": labels}}
 					if store == "containerd" {
 						row["ImageManifestDescriptor"] = map[string]any{"digest": manifest.String(), "mediaType": "application/vnd.oci.image.manifest.v1+json", "platform": map[string]string{"os": "linux", "architecture": "amd64"}}
 					}
@@ -96,6 +96,11 @@ func TestConsumerVersionNativeCandidateStores(t *testing.T) {
 			}
 			require.Equal(t, want, result.ContainerUpdates["consumer"].State)
 			require.Equal(t, store == "containerd", result.ContainerUpdates["consumer"].HasUpdate)
+			var saved ImageUpdateRecord
+			require.NoError(t, db.First(&saved, "id=?", "container::consumer").Error)
+			require.Equal(t, "native-v1:"+store+":linux/amd64", *saved.Platform)
+			require.Equal(t, local, saved.ImageID)
+			require.Equal(t, want, saved.UpdateInfo().State)
 		})
 	}
 }
