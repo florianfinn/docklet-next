@@ -20,20 +20,42 @@ export function caSourceFiles(assessed = JSON.parse(readFileSync("deploy/release
   for (const path of [...assessed.notices, ...licenses]) files[basename(path)] = readFileSync(path);
   return files;
 }
-// Every image default in the rendered Compose (service images and any *_IMAGE fallback) must be a package pin.
+// Compose interpolations at every "${" start, nested ones included: ${NAME}, ${NAME-x}, ${NAME:-x}, ${NAME?x},
+// ${NAME:?x}, ${NAME+x}, ${NAME:+x}. "$$" escapes are not special-cased, so the scan is stricter than Compose.
+export function interpolations(value) {
+  const found = [];
+  for (let start = value.indexOf("${"); start >= 0; start = value.indexOf("${", start + 2)) {
+    const name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(value.slice(start + 2))?.[0];
+    if (!name) throw new Error("invalid Compose interpolation");
+    const from = start + 2 + name.length + /^(?::?[-?+])?/.exec(value.slice(start + 2 + name.length))[0].length;
+    let depth = 1, end = from;
+    for (; end < value.length && depth; end++) {
+      if (value.startsWith("${", end)) { depth++; end++; } else if (value[end] === "}") depth--;
+    }
+    if (depth) throw new Error("unbalanced Compose interpolation");
+    const operator = value.slice(start + 2 + name.length, from);
+    found.push({ name, operator, argument: value.slice(from, end - 1), whole: start === 0 && end === value.length });
+  }
+  return found;
+}
+const isDefault = (item) => item.operator === "-" || item.operator === ":-";
+// Every image default in the rendered Compose (service images and any *_IMAGE fallback at any depth) must be a package pin.
 export function checkImageDefaults(compose, manifest) {
   const pins = new Set(["hub", "agent"].map((role) => manifest.images[role].reference));
   const defaults = [];
   for (const [name, service] of Object.entries(compose.services ?? {})) {
     const image = service?.image;
     if (typeof image !== "string") throw new Error(`service ${name} has no image default`);
-    const fallback = /^\$\{[A-Za-z_][A-Za-z0-9_]*:?-([^}]*)\}$/.exec(image);
-    if (!fallback && image.includes("$")) throw new Error(`service ${name} image has no usable default`);
-    defaults.push(fallback ? fallback[1] : image);
+    const items = interpolations(image);
+    if (!items.length) { defaults.push(image); continue; }
+    const [item] = items;
+    if (items.length !== 1 || !item.whole || !isDefault(item) || item.argument.includes("$"))
+      throw new Error(`service ${name} image has no usable default`);
+    defaults.push(item.argument);
   }
   const visit = (value) => {
     if (typeof value === "string") {
-      for (const [, name, fallback] of value.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*):?-([^}]*)\}/g)) if (name.endsWith("_IMAGE")) defaults.push(fallback);
+      for (const item of interpolations(value)) if (item.name.endsWith("_IMAGE") && isDefault(item)) defaults.push(item.argument);
     }
     else if (value && typeof value === "object") for (const item of Object.values(value)) visit(item);
   };
@@ -56,7 +78,8 @@ export function render(manifest, out, { template = readFileSync("deploy/hub/comp
   const yaml = header + "# Generated release package: source build removed; image defaults digest-pinned.\n" + stringify(compose, { lineWidth: 0 });
   checkImageDefaults(parse(yaml), manifest);
   const caFiles = caSourceFiles();
-  const variables = new Map([...yaml.matchAll(/\$\{([A-Z_][A-Z0-9_]*)(?:(:-|:\?)([^}]*))?\}/g)].map(([, key, mode, fallback]) => [key, { mode, fallback: fallback ?? "" }]));
+  const modes = { "-": ":-", ":-": ":-", "?": ":?", ":?": ":?" };
+  const variables = new Map(interpolations(yaml).map(({ name, operator, argument }) => [name, { mode: modes[operator], fallback: modes[operator] ? argument : "" }]));
   const comments = { HUB_IMAGE: "Optional hub image override; the default is pinned below.", DOCKLET_AGENT_IMAGE: "Optional agent image override; blank uses the pinned package default.", ENCRYPTION_KEY: "Required: generate a private 32-byte hexadecimal key. Keep it with your backups.", APP_URL: "Dedicated public domain root (sub-path hosting is unsupported).", PUID: "Numeric runtime user; startup prepares the data volume then drops privileges.", PGID: "Numeric runtime group.", TZ: "IANA time zone for schedules and display." };
   const env = ["# Docklet Next " + v, "# Copy to a private .env and pass --env-file consistently."];
   for (const [key, { mode, fallback }] of variables) {

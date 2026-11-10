@@ -11,7 +11,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
-import { caSourceFiles, checkImageDefaults, render } from "../deploy/release/render.mjs";
+import { caSourceFiles, checkImageDefaults, interpolations, render } from "../deploy/release/render.mjs";
 import { sha256 } from "../deploy/release/common.mjs";
 const { parse } = createRequire(new URL("../web/package.json", import.meta.url))("yaml");
 
@@ -64,11 +64,17 @@ for (const [label, edit] of [
   ["an environment *_IMAGE fallback", (c) => { c.services.hub.environment.HELPER_IMAGE = "${HELPER_IMAGE:-example/helper:1}"; }],
   ["a fallback of the variable named _IMAGE", (c) => { c.services.hub.environment.EXTRA = "${_IMAGE:-example/helper:latest}"; }],
   ["a dash fallback of the variable named _IMAGE", (c) => { c.services.hub.environment.EXTRA = "${_IMAGE-example/helper:latest}"; }],
+  ["an *_IMAGE fallback nested in another default", (c) => { c.services.hub.environment.EXTRA = "${OTHER:-${HELPER_IMAGE:-example/helper:latest}}"; }],
+  ["a dash *_IMAGE fallback nested in another default", (c) => { c.services.hub.environment.EXTRA = "${OTHER:-${HELPER_IMAGE-example/helper:latest}}"; }],
+  ["a nested fallback of the variable named _IMAGE", (c) => { c.services.hub.environment.EXTRA = "${OTHER-${_IMAGE:-example/helper:latest}}"; }],
+  ["an *_IMAGE fallback whose default is another interpolation", (c) => { c.services.hub.environment.EXTRA = "${HELPER_IMAGE:-${OTHER:-x}}"; }],
+  ["a service image whose default nests an interpolation", (c) => { c.services.extra = { image: "${EXTRA_IMAGE:-${OTHER:-x}}" }; }],
+  ["an unbalanced interpolation", (c) => { c.services.hub.environment.EXTRA = "${HELPER_IMAGE:-x"; }],
   ["a list-form environment *_IMAGE fallback", (c) => { c.services.extra = { image: pin("hub"), environment: ["FOO_IMAGE=${FOO_IMAGE:-example/foo:1}"] }; }],
 ]) {
   test(`rendering refuses ${label} before writing any file`, () => temporary((dir) => {
     const out = join(dir, "package");
-    assert.throws(() => render(manifest, out, { template: withExtra(edit) }), /image default|usable default/);
+    assert.throws(() => render(manifest, out, { template: withExtra(edit) }), /image default|usable default|interpolation/);
     assert.equal(existsSync(out), false);
   }));
 }
@@ -83,4 +89,15 @@ test("the env example keeps the operator overrides", () => temporary((out) => {
   const env = render(manifest, out)[`docklet-next-${v}.env.example`];
   assert.match(env, new RegExp(`^# HUB_IMAGE=${pin("hub").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
   assert.match(env, /^DOCKLET_AGENT_IMAGE=$/m);
+}));
+test("the interpolation scan sees every expression, nested ones included", () => {
+  assert.deepEqual(interpolations("${A:-${B_IMAGE-x}} ${C} ${D:?m} ${E+y}").map(({ name, operator, argument }) => [name, operator, argument]),
+    [["A", ":-", "${B_IMAGE-x}"], ["B_IMAGE", "-", "x"], ["C", "", ""], ["D", ":?", "m"], ["E", "+", "y"]]);
+  assert.equal(interpolations("${A:-x}")[0].whole, true);
+  assert.equal(interpolations("a ${A:-x}")[0].whole, false);
+  for (const bad of ["${", "${1A}", "${A:-x", "${:-x}"]) assert.throws(() => interpolations(bad), /interpolation/, bad);
+});
+test("a dash default gets an env example entry like a colon default", () => temporary((out) => {
+  const template = withExtra((c) => { c.services.hub.environment.EXTRA = "${EXTRA_SETTING-on}"; });
+  assert.match(render(manifest, out, { template })[`docklet-next-${v}.env.example`], /^EXTRA_SETTING=on$/m);
 }));
