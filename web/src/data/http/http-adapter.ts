@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips).
 
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -45,6 +45,10 @@ import { createHttpHubBackups } from "./hub-backups";
 import { createHttpHistory, createHttpUiPreferences } from "./history";
 import { createHttpServiceWidgets } from "./service-widgets";
 import { createCsrfClient } from "./csrf-client";
+import { problemCode } from "./problem-code";
+import { createDispatchGate } from "./dispatch-gate";
+import { createHostReadPolicy } from "./host-read-policy";
+import { createMaintenanceObserver } from "./maintenance-observer";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
 import { createHostReadAdmission } from "./host-read-admission";
@@ -218,7 +222,7 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
   if ((object.code === "run.busy" || object.code === "run.cancelling") && typeof object.activeRunId === "string" && object.activeRunId) {
     return new AdapterOutcomeError({ kind: "conflict", code: object.code, activeRunId: object.activeRunId });
   }
-  return new AdapterOutcomeError({ kind: "error", code: typeof object.code === "string" ? object.code : "http.error", status });
+  return new AdapterOutcomeError({ kind: "error", code: problemCode(error) ?? "http.error", status });
 }
 
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
@@ -233,7 +237,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (closing && await closing) throw new CancelledError();
     if (signedOut) throw new CancelledError();
   }
-  const network = createHostReadAdmission(options.fetch ?? globalThis.fetch, baseUrl);
+  const rawFetch = options.fetch ?? globalThis.fetch;
+  const maintenance = createMaintenanceObserver(`${baseUrl}/backups/maintenance`, rawFetch);
+  const hostPolicy = createHostReadPolicy();
+  const network = createHostReadAdmission(createDispatchGate(rawFetch, baseUrl, maintenance, hostPolicy), baseUrl);
   // Admitted reads still waiting for their answer; a logout lets them land before the session ends.
   const answering = new Set<Promise<void>>();
   // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.
@@ -315,7 +322,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology", "security"];
   const environmentCache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, gcTime: 30_000 } } });
   const environmentsKey = ["environments"];
-  const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
+  const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: async () => {
+    const token = hostPolicy.beginCatalogue();
+    const rows = await page("listEnvironments", "/environments", 100);
+    hostPolicy.applyCatalogue(token, rows);
+    return rows;
+  } });
   function invalidateCapabilities() { capabilityReads.clear(); }
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
   function suspendIdentity(retain = false, nextActive = false) {
@@ -334,6 +346,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
+    maintenance.reset(); hostPolicy.reset();
     conditions.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
@@ -607,9 +620,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return;
     }
     if (envelope.channel === "environments") {
+      const rows = envelope.environment?.environments;
+      // The read policy sees the new catalogue before any invalidation dispatches a read.
+      if (Array.isArray(rows)) hostPolicy.applyStream(rows);
       invalidateCapabilities();
       invalidateEnvironments();
-      const rows = envelope.environment?.environments;
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
@@ -922,6 +937,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return () => { if (!actionListeners.delete(listener)) return; if (!actionListeners.size) { targets.dropIdle(); runtime.observe(false); } disconnectIfUnused(); };
     },
     subscribeStackTerminals(listener) { stackListeners.add(listener); return () => { stackListeners.delete(listener); }; },
+    maintenance: { state: maintenance.state, subscribe: maintenance.subscribe },
     subscribeChanges(listener) {
       changeListeners.add(listener);
       connect();

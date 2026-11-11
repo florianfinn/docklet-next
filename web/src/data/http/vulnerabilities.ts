@@ -2,7 +2,7 @@
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #389: security fan-out reads are skippable background reads.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
@@ -60,8 +60,8 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
     const ids = local.map((i) => splitInventoryId(i.id)[1]);
     const base = `/environments/${encodeURIComponent(host.id)}`;
     const [batch, history] = await Promise.all([
-      request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }, true, signal, true),
-      request(`${base}/vulnerabilities/runs`, "GET", undefined, true, signal),
+      request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }, true, signal, true, "background"),
+      request(`${base}/vulnerabilities/runs`, "GET", undefined, true, signal, true, "background"),
     ]);
     const summary = summaries(object(batch).data);
     const rows: ScannedImage[] = local.map((im) => {
@@ -74,7 +74,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
     // One capped response avoids page cuts across changing exposure/intelligence scores.
     const findings: Finding[] = [];
     const localIds = new Set(ids);
-    const page = object(await request(`${base}/vulnerabilities/all?limit=-1&sort=vulnerabilityId&order=asc`, "GET", undefined, true, signal));
+    const page = object(await request(`${base}/vulnerabilities/all?limit=-1&sort=vulnerabilityId&order=asc`, "GET", undefined, true, signal, true, "background"));
     const data = array(page.data), total = count(object(page.pagination).totalItems);
     if (data.length !== total) invalid();
     for (const raw of data) {

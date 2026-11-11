@@ -14,6 +14,8 @@ import type { BackupOverview } from "@/domain/volumes";
 import type { CsrfClient } from "./csrf-client";
 import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { backupCron, mapBackup, mapBackupOverview } from "./backup-mapping";
+import { READ_TAG_HEADER, type ReadTag } from "./host-read-policy";
+import { MAINTENANCE_CODE, problemCode } from "./problem-code";
 
 type Schema = components["schemas"];
 export const BACKUP_OPERATIONS = [
@@ -75,6 +77,7 @@ export function createBackups(options: Options) {
   function problem(body: unknown, status: number, write = false): AdapterOutcomeError {
     const value = body && typeof body === "object" ? (body as Schema["BackupProblem"]) : undefined;
     // Access refusals keep their code; an unreachable agent leaves a write's outcome open.
+    if (problemCode(body) === MAINTENANCE_CODE) return new AdapterOutcomeError({ kind: "error", code: MAINTENANCE_CODE, status });
     if (value && ACCESS_CODES.has(value.code) && !(write && (value.code as string) === "agent.unavailable"))
       return new AdapterOutcomeError({ kind: "error", code: value.code, status });
     if (value && backupCodeKey(value.code))
@@ -119,10 +122,10 @@ export function createBackups(options: Options) {
     }
     return { result, check };
   }
-  async function request<T>(host: string, route: string, method = "GET", value?: object, signal?: AbortSignal): Promise<T> {
+  async function request<T>(host: string, route: string, method = "GET", value?: object, signal?: AbortSignal, tag?: ReadTag): Promise<T> {
     const { result, check } = await response(host, route, {
       method, signal,
-      ...(value ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) } : {}),
+      ...(value ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) } : tag ? { headers: { [READ_TAG_HEADER]: tag } } : {}),
     });
     let body: { success?: boolean; data: T };
     try {
@@ -142,9 +145,9 @@ export function createBackups(options: Options) {
       });
     return body.data;
   }
-  async function overview(host: string, signal?: AbortSignal) {
+  async function overview(host: string, signal?: AbortSignal, tag?: ReadTag) {
     return mapBackupOverview(
-      await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`, "GET", undefined, signal),
+      await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`, "GET", undefined, signal, tag),
       host,
     );
   }
@@ -186,11 +189,11 @@ export function createBackups(options: Options) {
     return id;
   }
   const api: Pick<DockletAdapter, Operation | "testBackupTargetDraft"> = {
-    async getBackupOverview(host) {
+    async getBackupOverview(host, tag) {
       await require("getBackupOverview", { kind: "host", id: host });
-      return overview(host);
+      return overview(host, undefined, tag);
     },
-    async listBackupOverviews(onPartial) {
+    async listBackupOverviews(onPartial, tag = "background") {
       const check = begin("");
       await require("listBackupOverviews", { kind: "hub", id: "0" });
       const hosts = await options.hosts();
@@ -204,7 +207,7 @@ export function createBackups(options: Options) {
         hosts.map(async (host) => {
           const hostCheck = begin(host.id);
           try {
-            const row = await api.getBackupOverview(host.id);
+            const row = await api.getBackupOverview(host.id, tag);
             check();
             hostCheck();
             retained.set(host.id, row);
@@ -358,9 +361,9 @@ export function createBackups(options: Options) {
         throw error;
       }
     },
-    async getBackupRepository(host) {
+    async getBackupRepository(host, tag) {
       await require("getBackupRepository", { kind: "host", id: host });
-      return request(host, `${path(host)}/backups/repository`);
+      return request(host, `${path(host)}/backups/repository`, "GET", undefined, undefined, tag);
     },
     async checkBackupRepository(host) {
       await require("checkBackupRepository", { kind: "host", id: host });
@@ -460,7 +463,7 @@ export function createBackups(options: Options) {
       }
     },
     async decorate(host: string, volumes: Awaited<ReturnType<DockletAdapter["listVolumes"]>>, signal?: AbortSignal) {
-      const ov = await (async () => { await require("getBackupOverview", { kind: "host", id: host }); signal?.throwIfAborted(); return overview(host, signal); })().catch((error) => {
+      const ov = await (async () => { await require("getBackupOverview", { kind: "host", id: host }); signal?.throwIfAborted(); return overview(host, signal, "background"); })().catch((error) => {
         if (error instanceof CancelledError) throw error;
         return undefined;
       });

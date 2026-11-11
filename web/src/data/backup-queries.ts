@@ -4,15 +4,22 @@
 // License: Apache-2.0
 // Deviations: Original host-scoped backup queries; recovery keys never enter query caches.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReadTag } from "./http/host-read-policy";
 import { useAdapter } from "./use-adapter";
 import type { BackupOverview } from "@/domain/volumes";
 
+/** A first load is a background read; a refresh of loaded data is an interval poll (skipped for standby hosts). */
+function readTag(client: QueryClient, key: readonly unknown[]): ReadTag {
+  return client.getQueryData(key) === undefined ? "background" : "poll";
+}
+
 export function useBackupOverview(host: string, enabled = true) {
-  const adapter = useAdapter();
+  const adapter = useAdapter(),
+    client = useQueryClient();
   return useQuery({
     queryKey: ["backup-overview", host],
-    queryFn: () => adapter.getBackupOverview(host),
+    queryFn: () => adapter.getBackupOverview(host, readTag(client, ["backup-overview", host])),
     enabled: enabled && !!host,
     refetchInterval: 5000,
   });
@@ -26,7 +33,7 @@ export function useBackupOverviews() {
       adapter.listBackupOverviews((rows) => {
         if (!signal.aborted && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined)
           client.setQueryData(["backup-overviews"], rows);
-      }),
+      }, readTag(client, ["backup-overviews"])),
     refetchInterval: 10000,
   });
 }
@@ -38,11 +45,13 @@ export function useBackupDefaultRetention() {
   const adapter = useAdapter();
   return useQuery({ queryKey: ["backup-default-retention"], queryFn: () => adapter.getBackupDefaultRetention?.() ?? 7 });
 }
-export function useBackupRepository(host: string) {
-  const adapter = useAdapter();
+export function useBackupRepository(host: string, enabled = true) {
+  const adapter = useAdapter(),
+    client = useQueryClient();
   return useQuery({
     queryKey: ["backup-repository", host],
-    queryFn: () => adapter.getBackupRepository(host),
+    queryFn: () => adapter.getBackupRepository(host, readTag(client, ["backup-repository", host])),
+    enabled,
     refetchInterval: 5000,
   });
 }

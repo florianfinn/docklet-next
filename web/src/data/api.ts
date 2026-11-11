@@ -20,6 +20,7 @@ import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
 import type { BackupBrowse, BackupOverview, BackupPolicy, BackupRepository, BackupSelection, Volume, VolumeDetail } from "@/domain/volumes";
 import type { AuthMode } from "@/domain/settings";
+import type { ReadTag } from "./http/host-read-policy";
 
 export type AppAssignment = components["schemas"]["UserAppAssignment"];
 export type ManagedUser = Pick<components["schemas"]["UserUser"], "id" | "username" | "isAdmin" | "disabledAt" | "requiresPasswordChange"> & { assignments: AppAssignment[] };
@@ -221,9 +222,10 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   downloadBackup(volumeId: string, runId: string): Promise<Blob | undefined>;
   deleteBackup(volumeId: string, runId: string): Promise<void>;
   uploadRestore(volumeId: string, file: File, mode?: "replace" | "new", newVolumeName?: string): Promise<string>;
-  getBackupOverview(hostId: string): Promise<BackupOverview>;
-  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void): Promise<BackupOverview[]>;
-  getBackupRepository(hostId: string): Promise<BackupRepository>;
+  getBackupOverview(hostId: string, tag?: ReadTag): Promise<BackupOverview>;
+  /** `tag` marks an automatic read the transport may skip for an unavailable host. */
+  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void, tag?: ReadTag): Promise<BackupOverview[]>;
+  getBackupRepository(hostId: string, tag?: ReadTag): Promise<BackupRepository>;
   checkBackupRepository(hostId: string): Promise<string>;
   listBackupTargets(): Promise<BackupTarget[]>;
   /** Initial retention count of new plans (hub setting, 0–3650, 0 keeps all); existing plans keep their own. */
