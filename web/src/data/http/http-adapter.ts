@@ -62,6 +62,8 @@ import { createActivityReader } from "./activity-reader";
 import { createEventReader } from "./event-reader";
 import { DASHBOARD_EVENT_LIMIT, DASHBOARD_EVENT_WINDOW_MS, createDashboardEvents } from "./dashboard-events";
 import { type Body, type ReadOperation, createPager } from "./paged-read";
+import { pausableTimeout } from "./deadline-pause";
+import { isMaintenanceError } from "../maintenance-retry";
 import { createVolumePrune } from "./volume-prune";
 import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
@@ -371,6 +373,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       descriptors = await pending;
     } catch (error) {
       if (operationId === "listActions" && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
+      // Hub maintenance decides nothing about the capability: the caller meets the maintenance outcome.
+      if (isMaintenanceError(error)) throw error;
       // Transport loss or a server failure can recover; a refusal or a missing or denied descriptor cannot.
       const status = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.status : 0;
       const lost = error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "http.error" && (status === undefined || status < 400 || status >= 500);
@@ -395,8 +399,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (identityCheck) return identityCheck;
     const version = identityGeneration;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const stop = () => { clearTimeout(timeout); controller.abort(); };
+    const stopTimer = pausableTimeout(10_000, () => controller.abort());
+    const stop = () => { stopTimer(); controller.abort(); };
     stopIdentityCheck = stop;
     const pending = (async () => {
       try {
@@ -406,7 +410,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         if (response.status === 401) { suspendIdentity(); return false; }
         if (!response.ok) throw classifiedError(null, response.status);
         return authenticated;
-      } finally { clearTimeout(timeout); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
+      } finally { stopTimer(); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
     })();
     identityCheck = pending;
     void pending.finally(() => { if (identityCheck === pending) identityCheck = undefined; }).catch(() => undefined);
@@ -865,7 +869,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
               enabled: true,
             }));
         }
-        catch { return []; }
+        // Maintenance fails the whole read, so the query keeps its cached rows while it retries.
+        catch (error) { if (isMaintenanceError(error)) throw error; return []; }
       }))).flat();
       return [...backupRows, ...(await Promise.all(selected.map(async (hostId) => {
         try {
@@ -877,7 +882,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
             return { id: `${hostId}~${p.targetKind}-${p.targetId}`, hostId, kind: "auto-update" as const, title: p.targetName, cadence: window.kind, nextRunAt: nextOccurrence(schedule, new Date(), timeZone)?.toISOString(), enabled: true, code: p.applyCode };
           });
         } catch (error) {
-          if (isCancelledError(error)) throw error;
+          if (isCancelledError(error) || isMaintenanceError(error)) throw error;
           return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
         }
       }))).flat()];

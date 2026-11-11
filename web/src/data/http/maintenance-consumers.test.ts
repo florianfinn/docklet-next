@@ -9,6 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "../app-query-client";
 import { AdapterOutcomeError } from "../capability";
+import { INVENTORY_RECOVERY_MS, inventoryRecoveryInterval } from "../inventory-recovery";
 import { MAINTENANCE_RETRY_DELAY_MS } from "../maintenance-retry";
 import { backupFixture } from "./backups.test-support";
 import { securityFixture } from "./vulnerabilities.test-support";
@@ -71,4 +72,69 @@ it("R1B-8 the volume backup adapter reads maintenance from code, nested data.cod
     f.intercept(async (_url, init) => init?.method === "POST" ? Response.json(body, { status: 503 }) : undefined);
     await expect(f.api.runBackup("first~data")).rejects.toMatchObject({ outcome: { code: "backup.maintenance" } });
   }
+});
+
+/** The security fixture's hub with a maintenance status endpoint and maintenance answers while it is active. */
+function maintainedSecurity() {
+  const f = securityFixture();
+  const original = f.fetcher.getMockImplementation()!;
+  const m = { active: false };
+  f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input), "https://hub.example.com").pathname;
+    if (path === "/api/backups/maintenance") return Response.json({ active: m.active, operation: "backup" });
+    if (m.active && !path.startsWith("/api/auth/")) return Response.json({ status: 503, detail: "backup.maintenance" }, { status: 503 });
+    return original(input, init);
+  });
+  return { f, m };
+}
+
+it("R1B-1 a security read held 45 s by maintenance ends with live rows, not an aborted unavailable result", async () => {
+  vi.useFakeTimers();
+  const { f, m } = maintainedSecurity();
+  const live = await f.adapter.getSecurity();
+  expect(live.images.some((i) => !i.unavailable)).toBe(true);
+  m.active = true;
+  await f.adapter.getHubBackupMaintenance();
+  const read = f.adapter.getSecurity();
+  await vi.advanceTimersByTimeAsync(45_000);
+  m.active = false;
+  await vi.advanceTimersByTimeAsync(2_000);
+  const after = await read.then((value) => value, (error: unknown) => ({ rejected: String(error) }));
+  expect("rejected" in after ? after : [after.unavailable, after.images.every((i) => !i.unavailable)]).toEqual([[], true]);
+});
+
+it("R1B-4 a stale online catalogue with an offline stream row: the security read is skipped, keeps frozen rows as new unavailable objects, reports agent.unavailable and schedules recovery", async () => {
+  const f = securityFixture();
+  const stop = f.adapter.subscribeChanges(() => {});
+  const before = deepFreeze(await f.adapter.getSecurity());
+  const previous = before.images.filter((image) => image.hostId === "second");
+  const hosts = await f.adapter.listHosts();
+  const sent: string[] = [];
+  let answerCatalogue!: () => void;
+  const catalogueHeld = new Promise<void>((resolve) => { answerCatalogue = resolve; });
+  let catalogueAsked!: () => void;
+  const asked = new Promise<void>((resolve) => { catalogueAsked = resolve; });
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input), "https://hub.example.com").pathname;
+    sent.push(path);
+    // The catalogue answer was produced before the host went offline: it still says online.
+    if (path === "/api/environments") { catalogueAsked(); await catalogueHeld; }
+    return original(input, init);
+  });
+  const envelope = { channel: "environments", timestamp: "2026-11-11T12:00:00Z", environment: { environments: hosts.map((h) => ({ id: h.id, name: h.id, status: h.id === "second" ? "offline" : "online", enabled: true, apiUrl: "http://agent.example.com", isEdge: false })) } };
+  // The stream row invalidates the catalogue; the next read's catalogue request is in flight when it is answered stale.
+  f.source.onmessage?.({ data: JSON.stringify(envelope), lastEventId: "" } as MessageEvent);
+  const read = f.adapter.getSecurity();
+  await asked;
+  f.source.onmessage?.({ data: JSON.stringify(envelope), lastEventId: "" } as MessageEvent);
+  answerCatalogue();
+  const after = await read;
+  const retained = after.images.filter((image) => image.hostId === "second");
+  expect(retained.length > 0 && retained.map((image) => image.id).join() === previous.map((image) => image.id).join()).toBe(true);
+  expect(retained.every((image) => image.unavailable) && !retained.some((image) => previous.includes(image))).toBe(true);
+  expect((after.unavailable ?? []).map((u) => [u.hostId, u.code])).toEqual([["second", "agent.unavailable"]]);
+  expect(sent.some((path) => path.startsWith("/api/environments/second/") && path.includes("vulnerabilities"))).toBe(false);
+  expect(inventoryRecoveryInterval(after, hosts)).toBe(INVENTORY_RECOVERY_MS);
+  stop();
 });

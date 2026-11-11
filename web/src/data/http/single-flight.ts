@@ -5,6 +5,9 @@
 // Deviations: Original consumer-aware, generation-scoped single flight with interruptible recovery and waiter transfer.
 
 import { CancelledError } from "@tanstack/react-query";
+import { activeElapsed, pausableTimeout, pausedTotal } from "./deadline-pause";
+
+type Lineage = { started: number; pause: number };
 
 function waiter<T>() {
   let resolve!: (value: T) => void;
@@ -20,20 +23,21 @@ export function createSingleFlight<T>(read: (signal: AbortSignal) => Promise<T>,
   { publish?: (value: T) => void; hasConsumer?: () => boolean; deadlineMs?: number; lineageMs?: number; timeout?: () => Error } = {}) {
   type Waiter = ReturnType<typeof waiter<T>>;
   type Work = { generation: number; current: Waiter; waiters: Waiter[]; next?: Waiter; explicitJoiner: boolean;
-    controller: AbortController; order: number; protected: boolean; lineageEnd: number; retired: boolean; timer?: ReturnType<typeof setTimeout> };
+    controller: AbortController; order: number; protected: boolean; lineage: Lineage; retired: boolean; stopTimer?: () => void };
   let running: Work | undefined;
   let order = 0;
   let errorMarker: number | undefined;
-  function start(current: Waiter, version: number, waiters = [current], protectedRead = false, lineageEnd = Date.now() + lineageMs): Promise<T> {
+  function start(current: Waiter, version: number, waiters = [current], protectedRead = false, lineage: Lineage = { started: Date.now(), pause: pausedTotal() }): Promise<T> {
     if (version !== generation()) { waiters.forEach((w) => w.reject(new CancelledError())); return current.promise; }
     const work: Work = { generation: version, current, waiters, explicitJoiner: false, controller: new AbortController(),
-      order: ++order, protected: protectedRead, lineageEnd, retired: false };
+      order: ++order, protected: protectedRead, lineage, retired: false };
     running = work; // Consume pending before accepting another notification.
     void (async () => {
       try {
         const task = read(work.controller.signal);
         const value = deadlineMs === undefined ? await task : await Promise.race([task, new Promise<never>((_, reject) => {
-          work.timer = setTimeout(() => { const error = timeout(); work.controller.abort(error); reject(error); }, Math.max(0, Math.min(deadlineMs, lineageEnd - Date.now())));
+          // Deadline and lineage spend only active time: a hub maintenance hold does not count.
+          work.stopTimer = pausableTimeout(Math.max(0, Math.min(deadlineMs, lineageMs - activeElapsed(lineage.started, lineage.pause))), () => { const error = timeout(); work.controller.abort(error); reject(error); });
         })]);
         if (version !== generation() || running !== work || work.controller.signal.aborted) throw new CancelledError();
         publish(value);
@@ -41,7 +45,7 @@ export function createSingleFlight<T>(read: (signal: AbortSignal) => Promise<T>,
       } catch (error) {
         if (!work.retired) work.waiters.forEach((w) => w.reject(version === generation() ? error : new CancelledError()));
       } finally {
-        clearTimeout(work.timer);
+        work.stopTimer?.();
         if (!work.retired) {
           if (running === work) running = undefined;
           if (work.next) {
@@ -54,7 +58,7 @@ export function createSingleFlight<T>(read: (signal: AbortSignal) => Promise<T>,
     return current.promise;
   }
   function active() { if (running && running.generation !== generation()) cancel(); return running; }
-  function retire(work: Work) { work.retired = true; clearTimeout(work.timer); work.controller.abort(); }
+  function retire(work: Work) { work.retired = true; work.stopTimer?.(); work.controller.abort(); }
   function cancel(reason: unknown = new CancelledError()) {
     const work = running; running = undefined;
     if (!work) return;
@@ -84,7 +88,7 @@ export function createSingleFlight<T>(read: (signal: AbortSignal) => Promise<T>,
     queueMicrotask(() => {
       if (running !== work) return;
       const waiters = [...work.waiters, next]; work.waiters = []; work.next = undefined; running = undefined;
-      start(next, work.generation, waiters, true, work.lineageEnd);
+      start(next, work.generation, waiters, true, work.lineage);
     });
     return next.promise;
   }

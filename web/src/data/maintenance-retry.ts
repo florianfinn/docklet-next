@@ -5,13 +5,16 @@
 // Deviations: Original query retry policy for reads refused by hub maintenance.
 
 import { AdapterOutcomeError } from "./capability";
+import { MAINTENANCE_CODE } from "./http/problem-code";
 
 /** Every 4 s, up to 30 times: together the 120 s bound of a maintenance hold. */
 export const MAINTENANCE_RETRY_DELAY_MS = 4_000;
 export const MAINTENANCE_RETRIES = 30;
 
+/** A maintenance refusal in any reader's error shape: an adapter outcome or a reader failure carrying the code. */
 export function isMaintenanceError(error: unknown): boolean {
-  return error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "backup.maintenance";
+  if (error instanceof AdapterOutcomeError) return error.outcome.kind === "error" && error.outcome.code === MAINTENANCE_CODE;
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === MAINTENANCE_CODE;
 }
 
 /** Only maintenance refusals retry: TanStack keeps a query's cached data and success state while it retries, so no

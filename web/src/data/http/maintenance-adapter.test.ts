@@ -4,10 +4,13 @@
 // License: Apache-2.0
 // Deviations: Original adapter-boundary proofs for hub maintenance holds, identity changes, native transports and host skips (#389, #391).
 
+import { QueryObserver } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { connectedFixture } from "@/production-connected.test-support";
+import { createAppQueryClient } from "../app-query-client";
 import { AdapterOutcomeError } from "../capability";
+import { isMaintenanceError } from "../maintenance-retry";
 import { isCancelledError } from "@tanstack/react-query";
 import { identityLifetime } from "../identity-lifetime";
 import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
@@ -43,7 +46,7 @@ class FakeSource {
 function hub() {
   const f = connectedFixture(); f.state.signedIn = true;
   const original = f.fetcher.getMockImplementation()!;
-  const m = { active: false, status: "ok" as "ok" | "down" | "revoked", revoked: false, hold: undefined as Promise<void> | undefined, holdPath: "/", hostStatus: undefined as string | undefined };
+  const m = { active: false, status: "ok" as "ok" | "down" | "revoked", revoked: false, hold: undefined as Promise<void> | undefined, holdPath: "/", hostStatus: undefined as string | undefined, ignoreAbort: false };
   const sent: string[] = [];
   f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "https://hub.example.com");
@@ -54,8 +57,8 @@ function hub() {
       return Response.json({ active: m.active, operation: "restore" });
     }
     sent.push(`${method} ${url.pathname}`);
-    // Like the browser's fetch, a held request rejects when its caller aborts it.
-    if (m.hold && url.pathname.startsWith(m.holdPath)) await Promise.race([m.hold, new Promise((_, reject) => {
+    // Like the browser's fetch, a held request rejects when its caller aborts it, unless the sender ignores aborts.
+    if (m.hold && url.pathname.startsWith(m.holdPath)) await Promise.race([m.hold, m.ignoreAbort ? m.hold : new Promise((_, reject) => {
       const signal = init?.signal;
       if (signal?.aborted) reject(signal.reason);
       signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
@@ -95,6 +98,8 @@ it("R1B-2 an active maintenance status read alone holds the next read and shows 
 
 it("R1B-3 a maintenance answer of a request cancelled by a sign-in does not start maintenance for the new identity", async () => {
   const h = hub();
+  // The sender delivers the late answer even though the request was cancelled, so it reaches the gate's own check.
+  h.m.ignoreAbort = true;
   // The CSRF bootstrap is complete, so the sign-in does not wait for the held read.
   await h.adapter.getAuthMode();
   let release!: () => void;
@@ -442,4 +447,76 @@ it("R2-h a host in standby skips poll reads but sends background reads; back onl
   await h.adapter.getBackupRepository("first", "poll").catch(() => undefined);
   expect(repositoryReads(h)).toBe(2);
   stop();
+});
+
+it("R1B-5 a warm hosts query whose capability lookup overflows a full hold keeps its cards and success state, then refreshes", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  const client = createAppQueryClient();
+  const observer = new QueryObserver(client, { queryKey: ["hosts"], queryFn: () => h.adapter.listHosts(), staleTime: 0 });
+  const states: Array<{ status: string; cards: number }> = [];
+  const stopObserver = observer.subscribe((result) => states.push({ status: result.status, cards: result.data?.length ?? 0 }));
+  const stop = h.adapter.subscribeChanges(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  const warm = observer.getCurrentResult();
+  expect([warm.status, (warm.data?.length ?? 0) > 0]).toEqual(["success", true]);
+  // The environment stream invalidates capabilities, so the refetch must look them up again.
+  h.sources[0]!.open(); h.sources[0]!.send(envelope("online"));
+  const reads = (await fillHold(h)).map((read) => read.catch(() => undefined));
+  states.length = 0;
+  void observer.refetch();
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(states.some((state) => state.status === "error" || state.cards === 0)).toBe(false);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(10_000);
+  await Promise.all(reads);
+  expect([observer.getCurrentResult().status, observer.getCurrentResult().fetchStatus]).toEqual(["success", "idle"]);
+  stop(); stopObserver();
+});
+
+it("R1B-5 the capability lookup itself rejects an overflowing read with the maintenance outcome, not capability.unavailable", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  await h.adapter.listHosts();
+  const stop = h.adapter.subscribeChanges(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  h.sources[0]!.open(); h.sources[0]!.send(envelope("online"));
+  const reads = (await fillHold(h)).map((read) => read.catch(() => undefined));
+  const lookup = await h.adapter.getCapability("listHosts").then((value) => value, (error: unknown) => error);
+  expect(isMaintenanceError(lookup)).toBe(true);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(2_000);
+  await Promise.all(reads);
+  stop();
+});
+
+/** The hub fixture with the settings operations available, so their reads reach the hold. */
+function settingsHub() {
+  const h = hub();
+  const original = h.f.fetcher.getMockImplementation()!;
+  h.f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const answer = await original(input, init);
+    if (new URL(String(input), "https://hub.example.com").pathname !== "/api/capabilities" || !answer.ok) return answer;
+    const body = await answer.json() as { data: Array<{ operationId: string; resourceRef: unknown }> };
+    const extra = ["getScanSettings", "saveSettings"].map((operationId) => ({ operationId, available: true, resourceRef: body.data[0]!.resourceRef }));
+    return Response.json({ ...body, data: [...body.data, ...extra] }, { headers: answer.headers });
+  });
+  return h;
+}
+
+it.each([
+  ["volume", async (h: ReturnType<typeof hub>) => { const [volume] = await h.adapter.listVolumes(); return () => h.adapter.getVolume(volume!.id); }],
+  ["scan settings", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("getScanSettings"); return () => h.adapter.getScanSettings!(); }],
+  ["update settings", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("saveSettings"); return () => h.adapter.getUpdateSettings!(); }],
+  ["connected settings", async (h: ReturnType<typeof hub>) => () => h.adapter.getConnectedSettings!("installation")],
+])("B16/B21/B22 a %s read refused by a full hold rejects with an error the maintenance retry policy recognises", async (_family, prepare) => {
+  vi.useFakeTimers();
+  const h = settingsHub();
+  const read = await prepare(h);
+  const reads = (await fillHold(h)).map((pending) => pending.catch(() => undefined));
+  const refused = await read().then(() => "resolved", (error: unknown) => error);
+  expect(isMaintenanceError(refused)).toBe(true);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(2_000);
+  await Promise.all(reads);
 });

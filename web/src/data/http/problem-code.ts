@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original shared problem-code decoder for hub, agent and maintenance answers.
 
+import { AdapterOutcomeError } from "../capability";
+
 const CODE = /^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$/;
 
 /** The hub's maintenance gate answers 503 problem+json with the code in `detail`. */
@@ -17,4 +19,12 @@ export function problemCode(body: unknown): string | undefined {
   const data = value.data && typeof value.data === "object" ? value.data as Record<string, unknown> : undefined;
   for (const entry of [data?.code, value.code]) if (typeof entry === "string" && entry) return entry;
   return typeof value.detail === "string" && CODE.test(value.detail) ? value.detail : undefined;
+}
+
+/** Marks the dispatch gate's maintenance answer, so readers that keep only a status need not read its body. */
+export const MAINTENANCE_HEADER = "X-Docklet-Maintenance";
+
+/** The maintenance outcome of an answer the dispatch gate marked, else undefined. */
+export function maintenanceOutcome(response: Response): AdapterOutcomeError | undefined {
+  return response.headers.get(MAINTENANCE_HEADER) === "hub" ? new AdapterOutcomeError({ kind: "error", code: MAINTENANCE_CODE, status: response.status }) : undefined;
 }

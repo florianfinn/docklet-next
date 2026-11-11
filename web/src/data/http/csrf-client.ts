@@ -8,6 +8,7 @@ import { isCancelledError } from "@tanstack/react-query";
 
 import { discardResponse, drainResponse } from "./identity-reads";
 import { AdapterOutcomeError } from "../capability";
+import { maintenanceOutcome } from "./problem-code";
 
 const CSRF_HEADER = "X-CSRF-Token";
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
@@ -51,7 +52,7 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
     if (bootstrap) await bootstrap;
     if (token) return token;
     const response = await safeFetch(`${baseUrl}/auth/mode`, { credentials: "same-origin", headers: { Accept: "application/json" } });
-    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     drainResponse(response);
     if (!token) throw new AdapterOutcomeError({ kind: "error", code: "http.csrf-token-missing", status: response.status });
     return token;

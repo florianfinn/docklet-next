@@ -34,3 +34,34 @@ export function onDeadlinesResume(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
 }
+
+/**
+ * A request timer that spends only active time: while deadlines are paused it parks and resumes with the remainder.
+ * Returns a cancel function.
+ */
+export function pausableTimeout(milliseconds: number, fire: () => void): () => void {
+  const started = Date.now(), pauseStart = pausedTotal(started);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let offResume: (() => void) | undefined;
+  let done = false;
+  const check = () => {
+    timer = undefined;
+    if (done) return;
+    if (deadlinesPaused()) { offResume = onDeadlinesResume(() => { offResume?.(); offResume = undefined; check(); }); return; }
+    const now = Date.now();
+    const remaining = milliseconds - (now - started - (pausedTotal(now) - pauseStart));
+    if (remaining > 0) { timer = setTimeout(check, remaining); return; }
+    done = true;
+    fire();
+  };
+  timer = setTimeout(check, Math.max(0, milliseconds));
+  return () => { done = true; if (timer) clearTimeout(timer); offResume?.(); };
+}
+
+/** Milliseconds of active time since `started` (paused time excluded); `pauseAtStart` is `pausedTotal(started)`. */
+export function activeElapsed(started: number, pauseAtStart: number, now = Date.now()): number {
+  return now - started - (pausedTotal(now) - pauseAtStart);
+}
+
+/** A clock that stands still while deadlines are paused; differences of two readings are active time. */
+export const activeNow = (): number => Date.now() - pausedTotal();

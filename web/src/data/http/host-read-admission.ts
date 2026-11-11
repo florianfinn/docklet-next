@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission; the hub's unavailable answer keeps a host held; gate-produced skips leave the mark unchanged.
 
+import { activeNow } from "./deadline-pause";
+
 const BODY_METHODS = new Set(["json", "text", "arrayBuffer", "blob", "formData", "bytes"]);
 
 /** Keep the native body methods: Chromium records a completed no-store body read through a JS stream reader as aborted
@@ -79,11 +81,12 @@ export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api",
       const entry: WaitingRead = { order: order++, start: () => {
         signal?.removeEventListener("abort", abort);
         ++active; ++state.active;
-        const startedAt = Date.now();
+        // Active time only: a read waiting in a hub maintenance hold below admission has no headers yet.
+        const startedAt = activeNow();
         let released = false;
         const abortActive = () => {
           // Ten seconds without headers distinguishes held transport from ordinary short cancellation.
-          if (!released && !receivedHeaders && Date.now() - startedAt >= 10_000) state.held = true;
+          if (!released && !receivedHeaders && activeNow() - startedAt >= 10_000) state.held = true;
           release();
         };
         release = () => {

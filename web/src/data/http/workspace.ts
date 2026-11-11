@@ -9,6 +9,7 @@ import { BackupError, backupCodeKey } from "@/data/backup-error";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "@/data/capability";
 import type { CsrfClient } from "./csrf-client";
 import { splitInventoryId } from "./inventory-mapping";
+import { MAINTENANCE_CODE } from "./problem-code";
 
 export class WorkspaceConflictError extends Error {
   constructor() { super("workspace.conflict"); this.name = "WorkspaceConflictError"; }
@@ -88,7 +89,7 @@ export function createWorkspaceTransport({ baseUrl, client, capability, generati
     if (!result.ok) {
       let code: string | undefined;
       try { code = (await result.json() as { code?: string }).code; } catch { /* HTTP status remains authoritative. */ }
-      if (code?.startsWith("agent.")) throw new AdapterOutcomeError({ kind: "error", code, status: result.status });
+      if (code?.startsWith("agent.") || code === MAINTENANCE_CODE) throw new AdapterOutcomeError({ kind: "error", code, status: result.status });
       if (code?.startsWith("volume.bind.") && backupCodeKey(code)) throw new BackupError({code: code as ConstructorParameters<typeof BackupError>[0]["code"]}, result.status);
       if (result.status === 409) throw new WorkspaceConflictError();
       if (code === "volume.helper-incompatible") throw new WorkspaceError("helper-incompatible", result.status);

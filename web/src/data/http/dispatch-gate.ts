@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original physical dispatch gate for hub maintenance holds and unavailable-host skips (#389, #391).
 
-import { MAINTENANCE_CODE, problemCode } from "./problem-code";
+import { MAINTENANCE_CODE, MAINTENANCE_HEADER, problemCode } from "./problem-code";
 import { READ_TAG_HEADER, SKIPPED_HEADER, type HostReadPolicy, type ReadTag } from "./host-read-policy";
 import type { MaintenanceObserver } from "./maintenance-observer";
 
@@ -23,8 +23,9 @@ export function skippedResponse(): Response {
   return json(502, { success: false, status: 502, code: "agent.unavailable", data: { reason: "host.skipped" } }, { [SKIPPED_HEADER]: "host" });
 }
 
-function maintenanceResponse(): Response {
-  return json(503, { status: 503, detail: MAINTENANCE_CODE }, { "Content-Type": "application/problem+json" });
+/** Every maintenance answer leaves the gate in one shape that code, nested and problem-detail decoders all read. */
+export function maintenanceResponse(): Response {
+  return json(503, { success: false, status: 503, code: MAINTENANCE_CODE, detail: MAINTENANCE_CODE, data: { code: MAINTENANCE_CODE } }, { [MAINTENANCE_HEADER]: "hub" });
 }
 
 async function isMaintenance(response: Response): Promise<boolean> {
@@ -63,9 +64,9 @@ export function createDispatchGate(fetcher: typeof fetch, baseUrl: string, maint
       // A request cancelled meanwhile (identity change, logout) must not set maintenance state for its successor.
       signal?.throwIfAborted();
       maintenance.signal();
-      // An overdue hold sends nothing again: the request surfaces its own answer.
-      if (!held || attempt >= MAINTENANCE_RETRIES || !maintenance.holding()) return response;
       void response.arrayBuffer().catch(() => undefined);
+      // An overdue hold sends nothing again: the request surfaces the maintenance answer.
+      if (!held || attempt >= MAINTENANCE_RETRIES || !maintenance.holding()) return maintenanceResponse();
     }
   };
 }

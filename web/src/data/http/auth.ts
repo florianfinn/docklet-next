@@ -14,6 +14,7 @@ import type { AuthMode } from "@/domain/settings";
 
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { maintenanceOutcome } from "./problem-code";
 
 function user(value: unknown): CurrentUser {
   if (!value || typeof value !== "object") throw new Error("auth.invalid-user");
@@ -61,7 +62,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       const code = typeof problem?.code === "string" && problem.code.startsWith("access.") ? problem.code : "http.error";
       throw new AdapterOutcomeError({ kind: "error", code, status: 403 });
     }
-    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");
     return payload.data;
