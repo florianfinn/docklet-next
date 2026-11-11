@@ -28,6 +28,8 @@ export function createMaintenanceObserver(statusUrl: string, fetcher: typeof fet
   let failures = 0;
   let epoch = 0;
   const waiters = new Set<Waiter>();
+  // Uncounted single parties (the event stream, a download navigation) wait for release without a request slot.
+  const releasers = new Set<() => void>();
   const listeners = new Set<(next: MaintenanceState) => void>();
 
   const owner = {};
@@ -40,6 +42,8 @@ export function createMaintenanceObserver(statusUrl: string, fetcher: typeof fet
   function release() {
     for (const waiter of waiters) { waiter.signal?.removeEventListener("abort", waiter.abort); waiter.resolve("released"); }
     waiters.clear();
+    for (const resolve of releasers) resolve();
+    releasers.clear();
   }
   function end() {
     if (holdTimer) clearTimeout(holdTimer);
@@ -112,6 +116,11 @@ export function createMaintenanceObserver(statusUrl: string, fetcher: typeof fet
       });
     },
     waiting: () => waiters.size,
+    /** Resolves when no hold is active: at release, when the hold is overdue, or at an identity reset. */
+    released(): Promise<void> {
+      if (!state.active || state.overdue) return Promise.resolve();
+      return new Promise<void>((resolve) => { releasers.add(resolve); });
+    },
     /** Identity reset: forget the observed state and reject every waiter; none of them is dispatched afterwards. */
     reset() {
       ++epoch;

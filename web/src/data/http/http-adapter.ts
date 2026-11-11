@@ -236,7 +236,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     generation: () => identityGeneration, suspend: () => suspendIdentity(),
   });
   // A hub backup download is a browser navigation outside fetch: it waits for logout admission and maintenance itself.
-  const hubBackups = createHttpHubBackups(baseUrl, client, options.uploadFactory, async () => { await admit(); await maintenance.wait(); });
+  const hubBackups = createHttpHubBackups(baseUrl, client, options.uploadFactory, async () => {
+    await admit();
+    const version = identityGeneration;
+    await maintenance.released();
+    if (version !== identityGeneration) throw new CancelledError();
+    await admit();
+  });
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
@@ -604,7 +610,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function connect(): void {
     if (!authenticated || closing || signedOut || source || (!actionListeners.size && !changeListeners.size)) return;
     // The native stream bypasses fetch: it starts only after a hub maintenance hold ends.
-    if (maintenance.holding()) { if (!streamHeld) { streamHeld = true; void maintenance.wait().then(() => { streamHeld = false; connect(); }, () => { streamHeld = false; }); } return; }
+    if (maintenance.holding()) { if (!streamHeld) { streamHeld = true; void maintenance.released().then(() => { streamHeld = false; connect(); }); } return; }
     sourceOpen = false;
     let opened: Source;
     try {

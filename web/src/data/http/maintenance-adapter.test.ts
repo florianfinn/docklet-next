@@ -8,7 +8,9 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { connectedFixture } from "@/production-connected.test-support";
 import { AdapterOutcomeError } from "../capability";
-import { hostReadDeadline } from "./host-read-deadline";
+import { isCancelledError } from "@tanstack/react-query";
+import { identityLifetime } from "../identity-lifetime";
+import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
 import { createDispatchGate } from "./dispatch-gate";
 import { createHostReadPolicy } from "./host-read-policy";
 import { createMaintenanceObserver } from "./maintenance-observer";
@@ -18,6 +20,12 @@ import { vulnerabilityTransport } from "./vulnerability-transport";
 const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
 const maintenanceAnswer = () => new Response(JSON.stringify({ title: "Service Unavailable", status: 503, detail: "backup.maintenance" }), { status: 503, headers: { "Content-Type": "application/problem+json" } });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+/** Records a promise's settlement so a test can assert it is still pending. */
+const outcome = (promise: Promise<unknown>) => {
+  const result: { settled?: unknown } = {};
+  void promise.then((value) => { result.settled = value; }, (error: unknown) => { result.settled = error; });
+  return result;
+};
 
 class FakeSource {
   readyState = 0;
@@ -35,7 +43,7 @@ class FakeSource {
 function hub() {
   const f = connectedFixture(); f.state.signedIn = true;
   const original = f.fetcher.getMockImplementation()!;
-  const m = { active: false, status: "ok" as "ok" | "down" | "revoked", revoked: false, hold: undefined as Promise<void> | undefined, hostStatus: undefined as string | undefined };
+  const m = { active: false, status: "ok" as "ok" | "down" | "revoked", revoked: false, hold: undefined as Promise<void> | undefined, holdPath: "/", hostStatus: undefined as string | undefined };
   const sent: string[] = [];
   f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "https://hub.example.com");
@@ -46,9 +54,16 @@ function hub() {
       return Response.json({ active: m.active, operation: "restore" });
     }
     sent.push(`${method} ${url.pathname}`);
-    if (m.hold) await m.hold;
-    if (m.active) return maintenanceAnswer();
+    // Like the browser's fetch, a held request rejects when its caller aborts it.
+    if (m.hold && url.pathname.startsWith(m.holdPath)) await Promise.race([m.hold, new Promise((_, reject) => {
+      const signal = init?.signal;
+      if (signal?.aborted) reject(signal.reason);
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    })]);
+    // The hub answers sign-in and sign-out during maintenance; everything else meets the maintenance answer.
+    if (m.active && !url.pathname.startsWith("/api/auth/")) return maintenanceAnswer();
     if (m.revoked && url.pathname !== "/api/auth/mode") return new Response(JSON.stringify({ code: "auth.unauthorized" }), { status: 401 });
+    if (url.pathname === "/api/auth/logout") { f.state.signedIn = false; return Response.json({ success: true, data: null }); }
     if (url.pathname === "/api/backups/storage") return Response.json({ available: true, path: "/backups" });
     if (url.pathname === "/api/environments" && m.hostStatus) {
       // The hub's catalogue agrees with its environment stream.
@@ -167,6 +182,8 @@ it("R1B-9 restore restart: unreachable status, revoked session, released reads m
   let unauthorized = 0;
   const count = () => { unauthorized++; };
   window.addEventListener("docklet:unauthorized", count);
+  let resets = 0;
+  const stopListening = identityLifetime(h.adapter).listen(() => { resets++; });
   try {
     h.m.active = true;
     await h.adapter.getHubBackupMaintenance();
@@ -179,14 +196,14 @@ it("R1B-9 restore restart: unreachable status, revoked session, released reads m
     h.m.active = false; h.m.revoked = true; h.m.status = "revoked";
     await vi.advanceTimersByTimeAsync(2_000);
     const results = await Promise.all(reads);
-    // The first 401 ends the identity; the identity reset cancels the released reads, which are never retried.
-    expect(results.every((error) => error instanceof Error)).toBe(true);
+    // The first 401 ends the identity; its reset cancels the released reads, which are never retried.
+    expect(results.map((error) => isCancelledError(error))).toEqual([true, true]);
     expect(h.sent.filter((line) => line === "GET /api/backups/storage").length).toBeLessThanOrEqual(2);
-    expect(unauthorized).toBeGreaterThanOrEqual(1);
+    expect([unauthorized > 0, resets]).toEqual([true, 1]);
     expect(h.adapter.maintenance!.state().active).toBe(false);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(h.sent.filter((line) => line === "GET /api/backups/storage").length).toBeLessThanOrEqual(2);
-  } finally { window.removeEventListener("docklet:unauthorized", count); }
+  } finally { window.removeEventListener("docklet:unauthorized", count); stopListening(); }
 });
 
 it("R1B-9 environment stream rows reach the read policy before change listeners run; online recovers with a read", async () => {
@@ -217,11 +234,14 @@ it("R1B-9 environment stream rows reach the read policy before change listeners 
   stop();
 });
 
-it("R1B-8 every backup adapter reads maintenance from code, nested data.code and a problem detail", async () => {
+it("R1B-8 the hub backup and generic readers decode maintenance from code, nested data.code and a problem detail", async () => {
   for (const body of [{ code: "backup.maintenance" }, { success: false, data: { code: "backup.maintenance" } }, { status: 409, detail: "backup.maintenance" }]) {
     const h = hub();
-    h.f.fetcher.mockImplementation(async (input: RequestInfo | URL) => String(input).endsWith("/backups/storage") ? Response.json(body, { status: 409 }) : Response.json({ active: false }));
+    const base = h.f.fetcher.getMockImplementation()!;
+    h.f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => /\/backups\/storage|\/api\/environments(\?|$)/.test(String(input)) ? Response.json(body, { status: 409 }) : base(input, init));
     await expect(h.adapter.getHubBackupStorage()).rejects.toMatchObject({ outcome: { code: "backup.maintenance" } });
+    // The generic reader (capabilities, environments, activities, events) decodes the same shapes.
+    await expect(h.adapter.listHosts()).rejects.toMatchObject({ outcome: { code: "backup.maintenance" } });
   }
 });
 
@@ -249,4 +269,177 @@ it("R1B-4 a skipped security read decodes as an unavailable agent", async () => 
   const request = vulnerabilityTransport("/api", { fetch: gate, token: async () => "synthetic" }, () => 0);
   await expect(request("/environments/d/vulnerabilities/runs", "GET", undefined, true, undefined, true, "background")).rejects.toMatchObject({ code: "agent.unavailable" });
   expect(physical).not.toHaveBeenCalled();
+});
+
+/** Fill the hold's 64 request slots with genuine held reads; a 65th read is answered with maintenance at once. */
+async function fillHold(h: ReturnType<typeof hub>) {
+  // The CSRF bootstrap is complete, so the reads themselves wait in the hold.
+  await h.adapter.getAuthMode();
+  h.m.active = true;
+  await h.adapter.getHubBackupMaintenance();
+  const reads = Array.from({ length: 64 }, () => h.adapter.getHubBackupStorage());
+  await flush();
+  await expect(h.adapter.getHubBackupStorage()).rejects.toMatchObject({ outcome: { code: "backup.maintenance" } });
+  expect(h.sent.filter((line) => line === "GET /api/backups/storage")).toHaveLength(0);
+  return reads;
+}
+
+it("R2B-2 with every hold slot taken the stream waits without a reconnect loop and starts once maintenance ends", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  const reads = await fillHold(h);
+  const stop = h.adapter.subscribeChanges(() => {});
+  try {
+    const then = vi.spyOn(Promise.prototype, "then");
+    await flush();
+    const calls = then.mock.calls.length;
+    then.mockRestore();
+    expect(calls).toBeLessThan(10);
+    expect(h.sources).toHaveLength(0);
+    h.m.active = false;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(h.sources).toHaveLength(1);
+    expect((await Promise.all(reads)).every((value) => value.available)).toBe(true);
+  } finally { stop(); }
+});
+
+it("R2B-2 a stream stopped while it waits for a full hold does not start after the hold", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  const reads = await fillHold(h);
+  const stop = h.adapter.subscribeChanges(() => {});
+  await flush();
+  stop();
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(1_000);
+  await Promise.all(reads);
+  expect(h.sources).toHaveLength(0);
+});
+
+it("R2B-3 a hub backup download with every hold slot taken does not navigate before the hold ends", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  const reads = await fillHold(h);
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const download = h.adapter.downloadHubBackup("example");
+  await flush();
+  await vi.advanceTimersByTimeAsync(500);
+  expect(click).not.toHaveBeenCalled();
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(1_000);
+  await download;
+  await Promise.all(reads);
+  expect(click).toHaveBeenCalledTimes(1);
+});
+
+it("R2B-3 an identity change while a download waits for the hold cancels the download without navigation", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  const reads = (await fillHold(h)).map((read) => read.catch((error: unknown) => error));
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const download = h.adapter.downloadHubBackup("example").then(() => "navigated", (error: unknown) => error);
+  await flush();
+  // A sign-in replaces the identity without signing out, so only the download's own generation check stops it.
+  await h.adapter.login("operator", "example-password");
+  await vi.advanceTimersByTimeAsync(10);
+  expect(isCancelledError(await download)).toBe(true);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(2_000);
+  await Promise.all(reads);
+  expect(click).not.toHaveBeenCalled();
+});
+
+/** A read through the real gate and observer that is held by maintenance, then stalls after the hold ends. */
+function heldThenStalled() {
+  const state = { active: true };
+  const physical = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/backups/maintenance") ? Response.json({ active: state.active }) : state.active ? maintenanceAnswer() : new Promise<Response>(() => {}));
+  const observer = createMaintenanceObserver("/api/backups/maintenance", physical);
+  const fetch = createDispatchGate(physical, "/api", observer, createHostReadPolicy());
+  return { state, observer, read: (signal: AbortSignal) => fetch("/api/environments/d/containers", { signal }) };
+}
+
+it("R2B-1 a read still stalled after a 60 s hold spends only its remaining 40 s budget of active time", async () => {
+  vi.useFakeTimers();
+  const h = heldThenStalled();
+  const result = outcome(hostReadDeadline(40_000, "activity.read-timeout")(h.read));
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(h.observer.holding()).toBe(true);
+  h.state.active = false;
+  // The status poll ends the hold at 61 s; 39 s of active time have passed at 100 s.
+  await vi.advanceTimersByTimeAsync(40_000);
+  expect(result.settled).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(result.settled).toMatchObject({ outcome: { code: "activity.read-timeout" } });
+  h.observer.reset();
+});
+
+it("R2B-1 an inventory budget taken before a 60 s hold leaves a host read started after it 30 s of active time", async () => {
+  vi.useFakeTimers();
+  const h = heldThenStalled();
+  const budget = inventoryReadBudget(undefined, "http.error");
+  // Another read meets maintenance and holds; the inventory's host read starts once the hold has ended (61 s).
+  void h.read(new AbortController().signal).catch(() => undefined);
+  await vi.advanceTimersByTimeAsync(60_000);
+  h.state.active = false;
+  await vi.advanceTimersByTimeAsync(1_000);
+  const result = outcome(budget(h.read));
+  await vi.advanceTimersByTimeAsync(29_000);
+  expect(result.settled).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(result.settled).toMatchObject({ outcome: { code: "http.error" } });
+  h.observer.reset();
+});
+
+const envelope = (status: string, isEdge = false) => ({ channel: "environments", timestamp: "2026-11-11T12:00:00Z", environment: { environments: [{ id: "first", name: "first", status, enabled: true, apiUrl: "http://192.0.2.10:3553", isEdge }] } });
+const repositoryReads = (h: ReturnType<typeof hub>) => h.sent.filter((line) => line.endsWith("/environments/first/volumes/backups/repository")).length;
+
+it("R2-g an Edge host going offline on the stream skips a tagged read still waiting in host admission", async () => {
+  const h = hub();
+  const stop = h.adapter.subscribeChanges(() => {});
+  await flush();
+  h.sources[0]!.open();
+  h.sources[0]!.send(envelope("online", true), "1");
+  await flush();
+  let release!: () => void;
+  h.m.hold = new Promise<void>((resolve) => { release = resolve; }); h.m.holdPath = "/api/environments/first/";
+  const busy = Array.from({ length: 5 }, () => h.adapter.getBackupRepository("first", "poll").catch((error: unknown) => error));
+  await flush(); await flush();
+  expect(repositoryReads(h)).toBe(5);
+  const queued = h.adapter.getBackupRepository("first", "background").catch((error: unknown) => error);
+  const queuedResult = outcome(queued);
+  await flush();
+  expect(repositoryReads(h)).toBe(5);
+  h.m.hostStatus = "offline";
+  h.sources[0]!.send(envelope("offline", true), "2");
+  await flush();
+  release(); h.m.hold = undefined;
+  // The stream's host change discards the five answers; their slots are released, so the queued read proceeds.
+  expect((await Promise.all(busy)).every((error) => isCancelledError(error))).toBe(true);
+  // The queued read is stale after the host change and is never dispatched; a new read is skipped at the gate.
+  await vi.waitFor(() => expect(queuedResult.settled).toBeDefined(), { timeout: 1_000 });
+  expect(isCancelledError(queuedResult.settled)).toBe(true);
+  expect(repositoryReads(h)).toBe(5);
+  expect(await h.adapter.getBackupRepository("first", "background").catch((error: unknown) => error)).toMatchObject({ outcome: { code: "agent.unavailable" } });
+  expect(repositoryReads(h)).toBe(5);
+  stop();
+});
+
+it("R2-h a host in standby skips poll reads but sends background reads; back online, poll reads are sent again", async () => {
+  const h = hub();
+  const stop = h.adapter.subscribeChanges(() => {});
+  await flush();
+  h.sources[0]!.open();
+  h.m.hostStatus = "standby";
+  h.sources[0]!.send(envelope("standby"), "1");
+  await flush();
+  expect(await h.adapter.getBackupRepository("first", "poll").catch((error: unknown) => error)).toMatchObject({ outcome: { code: "agent.unavailable" } });
+  expect(repositoryReads(h)).toBe(0);
+  await h.adapter.getBackupRepository("first", "background").catch(() => undefined);
+  expect(repositoryReads(h)).toBe(1);
+  h.m.hostStatus = "online";
+  h.sources[0]!.send(envelope("online"), "2");
+  await flush();
+  await h.adapter.getBackupRepository("first", "poll").catch(() => undefined);
+  expect(repositoryReads(h)).toBe(2);
+  stop();
 });

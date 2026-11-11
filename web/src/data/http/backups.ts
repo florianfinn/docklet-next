@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391 #398: host read tags, maintenance decoding, discarded answers release their admission slot.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
@@ -114,7 +114,8 @@ export function createBackups(options: Options) {
         code: init.method && init.method !== "GET" ? "volume.outcome-unknown" : "http.error",
       });
     }
-    check();
+    // A discarded answer cancels its body: an unread body keeps its host admission slot.
+    try { check(); } catch (error) { void result.body?.cancel().catch(() => undefined); throw error; }
     if (!result.ok) {
       const body: unknown = await result.json().catch(() => null);
       check();

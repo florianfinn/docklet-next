@@ -16,16 +16,16 @@ export function hostReadDeadline(milliseconds: number, code: string) {
     const stopped = new Promise<never>((_, fail) => { reject = fail; });
     const stop = (error: unknown) => { controller.abort(error); reject(error); };
     const abort = () => stop(parent?.reason instanceof AdapterOutcomeError ? parent.reason : new CancelledError());
-    // Time spent in a hub maintenance hold does not count against the budget.
-    const pauseStart = pausedTotal();
-    let granted = 0;
+    // Time spent in a hub maintenance hold does not count against the budget: only active time is spent.
+    const started = Date.now(), pauseStart = pausedTotal(started);
     let offResume: (() => void) | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const expire = () => {
       timer = undefined;
       if (deadlinesPaused()) { offResume = onDeadlinesResume(() => { offResume?.(); offResume = undefined; expire(); }); return; }
-      const extra = pausedTotal() - pauseStart - granted;
-      if (extra > 0) { granted += extra; timer = setTimeout(expire, extra); return; }
+      const now = Date.now();
+      const remaining = milliseconds - (now - started - (pausedTotal(now) - pauseStart));
+      if (remaining > 0) { timer = setTimeout(expire, remaining); return; }
       stop(new AdapterOutcomeError({ kind: "error", code }));
     };
     if (milliseconds > 0) timer = setTimeout(expire, milliseconds);

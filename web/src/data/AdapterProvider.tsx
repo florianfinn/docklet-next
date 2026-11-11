@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { resetActionIdentity } from "@/features/activity/run-presentation";
@@ -13,6 +13,7 @@ import { identityLifetime } from "./identity-lifetime";
 import { registerReadConsumer } from "./read-consumers";
 import { queryKeys } from "./query-keys";
 import { useCurrentUser } from "./queries";
+import { createAppQueryClient } from "./app-query-client";
 
 const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   hosts: [queryKeys.hosts, queryKeys.systemComponents],
@@ -107,15 +108,7 @@ function GateParents({ adapter }: { adapter: DockletAdapter }) {
 /** Provides the adapter behind the run gate, so no page can start the same run twice. */
 export function AdapterProvider({ adapter: inner, children }: { adapter: DockletAdapter; children: ReactNode }) {
   const adapter = useMemo(() => withRunGate(inner), [inner]);
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, refetchOnWindowFocus: false, staleTime: 30_000 },
-          mutations: { retry: false },
-        },
-      }),
-  );
+  const [client] = useState(createAppQueryClient);
   return (
     <AdapterContext.Provider value={adapter}>
       <QueryClientProvider client={client}>
