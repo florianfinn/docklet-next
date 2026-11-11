@@ -7,6 +7,7 @@
 package history
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"sync"
@@ -29,6 +30,8 @@ var localHistoryDisk = diskSampler{hostID: "0", read: disk.UsageWithContext}
 func (s *diskSampler) sample(ctx context.Context, path string, out *dto.HostSample) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// An unset path measures the root filesystem, as live metrics do; that is not a fallback.
+	path = cmp.Or(path, "/")
 	usage, err := s.read(ctx, path)
 	if err == nil && usage != nil && usage.Total > 0 {
 		s.failing = false

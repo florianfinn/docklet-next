@@ -139,3 +139,18 @@ func TestCapacityReusesEarlierEpochOfCurrentSource(t *testing.T) {
 	require.Equal(t, 10., *c.GrowthBytesPerDay, "root-source bucket must be excluded")
 	require.Equal(t, 96., *c.DaysUntilFull)
 }
+
+func TestDiskSamplerUnsetPathMeasuresRootWithoutWarning(t *testing.T) {
+	var logs bytes.Buffer
+	reads := []string{}
+	sampler := diskSampler{hostID: "0", logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	sampler.read = func(_ context.Context, path string) (*disk.UsageStat, error) {
+		reads = append(reads, path)
+		return &disk.UsageStat{Used: 40, Total: 200}, nil
+	}
+	var out dto.HostSample
+	sampler.sample(t.Context(), "", &out)
+	require.Equal(t, "/", out.DiskSource)
+	require.Equal(t, []string{"/"}, reads)
+	require.Empty(t, logs.String())
+}
