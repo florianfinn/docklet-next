@@ -121,6 +121,6 @@ it("invalidates host reads on environment state and reconnect envelopes", () => 
   expect(changed).toHaveBeenCalledWith(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security"]);
   changed.mockClear();
   source.onmessage?.({ data: JSON.stringify({ channel: "environments", type: "snapshot", timestamp: at }), lastEventId: "1" } as MessageEvent);
-  expect(changed).toHaveBeenCalledWith(["hosts", "stacks", "containers", "images", "volumes", "topology", "security"]);
+  expect(changed).toHaveBeenCalledWith(["hosts", "stacks", "containers", "images", "volumes", "topology", "security", "schedule"]);
   stop();
 });

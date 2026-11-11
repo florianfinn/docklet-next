@@ -54,6 +54,9 @@ interface Options {
   admit?: () => Promise<void>;
 }
 
+/** How long a completed automatic overview read serves other automatic consumers of the same host. */
+export const SHARE_MS = 2_000;
+
 export function createBackups(options: Options) {
   const { baseUrl, client } = options;
   const versions = new Map<string, number>();
@@ -146,11 +149,45 @@ export function createBackups(options: Options) {
       });
     return body.data;
   }
-  async function overview(host: string, signal?: AbortSignal, tag?: ReadTag) {
+  async function physicalOverview(host: string, signal?: AbortSignal, tag?: ReadTag) {
     return mapBackupOverview(
       await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`, "GET", undefined, signal, tag),
       host,
     );
+  }
+  // Automatic background reads of one host share one physical read per identity and backup version: joined while in
+  // flight, reused for SHARE_MS after it (AUTO-10). Polls and untagged (deliberate) reads always read on their own.
+  // The physical read keeps each consumer's budget: it is aborted once every waiting consumer has aborted.
+  type Shared = { identity: number; version: number; promise: Promise<BackupOverview>; settledAt?: number; waiting: number; controller: AbortController };
+  const shared = new Map<string, Shared>();
+  async function overview(host: string, signal?: AbortSignal, tag?: ReadTag) {
+    if (tag !== "background") return physicalOverview(host, signal, tag);
+    signal?.throwIfAborted();
+    const identity = options.generation(), version = versions.get(host) ?? 0;
+    let entry = shared.get(host);
+    if (!entry || entry.identity !== identity || entry.version !== version || (entry.settledAt !== undefined && Date.now() - entry.settledAt > SHARE_MS)) {
+      const controller = new AbortController();
+      const own: Shared = { identity, version, promise: physicalOverview(host, controller.signal, tag), waiting: 0, controller };
+      shared.set(host, own);
+      // A failure is not shared once it settled.
+      own.promise.then(() => { own.settledAt = Date.now(); }, () => { if (shared.get(host) === own) shared.delete(host); });
+      entry = own;
+    }
+    const own = entry;
+    if (own.settledAt !== undefined) return structuredClone(await own.promise);
+    // A consumer without a signal never gives up, so the read then runs to its end.
+    own.waiting += signal ? 1 : Number.POSITIVE_INFINITY;
+    if (!signal) return structuredClone(await own.promise);
+    return structuredClone(await new Promise<BackupOverview>((resolve, reject) => {
+      const abort = () => {
+        reject(signal.reason);
+        if (--own.waiting > 0 || own.settledAt !== undefined) return;
+        if (shared.get(host) === own) shared.delete(host);
+        own.controller.abort(signal.reason);
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      own.promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    }));
   }
   function context(id: string) {
     const [host, name] = splitInventoryId(id);
