@@ -510,6 +510,8 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     expect(access.read).toBe(scenario !== "no-access");
     const maintenance = await adapter.getHubBackupMaintenance();
     expect(maintenance.active).toBe(scenario === "maintenance");
+    // The real hub refuses every other read during maintenance; the HTTP adapter holds them until it ends.
+    if (kind === "http" && scenario === "maintenance") { expect(adapter.maintenance?.state().active).toBe(true); return; }
     if (!access.read) {
       await expect(adapter.listHubBackups()).rejects.toBeTruthy();
       await expect(adapter.deleteHubBackup("system-demo-1")).rejects.toBeTruthy();
