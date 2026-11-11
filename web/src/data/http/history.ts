@@ -70,9 +70,11 @@ export function mapCapacity(wire: WireCapacity): HostCapacity {
   if (!wire?.hostId || !Number.isFinite(wire.totalBytes) || !Number.isFinite(wire.usedBytes)) throw failure({ code: "history.invalid-response" });
   const growth = value(wire.growthBytesPerDay), days = value(wire.daysUntilFull);
   const minutes = HISTORY_BUCKETS["30d"].minutes;
-  const series = (wire.history?.buckets ?? [])
-    .filter((row) => row.diskTotal > 0 && row.diskSource === wire.diskSource && Number.isFinite(Date.parse(row.start)))
+  const buckets = (wire.history?.buckets ?? []).filter((row) => Number.isFinite(Date.parse(row.start)));
+  const series = buckets
+    .filter((row) => row.diskTotal > 0 && row.diskSource === wire.diskSource)
     .map((row) => ({ at: new Date(Date.parse(row.start) + minutes * 60_000).toISOString(), used: row.diskUsed }));
+  const domain = buckets.length ? { start: new Date(Date.parse(buckets[0]!.start)).toISOString(), end: new Date(Date.parse(buckets.at(-1)!.start) + minutes * 60_000).toISOString() } : undefined;
   return {
     hostId: wire.hostId,
     diskTotal: wire.totalBytes,
@@ -80,6 +82,8 @@ export function mapCapacity(wire: WireCapacity): HostCapacity {
     ...(!wire.growthUnavailable && growth !== undefined ? { growthPerDay: growth } : {}),
     ...(!wire.growthUnavailable && days !== undefined ? { daysUntilFull: days } : {}),
     series,
+    ...(domain ? { domain } : {}),
+    ...(wire.diskSource ? { diskSource: wire.diskSource } : {}),
   };
 }
 

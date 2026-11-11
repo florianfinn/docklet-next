@@ -180,6 +180,7 @@ export function useStackHistory(stackId: string | undefined, range: HistoryRange
 export function useCapacity() {
   const adapter = useAdapter();
   const user = useIsUser();
+  // The app's 30 s stale time lets a Dashboard visit refetch, so a disk source switch shows before the 15-minute poll.
   return useQuery({ queryKey: queryKeys.capacity, enabled: !user, queryFn: () => adapter.getCapacity(), refetchInterval: 15 * 60_000 });
 }
 

@@ -782,7 +782,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     runContainerCommand: runtime.runContainerCommand,
     recreateContainer: runtime.recreateContainer,
     restartService: runtime.restartService,
-    getRuntimeRun: runtime.getRuntimeRun,
+    getRuntimeRun: runtime.getRuntimeRun, confirmRun: runtime.confirmRun,
     cancelRuntimeRun: runtime.cancelRuntimeRun,
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,

@@ -328,6 +328,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     recreateContainer: (id: string, edit: RecreateInput, key?: string) => command("container", id, "recreate", undefined, { edit, key }),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
     getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },
+    confirmRun: (host: string, id: string) => detail(host, id, false),
     cancelRuntimeRun: (host: string, id: string) => mutate(host, id, "cancel"),
     releaseRuntimeRun: (host: string, id: string, input: RuntimeReleaseInput) => mutate(host, id, "release", input),
     detail, project, mergeSummary,

@@ -140,6 +140,8 @@ export interface DockletAdapter extends VulnerabilityCandidatesApi, Vulnerabilit
 
   /** Dormant boundaries; returning a snapshot never establishes verified Docker state. */
   getRuntimeRun?(hostId: string, runId: string): Promise<CodedRuntimeActionRun>;
+  /** One plain hub read of a run record (no host refresh, no follow); the run gate confirms a stale blocker with it. */
+  confirmRun?(hostId: string, runId: string): Promise<CodedRuntimeActionRun>;
   cancelRuntimeRun?(hostId: string, runId: string): Promise<CodedRuntimeActionRun>;
   /** Releases a hub exclusion with unknown outcome; never replays the command. */
   releaseRuntimeRun?(hostId: string, runId: string, input: RuntimeReleaseInput): Promise<CodedRuntimeActionRun>;

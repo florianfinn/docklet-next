@@ -61,3 +61,8 @@ that enforcement. The agent contract check remains separate.
 - In-app hub and agent updates have no automatic rollback. Recover manually using
   the saved env pin and a compatible database backup when needed. Agent updates
   cannot target a version newer than the hub. See [the upgrade guide](upgrade.md).
+- Docklet is designed and tested for about 50 containers per host. The
+  documented upper bound is 100 containers per host; Docklet does not enforce it,
+  and hosts above it run outside the documented range.
+- The Dashboard reads at most 500 events of the last 24 hours. When more exist it
+  says so and links to the Activity Center, which keeps the full history.

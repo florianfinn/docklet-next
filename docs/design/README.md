@@ -65,6 +65,9 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Licensing](licensing.md) | Six adoption and distribution duties |
 | [Tools helper image](tools-image.md) | Pinned two-platform helper, offline acfs, gated publication and corresponding BusyBox source |
 | [Hub database backup](hub-backup.md) | Coordinated SQLite archives, paired restore and interruption recovery |
+| [Request hygiene](request-hygiene.md) | M23 session hint, hub maintenance hold, maintenance outcome for every reader and unavailable-host skips |
+| [Dashboard load](dashboard-load.md) | M23 bounded events window, active vulnerability counts, inventory scope retention, metrics lifetime and readiness markers |
+| [Capacity, run gate and density](capacity-gate.md) | M23 single disk source and time axis, run gate confirmation read and supported containers per host |
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
 
 Historical plans belong in the [history index](../history/README.md).
