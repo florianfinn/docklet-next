@@ -605,8 +605,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
       if (changed) { backups.invalidate(); refreshRuns(); }
-      // A changed catalogue also fences backup reads (backups.invalidate), so the schedule repeats its read too.
-      changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics, "schedule"] : ["hosts"]));
+      changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics] : ["hosts"]));
       return;
     }
     refreshSubscribed();
@@ -770,7 +769,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       backups.invalidate();
       invalidateCapabilities();
       invalidateEnvironments();
-      changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics, "schedule"]));
+      changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics]));
     }, getCapability, () => identityGeneration),
     ...createHostChecks({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { invalidateCapabilities(); invalidateEnvironments(); actions.invalidate(true); changeListeners.forEach((listener) => listener(["hosts"])); } }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),

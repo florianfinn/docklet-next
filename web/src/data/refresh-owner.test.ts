@@ -7,7 +7,7 @@
 import { CancelledError } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "./app-query-client";
-import { MAX_SUPERSEDED_REPEATS, refresh } from "./refresh-owner";
+import { MAX_SUPERSEDED_REPEATS, OWN_REFRESH, refresh } from "./refresh-owner";
 import { backupFixture } from "./http/backups.test-support";
 import { SHARE_MS } from "./http/backups";
 
@@ -120,4 +120,15 @@ it("F-10 a read fenced by a backup version bump reads its answer to the end inst
   const read = f.api.getBackupOverview("first").then(() => "read", (error: unknown) => (error instanceof CancelledError ? "cancelled" : "failed"));
   await reached; f.invalidate(["first"]); release();
   expect([await read, cancelled, drained]).toEqual(["cancelled", false, true]);
+});
+
+it("a read whose owner coalesces its own refreshes (events) is never superseded by a notification", async () => {
+  const client = createAppQueryClient();
+  let calls = 0, finish!: (value: string) => void;
+  client.setQueryData(["owned"], "warm");
+  const refetch = client.fetchQuery({ queryKey: ["owned"], staleTime: 0, meta: OWN_REFRESH, queryFn: () => { calls++; return calls === 1 ? new Promise<string>((resolve) => { finish = resolve; }) : Promise.resolve("repeated"); } });
+  await vi.waitFor(() => expect(calls).toBe(1));
+  refresh(client, [["owned"]]);
+  finish("owner value");
+  expect([await refetch, calls]).toEqual(["owner value", 1]);
 });

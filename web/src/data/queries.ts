@@ -19,6 +19,7 @@ import { useIsUser } from "./use-principal";
 import { useAdapter } from "./use-adapter";
 import type { RecentEvents } from "./adapter";
 import { queryKeys } from "./query-keys";
+import { OWN_REFRESH } from "./refresh-owner";
 
 // Initial reads stream host batches; refetches retain the complete cached result.
 function initialBatches<T>(client: QueryClient, key: QueryKey, signal: AbortSignal): (rows: T) => void {
@@ -94,7 +95,7 @@ export function useEvents() {
   const adapter = useAdapter();
   const locale = useLocale();
   const select = useMemo(() => (events: CodedEvent[]) => events.map((event) => renderEvent(event, locale)), [locale]);
-  return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select });
+  return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select, meta: OWN_REFRESH });
 }
 
 /** The Dashboard's bounded window (24 h, at most 500); the Activity Center keeps the full history (`useEvents`). */
@@ -102,7 +103,7 @@ export function useDashboardEvents() {
   const adapter = useAdapter();
   const locale = useLocale();
   const select = useMemo(() => (page: RecentEvents) => ({ events: page.events.map((event) => renderEvent(event, locale)), totalItems: page.totalItems }), [locale]);
-  return useQuery({ queryKey: queryKeys.dashboardEvents, queryFn: () => adapter.listDashboardEvents(), select });
+  return useQuery({ queryKey: queryKeys.dashboardEvents, queryFn: () => adapter.listDashboardEvents(), select, meta: OWN_REFRESH });
 }
 
 export function useActionsQuery() {

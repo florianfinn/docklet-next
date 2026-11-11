@@ -11,6 +11,7 @@ import { AdapterOutcomeError } from "../capability";
 import { copyInventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline } from "./host-read-deadline";
 import { READ_TAG_HEADER, SKIPPED_HEADER, skipReason, type ReadTag } from "./host-read-policy";
+import { freshFrom } from "../refresh-owner";
 import { isMaintenanceError } from "../maintenance-retry";
 
 const automatic = new Set(["listStacks", "listContainers", "listImages", "listVolumes", "listNetworkSummaries", "getTopology"]);
@@ -31,6 +32,8 @@ export function createInventoryOwner(generation: () => number, hosts: Catalogue,
     try {
       const rows = await hostReadDeadline(30_000, "http.error")(async (signal) => {
         await requireCapability(operation === "listNetworkSummaries" ? "getTopology" : operation); signal.throwIfAborted();
+        // The catalogue read starts after every change notified so far: the attempt reads their state.
+        freshFrom(parent);
         const rows = await hosts(); signal.throwIfAborted(); return rows;
       }, parent);
       current(version);

@@ -21,6 +21,12 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
     const version = generation();
     if (version !== owner) { retained = new Map(); owner = version; }
     const check = () => { if (version !== generation()) throw new CancelledError(); };
+    // A host or backup change fences an overview read in flight; within the same identity the schedule reads it once
+    // more instead of failing (the schedule is not refreshed by those changes itself).
+    const fenced = <T,>(read: () => Promise<T>) => read().catch((error: unknown) => {
+      if (!isCancelledError(error) || version !== generation()) throw error;
+      return read();
+    });
     const catalogue = await hosts(); check();
     const selected = hostIds ?? catalogue.map((h) => h.id);
     let settingsRead: ReturnType<typeof settings> | undefined;
@@ -35,7 +41,7 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
     const batches = await Promise.all(selected.map(async (host) => {
       const previous = retained.get(host) ?? [];
       const [backup, updates] = await Promise.all([
-        overview(host, retained.has(host) || ["online", "standby"].includes(catalogue.find((h) => h.id === host)?.status ?? "") ? tag : undefined).then((o) => o.volumes.filter((v) => v.backup?.enabled && v.backup.nextRunAt).map((v) => ({ id: `${host}~backup-${v.name}`, hostId: host, kind: "backup" as const, title: v.name, volumeId: v.id, cadence: v.backup!.schedule.mode, nextRunAt: v.backup!.nextRunAt, enabled: true })), (error: unknown) => {
+        fenced(() => overview(host, retained.has(host) || ["online", "standby"].includes(catalogue.find((h) => h.id === host)?.status ?? "") ? tag : undefined)).then((o) => o.volumes.filter((v) => v.backup?.enabled && v.backup.nextRunAt).map((v) => ({ id: `${host}~backup-${v.name}`, hostId: host, kind: "backup" as const, title: v.name, volumeId: v.id, cadence: v.backup!.schedule.mode, nextRunAt: v.backup!.nextRunAt, enabled: true })), (error: unknown) => {
           // Maintenance fails the whole read, so the query keeps its cached rows while it retries (S2 B19).
           if (isCancelledError(error) || isMaintenanceError(error)) throw error;
           return previous.filter((r) => r.kind === "backup").map((r) => ({ ...r, unavailable: true }));

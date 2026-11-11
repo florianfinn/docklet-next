@@ -8,6 +8,9 @@ import { isCancelledError, type Query, type QueryClient, type QueryKey, type Que
 
 type QueryBehavior = NonNullable<QueryOptions["behavior"]>;
 
+/** Query meta of reads whose adapter owner coalesces its own refreshes (the event reads): never superseded here. */
+export const OWN_REFRESH = { ownRefresh: true } as const;
+
 /** Repeats of one fetch after changes arrived during it; the last outcome stands. */
 export const MAX_SUPERSEDED_REPEATS = 3;
 
@@ -18,6 +21,16 @@ const checked = new WeakMap<object, number>();
 const tails = new WeakSet<object>();
 /** Whether a query's running fetch started without loaded data; its own partial writes do not make it a refetch. */
 const initial = new WeakMap<object, boolean>();
+/** Per fetch signal: marks the attempt current from here on (see `freshFrom`). */
+const boundaries = new WeakMap<AbortSignal, () => void>();
+
+/**
+ * Called by a reader when its attempt takes the state it reads from (the inventory's host catalogue): a change notified
+ * before that point is already part of what the attempt reads, so it does not make the attempt superseded.
+ */
+export function freshFrom(signal: AbortSignal | undefined): void {
+  if (signal) boundaries.get(signal)?.();
+}
 
 /**
  * A fetch whose query was superseded while it ran discards that outcome and runs the query function again, so its
@@ -29,7 +42,8 @@ export const refreshBehavior: QueryBehavior = {
     initial.set(query, first);
     context.fetchFn = async () => {
       for (let repeat = 0; ; repeat++) {
-        const epoch = epochOf(query);
+        let epoch = epochOf(query);
+        boundaries.set(context.signal, () => { epoch = epochOf(query); });
         const current = () => {
           const done = epoch === epochOf(query) || repeat >= MAX_SUPERSEDED_REPEATS || context.signal.aborted;
           if (done) checked.set(query, epochOf(query));
@@ -80,7 +94,7 @@ export function refresh(client: QueryClient, keys: readonly QueryKey[], exactKey
   // Every running fetch learns of the change: a refetch of loaded data repeats (and gets a tail for a late change), a
   // first load repeats only when its source fenced it; its value joins the change as before.
   for (const query of queries) {
-    if (query.state.fetchStatus !== "fetching") continue;
+    if (query.state.fetchStatus !== "fetching" || query.meta?.ownRefresh) continue;
     epochs.set(query, epochOf(query) + 1);
     if (initial.get(query) === false) tail(client, query);
   }
