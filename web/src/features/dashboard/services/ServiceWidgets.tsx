@@ -10,6 +10,7 @@ import { useServiceWidget } from "@/data/queries";
 import { queryKeys } from "@/data/query-keys";
 import type { MediaRequest, ServiceKind, WidgetResult, WidgetSummary } from "@/domain/service-widgets";
 import { QueryError } from "@/shared/components/page";
+import { firstResult, useWidgetReady } from "../use-readiness";
 import { ToneBadge } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -199,6 +200,7 @@ export function ServiceWidgetBody({ kind, summary, admin }: { kind: ServiceKind;
   const t = useTranslations("dashboard.services");
   const active = summary.configured && summary.enabled;
   const query = useServiceWidget(kind, active);
+  useWidgetReady(kind, !active || firstResult(query));
   const setUp = admin ? (
     <Button asChild size="sm" variant="outline">
       <Link to="/settings/serviceWidgets">{t("setUp")}</Link>

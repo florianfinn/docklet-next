@@ -9,7 +9,7 @@ import { useActionRuns, useMetrics } from "@/data/live";
 import { useCapacity, useDashboardEvents, useSchedule, useSecurity, useServiceWidgets } from "@/data/queries";
 import { useIsUser } from "@/data/use-principal";
 import { isHostVisible } from "@/domain/hosts";
-import type { Tone } from "@/domain/model";
+import type { Host, Tone } from "@/domain/model";
 import { hasUpdate } from "@/domain/updates";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -18,6 +18,8 @@ import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { attentionItems } from "./attention";
+import { ReadinessProvider, WidgetReady } from "./readiness";
+import { firstResult, useDashboardReadiness, useWidgetReady } from "./use-readiness";
 import { CustomizeSheet } from "./CustomizeSheet";
 import {
   clampSize,
@@ -83,7 +85,6 @@ export default function DashboardPage() {
   const containers = useVisibleContainers();
   const security = useSecurity();
   const events = useDashboardEvents();
-  const schedule = useSchedule(hosts.visible.map((h) => h.id));
   const runs = useActionRuns();
   const metrics = useMetrics((s) => s?.hosts);
   const layout = useLayout();
@@ -152,7 +153,19 @@ export default function DashboardPage() {
     setAnnounce(t("customizeSheet.moved", { name: title(id), position: pos + 1, total: visible.length }));
   };
 
-  const body = (id: WidgetId): ReactNode => {
+  const online = hosts.visible.filter((h) => h.status === "online");
+  const ready: Partial<Record<WidgetId, boolean>> = {
+    attention: firstResult(security) && firstResult(capacity),
+    updates: true, apps: true,
+    timeline: firstResult(events), events: firstResult(events),
+    // The first metrics sample of every online host; other hosts show their state instead.
+    load: online.every((h) => !!metrics?.[h.id]),
+    capacity: firstResult(capacity),
+    security: firstResult(security),
+  };
+  const readiness = useDashboardReadiness(visible, firstResult(hosts) && firstResult(stacks) && firstResult(containers));
+  const body = (id: WidgetId): ReactNode => id in ready ? <WidgetReady id={id} ready={!!ready[id]}>{content(id)}</WidgetReady> : content(id);
+  const content = (id: WidgetId): ReactNode => {
     if (isServiceWidget(id)) {
       const summary = summaries.get(id);
       return summary ? <ServiceWidgetBody kind={id} summary={summary} admin={admin} /> : <WidgetBodySkeleton />;
@@ -169,13 +182,7 @@ export default function DashboardPage() {
       case "capacity":
         return <CapacityWidget hosts={hosts.visible} />;
       case "schedule":
-        return schedule.isPending ? (
-          <WidgetBodySkeleton />
-        ) : schedule.isError ? (
-          <QueryError error={schedule.error} compact onRetry={() => void schedule.refetch()} />
-        ) : (
-          <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={hosts.byId} now={now} />
-        );
+        return <ScheduleBody hosts={hosts.visible} byId={hosts.byId} now={now} />;
       case "security":
         return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
       case "apps":
@@ -192,7 +199,8 @@ export default function DashboardPage() {
   };
 
   return (
-    <>
+    <div className="contents" data-dashboard-core-ready={readiness.coreReady || undefined} data-dashboard-settled={readiness.settled || undefined}>
+    <ReadinessProvider report={readiness.report}>
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -277,6 +285,17 @@ export default function DashboardPage() {
         </>
       )}
       <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} services={widgets.data ?? []} admin={admin} onConfigure={openWidgetSettings} />
-    </>
+    </ReadinessProvider>
+    </div>
   );
+}
+
+/** The schedule fan-out is read only while its widget is shown. */
+function ScheduleBody({ hosts, byId, now }: { hosts: Host[]; byId: Map<string, Host>; now: number }) {
+  const schedule = useSchedule(hosts.map((h) => h.id));
+  useWidgetReady("schedule", firstResult(schedule));
+  const visibleIds = new Set(hosts.map((h) => h.id));
+  if (schedule.isPending) return <WidgetBodySkeleton />;
+  if (schedule.isError) return <QueryError error={schedule.error} compact onRetry={() => void schedule.refetch()} />;
+  return <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={byId} now={now} />;
 }
