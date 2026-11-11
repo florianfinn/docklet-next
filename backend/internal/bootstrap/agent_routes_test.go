@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 Echo route surface test for both agent modes.
+// Deviations: Original issue #8 Echo route surface test for both agent modes. M23 #435: active image summary route snapshot.
 
 package bootstrap
 
@@ -30,7 +30,7 @@ const echoRouteHeader = "# Source: docklet-next/docs/design/core-adoption.md\n" 
 	"# Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71\n" +
 	"# Retrieved: 2026-10-13\n" +
 	"# License: Apache-2.0\n" +
-	"# Deviations: Echo route snapshot for issue #8.\n"
+	"# Deviations: Echo route snapshot for issue #8; M23 #435 active image summaries.\n"
 
 func TestAgentAndEdgeAgentEchoRoutes(t *testing.T) {
 	want, err := os.ReadFile(filepath.Join("testdata", "agent-echo-routes.txt"))
