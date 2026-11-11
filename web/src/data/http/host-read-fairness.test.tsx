@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler. C2 #271: mounted stale-success recovery through containers and Dashboard consumers.
+// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler. C2 #271: mounted stale-success recovery through containers and Dashboard consumers. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { act } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -69,12 +69,19 @@ it("C2-1 recovers retained HTTP 200 snapshot rows in the mounted containers list
 
 it("D4-4 recovers the mounted lists within 15 s after release with no catalogue or identity change", async () => {
   vi.useFakeTimers(); const pool = hostReadPool();
+  const imageCompletions: number[] = [];
+  const original = pool.adapter.listImages;
+  pool.adapter.listImages = async (...args) => { const rows = await original(...args); imageCompletions.push(Date.now()); return rows; };
   const view = renderWithApp(<Probe />, pool.adapter);
   await act(() => vi.advanceTimersByTimeAsync(35_000));
   expect(view.getByTestId("containers").textContent).toBe("0:201,edge:201,direct:0");
-  pool.resume();
+  const releasedAt = Date.now(); pool.resume();
   await act(() => vi.advanceTimersByTimeAsync(15_000));
-  for (const name of Object.keys(hooks)) expect(view.getByTestId(name).textContent).toBe("0:201,edge:201,direct:201");
+  expect(imageCompletions).toHaveLength(2);
+  expect(imageCompletions[1]! - releasedAt).toBeLessThanOrEqual(15_000);
+  // The scope has a separate budget. Check completion before yielding the notification tick at its boundary.
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(Object.fromEntries(Object.keys(hooks).map((name) => [name, view.getByTestId(name).textContent]))).toEqual(Object.fromEntries(Object.keys(hooks).map((name) => [name, "0:201,edge:201,direct:201"])));
   expect(view.getByRole("status").textContent).toBe("");
 });
 

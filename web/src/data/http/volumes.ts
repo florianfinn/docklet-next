@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
+// Deviations: M23 #428 #389: the identity owner supplies retained volume rows across per-call readers. Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -23,9 +23,8 @@ type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 type Body<I extends Read> = operations[I]["responses"][200]["content"]["application/json"];
 type Schema = components["schemas"];
 
-export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (id: string, state: InventoryObservation) => void, generation: () => number, decorate: (host: string, rows: Volume[], signal: AbortSignal) => Promise<Volume[]> = async (_host, rows) => rows): Pick<DockletAdapter, "listVolumes" | "getVolume"> {
+export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (id: string, state: InventoryObservation) => void, generation: () => number, decorate: (host: string, rows: Volume[], signal: AbortSignal) => Promise<Volume[]> = async (_host, rows) => rows, retained = new Map<string, Volume[]>()): Pick<DockletAdapter, "listVolumes" | "getVolume"> {
   const transport = createInventoryTransport(baseUrl, fetcher, onState);
-  const retained = new Map<string, Volume[]>();
   let owner = generation();
   function begin() {
     const version = generation();

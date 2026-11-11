@@ -2,7 +2,7 @@
 // Revision: 37ee7825503944c425b0597baaa8cd690a699acb460f1883e7e3cbc7b06d9c8b
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected first-run identity flow. Review #95: preserve cached rows during refetches and fall back to stack IDs when names are absent. Issue #77: session-bound closure and identity generation cleanup. M9 #204: preserve partial topology observations. M10 #231: production stack updates and lifecycle UI. Held-host security recovery for #263. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. M23 #425: shared start-up auth reads.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected first-run identity flow. Review #95: preserve cached rows during refetches and fall back to stack IDs when names are absent. Issue #77: session-bound closure and identity generation cleanup. M9 #204: preserve partial topology observations. M10 #231: production stack updates and lifecycle UI. Held-host security recovery for #263. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. M23 #425: shared start-up auth reads. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { keepPreviousData, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -11,7 +11,7 @@ import { useLocale } from "use-intl";
 import type { ContainerHistoryRef, HistoryRange } from "@/domain/history";
 import type { ServiceKind } from "@/domain/service-widgets";
 import type { AppLocale } from "@/domain/locale";
-import { inventoryRecoveryInterval, inventoryStructuralSharing } from "./inventory-recovery";
+import { inventoryRecoveryInterval, inventoryStructuralSharing, inventoryReadTag } from "./inventory-recovery";
 
 import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtime";
 import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
@@ -52,7 +52,7 @@ export function useStacks(enabled = true) {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.stacks, enabled, queryFn: ({ signal }) => adapter.listStacks(initialBatches(client, queryKeys.stacks, signal), signal) });
+  return useQuery({ ...recovery, queryKey: queryKeys.stacks, enabled, queryFn: ({ signal }) => adapter.listStacks(initialBatches(client, queryKeys.stacks, signal), signal, inventoryReadTag(client, queryKeys.stacks)) });
 }
 
 export function useStack(id: string | undefined) {
@@ -67,7 +67,7 @@ export function useContainers(enabled = true) {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.containers, enabled: enabled && !user, queryFn: ({ signal }) => adapter.listContainers(initialBatches(client, queryKeys.containers, signal), signal), select: useLocalized(localizeContainers) });
+  return useQuery({ ...recovery, queryKey: queryKeys.containers, enabled: enabled && !user, queryFn: ({ signal }) => adapter.listContainers(initialBatches(client, queryKeys.containers, signal), signal, inventoryReadTag(client, queryKeys.containers)), select: useLocalized(localizeContainers) });
 }
 
 export function useSecurity() {
@@ -80,7 +80,7 @@ export function useTopology() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology)) });
+  return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology), inventoryReadTag(client, queryKeys.topology)) });
 }
 
 /** The Dashboard's security source: active counts per scanned image, without catalogue or findings reads. */
@@ -111,14 +111,16 @@ export function useActionsQuery() {
 
 export function useSchedule(hostIds?: readonly string[]) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: [...queryKeys.schedule, ...(hostIds ? [[...hostIds].sort()] : [])], queryFn: () => adapter.listSchedule(hostIds), select: useLocalized(localizeSchedule) });
+  const client = useQueryClient();
+  const key = [...queryKeys.schedule, ...(hostIds ? [[...hostIds].sort()] : [])];
+  return useQuery({ queryKey: key, queryFn: () => adapter.listSchedule(hostIds, inventoryReadTag(client, key)), select: useLocalized(localizeSchedule) });
 }
 
 export function useVolumes() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes(initialBatches(client, queryKeys.volumes, signal), signal) });
+  return useQuery({ ...recovery, queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes(initialBatches(client, queryKeys.volumes, signal), signal, inventoryReadTag(client, queryKeys.volumes)) });
 }
 
 export function useVolume(id: string | undefined) {
@@ -161,7 +163,7 @@ export function useImages() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages(initialBatches(client, queryKeys.images, signal), signal) });
+  return useQuery({ ...recovery, queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages(initialBatches(client, queryKeys.images, signal), signal, inventoryReadTag(client, queryKeys.images)) });
 }
 
 /** History refreshes with the minute samples; a range switch keeps the previous bars until the new ones arrive. */
@@ -202,5 +204,6 @@ export function useServiceWidgetConfig(kind: ServiceKind) {
 export function useNetworkSummaries() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
-  return useQuery({ ...recovery, queryKey: queryKeys.networks, queryFn: ({ signal }) => adapter.listNetworkSummaries(signal) });
+  const client = useQueryClient();
+  return useQuery({ ...recovery, queryKey: queryKeys.networks, queryFn: ({ signal }) => adapter.listNetworkSummaries(signal, inventoryReadTag(client, queryKeys.networks)) });
 }
