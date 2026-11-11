@@ -7,6 +7,7 @@
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReadTag } from "./http/host-read-policy";
 import { useAdapter } from "./use-adapter";
+import { attemptCurrent } from "./refresh-owner";
 import type { BackupOverview } from "@/domain/volumes";
 
 /**
@@ -34,11 +35,14 @@ export function useBackupOverviews() {
     client = useQueryClient();
   return useQuery({
     queryKey: ["backup-overviews"],
-    queryFn: ({ signal }) =>
-      adapter.listBackupOverviews((rows) => {
-        if (!signal.aborted && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined)
+    queryFn: ({ signal }) => {
+      // A superseded attempt publishes no partial rows (refresh-owner.ts).
+      const current = attemptCurrent(client, ["backup-overviews"]);
+      return adapter.listBackupOverviews((rows) => {
+        if (!signal.aborted && current() && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined)
           client.setQueryData(["backup-overviews"], rows);
-      }, readTag(client, ["backup-overviews"], 10000)),
+      }, readTag(client, ["backup-overviews"], 10000));
+    },
     refetchInterval: 10000,
   });
 }

@@ -13,6 +13,9 @@ export const MAX_SUPERSEDED_REPEATS = 3;
 
 const epochs = new WeakMap<object, number>();
 const epochOf = (query: object) => epochs.get(query) ?? 0;
+/** The epoch at a fetch's last check before Query publishes its outcome. */
+const checked = new WeakMap<object, number>();
+const tails = new WeakSet<object>();
 
 /**
  * A fetch whose query was superseded while it ran discards that outcome and runs the query function again, so its
@@ -24,7 +27,11 @@ export const refreshBehavior: QueryBehavior = {
     context.fetchFn = async () => {
       for (let repeat = 0; ; repeat++) {
         const epoch = epochOf(query);
-        const current = () => epoch === epochOf(query) || repeat >= MAX_SUPERSEDED_REPEATS || context.signal.aborted;
+        const current = () => {
+          const done = epoch === epochOf(query) || repeat >= MAX_SUPERSEDED_REPEATS || context.signal.aborted;
+          if (done) checked.set(query, epochOf(query));
+          return done;
+        };
         try {
           const value = await original();
           if (current()) return value;
@@ -37,11 +44,36 @@ export const refreshBehavior: QueryBehavior = {
   },
 };
 
+/** Whether a partial result of the attempt that called this is still current; superseded attempts publish nothing. */
+export function attemptCurrent(client: QueryClient, queryKey: QueryKey): () => boolean {
+  const query = client.getQueryCache().find({ queryKey, exact: true });
+  if (!query) return () => true;
+  const epoch = epochOf(query);
+  return () => epoch === epochOf(query);
+}
+
+/**
+ * A notification between a fetch's last check and Query's publication cannot repeat that fetch any more: once the
+ * outcome is published, the query is refreshed once more.
+ */
+function tail(client: QueryClient, query: Query): void {
+  if (tails.has(query)) return;
+  tails.add(query);
+  const off = client.getQueryCache().subscribe((event) => {
+    if (event.query !== query || query.state.fetchStatus !== "idle") return;
+    off(); tails.delete(query);
+    if (checked.get(query) !== undefined && checked.get(query) !== epochOf(query)) {
+      checked.set(query, epochOf(query));
+      void client.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
+    }
+  });
+}
+
 /** Refreshes the queries of one change notification: each once, without cancelling a read in flight. */
 export function refresh(client: QueryClient, keys: readonly QueryKey[], exactKeys: readonly QueryKey[] = []): void {
   const queries = new Set<Query>();
   for (const queryKey of keys) for (const query of client.getQueryCache().findAll({ queryKey })) queries.add(query);
   for (const queryKey of exactKeys) for (const query of client.getQueryCache().findAll({ queryKey, exact: true })) queries.add(query);
-  for (const query of queries) if (query.state.fetchStatus === "fetching") epochs.set(query, epochOf(query) + 1);
+  for (const query of queries) if (query.state.fetchStatus === "fetching") { epochs.set(query, epochOf(query) + 1); tail(client, query); }
   for (const query of queries) void client.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
 }

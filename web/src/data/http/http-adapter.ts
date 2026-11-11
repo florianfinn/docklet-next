@@ -712,7 +712,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const inventory = inventoryOwner.wrap((observe, fetch, hosts, require) => createInventoryReader(baseUrl, fetch, hosts, require, observe, (id, signal) => conditions.read(id, signal, fetch)));
   const userInventory = inventoryOwner.wrap((observe, fetch, hosts) => createUserInventory(baseUrl, fetch, hosts, () => principal, observe, (id, signal) => conditions.read(id, signal, fetch)));
   const resourceReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createResourceReader(baseUrl, fetch, hosts, require, observe));
-  function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
+  // A backup change ends shared overview reads before consumers refresh (AUTO-10).
+  function backupChanged() { sharedReads.clear(); backups.invalidate(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
   const backups = createBackups({
     baseUrl,
     client,
