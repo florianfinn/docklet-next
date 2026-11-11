@@ -10,7 +10,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "../app-query-client";
 import { AdapterOutcomeError } from "../capability";
 import { INVENTORY_RECOVERY_MS, inventoryRecoveryInterval } from "../inventory-recovery";
-import { MAINTENANCE_RETRY_DELAY_MS } from "../maintenance-retry";
+import type { DockletAdapter } from "../adapter";
+import { isMaintenanceError, MAINTENANCE_RETRY_DELAY_MS } from "../maintenance-retry";
+import type { Host } from "@/domain/model";
+import { createCsrfClient } from "./csrf-client";
+import { maintenanceResponse } from "./dispatch-gate";
+import { createScheduleReader } from "./inventory-schedule";
 import { backupFixture } from "./backups.test-support";
 import { securityFixture } from "./vulnerabilities.test-support";
 
@@ -137,4 +142,17 @@ it("R1B-4 a stale online catalogue with an offline stream row: the security read
   expect(sent.some((path) => path.startsWith("/api/environments/second/") && path.includes("vulnerabilities"))).toBe(false);
   expect(inventoryRecoveryInterval(after, hosts)).toBe(INVENTORY_RECOVERY_MS);
   stop();
+});
+
+it("E1/B19 a schedule read whose update policy part meets hub maintenance rejects with maintenance, keeping the cached schedule", async () => {
+  const base = "https://hub.example.com/api";
+  // Backup overviews answer; the updater read gets the dispatch gate's maintenance answer.
+  const client = createCsrfClient(base, async (input) => String(input).endsWith("/auth/mode")
+    ? Response.json({ success: true, data: { mode: "local" } }, { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } })
+    : maintenanceResponse());
+  const host = { id: "first", name: "first", status: "online" } as Host;
+  const read = createScheduleReader(base, client, async () => [host], async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }), () => 0,
+    async () => ({ volumes: [] }) as unknown as Awaited<ReturnType<NonNullable<DockletAdapter["getBackupOverview"]>>>, async () => ({ timeZone: "UTC" }) as never);
+  const outcome = await read(["first"]).then((rows) => rows, (error: unknown) => error);
+  expect(isMaintenanceError(outcome)).toBe(true);
 });

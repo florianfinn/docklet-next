@@ -18,6 +18,7 @@ import { createDispatchGate } from "./dispatch-gate";
 import { createHostReadPolicy } from "./host-read-policy";
 import { createMaintenanceObserver } from "./maintenance-observer";
 import { createHttpAdapter } from "./http-adapter";
+import { USER_OPERATIONS } from "./users";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 
 const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
@@ -495,10 +496,12 @@ function settingsHub() {
   const h = hub();
   const original = h.f.fetcher.getMockImplementation()!;
   h.f.fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    // The updater answers an empty policy list while the hub is not in maintenance.
+    if (!h.m.active && new URL(String(input), "https://hub.example.com").pathname.endsWith("/updater/policies")) return Response.json({ success: true, data: [] });
     const answer = await original(input, init);
     if (new URL(String(input), "https://hub.example.com").pathname !== "/api/capabilities" || !answer.ok) return answer;
     const body = await answer.json() as { data: Array<{ operationId: string; resourceRef: unknown }> };
-    const extra = ["getScanSettings", "saveSettings"].map((operationId) => ({ operationId, available: true, resourceRef: body.data[0]!.resourceRef }));
+    const extra = ["getScanSettings", "saveSettings", "listNotificationTargets", "getAutoHealSettings", "selfUpdate", "listUpdatePolicies", ...USER_OPERATIONS].map((operationId) => ({ operationId, available: true, resourceRef: body.data[0]!.resourceRef }));
     return Response.json({ ...body, data: [...body.data, ...extra] }, { headers: answer.headers });
   });
   return h;
@@ -509,7 +512,13 @@ it.each([
   ["scan settings", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("getScanSettings"); return () => h.adapter.getScanSettings!(); }],
   ["update settings", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("saveSettings"); return () => h.adapter.getUpdateSettings!(); }],
   ["connected settings", async (h: ReturnType<typeof hub>) => () => h.adapter.getConnectedSettings!("installation")],
-])("B16/B21/B22 a %s read refused by a full hold rejects with an error the maintenance retry policy recognises", async (_family, prepare) => {
+  ["update policies", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("listUpdatePolicies", { kind: "host", id: "first" }); return () => h.adapter.listUpdatePolicies!("first"); }],
+  ["users", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("listUsers"); return () => h.adapter.listUsers!(); }],
+  ["notification targets", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("listNotificationTargets"); return () => h.adapter.listNotificationTargets!(); }],
+  ["auto-heal settings", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("getAutoHealSettings", { kind: "host", id: "first" }); return () => h.adapter.getAutoHealSettings!("first"); }],
+  ["self-update check", async (h: ReturnType<typeof hub>) => { await h.adapter.getSelfUpdate!("first").catch(() => undefined); return () => h.adapter.getSelfUpdate!("first"); }],
+  ["schedule", async (h: ReturnType<typeof hub>) => { await h.adapter.getCapability("listUpdatePolicies", { kind: "host", id: "first" }); await h.adapter.listSchedule(["first"]); return () => h.adapter.listSchedule(["first"]); }],
+])("B16/B21/B22/E1-E4 a %s read refused by a full hold rejects with an error the maintenance retry policy recognises", async (_family, prepare) => {
   vi.useFakeTimers();
   const h = settingsHub();
   const read = await prepare(h);
@@ -519,4 +528,54 @@ it.each([
   h.m.active = false;
   await vi.advanceTimersByTimeAsync(2_000);
   await Promise.all(reads);
+});
+
+it("E1 a warm update policy query keeps its success state through a full hold, then refreshes", async () => {
+  vi.useFakeTimers();
+  const h = settingsHub();
+  const client = createAppQueryClient();
+  const observer = new QueryObserver(client, { queryKey: ["update-policies", "first"], queryFn: () => h.adapter.listUpdatePolicies!("first"), staleTime: 0 });
+  const states: string[] = [];
+  const stopObserver = observer.subscribe((result) => states.push(result.status));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(observer.getCurrentResult().status).toBe("success");
+  const reads = (await fillHold(h)).map((read) => read.catch(() => undefined));
+  states.length = 0;
+  void observer.refetch();
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(states.includes("error")).toBe(false);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(10_000);
+  await Promise.all(reads);
+  expect([observer.getCurrentResult().status, observer.getCurrentResult().fetchStatus]).toEqual(["success", "idle"]);
+  stopObserver();
+});
+
+it("A7 an identity check held 30 s by maintenance still meets the hub's 401 and ends the identity", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  let resets = 0;
+  const stopListening = identityLifetime(h.adapter).listen(() => { resets++; });
+  // The CSRF bootstrap is complete, so the held identity check does not block other requests.
+  await h.adapter.getAuthMode();
+  const stop = h.adapter.subscribeChanges(() => {});
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    const source = h.sources[0]!;
+    source.open();
+    let release!: () => void;
+    h.m.hold = new Promise<void>((resolve) => { release = resolve; }); h.m.holdPath = "/api/auth/me";
+    // The stream closes; the identity check's request is in flight when maintenance starts.
+    source.readyState = 2; source.onerror?.({} as Event);
+    await flush();
+    expect(h.sent).toContain("GET /api/auth/me");
+    h.m.active = true;
+    await h.adapter.getHubBackupMaintenance();
+    await vi.advanceTimersByTimeAsync(30_000);
+    // The restored hub revoked the session; the check's answer arrives after a long hold.
+    h.m.revoked = true; h.m.hold = undefined;
+    release();
+    await flush();
+    expect(resets).toBe(1);
+  } finally { stop(); stopListening(); }
 });

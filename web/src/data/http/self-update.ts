@@ -14,6 +14,7 @@ import { wireKey } from "../wire-catalogue";
 import { object, runtimeError } from "./runtime-mapping";
 import type { CsrfClient } from "./csrf-client";
 import { pausableTimeout } from "./deadline-pause";
+import { maintenanceOutcome } from "./problem-code";
 
 interface Options {
   baseUrl: string;
@@ -47,6 +48,8 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       current();
       const body: unknown = await response.json(); current();
       if (!response.ok) {
+        const refused = maintenanceOutcome(response);
+        if (refused) throw refused;
         const problem = object(body);
         const code = selfUpdateCodeKey(problem.code as string) ? problem.code : selfUpdateCodeKey(problem.detail as string) ? problem.detail : "http.error";
         throw runtimeError(code as string, response.status);

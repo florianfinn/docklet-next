@@ -12,6 +12,7 @@ import { splitInventoryId } from "./inventory-mapping";
 import { record, list, choice, reason, id as requiredId, invalidUpdate } from "./update-validation";
 import { baseline, points, policy, hints, checkResult } from "./update-decoders";
 import { runtimeResponseError } from "./runtime-mapping";
+import { MAINTENANCE_CODE } from "./problem-code";
 interface Options { baseUrl: string; client: CsrfClient; capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>; generation: () => number; changed: () => void }
 export function createStackUpdates({ baseUrl, client, capability, generation, changed }: Options): Required<Omit<UpdatesApi, "checkAllUpdates" | "restoreContainerImage" | "getContainerPreviousImage" | "getUpdateSettings">> {
   async function request(operation: string, ref: ResourceRef, suffix: string, method = "GET", body?: object, reads: string[] = []): Promise<unknown> {
@@ -27,7 +28,7 @@ export function createStackUpdates({ baseUrl, client, capability, generation, ch
     if (!response.ok) {
       const error = runtimeResponseError(raw, response.status);
       if (method !== "GET" && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") throw new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" });
-      if (error.outcome.kind === "error") throw new AdapterOutcomeError({ ...error.outcome, code: ["agent.unavailable", "agent.invalid-token", "agent.update-required"].includes(error.outcome.code) ? error.outcome.code : reason(error.outcome.code) ?? "http.error" });
+      if (error.outcome.kind === "error") throw new AdapterOutcomeError({ ...error.outcome, code: ["agent.unavailable", "agent.invalid-token", "agent.update-required", MAINTENANCE_CODE].includes(error.outcome.code) ? error.outcome.code : reason(error.outcome.code) ?? "http.error" });
       throw error;
     }
     let envelope: Record<string, unknown>;

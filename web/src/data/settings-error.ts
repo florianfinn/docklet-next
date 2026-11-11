@@ -8,6 +8,7 @@ import type { useTranslations } from "use-intl";
 import { AUTOHEAL_CODE_KEYS, NOTIFICATION_CODE_KEYS, SETTINGS_CODE_KEYS } from "./wire-catalogue-settings";
 import type { CatalogueKey } from "./wire-catalogue";
 import { AdapterOutcomeError } from "./capability";
+import { MAINTENANCE_CODE, problemCode } from "./http/problem-code";
 
 /** Producer codes the settings UI translates; anything else stays generic. */
 export const SETTINGS_PROBLEM_CODES = [
@@ -33,6 +34,8 @@ export class SettingsProblemError extends AdapterOutcomeError {
 export function settingsProblem(body: unknown, status: number): AdapterOutcomeError {
   const value = body && typeof body === "object" ? (body as { code?: unknown; field?: unknown }) : {};
   const code = value.code;
+  // A hub maintenance refusal keeps its code, so the query policy retries instead of showing an error.
+  if (problemCode(body) === MAINTENANCE_CODE) return new AdapterOutcomeError({ kind: "error", code: MAINTENANCE_CODE, status });
   const field = typeof value.field === "string" && value.field.length <= 256 ? value.field : undefined;
   if (typeof code === "string" && ([...SETTINGS_PROBLEM_CODES, ...ACCESS_CODES] as string[]).includes(code))
     return new SettingsProblemError(code as SettingsProblemCode, status, field);
