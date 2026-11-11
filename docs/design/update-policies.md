@@ -44,6 +44,12 @@ parent exclusion, snapshot/pins, literal edits and post-deploy verification rema
 the only effect path. Recovery follows recorded child evidence and cannot select
 a newer candidate under the old run identity.
 
+A default stack policy (revision 0, never saved) has no stored target identity.
+The single policy read resolves it from the live baseline (Compose inputs and
+Docker observation); the host's policy list leaves it empty, so listing does not
+run one baseline projection per stack. Saving, admission and execution verify
+the target themselves and never rely on a listed identity.
+
 Notification identity includes host registration, stack identity, repository,
 platform, release/tag and immutable candidate digest. A transaction commits that
 identity with its durable entry before existing channels are dispatched. Badge

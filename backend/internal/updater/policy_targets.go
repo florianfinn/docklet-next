@@ -180,7 +180,9 @@ func (s *UpdaterService) ListImagePolicies(ctx context.Context, env string) ([]d
 		if !target.Eligible {
 			continue
 		}
-		row, err := s.GetImagePolicy(ctx, env, target.ID, target.Kind)
+		// A list does not resolve default stack identities: one baseline projection per stack made it scale with
+		// the host's stacks; the single policy read (GetImagePolicy) still resolves it.
+		row, err := s.imagePolicy(ctx, env, target.ID, false, target.Kind)
 		if err != nil {
 			return nil, err
 		}
@@ -196,7 +198,7 @@ func (s *UpdaterService) ListImagePolicies(ctx context.Context, env string) ([]d
 		if row.EnvironmentID != env || seen[row.TargetKind+"\x00"+row.TargetID] {
 			continue
 		}
-		one, err := s.GetImagePolicy(ctx, env, row.TargetID, row.TargetKind)
+		one, err := s.imagePolicy(ctx, env, row.TargetID, false, row.TargetKind)
 		if err != nil {
 			return nil, err
 		}
