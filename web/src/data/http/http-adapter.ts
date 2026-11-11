@@ -12,6 +12,7 @@ import { createImageMetadata } from "./image-metadata";
 import { createStackImport } from "./stack-import";
 import { createScheduleReader } from "./inventory-schedule";
 import { createInventoryOwner } from "./inventory-owner";
+import { freshFrom } from "../refresh-owner";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
 import { createUpdateSettings } from "./update-settings";
@@ -694,9 +695,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   const observations = new Map<string, InventoryObservation>();
-  async function listHosts() {
+  /** `attempt` names a refresh-owner fetch whose catalogue read starts here (`freshFrom`); it never aborts. */
+  async function listHosts(attempt?: AbortSignal) {
     const version = identityGeneration;
     await requireCapability("listHosts");
+    freshFrom(attempt);
     const catalogue = catalogueVersion;
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();

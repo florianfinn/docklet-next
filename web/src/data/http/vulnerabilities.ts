@@ -119,11 +119,11 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const { enabled, hosts } = await securityDeadline(async (signal) => {
         await require("getSecurity", { kind: "hub", id: "0" });
         check(); signal.throwIfAborted();
+        // The settings and catalogue reads start after every change notified so far (refresh-owner `freshFrom`).
+        freshFrom(parent);
         const values = settingsValues(await request("/environments/0/settings/public", "GET", undefined, false, signal));
         if (!["true", "false"].includes(values.featureVulnerabilityManagementEnabled ?? "")) invalid();
         const enabled = values.featureVulnerabilityManagementEnabled === "true";
-        // The catalogue read starts after every change notified so far (refresh-owner `freshFrom`).
-        if (enabled) freshFrom(parent);
         return { enabled, hosts: enabled ? await o.hosts() : [] };
       }, parent).catch((error: unknown) => { check(); throw error; });
       check();
@@ -164,11 +164,11 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const { enabled, hosts } = await securityDeadline(async (signal) => {
         await require("getSecurity", { kind: "hub", id: "0" });
         check(); signal.throwIfAborted();
+        // The settings and catalogue reads start after every change notified so far (refresh-owner `freshFrom`).
+        freshFrom(parent);
         const values = settingsValues(await request("/environments/0/settings/public", "GET", undefined, false, signal));
         if (!["true", "false"].includes(values.featureVulnerabilityManagementEnabled ?? "")) invalid();
         const enabled = values.featureVulnerabilityManagementEnabled === "true";
-        // The catalogue read starts after every change notified so far (refresh-owner `freshFrom`).
-        if (enabled) freshFrom(parent);
         return { enabled, hosts: enabled ? await o.hosts() : [] };
       }, parent).catch((error: unknown) => { check(); throw error; });
       check();

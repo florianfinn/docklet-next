@@ -27,10 +27,13 @@ export function recoveryFixture() {
       const user = { id: "operator", username: "operator", requiresPasswordChange: false, isAdmin: true, locale: "en-US" };
       answer = ok(path.endsWith("/login") ? { user } : user);
     } else if (path === "/api/backups/maintenance") answer = Response.json({ active: state.maintenance, operation: state.maintenance ? "backup" : undefined }, { headers });
+    else if (path.endsWith("/test")) answer = ok({ status: "online" });
+    else if (path === "/api/environments/first" && init?.method === "PUT") answer = ok(rows()[0]);
+    else if (path.endsWith("/updater/system-image-hints")) answer = ok({ images: [] });
     else if (path === "/api/environments") answer = Response.json({ success: true, data: rows(), pagination: { totalItems: state.hostIds.length } }, { headers });
     else if (path === "/api/capabilities") {
       answer = await original(input); const body = await answer.json();
-      const extra = ["getSecurity", "listBackupOverviews", "getBackupOverview", "listUpdatePolicies", "saveSettings", "listEvents"];
+      const extra = ["updateHost", "connectHost", "reconnectHost", "listSystemComponents","getSecurity", "listBackupOverviews", "getBackupOverview", "listUpdatePolicies", "saveSettings", "listEvents"];
       body.data.push(...extra.map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
       answer = Response.json(body, { headers });
     } else if (path.endsWith("/settings/public")) answer = Response.json([{ key: "featureVulnerabilityManagementEnabled", value: "true" }], { headers });
@@ -54,5 +57,5 @@ export function recoveryFixture() {
   const source = resource.source;
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source });
   const send = () => source.onmessage?.({ data: JSON.stringify({ channel: "environments", timestamp: at, environment: { environments: rows() } }), lastEventId: "" } as MessageEvent);
-  return { adapter, state, pending, requests, source, send, releasePath: (path: string) => { state.hold.delete(path); pending.filter(p => p.path === path).forEach(p => p.release()); }, release: () => { state.hold.clear(); pending.forEach((p) => p.release()); } };
+  return { adapter, state, pending, requests, source, send, fetcher, releasePath: (path: string) => { state.hold.delete(path); pending.filter(p => p.path === path).forEach(p => p.release()); }, release: () => { state.hold.clear(); pending.forEach((p) => p.release()); } };
 }

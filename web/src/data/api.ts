@@ -131,8 +131,11 @@ export interface HostsApi {
   /** Connects the agent and returns the connection run's action id. */
   connectHost(hostId: string): Promise<string | HostCheckResult>;
   removeHost(hostId: string): Promise<void>;
-  /** Docklet's own components per host; they never appear in stack or container lists. */
-  listSystemComponents(): Promise<SystemComponent[]>;
+  /**
+   * Docklet's own components per host; they never appear in stack or container lists. `attempt` is the caller's fetch
+   * signal: it identifies the attempt for its freshness boundary only and never aborts the read.
+   */
+  listSystemComponents(attempt?: AbortSignal): Promise<SystemComponent[]>;
   /** Rotates an existing host credential and returns the new token once. */
   issueAgentToken(hostId: string): Promise<string>;
 }

@@ -39,7 +39,7 @@ export function useHosts() {
 
 export function useSystemComponents() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.systemComponents, queryFn: () => adapter.listSystemComponents() });
+  return useQuery({ queryKey: queryKeys.systemComponents, queryFn: ({ signal }) => adapter.listSystemComponents(signal) });
 }
 
 /** Each mounted inventory owns retries of its own omitted batches, independent of shared host observations. */
