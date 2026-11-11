@@ -9,9 +9,14 @@ import type { ReadTag } from "./http/host-read-policy";
 import { useAdapter } from "./use-adapter";
 import type { BackupOverview } from "@/domain/volumes";
 
-/** A first load is a background read; a refresh of loaded data is an interval poll (skipped for standby hosts). */
-function readTag(client: QueryClient, key: readonly unknown[]): ReadTag {
-  return client.getQueryData(key) === undefined ? "background" : "poll";
+/**
+ * Only an interval refresh of loaded data is a poll (skipped for standby hosts, Q-5a). A first load, an invalidation
+ * and a remount after older data are background reads; an interval refresh finds data about one interval old.
+ */
+function readTag(client: QueryClient, key: readonly unknown[], intervalMs: number): ReadTag {
+  const state = client.getQueryState(key);
+  if (state?.data === undefined || state.isInvalidated) return "background";
+  return Date.now() - state.dataUpdatedAt <= 2 * intervalMs ? "poll" : "background";
 }
 
 export function useBackupOverview(host: string, enabled = true) {
@@ -19,7 +24,7 @@ export function useBackupOverview(host: string, enabled = true) {
     client = useQueryClient();
   return useQuery({
     queryKey: ["backup-overview", host],
-    queryFn: () => adapter.getBackupOverview(host, readTag(client, ["backup-overview", host])),
+    queryFn: () => adapter.getBackupOverview(host, readTag(client, ["backup-overview", host], 5000)),
     enabled: enabled && !!host,
     refetchInterval: 5000,
   });
@@ -33,7 +38,7 @@ export function useBackupOverviews() {
       adapter.listBackupOverviews((rows) => {
         if (!signal.aborted && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined)
           client.setQueryData(["backup-overviews"], rows);
-      }, readTag(client, ["backup-overviews"])),
+      }, readTag(client, ["backup-overviews"], 10000)),
     refetchInterval: 10000,
   });
 }
@@ -50,7 +55,7 @@ export function useBackupRepository(host: string, enabled = true) {
     client = useQueryClient();
   return useQuery({
     queryKey: ["backup-repository", host],
-    queryFn: () => adapter.getBackupRepository(host, readTag(client, ["backup-repository", host])),
+    queryFn: () => adapter.getBackupRepository(host, readTag(client, ["backup-repository", host], 5000)),
     enabled,
     refetchInterval: 5000,
   });

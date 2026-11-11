@@ -46,6 +46,8 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
   }
   async function context(hostId: string, signal?: AbortSignal) {
     const [containers, projects] = await Promise.allSettled([transport.list("list-containers", hostId, "containers", undefined, signal), transport.list("list-projects", hostId, "projects", undefined, signal)]);
+    // Hub maintenance fails the read instead of dropping the context's bind rows; other failures keep the fallback.
+    for (const leg of [containers, projects]) if (leg.status === "rejected" && isMaintenanceError(leg.reason)) throw leg.reason;
     return { containers: containers.status === "fulfilled" ? containers.value.rows : [], projects: projects.status === "fulfilled" ? projects.value.rows : [] };
   }
   function supplement(volume: Volume, row: Schema["VolumeVolume"], hostId: string): Volume {

@@ -92,4 +92,3 @@ it("an assigned-stack list publishes its own stale and fresh observations", asyn
   await reader.listStacks();
   expect(observations).toEqual([true, false]);
 });
-

@@ -124,6 +124,8 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
           const [listed, contextual] = await Promise.allSettled([list("list-networks", h.id, "networks"), context(h.id)]);
           if (listed.status === "rejected") throw listed.reason;
           const networks = listed.value;
+          // Hub maintenance on the context fails the whole read, so the query keeps its graph while it retries.
+          if (contextual.status === "rejected" && isMaintenanceError(contextual.reason)) throw contextual.reason;
           const ctx = contextual.status === "fulfilled" ? contextual.value : { containers: [], projects: [], observations: [inventoryFailure(h.id, contextual.reason)] };
           const details = await Promise.all(networks.rows.map(async (summary) => {
             try {
