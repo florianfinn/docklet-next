@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Paired non-secret session presence hints in cookie writer assertions.
 
 package cookie
 
@@ -45,12 +45,12 @@ func TestBuildTokenCookieStringFor(t *testing.T) {
 		}
 
 		cookies := readSetCookieHeadersInternal(t, headers...)
-		require.Len(t, cookies, tokenCookieMaxChunks)
+		require.Len(t, cookies, tokenCookieMaxChunks+1)
 		require.Less(t, headerBytes, 1024)
 		assert.Equal(t, TokenCookieName, cookies[0].Name)
 		assert.Equal(t, "abc", cookies[0].Value)
 		assert.True(t, cookies[0].Secure)
-		for _, clear := range cookies[1:] {
+		for _, clear := range cookies[1:tokenCookieMaxChunks] {
 			assert.Equal(t, -1, clear.MaxAge)
 		}
 	})
@@ -59,7 +59,7 @@ func TestBuildTokenCookieStringFor(t *testing.T) {
 		headers := BuildTokenCookieStringFor(60, "abc", false)
 
 		cookies := readSetCookieHeadersInternal(t, headers...)
-		require.Len(t, cookies, tokenCookieMaxChunks)
+		require.Len(t, cookies, tokenCookieMaxChunks+1)
 		assert.Equal(t, InsecureTokenCookieName, cookies[0].Name)
 		assert.False(t, cookies[0].Secure)
 	})
@@ -85,7 +85,7 @@ func TestBuildClearTokenCookieStringsFor(t *testing.T) {
 	t.Run("secure clears fallback and host-prefixed cookies", func(t *testing.T) {
 		headers := BuildClearTokenCookieStringsFor(true)
 
-		require.Len(t, headers, 2*tokenCookieMaxChunks)
+		require.Len(t, headers, 2*tokenCookieMaxChunks+2)
 		assert.Equal(t, InsecureTokenCookieName, readSetCookieHeadersInternal(t, headers[0])[0].Name)
 		secureCookie := readSetCookieHeadersInternal(t, headers[1])[0]
 		assert.Equal(t, TokenCookieName, secureCookie.Name)
@@ -95,7 +95,7 @@ func TestBuildClearTokenCookieStringsFor(t *testing.T) {
 	t.Run("insecure clears only fallback cookie", func(t *testing.T) {
 		headers := BuildClearTokenCookieStringsFor(false)
 
-		require.Len(t, headers, tokenCookieMaxChunks)
+		require.Len(t, headers, tokenCookieMaxChunks+1)
 		clearCookie := readSetCookieHeadersInternal(t, headers[0])[0]
 		assert.Equal(t, InsecureTokenCookieName, clearCookie.Name)
 		assert.False(t, clearCookie.Secure)
