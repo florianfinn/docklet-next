@@ -30,7 +30,8 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
       <h3 className="font-medium">
         {t("builtInLocal")} · {host.name}
       </h3>
-      {repository.isError || (!available && !repository.data) ? (
+      {!available && value && <p role="status">{t("unavailable")}</p>}
+      {repository.isError || (!available && !value) ? (
         <p role="status">{t("unavailable")}</p>
       ) : !value ? (
         <p role="status">{t("loading")}</p>

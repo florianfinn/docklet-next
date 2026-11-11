@@ -20,7 +20,7 @@ function json(status: number, body: object, headers: Record<string, string> = {}
 
 /** The unavailable answer readers already map to retained rows; produced without a request. */
 export function skippedResponse(): Response {
-  return json(502, { success: false, code: "agent.unavailable", data: { reason: "host.skipped" } }, { [SKIPPED_HEADER]: "host" });
+  return json(502, { success: false, status: 502, code: "agent.unavailable", data: { reason: "host.skipped" } }, { [SKIPPED_HEADER]: "host" });
 }
 
 function maintenanceResponse(): Response {
@@ -60,6 +60,8 @@ export function createDispatchGate(fetcher: typeof fetch, baseUrl: string, maint
       if (tag && host && (tag === "background" || tag === "poll") && hosts.skip(host, tag)) return skippedResponse();
       const response = await send();
       if (!await isMaintenance(response)) return response;
+      // A request cancelled meanwhile (identity change, logout) must not set maintenance state for its successor.
+      signal?.throwIfAborted();
       maintenance.signal();
       // An overdue hold sends nothing again: the request surfaces its own answer.
       if (!held || attempt >= MAINTENANCE_RETRIES || !maintenance.holding()) return response;

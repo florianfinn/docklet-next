@@ -10,10 +10,11 @@ import { CancelledError } from "@tanstack/react-query";
 import { AdapterOutcomeError } from "../capability";
 import { createHttpAdapter } from "./http-adapter";
 import { problemCode } from "./problem-code";
+import { clearSessionHint } from "./session-hint";
 
 const token = "example".padEnd(43, "x");
 const user = { id: "admin", username: "admin", requiresPasswordChange: false, isAdmin: true };
-const clearCookies = () => { for (const part of document.cookie.split(";")) { const name = part.trim().split("=")[0]; if (name) document.cookie = `${name}=; Path=/; Max-Age=0`; } };
+const clearCookies = () => { for (const part of document.cookie.split(";")) { const name = part.trim().split("=")[0]; if (name) document.cookie = `${name}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`; } };
 beforeEach(clearCookies);
 afterEach(clearCookies);
 
@@ -131,4 +132,12 @@ it.each([
   [null, undefined],
 ])("R2-d decodes %j as %s", (body, code) => {
   expect(problemCode(body)).toBe(code);
+});
+
+it("R2-b deleting the hint takes effect within the same instant", () => {
+  document.cookie = "docklet_session=1; Path=/";
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try { clearSessionHint(); expect(document.cookie).not.toContain("docklet_session"); }
+  finally { clock.mockRestore(); }
 });

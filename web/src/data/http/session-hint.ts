@@ -17,6 +17,8 @@ export function hasSessionHint(): boolean {
 /** Drop a hint that outlived its session, so the next start does not probe again. */
 export function clearSessionHint(): void {
   if (typeof document === "undefined") return;
-  document.cookie = "__Host-docklet_session=; Path=/; Max-Age=0; Secure; SameSite=Lax";
-  document.cookie = "docklet_session=; Path=/; Max-Age=0; SameSite=Lax";
+  // A past Expires next to Max-Age=0 removes the cookie also where expiry compares with the same instant.
+  const expired = "Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  document.cookie = `__Host-docklet_session=; Path=/; ${expired}; Secure; SameSite=Lax`;
+  document.cookie = `docklet_session=; Path=/; ${expired}; SameSite=Lax`;
 }

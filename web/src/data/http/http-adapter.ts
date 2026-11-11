@@ -44,23 +44,17 @@ import { mapEvent, mapStatus } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createHttpHistory, createHttpUiPreferences } from "./history";
 import { createHttpServiceWidgets } from "./service-widgets";
-import { createCsrfClient } from "./csrf-client";
 import { problemCode } from "./problem-code";
-import { createDispatchGate } from "./dispatch-gate";
-import { createHostReadPolicy } from "./host-read-policy";
-import { createMaintenanceObserver } from "./maintenance-observer";
+import { createTransportChain } from "./transport-chain";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
-import { createHostReadAdmission } from "./host-read-admission";
 import { createSharedReads } from "./shared-reads";
-import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
 import { createVulnerabilityCandidates } from "./vulnerability-candidates";
 import { createVulnerabilityAdvisories } from "./vulnerability-advisory";
 import { registerIdentityLifetime } from "../identity-lifetime";
-import { createIdentityReads } from "./identity-reads";
 import { activityDeadline } from "./activity-deadline";
 import { createActivityTargets } from "./activity-targets";
 import { mapActivityDetail } from "./map-dto";
@@ -237,40 +231,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (closing && await closing) throw new CancelledError();
     if (signedOut) throw new CancelledError();
   }
-  const rawFetch = options.fetch ?? globalThis.fetch;
-  const maintenance = createMaintenanceObserver(`${baseUrl}/backups/maintenance`, rawFetch);
-  const hostPolicy = createHostReadPolicy();
-  const network = createHostReadAdmission(createDispatchGate(rawFetch, baseUrl, maintenance, hostPolicy), baseUrl);
-  // Admitted reads still waiting for their answer; a logout lets them land before the session ends.
-  const answering = new Set<Promise<void>>();
-  // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.
-  const identityReads = createIdentityReads(async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
-    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    const read = (method === "GET" || method === "HEAD") && !path.includes("/auth/");
-    if (read && (closing || signedOut)) await admit();
-    const answer = network(input, init);
-    if (read) {
-      const landed = answer.then(() => undefined, () => undefined);
-      answering.add(landed);
-      void landed.then(() => answering.delete(landed));
-    }
-    return answer;
+  const { maintenance, hostPolicy, identityReads, answering, client } = createTransportChain({
+    baseUrl, fetch: options.fetch ?? globalThis.fetch, admit, closing: () => !!closing || signedOut,
+    generation: () => identityGeneration, suspend: () => suspendIdentity(),
   });
-  const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
-  const client = { token: rawClient.token, fetch: (async (input, init) => {
-    const version = identityGeneration;
-    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
-    const response = await rawClient.fetch(input, init);
-    // Auth and activity/runtime consumers already own their authoritative 401 path.
-    const ownedRejection = ["/auth/login", "/auth/password", "/auth/me"].some((suffix) => path.endsWith(suffix)) || /\/(activities|runtime-runs)(\/|$)|\/(capabilities|environments)$/.test(path);
-    if (version === identityGeneration && response.status === 401 && !ownedRejection) {
-      const body = await response.arrayBuffer();
-      if (version === identityGeneration) suspendIdentity();
-      return new Response(body, { status: response.status, headers: response.headers });
-    }
-    return response;
-  }) as typeof fetch };
+  // A hub backup download is a browser navigation outside fetch: it waits for logout admission and maintenance itself.
+  const hubBackups = createHttpHubBackups(baseUrl, client, options.uploadFactory, async () => { await admit(); await maintenance.wait(); });
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
@@ -346,7 +312,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
-    maintenance.reset(); hostPolicy.reset();
+    maintenanceSeen = false; maintenance.reset(); hostPolicy.reset();
     conditions.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
@@ -637,6 +603,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function connect(): void {
     if (!authenticated || closing || signedOut || source || (!actionListeners.size && !changeListeners.size)) return;
+    // The native stream bypasses fetch: it starts only after a hub maintenance hold ends.
+    if (maintenance.holding()) { if (!streamHeld) { streamHeld = true; void maintenance.wait().then(() => { streamHeld = false; connect(); }, () => { streamHeld = false; }); } return; }
     sourceOpen = false;
     let opened: Source;
     try {
@@ -661,11 +629,24 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       actions.markError();
       // A reconnecting EventSource keeps its native retry cadence. Only CLOSED
       // sources need a replacement after the authoritative identity check.
-      const closed = opened.readyState === 2;
+      const held = maintenance.holding();
+      const closed = opened.readyState === 2 || held;
       if (closed) { opened.close(); source = undefined; sourceOpen = false; }
+      if (held) { connect(); return; }
       void checkIdentity().then((valid) => { if (closed && valid && version === identityGeneration) scheduleReconnect(); }, () => { if (closed && version === identityGeneration) scheduleReconnect(); });
     };
   }
+
+  let streamHeld = false;
+  // After hub maintenance every read may be outdated (a restore replaces the database): refresh all topics once.
+  let maintenanceSeen = false;
+  maintenance.subscribe((state) => {
+    if (state.active) { maintenanceSeen = true; return; }
+    if (!maintenanceSeen) return;
+    maintenanceSeen = false;
+    invalidateCapabilities(); invalidateEnvironments(); backups.invalidate();
+    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "schedule", "volumes", "settings", "images", "registries"]));
+  });
 
   function scheduleReconnect(): void {
     if (!authenticated || closing || signedOut || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
@@ -808,7 +789,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createSettingsCore(baseUrl, client),
     ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
-    ...createHttpHubBackups(baseUrl, client, options.uploadFactory, admit),
+    ...hubBackups,
+    // The page's detailed status read is also the browser-wide maintenance observation of this identity.
+    async getHubBackupMaintenance() {
+      const version = identityGeneration;
+      const status = await hubBackups.getHubBackupMaintenance();
+      if (version === identityGeneration) maintenance.observe(status);
+      return status;
+    },
     ...createHttpHistory(baseUrl, client),
     ...createHttpUiPreferences(baseUrl, client, () => ownedWrites.signal),
     ...createHttpServiceWidgets(baseUrl, client),

@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original browser-wide hub maintenance observer and bounded read hold.
 
+import { setDeadlinePause } from "./deadline-pause";
+
 export type MaintenanceState = { active: boolean; operation?: "backup" | "restore"; overdue: boolean };
 export type HoldOutcome = "released" | "overflow";
 
@@ -28,9 +30,11 @@ export function createMaintenanceObserver(statusUrl: string, fetcher: typeof fet
   const waiters = new Set<Waiter>();
   const listeners = new Set<(next: MaintenanceState) => void>();
 
+  const owner = {};
   function publish(next: MaintenanceState) {
     if (next.active === state.active && next.operation === state.operation && next.overdue === state.overdue) return;
     state = next;
+    setDeadlinePause(owner, state.active && !state.overdue);
     listeners.forEach((listener) => listener(state));
   }
   function release() {
@@ -86,6 +90,13 @@ export function createMaintenanceObserver(statusUrl: string, fetcher: typeof fet
     signal() {
       begin();
       if (!pollTimer && !polling) void poll();
+    },
+    /** A maintenance status read elsewhere (the hub backup page) is the same observation. */
+    observe(status: { active?: unknown; operation?: unknown }) {
+      if (status.active === true) {
+        begin(status.operation === "backup" ? "backup" : status.operation === "restore" ? "restore" : undefined);
+        if (!pollTimer && !polling) schedule(ACTIVE_POLL_MS);
+      } else if (status.active === false) end();
     },
     /** Whether a held-class request must wait now; an overdue hold lets requests through. */
     holding: () => state.active && !state.overdue,
