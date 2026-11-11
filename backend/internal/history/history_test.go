@@ -404,13 +404,12 @@ func TestCapacityKeepsHostWithoutCurrentMeasurement(t *testing.T) {
 	require.Equal(t, 41., got[0].UsedBytes)
 }
 
-// A missing disk usage path leaves the host sample without a disk source instead of failing
-// the whole minute (agents whose project directory differs from the default path).
+// A missing configured path falls back to the owning host root without failing the minute.
 func TestSampleHostWithoutDiskPath(t *testing.T) {
 	h, err := sampleHost(t.Context(), filepath.Join(t.TempDir(), "absent"))
 	require.NoError(t, err)
-	require.Empty(t, h.DiskSource)
-	require.Zero(t, h.DiskTotal)
+	require.Equal(t, "/", h.DiskSource)
+	require.Positive(t, h.DiskTotal)
 	require.Positive(t, h.MemoryTotal)
 	present, err := sampleHost(t.Context(), t.TempDir())
 	require.NoError(t, err)
