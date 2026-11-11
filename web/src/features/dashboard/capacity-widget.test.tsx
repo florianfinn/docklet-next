@@ -78,7 +78,9 @@ describe("demo capacity follows the hub's 30-day shape (#400)", () => {
     const { container } = renderWithApp(<CapacityWidget hosts={[a!]} />, createDemoAdapter());
     await waitFor(() => expect(container.querySelector("[data-capacity-line]")).not.toBeNull());
     const line = container.querySelector<SVGElement>("[data-capacity-line]")!;
-    expect([line.dataset.capacityLine, line.dataset.capacitySegments]).toEqual(["90", "1"]);
+    const points = line.querySelector("polyline")!.getAttribute("data-points")!.split(" ");
+    // Bucket ends, like the HTTP mapper: the first point sits one step in, the last at the domain end.
+    expect([line.dataset.capacityLine, line.dataset.capacitySegments, points[0]!.split(",")[0], points.at(-1)!.split(",")[0]]).toEqual(["90", "1", "1.11", "100"]);
   });
 });
 

@@ -70,8 +70,8 @@ export function demoCapacity(hostIds: readonly string[], now = Date.now()): Host
       diskUsed,
       growthPerDay,
       daysUntilFull: (diskTotal - diskUsed) / growthPerDay,
-      // The hub's 30-day shape: 90 buckets of 8 hours and their domain.
-      series: Array.from({ length: buckets }, (_, i) => ({ at: new Date(first + i * stepMs).toISOString(), used: Math.max(0, diskUsed - ((buckets - 1 - i) * growthPerDay) / 3) })),
+      // The hub's 30-day shape: 90 buckets of 8 hours, stamped at their end like the HTTP mapper, and their domain.
+      series: Array.from({ length: buckets }, (_, i) => ({ at: new Date(first + (i + 1) * stepMs).toISOString(), used: Math.max(0, diskUsed - ((buckets - 1 - i) * growthPerDay) / 3) })),
       domain: { start: new Date(first).toISOString(), end: new Date(first + buckets * stepMs).toISOString() },
     };
   });
