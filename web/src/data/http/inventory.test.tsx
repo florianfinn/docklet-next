@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory contract tests.
+// Deviations: Original multi-host inventory contract tests. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -83,7 +83,7 @@ describe("host inventory HTTP reads", () => {
     await f.adapter.listStacks();
     f.state.reason = "agent.unavailable";
     const stale = await f.adapter.listStacks();
-    expect(stale[0]?.inventory).toEqual({ stale: true, observedAt: at, reason: "agent.unavailable" });
+    expect(stale[0]?.inventory).toEqual({ stale: true, observedAt: at, reason: "agent.unavailable", recovery: "agent.unavailable" });
     renderWithApp(<InventoryNotice hosts={await f.adapter.listHosts()} items={stale} />);
     expect(screen.getByRole("status").textContent?.includes("Stand")).toBe(true);
     expect(screen.getByRole("status").textContent?.includes("nicht erreichbar")).toBe(true);

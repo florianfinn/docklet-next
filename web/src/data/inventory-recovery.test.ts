@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original query-local recovery, equal-result sharing and catalogue exclusion regressions. C2 #271: stale-success catalogue and freshness exclusions.
+// Deviations: Original query-local recovery, equal-result sharing and catalogue exclusion regressions. C2 #271: stale-success catalogue and freshness exclusions. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { expect, it } from "vitest";
 import type { Host } from "@/domain/model";
@@ -91,4 +91,15 @@ it("an assigned-stack list publishes its own stale and fresh observations", asyn
   f.state.reason = "";
   await reader.listStacks();
   expect(observations).toEqual([true, false]);
+});
+
+it("inventory tags distinguish first load and invalidation from interval refresh", async () => {
+  const { QueryClient } = await import("@tanstack/react-query");
+  const { inventoryReadTag } = await import("./inventory-recovery");
+  const client = new QueryClient();
+  expect(inventoryReadTag(client, ["stacks"])).toBe("background");
+  client.setQueryData(["stacks"], []);
+  expect(inventoryReadTag(client, ["stacks"])).toBe("poll");
+  await client.invalidateQueries({ queryKey: ["stacks"], refetchType: "none" });
+  expect(inventoryReadTag(client, ["stacks"])).toBe("background"); client.clear();
 });

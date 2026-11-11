@@ -2,14 +2,15 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips).
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
 import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
 import { createStackImport } from "./stack-import";
-import { nextOccurrence } from "@/domain/schedule";
+import { createScheduleReader } from "./inventory-schedule";
+import { createInventoryOwner } from "./inventory-owner";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
 import { createUpdateSettings } from "./update-settings";
@@ -304,6 +305,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
+    inventoryOwner.reset();
     backups.invalidate();
     events.identityChanged();
     authenticated = nextActive;
@@ -702,20 +704,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     observations.set(hostId, state);
     if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
   }
-  function scopedObservations<T extends object>(make: (observe: typeof observeHost) => T): T {
-    return new Proxy(make(() => {}), { get(_target, key) {
-      return (...args: unknown[]) => {
-        const version = identityGeneration;
-        const reader = make((hostId, state) => { if (version === identityGeneration) observeHost(hostId, state); });
-        const method = Reflect.get(reader, key) as (...values: unknown[]) => unknown;
-        return method(...args);
-      };
-    } });
-  }
+  const inventoryOwner = createInventoryOwner(() => identityGeneration, listHosts, requireCapability, fetcher, observeHost);
   const conditions = createConditionReader(baseUrl, fetcher);
-  const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe, conditions.read));
-  const userInventory = scopedObservations((observe) => createUserInventory(baseUrl, fetcher, listHosts, () => principal, observe, conditions.read));
-  const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  const inventory = inventoryOwner.wrap((observe, fetch, hosts, require) => createInventoryReader(baseUrl, fetch, hosts, require, observe, (id, signal) => conditions.read(id, signal, fetch)));
+  const userInventory = inventoryOwner.wrap((observe, fetch, hosts) => createUserInventory(baseUrl, fetch, hosts, () => principal, observe, (id, signal) => conditions.read(id, signal, fetch)));
+  const resourceReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createResourceReader(baseUrl, fetch, hosts, require, observe));
   function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
   const backups = createBackups({
     baseUrl,
@@ -730,7 +723,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       targets.notify(host, id, undefined, true);
     },
   });
-  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration, backups.decorate);
+  const volumeReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createVolumeReads(baseUrl, fetch, hosts, require, observe, () => identityGeneration, backups.decorate, inventoryOwner.volumeRows));
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
@@ -816,7 +809,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...resourceReads,
     ...createVulnerabilityCandidates({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, writeSignal: () => ownedWrites.signal, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
-    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...backups.api,
     async getVolume(id, parent) {
@@ -852,40 +845,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
     ...createNetworkCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["topology", "containers"])); } }),
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
-    async listSchedule(hostIds) {
-      const selected = hostIds ?? (await listHosts()).map((h) => h.id);
-      const backupRows = (await Promise.all(selected.map(async (host) => {
-        try {
-          return (await backups.api.getBackupOverview(host)).volumes
-            .filter((v) => v.backup?.enabled && v.backup.nextRunAt)
-            .map((v) => ({
-              id: `${host}~backup-${v.name}`,
-              hostId: host,
-              kind: "backup" as const,
-              title: v.name,
-              volumeId: v.id,
-              cadence: v.backup!.schedule.mode,
-              nextRunAt: v.backup!.nextRunAt,
-              enabled: true,
-            }));
-        }
-        catch { return []; }
-      }))).flat();
-      return [...backupRows, ...(await Promise.all(selected.map(async (hostId) => {
-        try {
-          const config = await adapter.listUpdatePolicies!(hostId);
-          const timeZone = (await adapter.getUpdateSettings!()).timeZone;
-          return config.filter((p) => p.mode === "scheduled" && p.window).map((p) => {
-            const window = p.window!;
-            const schedule = window.kind === "daily" ? { mode: "daily" as const, time: window.time } : { mode: "weekly" as const, day: (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[window.day!]!, time: window.time };
-            return { id: `${hostId}~${p.targetKind}-${p.targetId}`, hostId, kind: "auto-update" as const, title: p.targetName, cadence: window.kind, nextRunAt: nextOccurrence(schedule, new Date(), timeZone)?.toISOString(), enabled: true, code: p.applyCode };
-          });
-        } catch (error) {
-          if (isCancelledError(error)) throw error;
-          return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
-        }
-      }))).flat()];
-    },
+    listSchedule: createScheduleReader(baseUrl, client, listHosts, getCapability, () => identityGeneration, backups.api.getBackupOverview, () => adapter.getUpdateSettings!()),
     listActions: () => principal?.isAdmin === false ? Promise.resolve(runtime.retained()) : actions.load(),
     observeActionDetail(host, id, listener) {
       const offActions = adapter.subscribeActions(() => {});

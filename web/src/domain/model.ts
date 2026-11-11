@@ -51,6 +51,8 @@ export interface AgentReport {
 }
 
 export interface InventoryObservation {
+  recovery?: string;
+  scopeStale?: boolean;
   observedAt?: string;
   stale: boolean;
   reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required" | "inventory.read-error" | "inventory.mapping-error";

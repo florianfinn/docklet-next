@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original live runtime condition merge for the fleet ring, issue #371. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: M23 #389: automatic condition readers share the caller's read tag while retaining their identity-owned conditions. Original live runtime condition merge for the fleet ring, issue #371. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, RuntimeCondition, Stack } from "@/domain/model";
@@ -40,7 +40,7 @@ export function decodeConditionSnapshot(body: unknown): ConditionsByContainer {
     : []));
 }
 
-export type ConditionReader = (hostId: string, signal?: AbortSignal) => Promise<ConditionsByContainer>;
+export type ConditionReader = (hostId: string, signal?: AbortSignal, fetcher?: typeof fetch) => Promise<ConditionsByContainer>;
 
 /** Reads the container conditions of one host; throws when the read fails or the answer is malformed. */
 async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string, signal?: AbortSignal): Promise<ConditionsByContainer> {
@@ -57,10 +57,10 @@ async function readHost(baseUrl: string, fetcher: typeof fetch, hostId: string, 
 export function createConditionReader(baseUrl: string, fetcher: typeof fetch): { read: ConditionReader; reset: () => void } {
   let last = new Map<string, ConditionsByContainer>();
   return {
-    async read(hostId, signal) {
+    async read(hostId, signal, source = fetcher) {
       const owner = last;
       try {
-        const conditions = await readHost(baseUrl, fetcher, hostId, signal);
+        const conditions = await readHost(baseUrl, source, hostId, signal);
         signal?.throwIfAborted();
         if (owner === last) last.set(hostId, conditions);
         return conditions;

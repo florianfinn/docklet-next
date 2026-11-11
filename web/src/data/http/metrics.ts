@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Existing per-host stats streams with retained observations.
+// Deviations: Existing per-host stats streams with retained observations. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import type { Host, HostMetrics, InventoryObservation, MetricsSnapshot } from "@/domain/model";
 import { inventoryId, mapContainer } from "./inventory-mapping";
@@ -41,6 +41,16 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
   let timer: ReturnType<typeof setTimeout> | undefined;
   let generation = 0;
   let authenticated = true;
+  let lifetime = new AbortController();
+  function stop() {
+    ++generation; lifetime.abort(); lifetime = new AbortController();
+    if (timer) clearTimeout(timer); timer = undefined;
+    for (const socket of sockets.values()) socket.close(); sockets.clear();
+  }
+  function visibilityChanged() {
+    if (document.hidden) stop();
+    else if (authenticated && listeners.size) void refresh(generation);
+  }
   function emit() {
     const snapshot: MetricsSnapshot = { at: new Date().toISOString(), simulated: false, hosts: { ...retained }, containers: { ...containers } };
     listeners.forEach((push) => push(snapshot));
@@ -51,6 +61,8 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
   }
   function report(error: unknown) { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); }
   async function refresh(current: number) {
+    const signal = lifetime.signal;
+    if (document.hidden || signal.aborted) return;
     try {
       await requireCapability("subscribeMetrics");
       if (current !== generation || !authenticated) return;
@@ -89,7 +101,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
       await Promise.all(hosts.filter((h) => h.status === "online").map(async (h) => {
         // Resource sorting asks the existing container read to collect real samples.
         try {
-          const result = await list("list-containers", h.id, "containers", { sort: "cpuUsage" });
+          const result = await list("list-containers", h.id, "containers", { sort: "cpuUsage" }, signal);
           if (current !== generation) return;
           const samples: MetricsSnapshot["containers"] = {};
           for (const row of result.rows) {
@@ -111,25 +123,24 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
       }));
       if (current === generation) emit();
     } catch (error) { if (current === generation) report(error); }
-    finally { if (current === generation && listeners.size) timer = setTimeout(() => void refresh(current), 5000); }
+    finally { if (current === generation && listeners.size && !document.hidden && !signal.aborted) timer = setTimeout(() => void refresh(current), 5000); }
   }
   const subscribe = (push: (snapshot: MetricsSnapshot) => void) => {
     listeners.add(push);
-    if (listeners.size === 1 && authenticated) void refresh(++generation);
+    if (listeners.size === 1) {
+      document.addEventListener("visibilitychange", visibilityChanged);
+      if (authenticated) void refresh(++generation);
+    }
     return () => {
       listeners.delete(push);
       if (listeners.size) return;
-      ++generation;
-      if (timer) clearTimeout(timer);
-      for (const socket of sockets.values()) socket.close();
-      sockets.clear();
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      stop();
       for (const id of Object.keys(retained)) stale(id);
     };
   };
   return Object.assign(subscribe, { reset(active: boolean, retain = false) {
-  ++generation; authenticated = active;
-  if (timer) clearTimeout(timer); timer = undefined;
-  for (const socket of sockets.values()) socket.close(); sockets.clear();
+  stop(); authenticated = active;
   if (!retain) { for (const id of Object.keys(retained)) delete retained[id]; for (const id of Object.keys(containers)) delete containers[id]; }
   emit();
   if (active && listeners.size) void refresh(generation);

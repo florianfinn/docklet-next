@@ -2,8 +2,10 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
+// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
+import { READ_TAG_HEADER, SKIPPED_HEADER, type ReadTag } from "./host-read-policy";
+import { mergeInventoryObservations } from "./inventory-observations";
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
 
@@ -15,7 +17,7 @@ import { createInventoryTransport, inventoryFailure } from "./inventory-transpor
 import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
 
 function combine(observations: InventoryObservation[]): InventoryObservation {
-  return { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
+  return mergeInventoryObservations(observations);
 }
 
 export function createHostImageReader(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void) {
@@ -24,9 +26,23 @@ export function createHostImageReader(baseUrl: string, fetcher: typeof fetch, on
 }
 
 /** Security can own one host's complete inventory lifetime; the observation belongs to this read, not the shared host snapshot. */
-export function createObservedHostImageReader(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void) {
-  const { list } = createInventoryTransport(baseUrl, fetcher, onState);
+export function createObservedHostImageReader(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void, tag?: ReadTag, generation: () => number = () => 0) {
+  const loaded = new Set<string>();
+  let owner = generation();
+  const tagged: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers); if (tag) headers.set(READ_TAG_HEADER, tag);
+    let response = await fetcher(input, { ...init, headers });
+    const host = /\/environments\/([^/]+)\//.exec(String(input))?.[1];
+    if (tag && host && !loaded.has(decodeURIComponent(host)) && response.headers.has(SKIPPED_HEADER)) {
+      await response.body?.cancel(); init?.signal?.throwIfAborted();
+      headers.delete(READ_TAG_HEADER);
+      response = await fetcher(input, { ...init, headers });
+    }
+    return response;
+  };
+  const { list } = createInventoryTransport(baseUrl, tagged, onState);
   return async (hostId: string, signal?: AbortSignal) => {
+    const version = generation(); if (owner !== version) { loaded.clear(); owner = version; }
     const [images, projects, containers] = await Promise.all([
       list("list-images", hostId, "images", undefined, signal),
       list("list-projects", hostId, "projects", undefined, signal),
@@ -35,6 +51,7 @@ export function createObservedHostImageReader(baseUrl: string, fetcher: typeof f
     signal?.throwIfAborted();
     const inventory = combine([projects.observation, containers.observation, images.observation]);
     onState(hostId, inventory);
+    if (version === generation()) loaded.add(hostId);
     return { inventory, images: images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, hostId, containers.rows, projects.rows, inventory)) };
   };
 }
@@ -57,7 +74,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     const recovery = inventoryRecovery();
     const completed: T[] = [];
     const batches = await Promise.all(scope.map(async (host) => {
-      try { const { rows, inventory } = await budget((signal) => load(host, signal)); recovery.observed(host, inventory); completed.push(...rows); onPartial?.([...completed]); return rows; }
+      try { const { rows, inventory } = await budget((signal) => load(host, signal)); recovery.observed(host, inventory); onState(host.id, inventory); completed.push(...rows); onPartial?.([...completed]); return rows; }
       catch (error) {
         parent?.throwIfAborted(); recovery.failed(host, error);
         onState(host.id, inventoryFailure(host.id, error));
