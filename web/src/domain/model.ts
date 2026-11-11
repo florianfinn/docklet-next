@@ -475,6 +475,27 @@ export interface SecurityOverview {
   history: ScanRun[];
 }
 
+/** Active finding counts of one scanned local image (Dashboard); names and usage come from the container inventory. */
+export interface ActiveScannedImage {
+  /** Docker image id on its host. */
+  id: string;
+  hostId: string;
+  /** Known only where the source names the image (demo); otherwise taken from containers using it. */
+  ref?: string;
+  inUse: boolean;
+  counts: SecurityCounts;
+  /** Last completed scan; empty when the image has no completed scan yet. */
+  scannedAt: string;
+  /** The host could not be read; the counts are the last ones shown. */
+  unavailable?: boolean;
+}
+
+export interface ActiveSecurity {
+  enabled: boolean;
+  images: ActiveScannedImage[];
+  unavailable: { hostId: string; code: string }[];
+}
+
 /** Built-in Docker drivers; plugins remain displayable as arbitrary strings. */
 export type NetworkDriver = "bridge" | "host" | "none" | "null" | "macvlan" | "ipvlan" | "overlay";
 

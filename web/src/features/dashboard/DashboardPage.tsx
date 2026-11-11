@@ -6,7 +6,7 @@ import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useActionRuns, useMetrics } from "@/data/live";
-import { useCapacity, useDashboardEvents, useSchedule, useSecurity, useServiceWidgets } from "@/data/queries";
+import { useActiveSecurity, useCapacity, useDashboardEvents, useSchedule, useServiceWidgets } from "@/data/queries";
 import { useIsUser } from "@/data/use-principal";
 import { isHostVisible } from "@/domain/hosts";
 import type { Host, Tone } from "@/domain/model";
@@ -17,6 +17,7 @@ import { useHostScope, useVisibleContainers, useVisibleStacks } from "@/shared/h
 import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 
+import { activeOverview } from "./active-images";
 import { attentionItems } from "./attention";
 import { ReadinessProvider, WidgetReady } from "./readiness";
 import { firstResult, useDashboardReadiness, useWidgetReady } from "./use-readiness";
@@ -83,7 +84,9 @@ export default function DashboardPage() {
   const hosts = useHostScope();
   const stacks = useVisibleStacks();
   const containers = useVisibleContainers();
-  const security = useSecurity();
+  const security = useActiveSecurity();
+  // Active counts named by the containers using each image (AUTO-6); the Security page keeps the full overview.
+  const overview = useMemo(() => security.data && activeOverview(security.data, containers.data ?? []), [security.data, containers.data]);
   const events = useDashboardEvents();
   const runs = useActionRuns();
   const metrics = useMetrics((s) => s?.hosts);
@@ -103,7 +106,7 @@ export default function DashboardPage() {
   const capacity = useCapacity();
 
   const visibleIds = useMemo(() => new Set(hosts.visible.map((h) => h.id)), [hosts.visible]);
-  const images = useMemo(() => (security.data?.enabled ? security.data.images.filter((i) => !i.unavailable && !!i.scannedAt && isHostVisible(hosts.selection, i.hostId)) : []), [security.data, hosts.selection]);
+  const images = useMemo(() => (overview?.enabled ? overview.images.filter((i) => !i.unavailable && !!i.scannedAt && isHostVisible(hosts.selection, i.hostId)) : []), [overview, hosts.selection]);
   // Metrics tick every 2 s; disk-based items only need a coarse refresh.
   const diskKey = metrics ? Math.round(Object.values(metrics).reduce((n, m) => n + m.disk, 0)) : 0;
   const attention = useMemo(
@@ -112,9 +115,9 @@ export default function DashboardPage() {
     [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey, capacity.data],
   );
   const updates = stacks.visible.reduce((n, s) => n + s.services.filter((x) => hasUpdate(x.update)).length, 0) + containers.visible.filter((c) => c.origin !== "compose" && hasUpdate(c.update)).length;
-  const unavailableSecurity = !!security.data?.unavailable?.some((h) => isHostVisible(hosts.selection, h.hostId)) || !!security.data?.images.some((i) => i.unavailable && isHostVisible(hosts.selection, i.hostId));
-  const securityNotScanned = !!security.data?.enabled && !unavailableSecurity && !images.length;
-  const critical = security.data?.enabled && !unavailableSecurity && images.length ? images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0) : undefined;
+  const unavailableSecurity = !!overview?.unavailable?.some((h) => isHostVisible(hosts.selection, h.hostId)) || !!overview?.images.some((i) => i.unavailable && isHostVisible(hosts.selection, i.hostId));
+  const securityNotScanned = !!overview?.enabled && !unavailableSecurity && !images.length;
+  const critical = overview?.enabled && !unavailableSecurity && images.length ? images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0) : undefined;
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
   // Users only see service widgets that an administrator set up and turned on.
@@ -184,7 +187,7 @@ export default function DashboardPage() {
       case "schedule":
         return <ScheduleBody hosts={hosts.visible} byId={hosts.byId} now={now} />;
       case "security":
-        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
+        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={overview!} visibleHostIds={visibleIds} />;
       case "apps":
         return <AppsWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "events":

@@ -65,6 +65,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     getStack: unavailable,
     listContainers: unavailable,
     getSecurity: unavailable,
+    getActiveSecurity: unavailable,
     getVulnerabilityCandidates: unavailable, scanVulnerabilityCandidates: unavailable,
     getVulnerabilityAdvisory: unavailable, ignoreVulnerability: unavailable, unignoreVulnerability: unavailable,
     listEvents: unavailable,

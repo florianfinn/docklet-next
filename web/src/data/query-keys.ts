@@ -17,6 +17,8 @@ export const queryKeys = {
   serviceWidget: (kind: string) => ["service-widgets", "data", kind],
   serviceWidgetConfig: (kind: string) => ["service-widgets", "config", kind],
   security: ["security"],
+  // Under the security prefix: scans, ignores and settings changes refresh it with the overview.
+  activeSecurity: ["security", "active"],
   topology: ["topology"],
   networks: ["network-summaries"],
   events: ["events"],

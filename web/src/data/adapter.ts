@@ -15,6 +15,7 @@ import type {
   RuntimeKnowledge,
   ScheduledJob,
   SecurityOverview,
+  ActiveSecurity,
   Stack,
 } from "@/domain/model";
 
@@ -128,6 +129,8 @@ export interface DockletAdapter extends VulnerabilityCandidatesApi, Vulnerabilit
   getStack(id: string): Promise<CodedStackDetail>;
   listContainers(onPartial?: (rows: ContainerInfo[]) => void, signal?: AbortSignal): Promise<ContainerInfo[]>;
   getSecurity(signal?: AbortSignal): Promise<SecurityOverview>;
+  /** Active finding counts per scanned local image of every host; the Dashboard's security source. */
+  getActiveSecurity(signal?: AbortSignal): Promise<ActiveSecurity>;
   listEvents(): Promise<CodedEvent[]>;
   /** The last 24 hours of events, newest first, at most 500; `totalItems` counts every event of the window. */
   listDashboardEvents(): Promise<RecentEvents>;

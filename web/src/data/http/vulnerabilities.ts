@@ -12,10 +12,10 @@ import type { DockletAdapter } from "../adapter";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import type { DockerImage } from "@/domain/images";
 import { imageReference } from "@/domain/images";
-import type { Finding, Host, InventoryObservation, ScannedImage, SecurityOverview } from "@/domain/model";
+import type { ActiveScannedImage, Finding, Host, InventoryObservation, ScannedImage, SecurityOverview } from "@/domain/model";
 import { ScanAdmissionError, type ScanAdmission } from "@/domain/security";
 import { splitInventoryId } from "./inventory-mapping";
-import { array, count, counts, finding, id, invalid, object, run, summaries } from "./vulnerability-decoders";
+import { array, count, counts, finding, id, invalid, object, run, string, summaries } from "./vulnerability-decoders";
 import { createSecuritySettings, settingsValues } from "./security-settings";
 import { vulnerabilityTransport, VulnerabilityFailure } from "./vulnerability-transport";
 import type { CsrfClient } from "./csrf-client";
@@ -37,6 +37,16 @@ function errorCode(error: unknown): string {
 }
 
 const securityDeadline = hostReadDeadline(30_000, "vulnerability.read-timeout");
+/** A host's active counts; an image without a completed scan has no counts to show yet. */
+function activeImages(hostId: string, body: unknown): ActiveScannedImage[] {
+  const rows = object(object(body).data).images;
+  return (rows === null ? [] : array(rows)).map((value) => {
+    const row = object(value);
+    const scannedAt = row.lastCompletedScanAt === null ? "" : string(row.lastCompletedScanAt, 64);
+    if (typeof row.inUse !== "boolean") invalid();
+    return { id: id(row.imageId), hostId, inUse: row.inUse as boolean, counts: counts(row.summary), scannedAt };
+  });
+}
 
 /** Durable run counters are the scan progress producer; activity progress is not populated. */
 export async function readScanProgress(request: ReturnType<typeof vulnerabilityTransport>, host: string, activity: string, signal?: AbortSignal) {
@@ -44,12 +54,14 @@ export async function readScanProgress(request: ReturnType<typeof vulnerabilityT
   if (r.activityId !== activity || r.environmentId !== "0") invalid();
   return r.targets ? Math.min(100, Math.round(100 * (r.scanned + r.failed + r.skipped) / r.targets)) : undefined;
 }
-export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecurity" | "runScan" | "setScanEnabled" | "getScanSettings" | "saveScanSettings" | "cancelScan"> {
+export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecurity" | "getActiveSecurity" | "runScan" | "setScanEnabled" | "getScanSettings" | "saveScanSettings" | "cancelScan"> {
   const request = vulnerabilityTransport(o.baseUrl, o.client, o.generation);
   const settings = createSecuritySettings(request, o.capability, o.changed);
   async function require(operation: string, ref: ResourceRef) { const c = await o.capability(operation, ref); if (!c.available) throw unavailable(operation, ref, c.disabledReasonCode); }
   let retainedIdentity = o.generation(), latest = 0;
   let retained = new Map<string, ScannedImage[]>();
+  let activeIdentity = o.generation(), activeLatest = 0;
+  let activeRetained = new Map<string, ActiveScannedImage[]>();
   async function hostImages(host: Host, signal: AbortSignal, remember: (images: DockerImage[]) => void) {
     const [{ images, inventory }] = await Promise.all([
       o.images(host.id, signal).then((read) => { remember(read.images); return read; }),
@@ -140,6 +152,41 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       result.unavailable = batches.flatMap((b) => b.code ? [{ hostId: b.hostId, code: b.code }] : []);
       result.images = batches.flatMap((b) => b.images); result.findings = batches.flatMap((b) => b.findings); result.history = batches.flatMap((b) => b.history);
       return recovery.result(result);
+    },
+    async getActiveSecurity(parent) {
+      const budget = inventoryReadBudget(parent, "vulnerability.read-timeout");
+      const identity = o.generation(), sequence = ++activeLatest;
+      if (activeIdentity !== identity) { activeRetained = new Map(); activeIdentity = identity; }
+      const check = () => { if (identity !== o.generation() || sequence !== activeLatest) throw new CancelledError(); };
+      const { enabled, hosts } = await securityDeadline(async (signal) => {
+        await require("getSecurity", { kind: "hub", id: "0" });
+        check(); signal.throwIfAborted();
+        const values = settingsValues(await request("/environments/0/settings/public", "GET", undefined, false, signal));
+        if (!["true", "false"].includes(values.featureVulnerabilityManagementEnabled ?? "")) invalid();
+        const enabled = values.featureVulnerabilityManagementEnabled === "true";
+        return { enabled, hosts: enabled ? await o.hosts() : [] };
+      }, parent).catch((error: unknown) => { check(); throw error; });
+      check();
+      if (!enabled) { activeRetained = new Map(); return { enabled, images: [], unavailable: [] }; }
+      const batches = await Promise.all(hosts.map(async (host) => {
+        try {
+          const images = await budget(async (signal) => {
+            await require("getSecurity", { kind: "host", id: host.id });
+            return activeImages(host.id, await request(`/environments/${encodeURIComponent(host.id)}/images/vulnerabilities/active-summaries`, "POST", {}, true, signal, true, "background"));
+          });
+          check();
+          return { hostId: host.id, images };
+        } catch (error) {
+          check();
+          if (isCancelledError(error)) throw error;
+          // The host's last counts stay visible as new objects, marked unavailable.
+          return { hostId: host.id, images: (activeRetained.get(host.id) ?? []).map((i) => ({ ...i, unavailable: true })), code: errorCode(error) };
+        }
+      }));
+      check();
+      // Only a fresh answer replaces a host's retained counts; hosts no longer listed are forgotten.
+      activeRetained = new Map(batches.map((b) => [b.hostId, b.code ? activeRetained.get(b.hostId) ?? [] : b.images]));
+      return { enabled, images: batches.flatMap((b) => b.images), unavailable: batches.flatMap((b) => (b.code ? [{ hostId: b.hostId, code: b.code }] : [])) };
     },
     async runScan(input) {
       let selected: string[];
