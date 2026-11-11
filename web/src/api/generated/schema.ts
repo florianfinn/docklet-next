@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 52835da5b6edf4d28fa4c85b8d54010cf181a536db8b54fd8e40608b9c1f3977
+// Revision: 7ed1cce8a1eb1fc61dcaed54bd66f1027e74e66780d47e806e227f3c9e3af4c4
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -35336,8 +35336,10 @@ export interface operations {
                 order?: string;
                 /** @description Start index */
                 start?: number;
-                /** @description Limit */
+                /** @description Limit (default 20, or 500 with since) */
                 limit?: number;
+                /** @description Inclusive RFC 3339 event timestamp lower bound */
+                since?: string;
                 /** @description Filter by severity */
                 severity?: string;
                 /** @description Filter by event type (exact type or category prefix, comma-separated) */
@@ -35380,8 +35382,10 @@ export interface operations {
                 order?: string;
                 /** @description Start index */
                 start?: number;
-                /** @description Limit */
+                /** @description Limit (default 20, or 500 with since) */
                 limit?: number;
+                /** @description Inclusive RFC 3339 event timestamp lower bound */
+                since?: string;
                 /** @description Filter by severity */
                 severity?: string;
                 /** @description Filter by event type (exact type or category prefix, comma-separated) */

@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; typed bounded event window inputs
 
 package event
 
 import (
 	"context"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/base"
@@ -22,26 +23,28 @@ type EventHandler struct {
 }
 
 type ListEventsInput struct {
-	Search   string `query:"search" doc:"Search query"`
-	Sort     string `query:"sort" doc:"Column to sort by"`
-	Order    string `query:"order" default:"asc" doc:"Sort direction"`
-	Start    int    `query:"start" default:"0" doc:"Start index"`
-	Limit    int    `query:"limit" default:"20" doc:"Limit"`
-	Severity string `query:"severity" doc:"Filter by severity"`
-	Type     string `query:"type" doc:"Filter by event type (exact type or category prefix, comma-separated)"`
+	Search   string                     `query:"search" doc:"Search query"`
+	Sort     string                     `query:"sort" doc:"Column to sort by"`
+	Order    string                     `query:"order" default:"asc" doc:"Sort direction"`
+	Start    int                        `query:"start" default:"0" doc:"Start index"`
+	Limit    eventQueryParam[int]       `query:"limit" doc:"Limit (default 20, or 500 with since)"`
+	Since    eventQueryParam[time.Time] `query:"since" doc:"Inclusive RFC 3339 event timestamp lower bound"`
+	Severity string                     `query:"severity" doc:"Filter by severity"`
+	Type     string                     `query:"type" doc:"Filter by event type (exact type or category prefix, comma-separated)"`
 }
 
 type GetEventStatsInput struct{}
 
 type GetEventsByEnvironmentInput struct {
-	EnvironmentID string `path:"environmentId" doc:"Environment ID"`
-	Search        string `query:"search" doc:"Search query"`
-	Sort          string `query:"sort" doc:"Column to sort by"`
-	Order         string `query:"order" default:"asc" doc:"Sort direction"`
-	Start         int    `query:"start" default:"0" doc:"Start index"`
-	Limit         int    `query:"limit" default:"20" doc:"Limit"`
-	Severity      string `query:"severity" doc:"Filter by severity"`
-	Type          string `query:"type" doc:"Filter by event type (exact type or category prefix, comma-separated)"`
+	EnvironmentID string                     `path:"environmentId" doc:"Environment ID"`
+	Search        string                     `query:"search" doc:"Search query"`
+	Sort          string                     `query:"sort" doc:"Column to sort by"`
+	Order         string                     `query:"order" default:"asc" doc:"Sort direction"`
+	Start         int                        `query:"start" default:"0" doc:"Start index"`
+	Limit         eventQueryParam[int]       `query:"limit" doc:"Limit (default 20, or 500 with since)"`
+	Since         eventQueryParam[time.Time] `query:"since" doc:"Inclusive RFC 3339 event timestamp lower bound"`
+	Severity      string                     `query:"severity" doc:"Filter by severity"`
+	Type          string                     `query:"type" doc:"Filter by event type (exact type or category prefix, comma-separated)"`
 }
 
 type DeleteEventInput struct {
@@ -50,7 +53,10 @@ type DeleteEventInput struct {
 
 // ListEvents returns a paginated list of events.
 func (h *EventHandler) ListEvents(ctx context.Context, input *ListEventsInput) (*handlerutil.Page[event.Event], error) {
-	params := handlerutil.PaginationParams(input.Start, input.Limit, input.Sort, input.Order, input.Search)
+	params, err := eventPaginationParams(input.Start, input.Limit, input.Sort, input.Order, input.Search, input.Since)
+	if err != nil {
+		return nil, err
+	}
 
 	if input.Severity != "" {
 		params.Filters["severity"] = input.Severity
@@ -94,7 +100,10 @@ func (h *EventHandler) GetEventsByEnvironment(ctx context.Context, input *GetEve
 		return nil, huma.Error400BadRequest("Environment ID is required")
 	}
 
-	params := handlerutil.PaginationParams(input.Start, input.Limit, input.Sort, input.Order, input.Search)
+	params, err := eventPaginationParams(input.Start, input.Limit, input.Sort, input.Order, input.Search, input.Since)
+	if err != nil {
+		return nil, err
+	}
 
 	if input.Severity != "" {
 		params.Filters["severity"] = input.Severity
