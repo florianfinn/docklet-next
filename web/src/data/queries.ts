@@ -19,7 +19,6 @@ import { useIsUser } from "./use-principal";
 import { useAdapter } from "./use-adapter";
 import type { RecentEvents } from "./adapter";
 import { queryKeys } from "./query-keys";
-import { OWN_REFRESH } from "./refresh-owner";
 
 // Initial reads stream host batches; refetches retain the complete cached result.
 function initialBatches<T>(client: QueryClient, key: QueryKey, signal: AbortSignal): (rows: T) => void {
@@ -81,7 +80,7 @@ export function useTopology() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology), INVENTORY_READ_TAG) });
+  return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology), INVENTORY_READ_TAG, signal) });
 }
 
 /** The Dashboard's security source: active counts per scanned image, without catalogue or findings reads. */
@@ -95,7 +94,7 @@ export function useEvents() {
   const adapter = useAdapter();
   const locale = useLocale();
   const select = useMemo(() => (events: CodedEvent[]) => events.map((event) => renderEvent(event, locale)), [locale]);
-  return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select, meta: OWN_REFRESH });
+  return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select });
 }
 
 /** The Dashboard's bounded window (24 h, at most 500); the Activity Center keeps the full history (`useEvents`). */
@@ -103,7 +102,7 @@ export function useDashboardEvents() {
   const adapter = useAdapter();
   const locale = useLocale();
   const select = useMemo(() => (page: RecentEvents) => ({ events: page.events.map((event) => renderEvent(event, locale)), totalItems: page.totalItems }), [locale]);
-  return useQuery({ queryKey: queryKeys.dashboardEvents, queryFn: () => adapter.listDashboardEvents(), select, meta: OWN_REFRESH });
+  return useQuery({ queryKey: queryKeys.dashboardEvents, queryFn: () => adapter.listDashboardEvents(), select });
 }
 
 export function useActionsQuery() {

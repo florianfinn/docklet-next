@@ -260,8 +260,11 @@ export interface ConnectNetworkInput {
  * "containers" topics; every call is checked again on the adapter side.
  */
 export interface NetworksApi {
-  /** The caller supplies its existing query snapshot for host-local read fallback. */
-  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology, tag?: ReadTag): Promise<Topology>;
+  /**
+   * The caller supplies its existing query snapshot for host-local read fallback. `attempt` is the caller's fetch
+   * signal: it identifies the attempt for its freshness boundary only and never aborts the read.
+   */
+  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology, tag?: ReadTag, attempt?: AbortSignal): Promise<Topology>;
   /** Field errors throw "invalid-network"; disconnected hosts "host-offline". */
   createNetwork(input: CreateNetworkInput): Promise<TopologyNetwork>;
   /** Refused for Docker's own networks, Compose-owned networks and while containers are attached. */

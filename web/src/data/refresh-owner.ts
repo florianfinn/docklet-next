@@ -8,9 +8,6 @@ import { isCancelledError, type Query, type QueryClient, type QueryKey, type Que
 
 type QueryBehavior = NonNullable<QueryOptions["behavior"]>;
 
-/** Query meta of reads whose adapter owner coalesces its own refreshes (the event reads): never superseded here. */
-export const OWN_REFRESH = { ownRefresh: true } as const;
-
 /** Repeats of one fetch after changes arrived during it; the last outcome stands. */
 export const MAX_SUPERSEDED_REPEATS = 3;
 
@@ -94,7 +91,7 @@ export function refresh(client: QueryClient, keys: readonly QueryKey[], exactKey
   // Every running fetch learns of the change: a refetch of loaded data repeats (and gets a tail for a late change), a
   // first load repeats only when its source fenced it; its value joins the change as before.
   for (const query of queries) {
-    if (query.state.fetchStatus !== "fetching" || query.meta?.ownRefresh) continue;
+    if (query.state.fetchStatus !== "fetching") continue;
     epochs.set(query, epochOf(query) + 1);
     if (initial.get(query) === false) tail(client, query);
   }

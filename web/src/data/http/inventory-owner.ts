@@ -28,12 +28,12 @@ export function createInventoryOwner(generation: () => number, hosts: Catalogue,
   let readHosts = new Map<string, Set<string>>();
   let volumeRows = new Map<string, Volume[]>();
   const current = (version: number) => { if (version !== generation()) throw new CancelledError(); };
-  async function scope(operation: string, parent: AbortSignal | undefined, version: number) {
+  async function scope(operation: string, parent: AbortSignal | undefined, version: number, attempt = parent) {
     try {
       const rows = await hostReadDeadline(30_000, "http.error")(async (signal) => {
         await requireCapability(operation === "listNetworkSummaries" ? "getTopology" : operation); signal.throwIfAborted();
         // The catalogue read starts after every change notified so far: the attempt reads their state.
-        freshFrom(parent);
+        freshFrom(attempt);
         const rows = await hosts(); signal.throwIfAborted(); return rows;
       }, parent);
       current(version);
@@ -107,7 +107,9 @@ export function createInventoryOwner(generation: () => number, hosts: Catalogue,
           const tag = (method === "listNetworkSummaries" ? args[1] : args[2]) as ReadTag | undefined;
           const parent = method === "listNetworkSummaries" ? args[0] : method === "getTopology" ? undefined : args[1];
           const loadedHosts = readHosts.get(method) ?? new Set<string>(); readHosts.set(method, loadedHosts);
-          const { rows, stale } = await scope(method, parent as AbortSignal | undefined, version);
+          // Topology reads are not aborted; its last argument only names the attempt for the freshness boundary.
+          const attempt = method === "getTopology" ? args[3] : parent;
+          const { rows, stale } = await scope(method, parent as AbortSignal | undefined, version, attempt as AbortSignal | undefined);
           const mark = <R extends object>(result: R): R => {
             const next = stale ? annotate(result) : result;
             copyInventoryRecovery(result, next, stale ? rows : []);

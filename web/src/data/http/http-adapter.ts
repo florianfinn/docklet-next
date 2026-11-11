@@ -297,15 +297,16 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let environmentState: string | undefined;
   const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology", "security"];
   const environmentCache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, gcTime: 30_000 } } });
-  const environmentsKey = ["environments"];
-  const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: async () => {
+  // Each invalidation starts a new catalogue version: a read in flight from before it is never joined by later callers.
+  let catalogueVersion = 0;
+  const environments = () => environmentCache.fetchQuery({ queryKey: ["environments", catalogueVersion], queryFn: async () => {
     const token = hostPolicy.beginCatalogue();
     const rows = await page("listEnvironments", "/environments", 100);
     hostPolicy.applyCatalogue(token, rows);
     return rows;
   } });
   function invalidateCapabilities() { capabilityReads.clear(); }
-  function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
+  function invalidateEnvironments() { sharedReads.clear(); catalogueVersion++; }
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
     inventoryOwner.reset();
@@ -695,11 +696,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   async function listHosts() {
     const version = identityGeneration;
     await requireCapability("listHosts");
+    const catalogue = catalogueVersion;
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();
     try {
       const hosts = rows.map((row) => ({ ...mapHost(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row), inventory: observations.get(row.id) }));
-      environmentState = environmentKey(rows);
+      // A catalogue from before a later stream frame does not replace the state that frame compared against.
+      if (catalogue === catalogueVersion) environmentState = environmentKey(rows);
       return hosts;
     }
     catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }

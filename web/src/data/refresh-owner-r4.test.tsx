@@ -34,7 +34,7 @@ it.each([false, true])("R4G-1 a restart before the offline wave resolves reads t
   f.release(); await tick(100);
   expect(client.getQueryState(["images"])?.fetchStatus).toBe("idle");
   expect(client.getQueryState(["images"])?.status).toBe("success");
-  
+
   expect(f.requests.filter(p => p.path.endsWith("second/images"))).toHaveLength(1);
 });
 
@@ -89,7 +89,6 @@ it("R4G event owner keeps one running read and one pending read for a warm notif
   frame(); frame(); await tick(50);
   f.release(); await tick(100);
   expect(client.getQueryState(["dashboard-events"])?.fetchStatus).toBe("idle");
-  
+
   expect(f.requests.filter(p=>p.path === "/api/events")).toHaveLength(2);
 });
-
