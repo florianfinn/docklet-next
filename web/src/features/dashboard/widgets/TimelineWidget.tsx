@@ -36,7 +36,8 @@ export const TimelineWidget = memo(function TimelineWidget({ events, hosts, now,
   const t = useTranslations("dashboard.timeline");
   const buckets = timelineBuckets(events, hosts.map((h) => h.id), now);
   const shown = [...buckets.values()].flat();
-  if (!shown.length) return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
+  // The bounded window may hold no event of the shown hosts while it was truncated: keep the full-history link.
+  if (!shown.length) return <div className="flex flex-col gap-1 text-sm text-muted-foreground"><p>{t("empty")}</p><p className="flex text-xs"><RecentEventsLimit total={total} /></p></div>;
   const kinds = [...new Set(shown.flatMap((b) => b.events.map((e) => e.kind)))];
 
   return (

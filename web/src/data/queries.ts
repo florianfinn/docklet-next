@@ -86,7 +86,8 @@ export function useTopology() {
 /** The Dashboard's security source: active counts per scanned image, without catalogue or findings reads. */
 export function useActiveSecurity() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.activeSecurity, queryFn: ({ signal }) => adapter.getActiveSecurity(signal) });
+  const recovery = useInventoryRecovery();
+  return useQuery({ ...recovery, queryKey: queryKeys.activeSecurity, queryFn: ({ signal }) => adapter.getActiveSecurity(signal) });
 }
 
 export function useEvents() {

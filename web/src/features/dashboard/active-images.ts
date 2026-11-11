@@ -7,6 +7,7 @@
 import type { ActiveSecurity, ContainerInfo, ScannedImage, SecurityOverview } from "@/domain/model";
 
 const shortId = (id: string) => id.replace(/^sha256:/, "").slice(0, 12);
+const inventoryImageId = (hostId: string, id: string) => `${hostId}~${id}`;
 
 /**
  * The Dashboard's security overview: active counts per scanned image, named and attributed by the containers that
@@ -21,7 +22,8 @@ export function activeOverview(active: ActiveSecurity, containers: readonly Cont
     if (list) list.push(c); else users.set(key, [c]);
   }
   const images: ScannedImage[] = active.images.map((image) => {
-    const used = users.get(`${image.hostId}\u0000${image.id}`) ?? [];
+    // Containers carry the inventory image id (`host~sha256:…`); the active counts carry the raw image id.
+    const used = users.get(`${image.hostId}\u0000${inventoryImageId(image.hostId, image.id)}`) ?? [];
     const first = used[0];
     const ref = first ? `${first.image.repository}:${first.image.tag}` : image.ref ?? shortId(image.id);
     const usage = used.some((c) => c.state === "running") ? "running" : used.length || image.inUse ? "stopped" : "unused";

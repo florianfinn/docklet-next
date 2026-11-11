@@ -213,7 +213,7 @@ const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: 
 
 export function EventsWidget({ events, hosts, total }: { events: OpsEvent[]; hosts: Map<string, Host>; total?: number }) {
   const t = useTranslations("dashboard.events");
-  if (!events.length) return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
+  if (!events.length) return <div className="flex flex-col gap-1 text-sm text-muted-foreground"><p>{t("empty")}</p><p className="flex text-xs"><RecentEventsLimit total={total} /></p></div>;
   return (
     <ScrollArea className="h-full">
       <p className="flex pr-2 text-xs text-muted-foreground"><RecentEventsLimit total={total} /></p>

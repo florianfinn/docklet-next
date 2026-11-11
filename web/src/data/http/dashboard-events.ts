@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original owner of the Dashboard's bounded recent-events read and its stream triggers.
 
+import { CancelledError } from "@tanstack/react-query";
 import { RECENT_EVENT_LIMIT } from "../adapter";
 import { createSingleFlight } from "./single-flight";
 
@@ -35,7 +36,10 @@ export function createDashboardEvents<T>(read: (signal: AbortSignal) => Promise<
   function refresh() { void flight.notify().catch(() => undefined); changed(); }
   return {
     async load(): Promise<T> {
+      // A waiter released by an identity reset belongs to the old identity and never starts a read.
+      const version = generation();
       if (gate) await gate;
+      if (version !== generation()) throw new CancelledError();
       issued = true;
       return flight.request();
     },

@@ -168,6 +168,8 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       }, parent).catch((error: unknown) => { check(); throw error; });
       check();
       if (!enabled) { activeRetained = new Map(); return { enabled, images: [], unavailable: [] }; }
+      // A transient failure of an online host schedules the query's recovery refetch, as for getSecurity.
+      const recovery = inventoryRecovery();
       const batches = await Promise.all(hosts.map(async (host) => {
         try {
           const images = await budget(async (signal) => {
@@ -179,6 +181,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         } catch (error) {
           check();
           if (isCancelledError(error)) throw error;
+          recovery.failed(host, errorCode(error));
           // The host's last counts stay visible as new objects, marked unavailable.
           return { hostId: host.id, images: (activeRetained.get(host.id) ?? []).map((i) => ({ ...i, unavailable: true })), code: errorCode(error) };
         }
@@ -186,7 +189,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       check();
       // Only a fresh answer replaces a host's retained counts; hosts no longer listed are forgotten.
       activeRetained = new Map(batches.map((b) => [b.hostId, b.code ? activeRetained.get(b.hostId) ?? [] : b.images]));
-      return { enabled, images: batches.flatMap((b) => b.images), unavailable: batches.flatMap((b) => (b.code ? [{ hostId: b.hostId, code: b.code }] : [])) };
+      return recovery.result({ enabled, images: batches.flatMap((b) => b.images), unavailable: batches.flatMap((b) => (b.code ? [{ hostId: b.hostId, code: b.code }] : [])) });
     },
     async runScan(input) {
       let selected: string[];

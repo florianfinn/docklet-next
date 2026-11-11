@@ -32,11 +32,18 @@ export function mapHostMetrics(value: unknown, hostId: string, previous?: HostMe
     cpuHistory: [...previous?.cpuHistory ?? [], cpu].slice(-60), memHistory: [...previous?.memHistory ?? [], mem].slice(-60), inventory: { stale: false, observedAt: new Date().toISOString() } };
 }
 
+/** How long an online host's stats socket may stay silent before its metrics count as unavailable. */
+export const METRICS_FIRST_SAMPLE_MS = 10_000;
+
 export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, listHosts: () => Promise<Host[]>, requireCapability: (op: string) => Promise<void>, socketFactory: (url: string) => MetricsSocket, onState: (hostId: string, state: InventoryObservation) => void, checkIdentity: () => Promise<boolean> = async () => true, admit: () => Promise<void> = async () => {}) {
   const retained: Record<string, HostMetrics> = {};
   const containers: MetricsSnapshot["containers"] = {};
   const listeners = new Set<(snapshot: MetricsSnapshot) => void>();
   const sockets = new Map<string, MetricsSocket>();
+  // Online hosts without a first sample: the socket failed or stayed silent past the first-sample wait.
+  const unavailable = new Set<string>();
+  const firstSampleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const clearFirstSample = (id: string) => { clearTimeout(firstSampleTimers.get(id)); firstSampleTimers.delete(id); };
   const { list } = createInventoryTransport(baseUrl, fetcher, (hostId, state) => { if (state.stale) { stale(hostId, state.reason); emit(); } });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let generation = 0;
@@ -46,13 +53,14 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
     ++generation; lifetime.abort(); lifetime = new AbortController();
     if (timer) clearTimeout(timer); timer = undefined;
     for (const socket of sockets.values()) socket.close(); sockets.clear();
+    for (const id of [...firstSampleTimers.keys()]) clearFirstSample(id);
   }
   function visibilityChanged() {
     if (document.hidden) stop();
     else if (authenticated && listeners.size) void refresh(generation);
   }
   function emit() {
-    const snapshot: MetricsSnapshot = { at: new Date().toISOString(), simulated: false, hosts: { ...retained }, containers: { ...containers } };
+    const snapshot: MetricsSnapshot = { at: new Date().toISOString(), simulated: false, hosts: { ...retained }, containers: { ...containers }, unavailable: [...unavailable] };
     listeners.forEach((push) => push(snapshot));
   }
   function stale(id: string, reason: InventoryObservation["reason"] = "agent.unavailable") {
@@ -74,6 +82,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
       for (const id of Object.keys(retained)) if (!ids.has(id)) delete retained[id];
       for (const id of Object.keys(containers)) if (!ids.has(id.split("~")[0]!)) delete containers[id];
       for (const [id, socket] of sockets) if (!ids.has(id)) { sockets.delete(id); socket.close(); }
+      for (const id of [...unavailable]) if (!hosts.some((h) => h.id === id && h.status === "online")) unavailable.delete(id);
       for (const h of hosts) {
         if (h.status !== "online") {
           stale(h.id, h.inventory?.reason ?? (h.status === "update-required" ? "agent.update-required" : h.status === "token-rejected" ? "agent.invalid-token" : "agent.unavailable"));
@@ -85,14 +94,24 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
           url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
           const socket = socketFactory(url.href);
           sockets.set(h.id, socket);
+          if (!retained[h.id]) {
+            clearFirstSample(h.id);
+            firstSampleTimers.set(h.id, setTimeout(() => {
+              firstSampleTimers.delete(h.id);
+              if (current === generation && !retained[h.id]) { unavailable.add(h.id); emit(); }
+            }, METRICS_FIRST_SAMPLE_MS));
+          }
           socket.onmessage = (event) => {
             if (current !== generation || sockets.get(h.id) !== socket) return;
-            try { retained[h.id] = mapHostMetrics(JSON.parse(String(event.data)), h.id, retained[h.id]); emit(); }
-            catch (error) { const state = inventoryFailure(h.id, error); stale(h.id, state.reason); onState(h.id, state); emit(); }
+            clearFirstSample(h.id);
+            try { retained[h.id] = mapHostMetrics(JSON.parse(String(event.data)), h.id, retained[h.id]); unavailable.delete(h.id); emit(); }
+            catch (error) { const state = inventoryFailure(h.id, error); stale(h.id, state.reason); if (!retained[h.id]) unavailable.add(h.id); onState(h.id, state); emit(); }
           };
           socket.onclose = socket.onerror = () => {
             if (current !== generation || sockets.get(h.id) !== socket) return;
-            sockets.delete(h.id); socket.close(); stale(h.id); emit();
+            sockets.delete(h.id); socket.close(); stale(h.id); clearFirstSample(h.id);
+            if (!retained[h.id]) unavailable.add(h.id);
+            emit();
             void checkIdentity().catch(() => undefined);
           };
         }
@@ -141,7 +160,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
   };
   return Object.assign(subscribe, { reset(active: boolean, retain = false) {
   stop(); authenticated = active;
-  if (!retain) { for (const id of Object.keys(retained)) delete retained[id]; for (const id of Object.keys(containers)) delete containers[id]; }
+  if (!retain) { for (const id of Object.keys(retained)) delete retained[id]; for (const id of Object.keys(containers)) delete containers[id]; unavailable.clear(); }
   emit();
   if (active && listeners.size) void refresh(generation);
   } });

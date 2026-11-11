@@ -419,6 +419,8 @@ export interface MetricsSnapshot {
   hosts: Record<string, HostMetrics>;
   /** Keyed by container id. */
   containers: Record<string, ContainerMetrics>;
+  /** Online hosts whose stats socket failed, or sent nothing in time, before their first sample. */
+  unavailable?: readonly string[];
 }
 
 export type Severity = "critical" | "high" | "medium" | "low" | "unknown";

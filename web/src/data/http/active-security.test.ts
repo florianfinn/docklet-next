@@ -8,6 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import type { ContainerInfo } from "@/domain/model";
 import { activeOverview } from "@/features/dashboard/active-images";
+import { INVENTORY_RECOVERY_MS, inventoryRecoveryInterval } from "../inventory-recovery";
 import { securityFixture } from "./vulnerabilities.test-support";
 
 const summary = (critical: number, high: number) => ({ critical, high, medium: 1, low: 0, unknown: 0, total: critical + high + 1 });
@@ -71,7 +72,7 @@ it("AUTO-6 the Dashboard names images by their containers, keeps today's totals 
   const overview = activeOverview({ enabled: true, unavailable: [], images: [
     { id: "sha256:aaa", hostId: "first", inUse: true, counts: { critical: 1, high: 2, medium: 1, low: 0, unknown: 0 }, scannedAt: "x" },
     { id: "sha256:bbbbbbbbbbbbbbbb", hostId: "first", inUse: false, counts: { critical: 0, high: 1, medium: 1, low: 0, unknown: 0 }, scannedAt: "x" },
-  ] }, [container("web", "sha256:aaa", "running", "app"), container("other", "sha256:aaa", "exited")]);
+  ] }, [container("web", "first~sha256:aaa", "running", "app"), container("other", "first~sha256:aaa", "exited")]);
   expect(overview.images.map((i) => [i.ref, i.usage, i.stackId])).toEqual([["example.com/app:1", "running", "app"], ["bbbbbbbbbbbb", "unused", undefined]]);
   expect(overview.images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0)).toBe(4);
 });
@@ -90,4 +91,28 @@ it("the read is tagged: an offline host is skipped without a request and keeps i
   expect(sent.filter((s) => s.path.startsWith("/api/environments/first/")).length).toBe(before);
   expect(after.images.filter((i) => i.hostId === "first").every((i) => i.unavailable === true)).toBe(true);
   expect(after.unavailable.map((u) => [u.hostId, u.code])).toEqual([["first", "agent.unavailable"]]);
+});
+
+it("R1D-1 the Dashboard joins active counts to the adapter's mapped containers: name, running state and stack of the real producer", async () => {
+  const { f, answers } = active();
+  answers.first = { images: [
+    { imageId: "sha256:user", inUse: true, lastCompletedScanAt: "2026-11-11T10:00:00Z", latestAttemptStatus: "completed", summary: summary(1, 0) },
+    { imageId: "sha256:dddddddddddddddd", inUse: false, lastCompletedScanAt: "2026-11-11T10:00:00Z", latestAttemptStatus: "completed", summary: summary(0, 0) },
+  ] };
+  const containers = await f.adapter.listContainers();
+  const overview = activeOverview(await f.adapter.getActiveSecurity(), containers);
+  expect(overview.images.filter((i) => i.hostId === "first").map((i) => [i.ref, i.usage, i.stackId])).toEqual([
+    ["example:1.0.0", "running", "first~project"],
+    ["dddddddddddd", "unused", undefined],
+  ]);
+});
+
+it("R1D-4 a transient failure of an online host schedules recovery; a skipped offline host does not", async () => {
+  const { f } = active();
+  await f.adapter.getActiveSecurity();
+  f.state.failureHost = "first";
+  const failed = await f.adapter.getActiveSecurity();
+  const hosts = await f.adapter.listHosts();
+  expect(inventoryRecoveryInterval(failed, hosts.map((h) => ({ ...h, status: "online" as const })))).toBe(INVENTORY_RECOVERY_MS);
+  expect(inventoryRecoveryInterval(failed, hosts.map((h) => ({ ...h, status: "offline" as const })))).toBe(false);
 });

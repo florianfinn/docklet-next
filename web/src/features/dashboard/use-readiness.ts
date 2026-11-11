@@ -21,17 +21,18 @@ export function useWidgetReady(id: string, ready: boolean): void {
 }
 
 /**
- * `core` once hosts, stacks and containers have their first complete results; `settled` once every shown widget
- * reported too. Both stay set for this page visit (later refetches do not clear them).
+ * `core` once hosts, stacks and containers have their first complete results; `settled` once the shown widgets are
+ * known and every one reported too. Both stay set for this page visit (later refetches do not clear them).
  */
-export function useDashboardReadiness(visible: readonly string[], core: boolean) {
+export function useDashboardReadiness(visible: readonly string[], core: boolean, known = true) {
   const [reported, setReported] = useState<ReadonlySet<string>>(() => new Set());
   const [coreReady, setCoreReady] = useState(false);
   const [settled, setSettled] = useState(false);
   const report = useCallback<ReadyReport>((id) => setReported((old) => (old.has(id) ? old : new Set(old).add(id))), []);
   // Sticky flags derived while rendering.
   if (core && !coreReady) setCoreReady(true);
-  const all = (coreReady || core) && visible.every((id) => reported.has(id));
+  // `known`: the set of shown widgets is final (service summaries answered).
+  const all = (coreReady || core) && known && visible.every((id) => reported.has(id));
   if (all && !settled) setSettled(true);
   return { coreReady: coreReady || core, settled: settled || all, report };
 }

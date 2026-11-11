@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original proofs for Dashboard readiness markers and hidden-widget reads (L3-i, L3-m).
 
-import { act, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
@@ -12,7 +12,7 @@ import { simulationStore } from "@/data/demo/simulation";
 import { renderWithApp } from "@/test/render";
 
 import DashboardPage from "./DashboardPage";
-import { CORE_WIDGETS, layoutStore } from "./dashboard-layout";
+import { CORE_WIDGETS, WIDGET_IDS, layoutStore } from "./dashboard-layout";
 import { firstResult } from "./use-readiness";
 
 beforeEach(() => { simulationStore.set((s) => ({ ...s, latency: "instant", live: false })); });
@@ -71,4 +71,46 @@ it("L3-i a partial inventory seed (data while still fetching) is not a first com
     firstResult({ isError: false, isSuccess: true, fetchStatus: "idle" }),
     firstResult({ isError: true, isSuccess: false, fetchStatus: "idle" }),
   ]).toEqual([false, true, true]);
+});
+
+it("R1D-2 settled waits for the service summaries, then for the shown service detail", async () => {
+  const demo = createDemoAdapter();
+  const summary = held<Awaited<ReturnType<NonNullable<typeof demo.listServiceWidgets>>>>();
+  const detail = held<Awaited<ReturnType<NonNullable<typeof demo.getServiceWidget>>>>();
+  const getServiceWidget = vi.fn(() => detail.promise);
+  layoutStore.set((l) => ({ ...l, hidden: WIDGET_IDS.filter((id) => id !== "plex") }));
+  renderWithApp(<DashboardPage />, { ...demo, listServiceWidgets: () => summary.promise, getServiceWidget });
+  await waitFor(() => expect(marks()[0]).toBe(true));
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  const beforeSummary = marks()[1];
+  await act(async () => { summary.resolve((await demo.listServiceWidgets!()).map((w) => w.kind === "plex" ? { ...w, configured: true, enabled: true } : w)); });
+  await waitFor(() => expect(getServiceWidget).toHaveBeenCalled());
+  const beforeDetail = marks()[1];
+  await act(async () => { detail.resolve(await demo.getServiceWidget!("plex")); });
+  await waitFor(() => expect(marks()[1]).toBe(true));
+  expect([beforeSummary, beforeDetail]).toEqual([false, false]);
+});
+
+it("R1D-3 a core inventory error settles with its error shown", async () => {
+  const demo = createDemoAdapter();
+  layoutStore.set((l) => ({ ...l, hidden: WIDGET_IDS.filter((id) => id !== "events") }));
+  renderWithApp(<DashboardPage />, { ...demo, listStacks: async () => { throw new Error("example inventory failure"); } });
+  // The error UI is the effect; the markers are read once it is shown.
+  await screen.findByRole("alert");
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect(marks()).toEqual([true, true]);
+});
+
+it("R1D-3 the load widget settles when online hosts' metrics are explicitly unavailable before any sample", async () => {
+  const demo = createDemoAdapter();
+  const hosts = (await demo.listHosts()).map((h) => ({ ...h, status: "online" as const }));
+  layoutStore.set((l) => ({ ...l, hidden: WIDGET_IDS.filter((id) => id !== "load") }));
+  let push!: (snapshot: { at: string; simulated: boolean; hosts: Record<string, never>; containers: Record<string, never>; unavailable?: string[] }) => void;
+  renderWithApp(<DashboardPage />, { ...demo, listHosts: async () => hosts, subscribeMetrics: (listener) => { push = listener; listener({ at: "2026-11-11T12:00:00Z", simulated: false, hosts: {}, containers: {} }); return () => {}; } });
+  await waitFor(() => expect(marks()[0]).toBe(true));
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  const beforeOutcome = marks()[1];
+  act(() => push({ at: "2026-11-11T12:00:10Z", simulated: false, hosts: {}, containers: {}, unavailable: hosts.map((h) => h.id) }));
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect([beforeOutcome, marks()[1]]).toEqual([false, true]);
 });

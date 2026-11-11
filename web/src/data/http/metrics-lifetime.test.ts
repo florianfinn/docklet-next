@@ -5,6 +5,7 @@
 // Deviations: Original adapter-boundary scope, reason, retention and lifetime regression coverage. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { afterEach, expect, it, vi } from "vitest";
+import { METRICS_FIRST_SAMPLE_MS } from "./metrics";
 import { resourceFixture } from "./resources.test-support";
 import type { MetricsSnapshot } from "@/domain/model";
 
@@ -79,4 +80,21 @@ it.each([false, true])("L3-h identity loss aborts CPU with subscribers still mou
   await vi.waitFor(() => expect(entered).toBe(true));
   await f.adapter.getHubBackupStorage().catch(() => undefined);
   await vi.waitFor(() => expect(aborted).toBe(true)); stop();
+});
+
+it("R1D-3 an online host whose stats socket fails or stays silent before its first sample is reported unavailable, and a later sample clears it", async () => {
+  vi.useFakeTimers(); const f = resourceFixture(); f.state.hostIds = ["first", "second"];
+  let snapshot: MetricsSnapshot | undefined;
+  const stop = f.adapter.subscribeMetrics((value) => { snapshot = value; });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(snapshot?.unavailable ?? []).toEqual([]);
+  // first: the socket fails before any sample; second: the socket stays silent.
+  f.sockets.get("first")!.onerror?.({} as Event);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(snapshot?.unavailable).toEqual(["first"]);
+  await vi.advanceTimersByTimeAsync(METRICS_FIRST_SAMPLE_MS);
+  expect([...(snapshot?.unavailable ?? [])].sort()).toEqual(["first", "second"]);
+  f.sample("second");
+  expect([snapshot?.unavailable, !!snapshot?.hosts.second]).toEqual([["first"], true]);
+  stop();
 });

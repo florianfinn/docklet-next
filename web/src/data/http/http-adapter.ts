@@ -653,7 +653,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!maintenanceSeen) return;
     maintenanceSeen = false;
     invalidateCapabilities(); invalidateEnvironments(); backups.invalidate();
-    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "dashboardEvents", "schedule", "volumes", "settings", "images", "registries"]));
+    // The event owner queues a fresh snapshot behind any read that started before the restore.
+    dashboardEvents.missed();
+    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "schedule", "volumes", "settings", "images", "registries"]));
   });
 
   function scheduleReconnect(): void {

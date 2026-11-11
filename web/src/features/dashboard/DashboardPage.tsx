@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const events = useDashboardEvents();
   const runs = useActionRuns();
   const metrics = useMetrics((s) => s?.hosts);
+  const metricsUnavailable = useMetrics((s) => s?.unavailable);
   const layout = useLayout();
   const animate = useMotionEnabled();
   const speed = useTokens().speed;
@@ -161,12 +162,15 @@ export default function DashboardPage() {
     attention: firstResult(security) && firstResult(capacity),
     updates: true, apps: true,
     timeline: firstResult(events), events: firstResult(events),
-    // The first metrics sample of every online host; other hosts show their state instead.
-    load: online.every((h) => !!metrics?.[h.id]),
+    // The first metrics sample, or explicit metrics unavailability, of every online host; other hosts show their state.
+    load: online.every((h) => !!metrics?.[h.id] || !!metricsUnavailable?.includes(h.id)),
     capacity: firstResult(capacity),
     security: firstResult(security),
   };
-  const readiness = useDashboardReadiness(visible, firstResult(hosts) && firstResult(stacks) && firstResult(containers));
+  // Shown service widgets are known once their summaries answered; a core error shows no widgets and settles.
+  const servicesKnown = !visibleWidgets(layout).some(isServiceWidget) || firstResult(widgets);
+  const coreFailed = stacks.isError || containers.isError;
+  const readiness = useDashboardReadiness(coreFailed ? [] : visible, firstResult(hosts) && firstResult(stacks) && firstResult(containers), coreFailed || servicesKnown);
   const body = (id: WidgetId): ReactNode => id in ready ? <WidgetReady id={id} ready={!!ready[id]}>{content(id)}</WidgetReady> : content(id);
   const content = (id: WidgetId): ReactNode => {
     if (isServiceWidget(id)) {
