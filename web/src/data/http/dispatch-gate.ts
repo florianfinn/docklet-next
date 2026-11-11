@@ -24,7 +24,7 @@ export function skippedResponse(): Response {
 }
 
 function maintenanceResponse(): Response {
-  return json(503, { title: "Service Unavailable", status: 503, detail: MAINTENANCE_CODE }, { "Content-Type": "application/problem+json" });
+  return json(503, { status: 503, detail: MAINTENANCE_CODE }, { "Content-Type": "application/problem+json" });
 }
 
 async function isMaintenance(response: Response): Promise<boolean> {

@@ -174,7 +174,7 @@ it("R2-e restore restart: unreachable status, revoked session, release, then ide
 it("R2-g a tagged read queued in admission is skipped at dispatch once the stream reports the host offline", async () => {
   const sent: string[] = [];
   const gates: Array<() => void> = [];
-  const physical = vi.fn(async (input: RequestInfo | URL) => {
+  const physical = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     sent.push(new URL(String(input), "https://hub.example.com").pathname);
     await new Promise<void>((resolve) => gates.push(resolve));
     return Response.json({ success: true, data: [] });

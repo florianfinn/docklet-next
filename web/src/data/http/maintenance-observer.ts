@@ -14,6 +14,7 @@ export const MAINTENANCE_MAX_HOLD_MS = 120_000;
 const ACTIVE_POLL_MS = 1_000;
 const BACKOFF_MS = [1_000, 2_000, 4_000, 5_000];
 
+const cancelled = () => { const controller = new AbortController(); controller.abort(); return controller.signal.reason as unknown; };
 type Waiter = { resolve: (outcome: HoldOutcome) => void; reject: (reason: unknown) => void; signal?: AbortSignal; abort: () => void };
 
 /** The status endpoint is read on the raw fetcher: no CSRF bootstrap, no hold, no host admission. */
@@ -107,7 +108,7 @@ export function createMaintenanceObserver(statusUrl: string, fetcher: typeof fet
       pollTimer = undefined;
       polling = false;
       failures = 0;
-      for (const waiter of waiters) { waiter.signal?.removeEventListener("abort", waiter.abort); waiter.reject(new DOMException("Identity changed", "AbortError")); }
+      for (const waiter of waiters) { waiter.signal?.removeEventListener("abort", waiter.abort); waiter.reject(cancelled()); }
       waiters.clear();
       end();
     },
