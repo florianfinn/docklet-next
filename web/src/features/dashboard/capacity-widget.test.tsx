@@ -72,6 +72,16 @@ describe("capacity line time axis and source (#400, #401)", () => {
   });
 });
 
+describe("demo capacity follows the hub's 30-day shape (#400)", () => {
+  it("draws the demo trend as one connected line over 90 eight-hour buckets", async () => {
+    const [a] = online;
+    const { container } = renderWithApp(<CapacityWidget hosts={[a!]} />, createDemoAdapter());
+    await waitFor(() => expect(container.querySelector("[data-capacity-line]")).not.toBeNull());
+    const line = container.querySelector<SVGElement>("[data-capacity-line]")!;
+    expect([line.dataset.capacityLine, line.dataset.capacitySegments]).toEqual(["90", "1"]);
+  });
+});
+
 describe("capacity refresh on a later Dashboard visit (#401 DR-10)", () => {
   it("a remount a minute later refetches the capacity trend", async () => {
     const getCapacity = vi.fn(async () => [] as HostCapacity[]);

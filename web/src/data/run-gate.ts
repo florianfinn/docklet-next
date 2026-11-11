@@ -306,8 +306,8 @@ export class RunGate {
 
   /** Starts through the gate; `fresh: false` skips the freshness answer (explicit recheck). */
   run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean; quiet?: boolean; send?: () => Promise<string>; joined?: () => void } = {},
-    /** Blockers this attempt confirmed terminal, and those it already asked about. */
-    confirmed: ReadonlySet<string> = new Set(), asked: ReadonlySet<string> = new Set()): Promise<unknown> {
+    /** Blockers this attempt confirmed terminal with a known outcome. */
+    confirmed: ReadonlySet<string> = new Set()): Promise<unknown> {
     const generation = this.generation;
     const check = () => { if (generation !== this.generation) throw new CancelledError(); };
     const ruleOf = GATE_RULES[method];
@@ -342,11 +342,12 @@ export class RunGate {
         };
         const host = blocker ? this.hostOf(blocker) : undefined;
         // A local row may lag behind the hub: read the blocker's record once, then repeat the complete admission.
-        if (!blocker || !host || !this.inner.confirmRun || asked.has(blocker)) return refuse();
+        if (!blocker || !host || !this.inner.confirmRun) return refuse();
         return this.confirm(host, blocker).then((run) => {
           check();
-          const done = run.id === blocker && run.hostId === host && !active(run.status) && run.outcomeState !== "unknown";
-          return this.run(method, args, options, done ? new Set([...confirmed, blocker]) : confirmed, new Set([...asked, blocker]));
+          // The read publishes its row, so the decision cannot wait for re-admission: only a terminal, known answer for this run admits.
+          if (run.id !== blocker || run.hostId !== host || active(run.status) || run.outcomeState === "unknown") return refuse();
+          return this.run(method, args, options, new Set([...confirmed, blocker]));
         }, () => { check(); return refuse(); });
       }
     }

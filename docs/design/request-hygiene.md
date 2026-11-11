@@ -63,8 +63,12 @@ gate answers tagged reads without a request: status 502, `code: agent.unavailabl
 host's previous rows as new objects marked unavailable, with the catalogue's
 refusal as the visible reason. Standby Edge hosts skip only `poll` reads.
 
-First loads still read, because the hub serves retained snapshots of offline
-hosts. Deliberate user reads (detail pages, dialogs) are never tagged.
+An inventory reader (stacks, containers, topology, volumes, images, networks)
+sends its first read of an offline host untagged, because the hub serves retained
+snapshots of offline hosts; only later refreshes of that host are skipped. Other
+tagged first loads, such as the security counts, are skipped like any background
+read. Deliberate user reads
+(detail pages, dialogs) are never tagged.
 
 ## Limits
 

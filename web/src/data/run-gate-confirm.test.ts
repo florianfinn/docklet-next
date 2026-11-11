@@ -105,6 +105,27 @@ it("C2-g a new blocker that appears after the confirmation gets its own confirma
   expect([vi.mocked(f.inner.confirmRun!).mock.calls.map((call) => call[1]), vi.mocked(f.inner.runContainerCommand).mock.calls.length]).toEqual([[f.staleRow.id, "second-run"], 0]);
 });
 
+it.each([
+  ["running", { status: "running", outcomeState: "known" }, "busy", 0, 1],
+  ["queued", { status: "queued", outcomeState: "known" }, "busy", 0, 1],
+  ["failed with an unknown outcome", { status: "failed", outcomeState: "unknown" }, "busy", 0, 1],
+  ["succeeded", { status: "success", outcomeState: "known" }, "started", 1, 0],
+])("C2-e through the HTTP adapter, whose read publishes the answer to the gate: %s", async (_case, patch, expected, sent, notices) => {
+  const f = runtimeFixture();
+  f.state.run = snapshot("edge", { resourceId: "a" });
+  const gate = new RunGate(f.adapter);
+  const busyNotices: string[] = [];
+  gate.subscribe((notice) => { if (notice.reason === "busy") busyNotices.push(notice.key); });
+  await gate.run("runContainerCommand", ["edge~a", "start"]);
+  // The local row says running; the hub record now answers the case.
+  await f.adapter.confirmRun!("edge", RUN_ID);
+  const before = f.commands().length;
+  f.state.run = snapshot("edge", { resourceId: "a", ...patch } as never);
+  const outcome = await busy(gate.run("runContainerCommand", ["edge~a", "restart"]));
+  gate.reset();
+  expect([outcome, f.commands().length - before, busyNotices.length]).toEqual([expected, sent, notices]);
+});
+
 it("without a confirmation port (demo) the refusal stays synchronous as today", async () => {
   const f = fixture(); delete f.inner.confirmRun;
   await f.gate.run("runStackCommand", ["edge~other", "start"]); f.emit([f.staleRow]);
