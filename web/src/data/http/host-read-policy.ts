@@ -14,6 +14,16 @@ export const SKIPPED_HEADER = "X-Docklet-Skipped";
 type Row = { id?: unknown; status?: unknown; enabled?: unknown };
 const SKIP = new Set(["offline", "error", "pending", "update-required", "token-rejected"]);
 
+/** The visible refusal of a host whose reads are skipped; statuses with the same refusal read alike. */
+export function skipReason(status: string | undefined): string {
+  if (status === "update-required") return "agent.update-required";
+  if (status === "token-rejected") return "agent.invalid-token";
+  return "agent.unavailable";
+}
+
+/** A catalogue status whose automatic reads are skipped. */
+export const skipsReads = (status: string | undefined) => !!status && SKIP.has(status);
+
 /** Current catalogue status per host. Environment stream rows are authoritative; a catalogue list answer only counts
  * when its read started after the last applied stream envelope, so a delayed older list never undoes a newer state. */
 export function createHostReadPolicy() {

@@ -16,6 +16,8 @@ const epochOf = (query: object) => epochs.get(query) ?? 0;
 /** The epoch at a fetch's last check before Query publishes its outcome. */
 const checked = new WeakMap<object, number>();
 const tails = new WeakSet<object>();
+/** Whether a query's running fetch started without loaded data; its own partial writes do not make it a refetch. */
+const initial = new WeakMap<object, boolean>();
 
 /**
  * A fetch whose query was superseded while it ran discards that outcome and runs the query function again, so its
@@ -23,7 +25,8 @@ const tails = new WeakSet<object>();
  */
 export const refreshBehavior: QueryBehavior = {
   onFetch(context, query) {
-    const original = context.fetchFn;
+    const original = context.fetchFn, first = query.state.data === undefined;
+    initial.set(query, first);
     context.fetchFn = async () => {
       for (let repeat = 0; ; repeat++) {
         const epoch = epochOf(query);
@@ -34,9 +37,11 @@ export const refreshBehavior: QueryBehavior = {
         };
         try {
           const value = await original();
-          if (current()) return value;
+          // A first load joins a change as before; only a refetch of loaded data repeats.
+          if (first || current()) return value;
         } catch (error) {
-          // A fence of the read's own source (a version bump) counts as superseded; cancelling this fetch does not.
+          // A fence of the read's own source (a version bump) counts as superseded, also for a first load;
+          // cancelling this fetch does not.
           if (!isCancelledError(error) || current()) throw error;
         }
       }
@@ -72,9 +77,12 @@ export function refresh(client: QueryClient, keys: readonly QueryKey[], exactKey
   const queries = new Set<Query>();
   for (const queryKey of keys) for (const query of client.getQueryCache().findAll({ queryKey })) queries.add(query);
   for (const queryKey of exactKeys) for (const query of client.getQueryCache().findAll({ queryKey, exact: true })) queries.add(query);
-  // Only refetches of loaded data are superseded, the reads TanStack would cancel; a first load joins as before.
+  // Every running fetch learns of the change: a refetch of loaded data repeats (and gets a tail for a late change), a
+  // first load repeats only when its source fenced it; its value joins the change as before.
   for (const query of queries) {
-    if (query.state.fetchStatus === "fetching" && query.state.data !== undefined) { epochs.set(query, epochOf(query) + 1); tail(client, query); }
+    if (query.state.fetchStatus !== "fetching") continue;
+    epochs.set(query, epochOf(query) + 1);
+    if (initial.get(query) === false) tail(client, query);
   }
   for (const query of queries) void client.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
 }

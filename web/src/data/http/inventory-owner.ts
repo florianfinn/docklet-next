@@ -10,7 +10,7 @@ import type { Host, InventoryObservation } from "@/domain/model";
 import { AdapterOutcomeError } from "../capability";
 import { copyInventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline } from "./host-read-deadline";
-import { READ_TAG_HEADER, SKIPPED_HEADER, type ReadTag } from "./host-read-policy";
+import { READ_TAG_HEADER, SKIPPED_HEADER, skipReason, type ReadTag } from "./host-read-policy";
 import { isMaintenanceError } from "../maintenance-retry";
 
 const automatic = new Set(["listStacks", "listContainers", "listImages", "listVolumes", "listNetworkSummaries", "getTopology"]);
@@ -21,12 +21,6 @@ type Factory<T> = (observe: Observe, fetcher: typeof fetch, hosts: Catalogue, re
 type StoredResponse = { body: string; headers: Headers };
 
 /** One adapter identity owns catalogues and automatic snapshots, outside the per-call readers. */
-function skipReason(status: string | undefined): string {
-  if (status === "update-required") return "agent.update-required";
-  if (status === "token-rejected") return "agent.invalid-token";
-  return "agent.unavailable";
-}
-
 export function createInventoryOwner(generation: () => number, hosts: Catalogue, requireCapability: Require, fetcher: typeof fetch, observe: Observe) {
   let catalogues = new Map<string, Host[]>();
   let responses = new Map<string, StoredResponse>();

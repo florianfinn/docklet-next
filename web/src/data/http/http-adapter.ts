@@ -6,6 +6,7 @@
 
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
+import { skipReason, skipsReads } from "./host-read-policy";
 import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
 import { createStackImport } from "./stack-import";
@@ -340,7 +341,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (authenticated) { metrics.reset(true, retain); connect(); }
   }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
-    return JSON.stringify(rows.map((row) => [
+    // A host whose reads are skipped reads alike in every status with the same refusal (offline, pending): moving
+    // between them changes no inventory, so it refreshes the host list only.
+    return JSON.stringify(rows.map((row) => skipsReads(row.status) ? [row.id, skipReason(row.status), row.enabled, row.registrationRevision] : [
       row.id,
       row.connectedAt,
       row.edgeSessionId,
