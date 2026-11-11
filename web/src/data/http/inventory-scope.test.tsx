@@ -15,6 +15,7 @@ import { inventoryRecoveryInterval } from "../inventory-recovery";
 import { resourceFixture } from "./resources.test-support";
 import { createInventoryOwner } from "./inventory-owner";
 import { AdapterOutcomeError } from "../capability";
+import { isMaintenanceError } from "../maintenance-retry";
 import type { Host } from "@/domain/model";
 
 const flush = async () => { for (let i = 0; i < 100; i++) await Promise.resolve(); };
@@ -122,4 +123,38 @@ it("L4-f scope owner rejects an uncooperative late answer after principal replac
   generation++; owner.reset(); release();
   expect(isCancelledError(await old)).toBe(true);
   fail = true; await expect(api.listContainers()).rejects.toBeDefined();
+});
+
+/** An owner whose capability stage fails with `failure` after one successful load. */
+async function failingScope(failure: unknown) {
+  let fail = false;
+  const rows = [{ id: "first", status: "online", inventory: { stale: false } }] as unknown as Host[];
+  const owner = createInventoryOwner(() => 0, async () => rows, async () => { if (fail) throw failure; }, fetch, () => {});
+  const api = owner.wrap((_observe, _fetch, hosts) => ({ async listContainers() { return (await hosts()).map((h) => ({ hostId: h.id, inventory: h.inventory })); } }));
+  await api.listContainers(); fail = true;
+  return api.listContainers().then((value) => value, (error: unknown) => ({ rejected: error }));
+}
+
+it("R1E-1 hub maintenance after success rejects with the maintenance outcome instead of a stale scope", async () => {
+  const outcome = await failingScope(new AdapterOutcomeError({ kind: "error", code: "backup.maintenance", status: 503 }));
+  expect("rejected" in outcome && isMaintenanceError(outcome.rejected)).toBe(true);
+});
+
+it.each([
+  ["capability 5xx", new AdapterOutcomeError({ kind: "not-available", operationId: "listContainers", resourceRef: { kind: "hub", id: "0" }, reasonCode: "capability.read-unavailable" })],
+  ["capability network", new TypeError("fetch failed")],
+])("R1E-2 a transient %s after success retains the catalogue as stale scope", async (_case, failure) => {
+  const outcome = await failingScope(failure);
+  expect(Array.isArray(outcome) && outcome[0]?.inventory?.scopeStale === true).toBe(true);
+});
+
+it("R1E-2 a capability denial after success still rejects", async () => {
+  const outcome = await failingScope(new AdapterOutcomeError({ kind: "not-available", operationId: "listContainers", resourceRef: { kind: "hub", id: "0" }, reasonCode: "capability.unavailable" }));
+  expect("rejected" in outcome).toBe(true);
+});
+
+it.each([["en-US", en, "first: Inventory catalogue could not be refreshed. No retained"], ["de", de, "first: Inventarkatalog konnte nicht aktualisiert werden. Noch keine"]] as const)("R1E-4 a stale catalogue of an available host names no host reason (%s)", (locale, messages, text) => {
+  render(<IntlProvider locale={locale} messages={{ stacks: messages }}><InventoryNotice hosts={[{ id: "first", name: "first", status: "online" } as Host]} items={[{ hostId: "first", inventory: { stale: true, scopeStale: true } }]} /></IntlProvider>);
+  const content = screen.getByRole("status").textContent ?? "";
+  expect([content.includes(text), content.includes(messages.inventory.unavailable)]).toEqual([true, false]);
 });

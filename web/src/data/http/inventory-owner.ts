@@ -11,6 +11,7 @@ import { AdapterOutcomeError } from "../capability";
 import { copyInventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline } from "./host-read-deadline";
 import { READ_TAG_HEADER, SKIPPED_HEADER, type ReadTag } from "./host-read-policy";
+import { isMaintenanceError } from "../maintenance-retry";
 
 const automatic = new Set(["listStacks", "listContainers", "listImages", "listVolumes", "listNetworkSummaries", "getTopology"]);
 type Observe = (host: string, state: InventoryObservation) => void;
@@ -20,6 +21,12 @@ type Factory<T> = (observe: Observe, fetcher: typeof fetch, hosts: Catalogue, re
 type StoredResponse = { body: string; headers: Headers };
 
 /** One adapter identity owns catalogues and automatic snapshots, outside the per-call readers. */
+function skipReason(status: string | undefined): string {
+  if (status === "update-required") return "agent.update-required";
+  if (status === "token-rejected") return "agent.invalid-token";
+  return "agent.unavailable";
+}
+
 export function createInventoryOwner(generation: () => number, hosts: Catalogue, requireCapability: Require, fetcher: typeof fetch, observe: Observe) {
   let catalogues = new Map<string, Host[]>();
   let responses = new Map<string, StoredResponse>();
@@ -37,8 +44,12 @@ export function createInventoryOwner(generation: () => number, hosts: Catalogue,
       return { rows: structuredClone(rows), stale: false };
     } catch (error) {
       current(version); parent?.throwIfAborted();
+      // Hub maintenance decides nothing about the scope: the query keeps its data and retries (S2 rule B).
+      if (isMaintenanceError(error)) throw error;
       const outcome = error instanceof AdapterOutcomeError ? error.outcome : undefined;
-      const transient = error instanceof TypeError || outcome?.kind === "error" && (outcome.status !== undefined ? outcome.status >= 500 : ["http.error", "agent.unavailable", "capability.read-unavailable"].includes(outcome.code));
+      // A transient capability read arrives as not-available with its own reason; denials keep other reasons.
+      const transient = error instanceof TypeError || outcome?.kind === "not-available" && outcome.reasonCode === "capability.read-unavailable"
+        || outcome?.kind === "error" && (outcome.status !== undefined ? outcome.status >= 500 : ["http.error", "agent.unavailable", "capability.read-unavailable"].includes(outcome.code));
       const retained = catalogues.get(operation);
       if (!transient || !retained) { catalogues.delete(operation); throw error; }
       return { rows: structuredClone(retained), stale: true };
@@ -66,7 +77,8 @@ export function createInventoryOwner(generation: () => number, hosts: Catalogue,
       current(version); init?.signal?.throwIfAborted();
       if (response.headers.has(SKIPPED_HEADER) && previous) {
         await response.body?.cancel();
-        const headers = new Headers(previous.headers); headers.set("X-Docklet-Host-Reason", "agent.unavailable");
+        // The skip keeps the catalogue's persistent refusal as the visible reason.
+        const headers = new Headers(previous.headers); headers.set("X-Docklet-Host-Reason", skipReason(status));
         return new Response(previous.body, { status: 200, headers });
       }
       if (response.ok) {

@@ -16,6 +16,7 @@ import { createInventoryTransport, inventoryFailure } from "./inventory-transpor
 import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { normalizeProjectName } from "./project-ownership";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
+import { isMaintenanceError } from "../maintenance-retry";
 
 export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
@@ -60,7 +61,8 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       const batch = await budget((signal) => hostInventory(host, signal)).then((batch) => {
         recovery.observed(host, batch.observation); return batch;
       }).catch((error) => {
-        parent?.throwIfAborted(); recovery.failed(host, error);
+        // A hub maintenance refusal fails the whole read, so the query keeps its rows while it retries.
+        parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error);
         const observation = inventoryFailure(host.id, error); onState(host.id, observation);
         return { stacks: [], containers: [], observation };
       });
@@ -81,7 +83,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       // file content, which only the compose read carries and which is never cached.
       const [detail, batch, files] = await Promise.all([
         read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`),
-        stackInventory(host, projectId).catch((error) => { onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
+        stackInventory(host, projectId).catch((error) => { if (isMaintenanceError(error)) throw error; onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");

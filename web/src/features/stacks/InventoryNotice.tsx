@@ -17,7 +17,12 @@ export function InventoryNotice({ hosts, items }: { hosts: Host[]; items: { host
       const state = retained ?? host.inventory;
       if (!state?.stale && isHostAvailable(host)) return null;
       const reason = state?.reason ?? (host.status === "update-required" ? "agent.update-required" : "agent.unavailable");
-      return <p key={host.id}>{t("host", { name: host.name, reason: t(reason === "agent.update-required" ? "updateRequired" : reason === "agent.invalid-token" ? "credentialRejected" : reason === "inventory.mapping-error" ? "mappingError" : reason === "inventory.read-error" ? "readError" : "unavailable") })} {state?.scopeStale ? t("scopeStale") : ""} {state?.observedAt ? t("asOf", { time: format.dateTime(new Date(state.observedAt), { dateStyle: "medium", timeStyle: "medium" }) }) : t("noSnapshot")}</p>;
+      // A stale catalogue of an available host is the only fact; it names no host reason.
+      const scopeOnly = !!state?.scopeStale && !state.reason && isHostAvailable(host);
+      const label = scopeOnly ? t("scopeStale") : t(reason === "agent.update-required" ? "updateRequired" : reason === "agent.invalid-token" ? "credentialRejected" : reason === "inventory.mapping-error" ? "mappingError" : reason === "inventory.read-error" ? "readError" : "unavailable");
+      const sentences = [t("host", { name: host.name, reason: label }), ...(state?.scopeStale && !scopeOnly ? [t("scopeStaleNote")] : []),
+        state?.observedAt ? t("asOf", { time: format.dateTime(new Date(state.observedAt), { dateStyle: "medium", timeStyle: "medium" }) }) : t("noSnapshot")];
+      return <p key={host.id}>{sentences.join(" ")}</p>;
     })}
   </div>;
 }

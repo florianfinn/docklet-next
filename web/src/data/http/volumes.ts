@@ -18,6 +18,7 @@ import { bindSize, type BindInfo, type Volume } from "@/domain/volumes";
 import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapVolumes } from "./resource-mapping";
+import { isMaintenanceError } from "../maintenance-retry";
 
 type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 type Body<I extends Read> = operations[I]["responses"][200]["content"]["application/json"];
@@ -100,7 +101,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
           recovery.observed(host, observation);
           onState(host.id, observation);
         } catch (error) {
-          parent?.throwIfAborted(); recovery.failed(host, error); check();
+          parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error); check();
           const state = inventoryFailure(host.id, error);
           onState(host.id, state);
           const old = retained.get(host.id);

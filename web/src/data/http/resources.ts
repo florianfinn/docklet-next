@@ -15,6 +15,7 @@ import type { Host, InventoryObservation, Topology } from "@/domain/model";
 import { splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
+import { isMaintenanceError } from "../maintenance-retry";
 
 function combine(observations: InventoryObservation[]): InventoryObservation {
   return mergeInventoryObservations(observations);
@@ -76,7 +77,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     const batches = await Promise.all(scope.map(async (host) => {
       try { const { rows, inventory } = await budget((signal) => load(host, signal)); recovery.observed(host, inventory); onState(host.id, inventory); completed.push(...rows); onPartial?.([...completed]); return rows; }
       catch (error) {
-        parent?.throwIfAborted(); recovery.failed(host, error);
+        parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error);
         onState(host.id, inventoryFailure(host.id, error));
         return [];
       }
@@ -132,7 +133,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
               mapTopology([detail.body.data], h.id, [], ctx.projects, detail.observation, [summary]);
               return { row: detail.body.data, observation: detail.observation, unavailable: false };
             } catch (error) {
-              return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
+              if (isMaintenanceError(error)) throw error; return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
             }
           }));
           const base = combine([...ctx.observations, networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]);
@@ -143,7 +144,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
           recovery.observed(h, combine([...(contextual.status === "fulfilled" ? ctx.observations : []), networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]));
           batches.set(h.id, { ...graph, ...(inventory.stale ? { inventory: { [h.id]: inventory } } : {}) });
         } catch (error) {
-          recovery.failed(h, error);
+          if (isMaintenanceError(error)) throw error; recovery.failed(h, error);
           const state = inventoryFailure(h.id, error);
           const previous = batches.get(h.id)!;
           onState(h.id, state);

@@ -93,13 +93,3 @@ it("an assigned-stack list publishes its own stale and fresh observations", asyn
   expect(observations).toEqual([true, false]);
 });
 
-it("inventory tags distinguish first load and invalidation from interval refresh", async () => {
-  const { QueryClient } = await import("@tanstack/react-query");
-  const { inventoryReadTag } = await import("./inventory-recovery");
-  const client = new QueryClient();
-  expect(inventoryReadTag(client, ["stacks"])).toBe("background");
-  client.setQueryData(["stacks"], []);
-  expect(inventoryReadTag(client, ["stacks"])).toBe("poll");
-  await client.invalidateQueries({ queryKey: ["stacks"], refetchType: "none" });
-  expect(inventoryReadTag(client, ["stacks"])).toBe("background"); client.clear();
-});

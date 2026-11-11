@@ -11,7 +11,7 @@ import { useLocale } from "use-intl";
 import type { ContainerHistoryRef, HistoryRange } from "@/domain/history";
 import type { ServiceKind } from "@/domain/service-widgets";
 import type { AppLocale } from "@/domain/locale";
-import { inventoryRecoveryInterval, inventoryStructuralSharing, inventoryReadTag } from "./inventory-recovery";
+import { inventoryRecoveryInterval, inventoryStructuralSharing, INVENTORY_READ_TAG } from "./inventory-recovery";
 
 import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtime";
 import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
@@ -52,7 +52,7 @@ export function useStacks(enabled = true) {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.stacks, enabled, queryFn: ({ signal }) => adapter.listStacks(initialBatches(client, queryKeys.stacks, signal), signal, inventoryReadTag(client, queryKeys.stacks)) });
+  return useQuery({ ...recovery, queryKey: queryKeys.stacks, enabled, queryFn: ({ signal }) => adapter.listStacks(initialBatches(client, queryKeys.stacks, signal), signal, INVENTORY_READ_TAG) });
 }
 
 export function useStack(id: string | undefined) {
@@ -67,7 +67,7 @@ export function useContainers(enabled = true) {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.containers, enabled: enabled && !user, queryFn: ({ signal }) => adapter.listContainers(initialBatches(client, queryKeys.containers, signal), signal, inventoryReadTag(client, queryKeys.containers)), select: useLocalized(localizeContainers) });
+  return useQuery({ ...recovery, queryKey: queryKeys.containers, enabled: enabled && !user, queryFn: ({ signal }) => adapter.listContainers(initialBatches(client, queryKeys.containers, signal), signal, INVENTORY_READ_TAG), select: useLocalized(localizeContainers) });
 }
 
 export function useSecurity() {
@@ -80,7 +80,7 @@ export function useTopology() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology), inventoryReadTag(client, queryKeys.topology)) });
+  return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology), INVENTORY_READ_TAG) });
 }
 
 /** The Dashboard's security source: active counts per scanned image, without catalogue or findings reads. */
@@ -111,16 +111,15 @@ export function useActionsQuery() {
 
 export function useSchedule(hostIds?: readonly string[]) {
   const adapter = useAdapter();
-  const client = useQueryClient();
   const key = [...queryKeys.schedule, ...(hostIds ? [[...hostIds].sort()] : [])];
-  return useQuery({ queryKey: key, queryFn: () => adapter.listSchedule(hostIds, inventoryReadTag(client, key)), select: useLocalized(localizeSchedule) });
+  return useQuery({ queryKey: key, queryFn: () => adapter.listSchedule(hostIds, INVENTORY_READ_TAG), select: useLocalized(localizeSchedule) });
 }
 
 export function useVolumes() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes(initialBatches(client, queryKeys.volumes, signal), signal, inventoryReadTag(client, queryKeys.volumes)) });
+  return useQuery({ ...recovery, queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes(initialBatches(client, queryKeys.volumes, signal), signal, INVENTORY_READ_TAG) });
 }
 
 export function useVolume(id: string | undefined) {
@@ -163,7 +162,7 @@ export function useImages() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages(initialBatches(client, queryKeys.images, signal), signal, inventoryReadTag(client, queryKeys.images)) });
+  return useQuery({ ...recovery, queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages(initialBatches(client, queryKeys.images, signal), signal, INVENTORY_READ_TAG) });
 }
 
 /** History refreshes with the minute samples; a range switch keeps the previous bars until the new ones arrive. */
@@ -204,6 +203,5 @@ export function useServiceWidgetConfig(kind: ServiceKind) {
 export function useNetworkSummaries() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
-  const client = useQueryClient();
-  return useQuery({ ...recovery, queryKey: queryKeys.networks, queryFn: ({ signal }) => adapter.listNetworkSummaries(signal, inventoryReadTag(client, queryKeys.networks)) });
+  return useQuery({ ...recovery, queryKey: queryKeys.networks, queryFn: ({ signal }) => adapter.listNetworkSummaries(signal, INVENTORY_READ_TAG) });
 }

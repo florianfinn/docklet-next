@@ -131,3 +131,13 @@ it("first inventory load queued across an offline stream update still reads the 
   expect(paths.filter((path) => path.includes("/environments/first/containers?"))).toHaveLength(1);
   f.stop();
 });
+
+it("R1E-5 a skipped refresh of an update-required host keeps the persistent refusal as the visible reason", async () => {
+  const f = fixture(false);
+  await f.adapter.listStacks();
+  f.environment("update-required"); const before = f.hostRequests();
+  await f.adapter.listStacks();
+  expect(f.hostRequests()).toBe(before);
+  expect((await f.adapter.listHosts())[0]?.inventory).toMatchObject({ stale: true, reason: "agent.update-required" });
+  f.stop();
+});

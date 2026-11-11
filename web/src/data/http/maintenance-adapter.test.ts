@@ -579,3 +579,37 @@ it("A7 an identity check held 30 s by maintenance still meets the hub's 401 and 
     expect(resets).toBe(1);
   } finally { stop(); stopListening(); }
 });
+
+it.each(["listStacks", "listContainers", "listImages", "listVolumes", "getTopology"] as const)("B11' an inventory %s read refused by a full hold rejects with the maintenance outcome", async (name) => {
+  vi.useFakeTimers();
+  const h = hub();
+  await h.adapter[name]();
+  const reads = (await fillHold(h)).map((pending) => pending.catch(() => undefined));
+  const refused = await h.adapter[name]().then(() => "resolved", (error: unknown) => error);
+  expect(isMaintenanceError(refused)).toBe(true);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(2_000);
+  await Promise.all(reads);
+});
+
+it("B11' a warm stacks query keeps its rows and success state through a full hold, then refreshes", async () => {
+  vi.useFakeTimers();
+  const h = hub();
+  const client = createAppQueryClient();
+  const observer = new QueryObserver(client, { queryKey: ["stacks"], queryFn: () => h.adapter.listStacks(), staleTime: 0 });
+  const states: Array<{ status: string; rows: number }> = [];
+  const stopObserver = observer.subscribe((result) => states.push({ status: result.status, rows: result.data?.length ?? 0 }));
+  await vi.advanceTimersByTimeAsync(0);
+  const warm = observer.getCurrentResult().data?.length ?? 0;
+  expect(warm > 0).toBe(true);
+  const reads = (await fillHold(h)).map((read) => read.catch(() => undefined));
+  states.length = 0;
+  void observer.refetch();
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(states.some((state) => state.status === "error" || state.rows !== warm)).toBe(false);
+  h.m.active = false;
+  await vi.advanceTimersByTimeAsync(10_000);
+  await Promise.all(reads);
+  expect([observer.getCurrentResult().status, observer.getCurrentResult().data?.length]).toEqual(["success", warm]);
+  stopObserver();
+});

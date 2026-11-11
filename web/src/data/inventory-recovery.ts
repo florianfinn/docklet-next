@@ -6,7 +6,7 @@
 
 import { transientInventoryReasons as transient } from "./http/inventory-observations";
 import type { ReadTag } from "./http/host-read-policy";
-import { replaceEqualDeep, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { replaceEqualDeep } from "@tanstack/react-query";
 import type { Host, InventoryObservation } from "@/domain/model";
 import { AdapterOutcomeError } from "./capability";
 
@@ -45,8 +45,8 @@ export function copyInventoryRecovery(source: object, target: object, scopeFaile
   failures.set(target, new Set([...(failures.get(source) ?? []), ...scopeFailed.filter((h) => h.status === "online").map((h) => h.id)]));
 }
 
-/** Invalidations wake standby hosts; interval refreshes of settled data remain expendable polls. */
-export function inventoryReadTag(client: QueryClient, key: QueryKey): ReadTag {
-  const state = client.getQueryState(key);
-  return state?.data === undefined || state.isInvalidated ? "background" : "poll";
-}
+/**
+ * The inventory queries have no interval poll: mount, remount after the stale time, invalidation and recovery are
+ * all background reads, which still read standby hosts (Q-5a).
+ */
+export const INVENTORY_READ_TAG: ReadTag = "background";
