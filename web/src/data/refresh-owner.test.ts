@@ -16,7 +16,8 @@ afterEach(() => { vi.useRealTimers(); });
 it("F-8 a fetch superseded on every attempt repeats at most the bound; the last value stands", async () => {
   const client = createAppQueryClient();
   let calls = 0;
-  const value = await client.fetchQuery({ queryKey: ["example"], queryFn: async () => {
+  client.setQueryData(["example"], 0);
+  const value = await client.fetchQuery({ queryKey: ["example"], staleTime: 0, queryFn: async () => {
     calls++; refresh(client, [["example"]]); await Promise.resolve(); return calls;
   } });
   expect([calls, value]).toEqual([MAX_SUPERSEDED_REPEATS + 1, MAX_SUPERSEDED_REPEATS + 1]);
@@ -25,12 +26,13 @@ it("F-8 a fetch superseded on every attempt repeats at most the bound; the last 
 it("F-3 a fence CancelledError of a superseded attempt repeats; an unsuperseded one fails as before", async () => {
   const client = createAppQueryClient();
   let calls = 0;
-  const repeated = await client.fetchQuery({ queryKey: ["fenced"], queryFn: async () => {
+  client.setQueryData(["fenced"], "warm"); client.setQueryData(["plain"], "warm");
+  const repeated = await client.fetchQuery({ queryKey: ["fenced"], staleTime: 0, queryFn: async () => {
     calls++;
     if (calls === 1) { refresh(client, [["fenced"]]); throw new CancelledError(); }
     return "fresh";
   } }).catch((error: unknown) => (error instanceof CancelledError ? "cancelled" : "failed"));
-  const plain = await client.fetchQuery({ queryKey: ["plain"], queryFn: async () => { throw new CancelledError(); } }).then(() => "resolved", (error: unknown) => error instanceof CancelledError);
+  const plain = await client.fetchQuery({ queryKey: ["plain"], staleTime: 0, queryFn: async () => { throw new CancelledError(); } }).then(() => "resolved", (error: unknown) => error instanceof CancelledError);
   expect([repeated, calls, plain]).toEqual(["fresh", 2, true]);
 });
 
@@ -100,4 +102,22 @@ it("F-6 a shared read keeps each consumer's budget: one abort leaves it to the o
   await vi.waitFor(() => expect(physical).toBeDefined());
   c.abort();
   expect([...kept, await third, physical!.aborted]).toEqual(["aborted", "read", false, "aborted", true]);
+});
+
+it("F-10 a read fenced by a backup version bump reads its answer to the end instead of cancelling it", async () => {
+  const f = backupFixture();
+  let entered!: () => void, release!: () => void, cancelled = false, drained = false;
+  const reached = new Promise<void>((resolve) => { entered = resolve; }), held = new Promise<void>((resolve) => { release = resolve; });
+  f.intercept(async (url) => {
+    if (!url.pathname.endsWith("/overview")) return undefined;
+    entered(); await held;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) { controller.enqueue(new TextEncoder().encode(JSON.stringify({ success: true, data: {} }))); controller.close(); drained = true; },
+      cancel() { cancelled = true; },
+    });
+    return new Response(body, { headers: { "Content-Type": "application/json" } });
+  });
+  const read = f.api.getBackupOverview("first").then(() => "read", (error: unknown) => (error instanceof CancelledError ? "cancelled" : "failed"));
+  await reached; f.invalidate(["first"]); release();
+  expect([await read, cancelled, drained]).toEqual(["cancelled", false, true]);
 });

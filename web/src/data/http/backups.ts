@@ -117,8 +117,9 @@ export function createBackups(options: Options) {
         code: init.method && init.method !== "GET" ? "volume.outcome-unknown" : "http.error",
       });
     }
-    // A discarded answer cancels its body: an unread body keeps its host admission slot.
-    try { check(); } catch (error) { void result.body?.cancel().catch(() => undefined); throw error; }
+    // A discarded answer is read to its end, not cancelled: an unread body keeps its host admission slot, and a
+    // cancelled one shows as an aborted request.
+    try { check(); } catch (error) { await result.arrayBuffer().catch(() => undefined); throw error; }
     if (!result.ok) {
       const body: unknown = await result.json().catch(() => null);
       check();

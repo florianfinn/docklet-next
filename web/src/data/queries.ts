@@ -19,12 +19,11 @@ import { useIsUser } from "./use-principal";
 import { useAdapter } from "./use-adapter";
 import type { RecentEvents } from "./adapter";
 import { queryKeys } from "./query-keys";
-import { attemptCurrent } from "./refresh-owner";
 
-// Initial reads stream host batches; refetches retain the complete cached result. A superseded attempt streams nothing.
+// Initial reads stream host batches; refetches retain the complete cached result.
 function initialBatches<T>(client: QueryClient, key: QueryKey, signal: AbortSignal): (rows: T) => void {
-  const publish = client.getQueryData(key) === undefined, current = attemptCurrent(client, key);
-  return (rows) => { if (publish && !signal.aborted && current()) client.setQueryData(key, rows); };
+  const publish = client.getQueryData(key) === undefined;
+  return (rows) => { if (publish && !signal.aborted) client.setQueryData(key, rows); };
 }
 
 /** Query select that shows demo texts in the interface language; German keeps the cached data as is. */

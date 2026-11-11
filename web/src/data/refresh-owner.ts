@@ -44,25 +44,23 @@ export const refreshBehavior: QueryBehavior = {
   },
 };
 
-/** Whether a partial result of the attempt that called this is still current; superseded attempts publish nothing. */
-export function attemptCurrent(client: QueryClient, queryKey: QueryKey): () => boolean {
-  const query = client.getQueryCache().find({ queryKey, exact: true });
-  if (!query) return () => true;
-  const epoch = epochOf(query);
-  return () => epoch === epochOf(query);
-}
-
 /**
- * A notification between a fetch's last check and Query's publication cannot repeat that fetch any more: once the
- * outcome is published, the query is refreshed once more.
+ * A notification between a fetch's last check and Query's publication cannot repeat that fetch any more: once that
+ * fetch publishes its value or error, the query is refreshed once more. Cancellation, a reset or removal of the query
+ * retires the tail without a read.
  */
 function tail(client: QueryClient, query: Query): void {
   if (tails.has(query)) return;
   tails.add(query);
   const off = client.getQueryCache().subscribe((event) => {
-    if (event.query !== query || query.state.fetchStatus !== "idle") return;
+    if (event.query !== query) return;
+    if (event.type === "removed") { off(); tails.delete(query); return; }
+    // A manual cache write (a partial publisher) is not this fetch's publication.
+    if (event.type !== "updated" || ["fetch", "failed", "pause", "continue", "invalidate"].includes(event.action.type)
+      || (event.action.type === "success" && event.action.manual)) return;
     off(); tails.delete(query);
-    if (checked.get(query) !== undefined && checked.get(query) !== epochOf(query)) {
+    const published = event.action.type === "success" || (event.action.type === "error" && !isCancelledError(event.action.error));
+    if (published && checked.get(query) !== epochOf(query)) {
       checked.set(query, epochOf(query));
       void client.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
     }
@@ -74,6 +72,9 @@ export function refresh(client: QueryClient, keys: readonly QueryKey[], exactKey
   const queries = new Set<Query>();
   for (const queryKey of keys) for (const query of client.getQueryCache().findAll({ queryKey })) queries.add(query);
   for (const queryKey of exactKeys) for (const query of client.getQueryCache().findAll({ queryKey, exact: true })) queries.add(query);
-  for (const query of queries) if (query.state.fetchStatus === "fetching") { epochs.set(query, epochOf(query) + 1); tail(client, query); }
+  // Only refetches of loaded data are superseded, the reads TanStack would cancel; a first load joins as before.
+  for (const query of queries) {
+    if (query.state.fetchStatus === "fetching" && query.state.data !== undefined) { epochs.set(query, epochOf(query) + 1); tail(client, query); }
+  }
   for (const query of queries) void client.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
 }

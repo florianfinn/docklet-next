@@ -5,7 +5,7 @@
 // Deviations: Original regressions for the candidate-fix review R1G-1..R1G-3 at the adapter and provider boundary.
 
 import { act, cleanup, render } from "@testing-library/react";
-import { QueryClientProvider, isCancelledError, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider, QueryObserver, isCancelledError, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { IntlProvider } from "use-intl";
 import { catalogs } from "@/app/i18n/catalog";
@@ -16,11 +16,36 @@ import { recoveryFixture } from "./http/recovery-diagnosis.test-support";
 import { backupFixture, overview } from "./http/backups.test-support";
 import { createAppQueryClient } from "./app-query-client";
 import { refresh } from "./refresh-owner";
+import type { DockletAdapter } from "./adapter";
+import { registerIdentityLifetime } from "./identity-lifetime";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const tick = async (ms = 0) => { await act(() => vi.advanceTimersByTimeAsync(ms)); };
 
-it.each(["images", "backup-overviews"] as const)("R1G-1 a superseded first load of %s publishes no partial rows", async (kind) => {
+/** A mounted query: the first read answers "warm"; a refetch is held until `finish`/`fail`; later reads answer "fresh". */
+function warmHeld(client: QueryClient, key: string) {
+  let calls = 0, finish!: (value: string) => void, fail!: (error: Error) => void;
+  function Reader() {
+    useQuery({ queryKey: [key], queryFn: () => {
+      calls++;
+      if (calls === 1) return Promise.resolve("warm");
+      if (calls === 2) return new Promise<string>((resolve, reject) => { finish = resolve; fail = reject; });
+      return Promise.resolve("fresh");
+    } });
+    return null;
+  }
+  render(<QueryClientProvider client={client}><Reader /></QueryClientProvider>);
+  return {
+    calls: () => calls, finish: (value: string) => finish(value), fail: (error: Error) => fail(error),
+    async refetching() {
+      await vi.waitFor(() => expect(client.getQueryData([key])).toBe("warm"));
+      void client.refetchQueries({ queryKey: [key] });
+      await vi.waitFor(() => expect(calls).toBe(2));
+    },
+  };
+}
+
+it.each(["images", "backup-overviews"] as const)("a change notification during a first load of %s joins it: one read, rows published", async (kind) => {
   vi.useFakeTimers();
   const f = recoveryFixture();
   await f.adapter.getCurrentUser();
@@ -36,13 +61,8 @@ it.each(["images", "backup-overviews"] as const)("R1G-1 a superseded first load 
   expect(f.pending.filter((p) => p.path.endsWith(suffix))).toHaveLength(2);
   if (kind === "images") { f.state.edge = "offline"; f.send(); } else f.source.onopen?.({} as Event);
   await tick();
-  const oldPartials: number[] = [];
-  const off = client.getQueryCache().subscribe((event) => {
-    const rows = client.getQueryData<unknown[]>([kind]);
-    if (event.type === "updated" && event.query.queryKey[0] === kind && event.action.type === "success" && call.mock.calls.length === 1 && rows?.length) oldPartials.push(rows.length);
-  });
-  f.release(); await tick(100); off();
-  expect([call.mock.calls.length > 1, oldPartials]).toEqual([true, []]);
+  f.release(); await tick(100);
+  expect([call.mock.calls.length, (client.getQueryData<unknown[]>([kind])?.length ?? 0) > 0, f.pending.some((p) => p.aborted)]).toEqual([1, true, false]);
 });
 
 it("R1G-2 a backup completion ends a completed shared overview before the next background read", async () => {
@@ -61,17 +81,13 @@ it("R1G-2 a backup completion ends a completed shared overview before the next b
 });
 
 it("R1G-3 a change after the last check but before Query publishes is refreshed once more", async () => {
-  const client = createAppQueryClient(); let finish!: (value: string) => void; let calls = 0;
-  const old = new Promise<string>((resolve) => { finish = resolve; });
-  const queryFn = () => ++calls === 1 ? old : Promise.resolve("fresh");
+  const client = createAppQueryClient(), q = warmHeld(client, "handoff");
+  await q.refetching();
   let fetchingAtChange: string | undefined;
-  function Reader() { useQuery({ queryKey: ["handoff"], queryFn }); return null; }
-  render(<QueryClientProvider client={client}><Reader /></QueryClientProvider>);
-  await vi.waitFor(() => expect(calls).toBe(1));
-  finish("old");
+  q.finish("old");
   queueMicrotask(() => { fetchingAtChange = client.getQueryState(["handoff"])?.fetchStatus; refresh(client, [["handoff"]]); });
   await vi.waitFor(() => expect(client.getQueryData(["handoff"])).toBe("fresh"));
-  expect([fetchingAtChange, calls, client.getQueryState(["handoff"])?.fetchStatus]).toEqual(["fetching", 2, "idle"]);
+  expect([fetchingAtChange, q.calls(), client.getQueryState(["handoff"])?.fetchStatus]).toEqual(["fetching", 3, "idle"]);
 });
 
 it("F-7 an earlier identity's in-flight shared overview rejects; the new identity reads again", async () => {
@@ -84,4 +100,90 @@ it("F-7 an earlier identity's in-flight shared overview rejects; the new identit
   release();
   const current = await reading;
   expect([isCancelledError(await old), current, calls]).toEqual([true, "first", 2]);
+});
+
+/** A warm query whose refetch is held until its signal aborts. */
+function heldWarm(client: QueryClient, key: string) {
+  let calls = 0;
+  const observer = new QueryObserver(client, { queryKey: [key], queryFn: ({ signal }) => {
+    calls++; if (calls === 1) return Promise.resolve("warm");
+    return new Promise<string>((resolve) => { signal.addEventListener("abort", () => resolve("cancelled"), { once: true }); });
+  } });
+  return { observer, calls: () => calls, off: observer.subscribe(() => {}) };
+}
+
+it("R2G-1 cancelling a superseded warm refetch starts no further read", async () => {
+  const client = createAppQueryClient(), q = heldWarm(client, "cancel-warm");
+  await vi.waitFor(() => expect(client.getQueryData(["cancel-warm"])).toBe("warm"));
+  void q.observer.refetch(); refresh(client, [["cancel-warm"]]);
+  await client.cancelQueries({ queryKey: ["cancel-warm"] }, { revert: false });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(q.calls()).toBe(2);
+  q.off(); client.clear();
+});
+
+it("R2G-1 an identity-style reset of a superseded warm refetch starts no further read", async () => {
+  const client = createAppQueryClient(), q = heldWarm(client, "reset-warm");
+  await vi.waitFor(() => expect(client.getQueryData(["reset-warm"])).toBe("warm"));
+  void q.observer.refetch(); refresh(client, [["reset-warm"]]);
+  const cancel = client.cancelQueries({ queryKey: ["reset-warm"] }, { revert: false });
+  client.getQueryCache().find({ queryKey: ["reset-warm"] })!.reset();
+  await cancel; await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(q.calls()).toBe(2);
+  q.off(); client.clear();
+});
+
+it("R2G-1 the IdentityBridge's inactive reset never starts a new read", async () => {
+  let active = true, notify!: () => void, client!: QueryClient, calls = 0;
+  const states: boolean[] = [];
+  const adapter = { kind: "demo", subscribeChanges: () => () => {}, getCurrentUser: async () => null } as unknown as DockletAdapter;
+  registerIdentityLifetime(adapter.subscribeChanges, { active: () => active, version: () => (active ? 0 : 1), listen: (fn) => { notify = fn; return () => {}; } });
+  function Reader() {
+    client = useQueryClient();
+    useQuery({ queryKey: ["images"], queryFn: ({ signal }) => {
+      calls++; states.push(active);
+      if (calls === 1) return Promise.resolve("warm");
+      return new Promise<string>((resolve) => { signal.addEventListener("abort", () => resolve("cancelled"), { once: true }); });
+    } });
+    return null;
+  }
+  const view = render(<AdapterProvider adapter={adapter}><Reader /></AdapterProvider>);
+  await vi.waitFor(() => expect(client.getQueryData(["images"])).toBe("warm"));
+  await act(async () => { refresh(client, [["images"]]); refresh(client, [["images"]]); });
+  await act(async () => { active = false; notify(); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  view.unmount();
+  expect(states).toEqual([true, true]);
+});
+
+it("R2G-2 removing a superseded query releases its tail subscription", async () => {
+  const client = createAppQueryClient(), cache = client.getQueryCache();
+  const subscribe = cache.subscribe.bind(cache);
+  const stops: Array<ReturnType<typeof vi.fn>> = [];
+  vi.spyOn(cache, "subscribe").mockImplementation((listener) => { const stop = vi.fn(subscribe(listener)); stops.push(stop); return stop; });
+  client.setQueryData(["removed"], "warm");
+  void client.fetchQuery({ queryKey: ["removed"], staleTime: 0, queryFn: () => new Promise<string>(() => {}) }).catch(() => {});
+  refresh(client, [["removed"]]);
+  client.removeQueries({ queryKey: ["removed"] });
+  await Promise.resolve();
+  expect([stops.length, stops[0]?.mock.calls.length]).toEqual([1, 1]);
+});
+
+it("a partial cache write during a superseded fetch is not taken for its publication", async () => {
+  const client = createAppQueryClient(), q = warmHeld(client, "manual");
+  await q.refetching();
+  q.finish("old");
+  // In the handoff gap: a late change, then a manual partial write before the fetch publishes.
+  queueMicrotask(() => { refresh(client, [["manual"]]); client.setQueryData(["manual"], "partial"); });
+  await vi.waitFor(() => expect(client.getQueryData(["manual"])).toBe("fresh"));
+  expect(q.calls()).toBe(3);
+});
+
+it("a change in the handoff gap before an error publication is refreshed once more", async () => {
+  const client = createAppQueryClient(), q = warmHeld(client, "gap-error");
+  await q.refetching();
+  q.fail(new Error("old failure"));
+  queueMicrotask(() => { refresh(client, [["gap-error"]]); });
+  await vi.waitFor(() => expect(client.getQueryData(["gap-error"])).toBe("fresh"));
+  expect(q.calls()).toBe(3);
 });
