@@ -300,9 +300,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   // Each invalidation starts a new catalogue version: a read in flight from before it is never joined by later callers.
   let catalogueVersion = 0;
   const environments = () => environmentCache.fetchQuery({ queryKey: ["environments", catalogueVersion], queryFn: async () => {
-    const token = hostPolicy.beginCatalogue();
+    const catalogue = catalogueVersion, token = hostPolicy.beginCatalogue();
     const rows = await page("listEnvironments", "/environments", 100);
-    hostPolicy.applyCatalogue(token, rows);
+    // An obsolete catalogue version still answers its own callers but no longer sets the dispatch policy.
+    if (catalogue === catalogueVersion) hostPolicy.applyCatalogue(token, rows);
     return rows;
   } });
   function invalidateCapabilities() { capabilityReads.clear(); }

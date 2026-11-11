@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #389: security fan-out reads are skippable background reads.
 
+import { freshFrom } from "../refresh-owner";
 import { inventoryRecovery } from "../inventory-recovery";
 import { hostReadDeadline, inventoryReadBudget } from "./host-read-deadline";
 
@@ -121,6 +122,8 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         const values = settingsValues(await request("/environments/0/settings/public", "GET", undefined, false, signal));
         if (!["true", "false"].includes(values.featureVulnerabilityManagementEnabled ?? "")) invalid();
         const enabled = values.featureVulnerabilityManagementEnabled === "true";
+        // The catalogue read starts after every change notified so far (refresh-owner `freshFrom`).
+        if (enabled) freshFrom(parent);
         return { enabled, hosts: enabled ? await o.hosts() : [] };
       }, parent).catch((error: unknown) => { check(); throw error; });
       check();
@@ -164,6 +167,8 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         const values = settingsValues(await request("/environments/0/settings/public", "GET", undefined, false, signal));
         if (!["true", "false"].includes(values.featureVulnerabilityManagementEnabled ?? "")) invalid();
         const enabled = values.featureVulnerabilityManagementEnabled === "true";
+        // The catalogue read starts after every change notified so far (refresh-owner `freshFrom`).
+        if (enabled) freshFrom(parent);
         return { enabled, hosts: enabled ? await o.hosts() : [] };
       }, parent).catch((error: unknown) => { check(); throw error; });
       check();
