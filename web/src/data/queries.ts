@@ -17,6 +17,7 @@ import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtim
 import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
 import { useIsUser } from "./use-principal";
 import { useAdapter } from "./use-adapter";
+import type { RecentEvents } from "./adapter";
 import { queryKeys } from "./query-keys";
 
 // Initial reads stream host batches; refetches retain the complete cached result.
@@ -87,6 +88,14 @@ export function useEvents() {
   const locale = useLocale();
   const select = useMemo(() => (events: CodedEvent[]) => events.map((event) => renderEvent(event, locale)), [locale]);
   return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select });
+}
+
+/** The Dashboard's bounded window (24 h, at most 500); the Activity Center keeps the full history (`useEvents`). */
+export function useDashboardEvents() {
+  const adapter = useAdapter();
+  const locale = useLocale();
+  const select = useMemo(() => (page: RecentEvents) => ({ events: page.events.map((event) => renderEvent(event, locale)), totalItems: page.totalItems }), [locale]);
+  return useQuery({ queryKey: queryKeys.dashboardEvents, queryFn: () => adapter.listDashboardEvents(), select });
 }
 
 export function useActionsQuery() {

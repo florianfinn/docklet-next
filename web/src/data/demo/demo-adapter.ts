@@ -208,6 +208,11 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     ...demoVulnerabilityAdvisories(db, () => db.changed("security")),
     getSecurity: () => simulateRead("security", () => (empty() ? { ...clone(db.security), images: [], findings: [], history: [] } : clone(db.security))),
     listEvents: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.events).map(encodeDemoEvent))),
+    listDashboardEvents: () => simulateRead("dashboard", () => {
+      const since = Date.now() - 24 * 60 * 60 * 1_000;
+      const recent = empty() ? [] : db.events.filter((event) => Date.parse(event.at) >= since);
+      return { events: clone(recent.slice(0, 500)).map(encodeDemoEvent), totalItems: recent.length };
+    }),
     listSchedule: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.schedule))),
     listActions: async () => clone(encodeDemoRuns(runner.list())),
 

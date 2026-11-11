@@ -6,7 +6,7 @@ import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useActionRuns, useMetrics } from "@/data/live";
-import { useCapacity, useEvents, useSchedule, useSecurity, useServiceWidgets } from "@/data/queries";
+import { useCapacity, useDashboardEvents, useSchedule, useSecurity, useServiceWidgets } from "@/data/queries";
 import { useIsUser } from "@/data/use-principal";
 import { isHostVisible } from "@/domain/hosts";
 import type { Tone } from "@/domain/model";
@@ -82,7 +82,7 @@ export default function DashboardPage() {
   const stacks = useVisibleStacks();
   const containers = useVisibleContainers();
   const security = useSecurity();
-  const events = useEvents();
+  const events = useDashboardEvents();
   const schedule = useSchedule(hosts.visible.map((h) => h.id));
   const runs = useActionRuns();
   const metrics = useMetrics((s) => s?.hosts);
@@ -163,7 +163,7 @@ export default function DashboardPage() {
       case "updates":
         return <UpdateRadarWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "timeline":
-        return events.isPending ? <WidgetBodySkeleton /> : events.isError ? <QueryError error={events.error} compact onRetry={() => void events.refetch()} /> : <TimelineWidget events={events.data} hosts={hosts.visible} now={now} />;
+        return events.isPending ? <WidgetBodySkeleton /> : events.isError ? <QueryError error={events.error} compact onRetry={() => void events.refetch()} /> : <TimelineWidget events={events.data.events} total={events.data.totalItems} hosts={hosts.visible} now={now} />;
       case "load":
         return <LoadWidget hosts={hosts.visible} />;
       case "capacity":
@@ -186,7 +186,7 @@ export default function DashboardPage() {
         ) : events.isError ? (
           <QueryError error={events.error} compact onRetry={() => void events.refetch()} />
         ) : (
-          <EventsWidget events={events.data.filter((e) => !e.hostId || visibleIds.has(e.hostId))} hosts={hosts.byId} />
+          <EventsWidget events={events.data.events.filter((e) => !e.hostId || visibleIds.has(e.hostId))} total={events.data.totalItems} hosts={hosts.byId} />
         );
     }
   };

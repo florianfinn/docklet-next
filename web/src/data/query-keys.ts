@@ -20,6 +20,8 @@ export const queryKeys = {
   topology: ["topology"],
   networks: ["network-summaries"],
   events: ["events"],
+  // Not under the events prefix: an events invalidation (stream open) must not refetch the Dashboard's window.
+  dashboardEvents: ["dashboard-events"],
   actions: ["actions"],
   schedule: ["schedule"],
   volumes: ["volumes"],

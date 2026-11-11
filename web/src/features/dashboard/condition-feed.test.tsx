@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original fleet ring condition feed test from the hub event shape, issue #371 (FR5).
+// Deviations: Original fleet ring condition feed test from the hub event shape, issue #371 (FR5). M23 #435: bounded events window.
 
 import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -31,7 +31,7 @@ it("lists the last five condition events with container, exit code, restarts and
     event("e3", "container.condition.restart-loop", { hostId: "host", containerName: "db", exitCode: 0, restarts: 4 }, 3),
     ...["e4", "e5", "e6", "e7"].map((id, i) => event(id, "container.condition.running-again", { hostId: "host", containerName: id, exitCode: 0, restarts: 0 }, 10 + i)),
   ];
-  const adapter = { ...createDemoAdapter(), listEvents: async () => wire.map(mapEvent) };
+  const adapter = { ...createDemoAdapter(), listDashboardEvents: async () => ({ events: wire.map(mapEvent), totalItems: wire.length }) };
   renderWithApp(<ConditionFeed />, adapter);
   const feed = await screen.findByRole("list", { name: "Recent container condition changes" });
   const rows = [...feed.querySelectorAll("li")].map((li) => li.textContent);

@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useScanAction } from "@/features/security/use-scan-action";
+import { RecentEventsLimit } from "./TimelineWidget";
 import { useCapability } from "@/data/use-capability";
 import { useMetrics } from "@/data/live";
 import { useCapacity } from "@/data/queries";
@@ -210,11 +211,12 @@ export function AppsWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<stri
 
 const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: "err", warn: "warn", ok: "ok", info: "info" };
 
-export function EventsWidget({ events, hosts }: { events: OpsEvent[]; hosts: Map<string, Host> }) {
+export function EventsWidget({ events, hosts, total }: { events: OpsEvent[]; hosts: Map<string, Host>; total?: number }) {
   const t = useTranslations("dashboard.events");
   if (!events.length) return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
   return (
     <ScrollArea className="h-full">
+      <p className="flex pr-2 text-xs text-muted-foreground"><RecentEventsLimit total={total} /></p>
       <ol className="flex flex-col pr-2">
         {events.slice(0, 12).map((e) => (
           <li key={e.id} className="flex gap-2.5 border-b border-border/50 py-2 last:border-0">

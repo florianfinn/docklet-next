@@ -60,6 +60,8 @@ import { createActivityTargets } from "./activity-targets";
 import { mapActivityDetail } from "./map-dto";
 import { createActivityReader } from "./activity-reader";
 import { createEventReader } from "./event-reader";
+import { DASHBOARD_EVENT_LIMIT, DASHBOARD_EVENT_WINDOW_MS, createDashboardEvents } from "./dashboard-events";
+import { type Body, type ReadOperation, createPager } from "./paged-read";
 import { createVolumePrune } from "./volume-prune";
 import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
@@ -72,8 +74,6 @@ import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
 import { createStackTerminals } from "./stack-terminals";
 
-type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
-type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
@@ -305,7 +305,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
     backups.invalidate();
-    events.identityChanged();
+    events.identityChanged(); dashboardEvents.identityChanged();
     authenticated = nextActive;
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
@@ -389,21 +389,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!descriptor.available) throw unavailable(operationId, descriptor.resourceRef, descriptor.disabledReasonCode);
   }
 
-  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<NonNullable<Body<I>["data"]>> {
-    const result: NonNullable<Body<I>["data"]> = [] as unknown as NonNullable<Body<I>["data"]>;
-    let start = 0;
-    for (;;) {
-      if (signal?.aborted) throw new CancelledError();
-      let responseIncomplete = false;
-      const body = await read(operationId, route, { start, limit, order: "desc", ...(operationId === "list-activities" ? { includeSummary: "true" } : {}), ...(operationId === "listEvents" ? { sort: "timestamp" } : {}) }, (response) => { responseIncomplete = response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable"; observeResponse?.(response); }, signal);
-      if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
-      result.push(...body.data as never[]);
-      start += body.data.length;
-      if (limit === -1 && start < body.pagination.totalItems && responseIncomplete === false) throw classifiedError({ code: `${operationId}.short-page` });
-      if (limit === -1 || start >= body.pagination.totalItems) return result;
-      if (body.data.length === 0) throw classifiedError({ code: `${operationId}.short-page` });
-    }
-  }
+  const page = createPager(read, classifiedError);
 
   async function checkIdentity(): Promise<boolean> {
     if (identityCheck) return identityCheck;
@@ -519,6 +505,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     try { return rows.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
   }, () => identityGeneration, () => hasReadConsumer(adapter.subscribeChanges, "events"));
   const loadEvents = events.load;
+  const dashboardEvents = createDashboardEvents(async (signal) => {
+    await requireCapability("listEvents");
+    const body = await read("listEvents", "/events", { since: new Date(Date.now() - DASHBOARD_EVENT_WINDOW_MS).toISOString(), limit: DASHBOARD_EVENT_LIMIT, sort: "timestamp", order: "desc" }, undefined, signal);
+    if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: "listEvents.invalid-page" });
+    try { return { events: body.data.map(mapEvent), totalItems: body.pagination.totalItems }; } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+  }, () => identityGeneration, { hasConsumer: () => hasReadConsumer(adapter.subscribeChanges, "dashboardEvents"), changed: () => changeListeners.forEach((listener) => listener(["dashboardEvents"])) });
 
   function refreshRuns(recovery = false): void {
     if (principal?.isAdmin === false || actionListeners.size === 0) return;
@@ -543,6 +535,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function refreshSubscribed(reopen = false): void {
     invalidateEnvironments();
     events.changed();
+    // A new connection's initial event frame, not its open, refreshes the Dashboard's recent events.
+    if (!reopen) dashboardEvents.missed();
     refreshRuns(reopen);
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security"]));
   }
@@ -588,6 +582,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
       events.changed();
+      dashboardEvents.frame();
       changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
@@ -615,6 +610,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     let opened: Source;
     try {
       opened = sourceFactory(`${baseUrl}/stream?channels=${principal?.isAdmin === false ? "environments" : "activities%2Cevents%2Cenvironments"}`);
+      dashboardEvents.streamStarted(principal?.isAdmin !== false);
     } catch (error) {
       window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
       scheduleReconnect();
@@ -651,7 +647,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!maintenanceSeen) return;
     maintenanceSeen = false;
     invalidateCapabilities(); invalidateEnvironments(); backups.invalidate();
-    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "schedule", "volumes", "settings", "images", "registries"]));
+    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "dashboardEvents", "schedule", "volumes", "settings", "images", "registries"]));
   });
 
   function scheduleReconnect(): void {
@@ -922,6 +918,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return () => { healthListeners.delete(listener); };
     },
     listEvents: loadEvents,
+    listDashboardEvents: dashboardEvents.load,
     subscribeActions(listener) {
       actionListeners.add(listener);
       runtime.observe(true);

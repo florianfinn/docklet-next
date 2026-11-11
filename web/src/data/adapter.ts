@@ -87,9 +87,13 @@ export interface ImportResult {
 }
 
 /** Query topics used to invalidate cached reads after server-side changes. */
-export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "schedule" | "volumes" | "settings" | "images" | "registries";
+export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "dashboardEvents" | "schedule" | "volumes" | "settings" | "images" | "registries";
 
 export type Unsubscribe = () => void;
+
+export type RecentEvents = { events: CodedEvent[]; totalItems: number };
+/** The Dashboard reads at most this many events of the last 24 hours. */
+export const RECENT_EVENT_LIMIT = 500;
 
 /** Activity reads are observations; a failed source cannot establish removal or completion. */
 export interface ActionReadFailure {
@@ -125,6 +129,8 @@ export interface DockletAdapter extends VulnerabilityCandidatesApi, Vulnerabilit
   listContainers(onPartial?: (rows: ContainerInfo[]) => void, signal?: AbortSignal): Promise<ContainerInfo[]>;
   getSecurity(signal?: AbortSignal): Promise<SecurityOverview>;
   listEvents(): Promise<CodedEvent[]>;
+  /** The last 24 hours of events, newest first, at most 500; `totalItems` counts every event of the window. */
+  listDashboardEvents(): Promise<RecentEvents>;
   listSchedule(hostIds?: readonly string[]): Promise<ScheduledJob[]>;
   listActions(): Promise<CodedActionRun[]>;
 

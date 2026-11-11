@@ -213,7 +213,9 @@ export class DemoDb {
   }
 
   changed(...topics: Topic[]): void {
-    this.changeListeners.forEach((l) => l(topics));
+    // The Dashboard's recent events follow every event change.
+    const all = topics.includes("events") && !topics.includes("dashboardEvents") ? [...topics, "dashboardEvents" as const] : topics;
+    this.changeListeners.forEach((l) => l(all));
   }
 
   deploymentsFor(stackId: string, runs: ActionRun[]): ActionRun[] {

@@ -23,6 +23,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   security: [queryKeys.security],
   topology: [queryKeys.topology, queryKeys.networks],
   events: [queryKeys.events],
+  dashboardEvents: [queryKeys.dashboardEvents],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot, ["backup-overviews"], ["backup-overview"], ["backup-repository"]],
   settings: [queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
@@ -39,6 +40,7 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
     () => {
       if (!enabled) return;
       const offDemand = registerReadConsumer(adapter.subscribeChanges, "events", () => client.getQueryCache().find({ queryKey: queryKeys.events, exact: true })?.isActive() ?? false);
+      const offRecent = registerReadConsumer(adapter.subscribeChanges, "dashboardEvents", () => client.getQueryCache().find({ queryKey: queryKeys.dashboardEvents, exact: true })?.isActive() ?? false);
       const offStacks = adapter.subscribeStackTerminals?.(({ stackId, hostId }) => {
         void client.invalidateQueries({ queryKey: queryKeys.stack(stackId) });
         // The stack's own descriptors and its host's container descriptors may change with the run.
@@ -54,7 +56,7 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
           for (const key of TOPIC_KEYS[topic]) void client.invalidateQueries({ queryKey: key });
         }
       });
-      return () => { offDemand(); offChanges(); offStacks?.(); };
+      return () => { offDemand(); offRecent(); offChanges(); offStacks?.(); };
     },
     [adapter, client, enabled],
   );

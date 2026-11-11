@@ -2,7 +2,7 @@
 // Revision: d4a55e15346430acc3fcf66b241684177375f39e
 // Retrieved: 2026-11-08
 // License: Apache-2.0
-// Deviations: Original Dashboard timeline render-isolation tests through the actual events query selector.
+// Deviations: Original Dashboard timeline render-isolation tests through the actual events query selector. M23 #435: 15-minute slots and the bounded events window.
 
 import { act, screen } from "@testing-library/react";
 import { useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { mapEvent } from "@/data/http/map-dto";
 import type { CodedEvent } from "@/data/message-code";
-import { useEvents } from "@/data/queries";
+import { useDashboardEvents } from "@/data/queries";
 import * as format from "@/domain/format";
 import type { Host, OpsEvent } from "@/domain/model";
 import { renderWithApp } from "@/test/render";
@@ -44,13 +44,13 @@ const coded = (rows: OpsEvent[]): CodedEvent[] => rows.map((event) => mapEvent({
 } as Parameters<typeof mapEvent>[0]));
 let refetch: () => Promise<unknown> = async () => undefined;
 function QueryTimeline() {
-  const query = useEvents();
+  const query = useDashboardEvents();
   useEffect(() => { refetch = query.refetch; }, [query.refetch]);
-  return query.data ? <TimelineWidget events={query.data} hosts={hosts()} now={now} /> : null;
+  return query.data ? <TimelineWidget events={query.data.events} total={query.data.totalItems} hosts={hosts()} now={now} /> : null;
 }
 async function queried(initial: OpsEvent[]) {
   let rows = coded(initial);
-  const adapter = { ...createDemoAdapter(), listEvents: vi.fn(async () => structuredClone(rows)) };
+  const adapter = { ...createDemoAdapter(), listDashboardEvents: vi.fn(async () => ({ events: structuredClone(rows), totalItems: rows.length })) };
   const view = renderWithApp(<QueryTimeline />, adapter);
   await view.findByRole("button", { name: /Event 0/ });
   return { view, serve: (next: OpsEvent[]) => { rows = coded(next); } };
@@ -79,14 +79,16 @@ describe("dashboard timeline", () => {
     expect(formatted()).toBe(markers);
   });
 
-  it("builds only the new marker when a refetch through the events query prepends an event", async () => {
+  it("builds only the changed slot marker when a refetch through the events query prepends an event", async () => {
     setAppLocale("de");
     const { view, serve } = await queried(events);
     const before = formatted();
     serve([{ id: "new", at: new Date(now - 30_000).toISOString(), kind: "activity", level: "info", title: "Fresh event", hostId: "h" }, ...events]);
     await act(async () => { await refetch(); });
-    await view.findByRole("button", { name: /Fresh event/ });
-    expect(view.getAllByRole("button").length).toBe(events.length + 1);
+    // The fresh event joins the newest slot, whose newest entry is still Event 0.
+    await view.findByRole("button", { name: /16 Ereignisse · Event 0/ });
+    // 51 events within 50 minutes fill four 15-minute slots; only the newest slot changed.
+    expect(view.getAllByRole("button").length).toBe(4);
     expect(formatted() - before).toBe(1);
   });
 
@@ -95,6 +97,6 @@ describe("dashboard timeline", () => {
     const { view } = await queried(events);
     act(() => setAppLocale("en-US"));
     await view.findByText("now");
-    expect(view.getByRole("button", { name: /Event 0/ }).getAttribute("aria-label")).toBe(`${format.formatTime(events[0]!.at)} · Event 0`);
+    expect(view.getByRole("button", { name: /Event 0/ }).getAttribute("aria-label")).toBe(`${format.formatTime(events[0]!.at)} · 15 events · Event 0`);
   });
 });

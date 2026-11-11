@@ -2,11 +2,11 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original fleet ring condition feed for issue #371.
+// Deviations: Original fleet ring condition feed for issue #371. M23 #435: reads the Dashboard's bounded events window.
 
 import { useTranslations } from "use-intl";
 
-import { useEvents } from "@/data/queries";
+import { useDashboardEvents } from "@/data/queries";
 import { formatRelative } from "@/domain/format";
 import type { EventLevel } from "@/domain/model";
 import { ToneDot } from "@/shared/components/tone";
@@ -16,8 +16,8 @@ const TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: "err",
 /** The last five container condition changes under the fleet ring; nothing while none exist. */
 export function ConditionFeed() {
   const t = useTranslations("dashboard.ring");
-  const events = useEvents();
-  const recent = (events.data ?? []).filter((e) => e.condition).slice(0, 5);
+  const events = useDashboardEvents();
+  const recent = (events.data?.events ?? []).filter((e) => e.condition).slice(0, 5);
   if (!recent.length) return null;
   return (
     <ol className="flex w-full max-w-md flex-col gap-1 text-xs" aria-label={t("feed")} data-slot="condition-feed">
