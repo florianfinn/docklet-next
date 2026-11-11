@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries.
 
 package access
 
@@ -232,6 +232,7 @@ var Routes = []Route{
 	{"POST", "/environments/{id}/images/pull", "pull-image"},
 	{"POST", "/environments/{id}/images/upload", "upload-image"},
 	{"POST", "/environments/{id}/images/vulnerabilities/summaries", "get-image-vulnerability-summaries"},
+	{"POST", "/environments/{id}/images/vulnerabilities/active-summaries", "get-active-image-vulnerability-summaries"},
 	{"POST", "/environments/{id}/images/{imageId}/patch", "patch-image"},
 	{"POST", "/environments/{id}/images/{imageId}/vulnerabilities/scan", "scan-image-vulnerabilities"},
 	{"POST", "/environments/{id}/images/{name}/tag", "tag-image"},

@@ -2,7 +2,7 @@
 # Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Echo route snapshot for issue #8.
+# Deviations: Echo route snapshot for issue #8; M23 #435 active image summaries.
 DELETE /api/environments/:id/activities/history
 DELETE /api/environments/:id/containers/:containerId
 DELETE /api/environments/:id/images/:imageId
@@ -149,6 +149,7 @@ POST /api/environments/:id/images/:name/tag
 POST /api/environments/:id/images/prune
 POST /api/environments/:id/images/pull
 POST /api/environments/:id/images/upload
+POST /api/environments/:id/images/vulnerabilities/active-summaries
 POST /api/environments/:id/images/vulnerabilities/summaries
 POST /api/environments/:id/jobs/:jobId/restart
 POST /api/environments/:id/jobs/:jobId/run

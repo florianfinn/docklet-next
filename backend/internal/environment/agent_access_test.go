@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation.
+// Deviations: Original host registration implementation. M23 #435: active summaries contract coverage.
 
 package environment
 
@@ -174,7 +174,7 @@ func TestHostAgentVersionMatrix(t *testing.T) {
 				require.Equal(t, expected, env.Status)
 				require.NotNil(t, env.LastSeen)
 				for _, route := range []struct{ method, path string }{
-					{"GET", "/api/health"}, {"GET", "/api/app-version"}, {"HEAD", "/api/environments/0/system/health"}, {"POST", "/api/environments/0/system/upgrade"}, {"GET", "/api/environments/0/containers"}, {"POST", "/api/container-registries/sync"}, {"PUT", "/api/environments/0/settings"},
+					{"POST", "/api/environments/0/images/vulnerabilities/active-summaries"}, {"GET", "/api/health"}, {"GET", "/api/app-version"}, {"HEAD", "/api/environments/0/system/health"}, {"POST", "/api/environments/0/system/upgrade"}, {"GET", "/api/environments/0/containers"}, {"POST", "/api/container-registries/sync"}, {"PUT", "/api/environments/0/settings"},
 				} {
 					var body []byte
 					if route.method == "POST" && strings.HasSuffix(route.path, "/system/upgrade") {
