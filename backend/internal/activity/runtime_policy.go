@@ -54,7 +54,20 @@ func (s *ActivityService) WaitPolicyUpdate(ctx context.Context, env, run string)
 		return snapshot, err
 	}
 	deadline := remote.schedule.Now().Add(policyHoldCap)
-	for snapshot.OutcomeState == activityDTO.RuntimeOutcomeUnknown && s.policyHoldRetryable(ctx, run) && remote.schedule.Now().Before(deadline) {
+	for {
+		if snapshot.OutcomeState != activityDTO.RuntimeOutcomeUnknown {
+			if isTerminalActivityStatusInternal(snapshot.Status) {
+				return snapshot, nil
+			}
+			// A refresh proved the run still active: resume the ordinary wait.
+			if snapshot, err = s.runtimeHTTP.wait(ctx, ref, nil); err != nil {
+				return snapshot, err
+			}
+			continue
+		}
+		if !s.policyHoldRetryable(ctx, run) || !remote.schedule.Now().Before(deadline) {
+			return snapshot, nil
+		}
 		if err := remote.schedule.Wait(ctx, policyHoldSpacing); err != nil {
 			return snapshot, err
 		}
@@ -64,7 +77,6 @@ func (s *ActivityService) WaitPolicyUpdate(ctx context.Context, env, run string)
 			return snapshot, ctx.Err()
 		}
 	}
-	return snapshot, nil
 }
 
 // Only holds the executor may still resolve are re-queried; expired or invalid
