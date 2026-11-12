@@ -50,66 +50,74 @@ func checkedLifecycleResult(result dto.LifecycleResult) dto.LifecycleResult {
 	return result
 }
 
+// terminalShape is what checked evidence may claim for one terminal status and code.
+type terminalShape struct {
+	evidenceOptional, recoveryOptional, verified, codeRequired bool
+	outcomes                                                   []string
+}
+
+func observedTerminalShape(status, code string) (terminalShape, bool) {
+	switch {
+	case status == "success":
+		return terminalShape{recoveryOptional: true, verified: true, outcomes: []string{"not-needed"}}, true
+	case status == "cancelled", status == "failed" && code == "runtime.interrupted":
+		// Interruption and cancellation may end a run before or after its first effect.
+		return terminalShape{evidenceOptional: true, recoveryOptional: true, outcomes: []string{"interrupted", "not-needed"}}, true
+	case status == "failed":
+		return terminalShape{codeRequired: true, outcomes: []string{"not-needed", "restored", "restore-failed", "unavailable"}}, true
+	}
+	return terminalShape{}, false
+}
+
+// recoveryCodeValid is the per-outcome reason rule; it never depends on the terminal status.
+func recoveryCodeValid(result dto.LifecycleResult) bool {
+	recovery := result.Recovery
+	switch recovery.Outcome {
+	case "not-needed", "interrupted":
+		return recovery.Code == "" || recovery.Code == result.Code
+	case "restored":
+		return recovery.Code == ""
+	case "restore-failed":
+		return true
+	case "unavailable":
+		return slices.Contains([]string{"restore.unavailable", "restore.files-changed", "restore.shared-reference", "image.busy", "container.auto-remove"}, recovery.Code)
+	}
+	return false
+}
+
 func checkedTerminalLifecycle(run, status, code string, bound bool, result *dto.LifecycleResult) *dto.LifecycleResult {
 	unknown := func() *dto.LifecycleResult { value := unknownLifecycle(run); return &value }
-	if result == nil {
-		if bound && !(status == "cancelled" || status == "failed" && code == "runtime.interrupted") {
-			return unknown()
+	if !bound {
+		if result == nil {
+			return nil
 		}
-		return nil
-	}
-	checked := checkedLifecycleResult(*result)
-	if checked.RunID != run || checked.Code == "runtime.outcome-unknown" {
+		if checked := checkedLifecycleResult(*result); checked.RunID == run && checked.Code != "runtime.outcome-unknown" && checked.Recovery == nil {
+			return &checked
+		}
 		return unknown()
 	}
-	recovery := checked.Recovery
-	if !bound {
-		if recovery != nil {
-			return unknown()
-		}
-		return &checked
+	shape, ok := observedTerminalShape(status, code)
+	if !ok {
+		return unknown()
 	}
-	switch status {
-	case "success":
-		if !checked.Verified || checked.Code != "" || recovery != nil && (recovery.Outcome != "not-needed" || recovery.Code != "") {
-			return unknown()
+	if result == nil {
+		if shape.evidenceOptional {
+			return nil
 		}
-	case "cancelled":
-		if recovery != nil && (recovery.Outcome != "interrupted" && recovery.Outcome != "not-needed" || recovery.Code != "" && recovery.Code != checked.Code) {
-			return unknown()
+		return unknown()
+	}
+	checked := checkedLifecycleResult(*result)
+	if checked.RunID != run || checked.Code == "runtime.outcome-unknown" || checked.Verified != shape.verified ||
+		shape.verified && checked.Code != "" || shape.codeRequired && checked.Code == "" {
+		return unknown()
+	}
+	if checked.Recovery == nil {
+		if shape.recoveryOptional {
+			return &checked
 		}
-		if checked.Verified {
-			return unknown()
-		}
-	case "failed":
-		if code == "runtime.interrupted" {
-			// A zero-effect refusal stays "not-needed" when the owner context ended around it.
-			if checked.Verified || recovery != nil && recovery.Outcome != "interrupted" && recovery.Outcome != "not-needed" {
-				return unknown()
-			}
-			break
-		}
-		if recovery == nil || checked.Code == "" || checked.Verified {
-			return unknown()
-		}
-		switch recovery.Outcome {
-		case "not-needed":
-			if recovery.Code != "" && recovery.Code != checked.Code {
-				return unknown()
-			}
-		case "restored":
-			if recovery.Code != "" {
-				return unknown()
-			}
-		case "restore-failed":
-		case "unavailable":
-			if !slices.Contains([]string{"restore.unavailable", "restore.files-changed", "restore.shared-reference", "image.busy", "container.auto-remove"}, recovery.Code) {
-				return unknown()
-			}
-		default:
-			return unknown()
-		}
-	default:
+		return unknown()
+	}
+	if !slices.Contains(shape.outcomes, checked.Recovery.Outcome) || !recoveryCodeValid(checked) {
 		return unknown()
 	}
 	return &checked

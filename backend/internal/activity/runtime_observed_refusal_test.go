@@ -143,3 +143,40 @@ func TestObservedEvidenceHoldsMaximumAppliedServices(t *testing.T) {
 	require.Equal(t, "update.unstable", checked.Code)
 	require.Len(t, checked.Applied, dto.MaxAppliedCandidates)
 }
+
+// R3S1-1: a "not needed" recovery code that contradicts the lifecycle code is unknown
+// for every terminal status, through the real completion transaction.
+func TestObservedNotNeededCodeContradictionIsUnknown(t *testing.T) {
+	for _, mode := range []string{"manual", "scheduled"} {
+		for _, terminal := range []struct {
+			name, state string
+			code        activityDTO.Code
+		}{
+			{"ordinary", "failed", activityDTO.CodeRuntimeFailed},
+			{"interrupted", "failed", activityDTO.CodeRuntimeInterrupted},
+			{"cancelled", "cancelled", activityDTO.CodeRuntimeCancelled},
+		} {
+			for _, reason := range []string{"", "runtime.target-unavailable", "update.deploy-failed"} {
+				t.Run(mode+"/"+terminal.name+"/"+reason, func(t *testing.T) {
+					f := runtimeFixture(t)
+					req := f.request()
+					req.OperationID = string(RuntimeUpdateProject)
+					row, err := f.admit(req)
+					require.NoError(t, err)
+					require.NoError(t, f.svc.db.Create(&RuntimeObservedRun{RunID: row.RunID, Kind: "stack", Mode: mode, CreatedAt: f.now}).Error)
+					result := dto.LifecycleResult{RunID: row.RunID, Code: "runtime.target-unavailable", HTTPStatus: 503, Recovery: &dto.RecoveryResult{Outcome: "not-needed", Code: reason}}
+					want := activityDTO.RuntimeOutcomeKnown
+					if reason == "update.deploy-failed" {
+						want = activityDTO.RuntimeOutcomeUnknown
+					}
+					require.NoError(t, f.tx(func(tx *gorm.DB, now time.Time) error {
+						snapshot, _, err := runtimeCompleteTxInternal(tx.WithContext(context.WithValue(tx.Statement.Context, gateRunContextKey{}, row.RunID)), now, req.Identity, runtimeLocalResultInternal{state: terminal.state, code: terminal.code, message: "refused", settledAt: now, imageLifecycle: &result})
+						require.NoError(t, err)
+						require.Equal(t, want, snapshot.OutcomeState)
+						return err
+					}))
+				})
+			}
+		}
+	}
+}
