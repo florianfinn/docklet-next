@@ -72,7 +72,12 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recreateEffectTimeout)
+	budget := recreateEffectTimeout
+	watch := deferredRecreateFrom(ctx)
+	if watch != nil {
+		budget = observedRecreateBudget
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
 	defer cancel()
 	j := &RecreateJournal{RunID: run, OldID: old.ID, OldName: strings.TrimPrefix(old.Name, "/"), BackupName: strings.TrimPrefix(old.Name, "/") + "-docklet-recreate-" + run, NewName: name, WasRunning: old.State != nil && old.State.Running, AutoRemove: old.HostConfig != nil && old.HostConfig.AutoRemove}
 	if expected, ok := ctx.Value(expectedContainerImageKey{}).(string); ok {
@@ -83,11 +88,24 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 		// transaction's journal check still holds the run if the row committed.
 		return "", fmt.Errorf("recreate journal: %w", errors.Unwrap(err))
 	}
+	if observed := observedRecreateFrom(ctx); observed != nil {
+		observed.journaled = true
+	}
+	var tail func() (string, error)
 	fail := func(step string, effectErr error) (string, error) {
 		if ctx.Err() != nil {
 			return "", &recreateUncertain{cause: effectErr}
 		}
 		recovery, err := s.recoverRecreate(ctx, c, j)
+		if errors.Is(err, errObservedContinue) {
+			// The errored effect completed in the daemon: continue at started.
+			if j.WasRunning {
+				if err := s.saveRecreate(ctx, j, "started"); err != nil {
+					return "", err
+				}
+			}
+			return tail()
+		}
 		if err != nil {
 			// A failed recovery read is no outcome: the journal stays unresolved and
 			// the run stays held for startup recovery.
@@ -99,6 +117,7 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 		}
 		return "", dto.RecreateFailure(recovery.Code, step)
 	}
+	tail = func() (string, error) { return s.recreateTail(ctx, c, j, watch, fail) }
 	if _, err := c.ContainerRename(ctx, j.OldID, client.ContainerRenameOptions{NewName: j.BackupName}); err != nil {
 		return fail("rename", err)
 	}
@@ -157,6 +176,18 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 			return "", err
 		}
 	}
+	return tail()
+}
+
+// recreateTail removes the original after the replacement is in place. An
+// observed update first proves and observes the replacement while the original
+// is kept, and compensates instead of removing it on failure.
+func (s *ContainerService) recreateTail(ctx context.Context, c *client.Client, j *RecreateJournal, watch *observedRecreate, fail func(string, error) (string, error)) (string, error) {
+	if watch != nil {
+		if handled, err := s.observeReplacement(ctx, c, j, watch); handled {
+			return "", err
+		}
+	}
 	if err := s.saveRecreate(ctx, j, "intent-remove-old"); err != nil {
 		return "", err
 	}
@@ -169,6 +200,11 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 		return "", err
 	}
 	if err := s.verifyImageRecreate(ctx, c, j); err != nil {
+		// A replacement that runs another image is still the live container;
+		// the origin follows it even though the update is refused.
+		if refusedReplacement(err) {
+			dto.RecordRecreateResult(ctx, *recreateResult(j))
+		}
 		return j.NewID, err
 	}
 	result := recreateResult(j)
@@ -277,7 +313,11 @@ func (s *ContainerService) finishRecoveredRecreate(ctx context.Context, c *clien
 	if err := s.verifyImageRecreate(ctx, c, j); err != nil {
 		var p *imageDTO.OperationError
 		if errors.As(err, &p) && p.Problem.Code == "update.target-changed" {
-			return dto.RecreateRecovery{RunID: j.RunID, Code: "update.target-changed"}, nil
+			recovery := dto.RecreateRecovery{RunID: j.RunID, Code: "update.target-changed"}
+			if refusedReplacement(err) {
+				recovery.Result = recreateResult(j)
+			}
+			return recovery, nil
 		}
 		return dto.RecreateRecovery{}, err
 	}
@@ -362,6 +402,14 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 		}
 		return s.compensateRecreate(ctx, c, j, old, nil)
 	}
+	// A live observed update never finishes here: it proves and observes the
+	// replacement first, or compensates a replacement that is not running.
+	if deferredRecreateFrom(ctx) != nil && observedBeforeRemoval(j.Phase) {
+		if !j.WasRunning || (replacement.State != nil && replacement.State.Running) {
+			return dto.RecreateRecovery{}, errObservedContinue
+		}
+		return s.compensateRecreate(ctx, c, j, old, replacement)
+	}
 	if !j.WasRunning {
 		return s.finishRecoveredRecreate(ctx, c, j, old)
 	}
@@ -389,12 +437,8 @@ func (s *ContainerService) verifyImageRecreate(ctx context.Context, c *client.Cl
 	if j.ExpectedImageID == nil {
 		return nil
 	}
-	current, err := recreateInspect(ctx, c, j.NewName)
-	if err != nil {
+	if _, err := proveImageRecreate(ctx, c, j); err != nil {
 		return err
-	}
-	if current == nil || current.ID != j.NewID || current.Image != *j.ExpectedImageID {
-		return imageDTO.Failure("update.target-changed", 409)
 	}
 	return s.advancePreviousImage(ctx, j)
 }

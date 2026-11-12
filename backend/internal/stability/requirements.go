@@ -9,6 +9,7 @@ package stability
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 )
@@ -27,6 +28,8 @@ type requirement struct {
 	id      string
 	want    int
 	kind    Kind
+	// baseline is an exact container's state before this attempt; nil requires a fresh start.
+	baseline *sample
 }
 
 // RequiredSet owns a frozen copy of the intended membership, never engine counts.
@@ -40,6 +43,17 @@ func NewContainerSet(id string) RequiredSet {
 		return RequiredSet{}
 	}
 	return RequiredSet{requirements: []requirement{{id: id, want: 1}}}
+}
+
+// NewContainerSetSince requires an exact container that this attempt may not have
+// started: its first sample must either match the given pre-attempt restart count
+// and start time, or show a fresh API start (RestartCount 0, start time changed).
+func NewContainerSetSince(id string, restartCount int, startedAt time.Time) RequiredSet {
+	set := NewContainerSet(id)
+	if len(set.requirements) == 1 {
+		set.requirements[0].baseline = &sample{startedAt: startedAt, restartCount: restartCount}
+	}
+	return set
 }
 
 // NewStackSet freezes the selected/present services in the effective deploy model.

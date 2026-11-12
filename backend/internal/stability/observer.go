@@ -141,7 +141,13 @@ func (o *Observer) sample(ctx context.Context, required requirement, state *memb
 		if !seen && state.sampled {
 			return "Container appeared during observation"
 		}
-		if (!seen && container.RestartCount != 0) || (seen && container.RestartCount != previous.restartCount) {
+		// An API start resets RestartCount; a policy restart increments it.
+		fresh := container.RestartCount == 0
+		if base := required.baseline; base != nil {
+			unchanged := container.StartedAt.Equal(base.startedAt) && container.RestartCount == base.restartCount
+			fresh = unchanged || (fresh && !container.StartedAt.Equal(base.startedAt))
+		}
+		if (!seen && !fresh) || (seen && container.RestartCount != previous.restartCount) {
 			return "Required container restarted"
 		}
 		if seen && !container.StartedAt.Equal(previous.startedAt) {

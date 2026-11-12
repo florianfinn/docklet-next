@@ -106,6 +106,21 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 				_, err := runtimeEvidenceTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: row.ExecutorStartedAt})
 				return err
 			}
+			observed, err := runtimeObservedRunTx(tx, row.RunID)
+			if err != nil {
+				return err
+			}
+			if observed != nil && row.OperationID != nil && runtimeContainerImageOperation(RuntimeOperation(*row.OperationID)) {
+				// Process loss cut the observation, compensation or verification:
+				// journal identity is no stability proof. The journal's final
+				// replacement, if any, is still the live container.
+				message := string(activityDTO.CodeRuntimeInterrupted)
+				evidence := updaterDTO.LifecycleResult{RunID: row.RunID, Code: message, HTTPStatus: 503, Recovery: &updaterDTO.RecoveryResult{Outcome: "interrupted"}}
+				result := runtimeLocalResultInternal{recovered: true, state: "failed", code: activityDTO.CodeRuntimeInterrupted, message: message, errorText: &message,
+					settledAt: now, startedAt: row.ExecutorStartedAt, recreate: recovered.Result, imageLifecycle: &evidence}
+				_, _, err := runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
+				return err
+			}
 			state, code := "failed", activityDTO.Code(recovered.Code)
 			if recovered.Result != nil && recovered.Code == "" {
 				state, code = "success", activityDTO.CodeActivitySuccess
@@ -131,7 +146,7 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 			if state == "failed" {
 				result.errorText = new(result.message)
 			}
-			_, _, err := runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
+			_, _, err = runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
 			return err
 		})
 		if err != nil {
