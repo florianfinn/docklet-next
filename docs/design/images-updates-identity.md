@@ -144,3 +144,19 @@ All Moby facts below use Docker v29.9.0 commit `a5b58c94d334674eae3a3207d4f05417
 
 Never-configured policy/schedule/baseline/unchecked fixtures come from Go tests exercising registered handlers/defaults; consume those exact public bytes through the HTTP adapter and actual gestures. Malformed variants exercise the hub's Direct/Edge decode boundary. New fixtures distinguish local ID, index, manifest and config according to the store rather than assigning one digest to every role.
 If a sanitized parser fixture needs a publication exception, use only exact path/category/line-SHA/count entries with reviewed rationale in `scripts/publication-allowlist.json`; no directory exemptions. Prefer reserved examples requiring no exception. Hash-allowlist any committed binary asset; operational screenshots/raw inspect remain private.
+
+## Per-reference digest observations (#412)
+
+One image ID can run under several references, for example two tags of the same content. An image-ID-keyed
+observation can describe only one of them, so the other container showed "unchecked" or a candidate for a
+reference it does not run. Digest-strategy checks therefore also persist one `container::<id>` observation per
+running consumer, with that consumer's own repository, tag and policy key; the image-level row stays keyed by image
+ID for image views and the image summary. Registry reads happen once per distinct reference, and replicas of one
+reference share that result. A failed recheck replaces an older scoped success instead of leaving it actionable.
+
+Check cleanup runs before the new rows are written and deletes only container rows whose policy key no longer matches
+the container's current strategy, so a later tag-policy batch check cannot erase fresh digest rows. The reader uses a
+scoped digest row only when container ID, live image ID, reference and policy key all match the live container;
+otherwise it falls back to the image-level row under the existing same-reference rule. The Dashboard counts pending
+updates per container through this reader, so two containers with their own candidates count twice and one container
+never counts twice. No schema, migration or DTO change was needed.
