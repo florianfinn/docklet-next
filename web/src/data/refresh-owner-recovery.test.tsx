@@ -39,7 +39,7 @@ it.each(["images", "backup-overviews"] as const)("R3G-1 a first load of %s after
   });
   f.source.onopen?.({} as Event); await tick();
   f.release(); await tick(100); off();
-  
+
   expect(call.mock.calls.length).toBe(1);
 });
 
@@ -57,7 +57,7 @@ it("R3G control: warm overview repeats after an explicit registration change", a
   // The producer's connectedAt/session/report updates also change environmentKey while data is already loaded.
   f.state.revision++; f.send(); await tick(100);
   f.release(); await tick(100);
-  
+
   expect(f.requests.filter(p => p.path.endsWith("second/volumes/backups/overview"))).toHaveLength(2);
 });
 
@@ -82,7 +82,7 @@ it.each(["backup-overviews", "schedule"] as const)("R3G-2 a first load of %s rec
   const key = kind === "backup-overviews" ? [kind] : [kind,["first","second"]];
   expect(client.getQueryData(key)).toBeUndefined();
   f.state.edge = "offline"; f.send(); await tick(); f.release(); await tick(100);
-  
+
   expect(client.getQueryState(key)?.status).toBe("success");
 });
 
@@ -98,7 +98,7 @@ it("R3G-3 warm inventory recovery across offline, pending and online frames read
   expect(f.pending.some(p => p.path === "/api/capabilities")).toBe(true);
   f.state.edge = "online"; f.send(); await tick(50);
   f.release(); await tick(100);
-  
+
   expect(f.requests.filter(p => p.path.endsWith("second/images"))).toHaveLength(1);
 });
 
