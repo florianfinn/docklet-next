@@ -70,9 +70,11 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 	}
 	// The image observation was checked for this reference, independently of
 	// other tags sharing its image ID. Replicas reuse that registry result.
+	// Every digest consumer is covered whatever its state, like tag consumers:
+	// readers and the update action see stopped containers too.
 	for _, item := range listed.Items {
 		policy, policyErr := tagpolicy.Resolve(item.Image, updater.DefaultLabelPolicy().TagPolicy(item.Labels))
-		if item.State == "running" && !imageref.IsUpdateCheckDisabled(item.Labels) && SameUpdateReference(item.Image, ref) && policyErr == nil && policy.Strategy == "digest" {
+		if !imageref.IsUpdateCheckDisabled(item.Labels) && SameUpdateReference(item.Image, ref) && policyErr == nil && policy.Strategy == "digest" {
 			policies[item.ID] = &checkDTO.Response{ImageRef: item.Image}
 		}
 	}

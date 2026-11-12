@@ -150,7 +150,8 @@ If a sanitized parser fixture needs a publication exception, use only exact path
 One image ID can run under several references, for example two tags of the same content. An image-ID-keyed
 observation can describe only one of them, so the other container showed "unchecked" or a candidate for a
 reference it does not run. Digest-strategy checks therefore also persist one `container::<id>` observation per
-running consumer, with that consumer's own repository, tag and policy key; the image-level row stays keyed by image
+consumer, running or stopped (like tag-policy consumers; readers and the update action see stopped containers too,
+so a stopped consumer's row must follow every recheck), with that consumer's own repository, tag and policy key; the image-level row stays keyed by image
 ID for image views and the image summary. Registry reads happen once per distinct reference, and replicas of one
 reference share that result. A failed recheck replaces an older scoped success instead of leaving it actionable.
 
@@ -160,3 +161,10 @@ scoped digest row only when container ID, live image ID, reference and policy ke
 otherwise it falls back to the image-level row under the existing same-reference rule. The Dashboard counts pending
 updates per container through this reader, so two containers with their own candidates count twice and one container
 never counts twice. No schema, migration or DTO change was needed.
+
+"Check all" checks every reference a non-opted-out container uses, including live references missing from the
+image's tags, and skips images used only by containers that opted out of update checks (the same rule as the batch
+check). A digest container whose tag has since moved locally to another image (pulled, not recreated) shows its own
+scoped `unknown` instead of the older image-level row, as tag-policy consumers already do. For a consumer on a
+non-default platform the stored row is `unknown` (no native evidence at the default platform); the immediate check
+response may still carry the default-platform result, as before #412.

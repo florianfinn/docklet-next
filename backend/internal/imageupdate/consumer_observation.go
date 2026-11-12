@@ -97,7 +97,7 @@ func (s *ImageUpdateService) invalidateConsumerObservations(ctx context.Context,
 }
 
 // Failed image discovery keeps tag-policy failure behavior and persists the
-// same failure for each running digest consumer without another registry read.
+// same failure for each digest consumer, in any state, without another registry read.
 func (s *ImageUpdateService) saveFailedDigestObservations(ctx context.Context, ref string, result *checkDTO.Response) error {
 	var consumers []container.Summary
 	if s.db != nil && !strings.Contains(ref, "@") {
@@ -105,7 +105,7 @@ func (s *ImageUpdateService) saveFailedDigestObservations(ctx context.Context, r
 			if listed, err := c.ContainerList(ctx, client.ContainerListOptions{All: true}); err == nil {
 				for _, cnt := range listed.Items {
 					policy, err := tagpolicy.Resolve(cnt.Image, updater.DefaultLabelPolicy().TagPolicy(cnt.Labels))
-					if err == nil && policy.Strategy == "digest" && cnt.State == "running" && !imageref.IsUpdateCheckDisabled(cnt.Labels) && SameUpdateReference(cnt.Image, ref) {
+					if err == nil && policy.Strategy == "digest" && !imageref.IsUpdateCheckDisabled(cnt.Labels) && SameUpdateReference(cnt.Image, ref) {
 						consumers = append(consumers, cnt)
 					}
 				}
