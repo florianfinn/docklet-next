@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; batch checks deduplicate live references.
 
 package imageupdate
 
@@ -19,6 +19,7 @@ import (
 	checkDTO "github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"go.getarcane.app/updater/refs"
 )
 
 // ReadUpdateInfo is the PR1 producer: registry/Docker reads and an observation
@@ -154,17 +155,27 @@ func (s *ImageUpdateService) ReadUpdateByID(ctx context.Context, id string) (*ch
 	sort.Strings(public)
 	return s.ReadUpdateInfo(ctx, public[0])
 }
-func (s *ImageUpdateService) ReadMultiple(ctx context.Context, refs []string) (checkDTO.BatchResponse, error) {
-	if len(refs) > 256 {
+func (s *ImageUpdateService) ReadMultiple(ctx context.Context, imageRefs []string) (checkDTO.BatchResponse, error) {
+	if len(imageRefs) > 256 {
 		return nil, imageDTO.Failure("update.invalid-target", 400)
 	}
 	out := checkDTO.BatchResponse{}
-	for _, ref := range refs {
+	checked := map[string]*checkDTO.Response{}
+	for _, ref := range imageRefs {
+		key := refs.NormalizeImageUpdateRef(ref)
+		if key == "" {
+			key = ref
+		}
+		if cached := checked[key]; cached != nil {
+			out[ref] = cached
+			continue
+		}
 		r, err := s.ReadUpdateInfo(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
 		out[ref] = r
+		checked[key] = r
 	}
 	return out, nil
 }
@@ -177,9 +188,10 @@ func (s *ImageUpdateService) ReadAll(ctx context.Context) (checkDTO.BatchRespons
 	if err != nil {
 		return nil, imageDTO.Failure("update.check-unavailable", 503)
 	}
-	refs := []string{}
-	for _, item := range items.Items {
-		refs = append(refs, guard.PublicTags(item.RepoTags)...)
+	consumers, err := c.ContainerList(ctx, client.ContainerListOptions{All: true})
+	if err != nil {
+		return nil, imageDTO.Failure("update.check-unavailable", 503)
 	}
-	return s.ReadMultiple(ctx, refs)
+	refs := filterImageSummariesByContainerOptOutInternal(items.Items, consumers.Items, 0)
+	return s.ReadMultiple(ctx, guard.PublicTags(refs))
 }

@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original policy projection for issue #229; persist final consumer-bound native observations.
+// Deviations: Original policy projection for issue #229; persist final consumer-bound native observations, including per-reference digest checks.
 
 package imageupdate
 
@@ -14,6 +14,7 @@ import (
 	"errors"
 	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	checkDTO "github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/moby/moby/api/types/container"
@@ -30,7 +31,10 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 	if err != nil {
 		return result, err
 	}
-	if result.State == "error" || result.State == "unknown" || result.State == "local" {
+	if result.State == "error" || result.State == "unknown" {
+		return result, s.saveFailedDigestObservations(ctx, ref, result)
+	}
+	if result.State == "local" {
 		return result, s.invalidateConsumerObservations(ctx, ref, result)
 	}
 	if strings.Contains(ref, "@") || s.tags == nil {
@@ -56,13 +60,21 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 		consumerLabels[item.ID] = item.Labels
 		consumerRows[item.ID] = item
 	}
-	policies, err := s.tags.Check(ctx, listed.Items, map[string]bool{refs.NormalizeImageUpdateRef(ref): true}, nil, func(context.Context, []string) error { return nil }, func(context.Context, container.Summary, *checkDTO.Response) error { return nil })
+	policies, err := s.tags.Check(ctx, listed.Items, map[string]bool{refs.NormalizeImageUpdateRef(ref): true}, nil, s.deleteContainerUpdateRecordsInternal, func(context.Context, container.Summary, *checkDTO.Response) error { return nil })
 	if err != nil {
 		result.State = "error"
 		result.HasUpdate = false
 		result.Code = "update.check-unavailable"
 		result.Error = imageDTO.Failure(result.Code, 503).Error()
 		return result, s.invalidateConsumerObservations(ctx, ref, result)
+	}
+	// The image observation was checked for this reference, independently of
+	// other tags sharing its image ID. Replicas reuse that registry result.
+	for _, item := range listed.Items {
+		policy, policyErr := tagpolicy.Resolve(item.Image, updater.DefaultLabelPolicy().TagPolicy(item.Labels))
+		if item.State == "running" && !imageref.IsUpdateCheckDisabled(item.Labels) && SameUpdateReference(item.Image, ref) && policyErr == nil && policy.Strategy == "digest" {
+			policies[item.ID] = &checkDTO.Response{ImageRef: item.Image}
+		}
 	}
 	if len(policies) == 0 {
 		return result, nil
@@ -89,7 +101,8 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 		if containerErr == nil {
 			local, containerErr = identity.ResolveContainer(ctx, c, baseline.InspectResponse, "", inspected.Container.ImageManifestDescriptor)
 		}
-		if containerErr == nil {
+		policy, policyErr := tagpolicy.Resolve(consumerRows[id].Image, updater.DefaultLabelPolicy().TagPolicy(consumerLabels[id]))
+		if containerErr == nil && (policyErr != nil || policy.Strategy != "digest") {
 			base, e := s.readImageObservationAt(ctx, ref, local.Platform.String(), inspected.Container.ImageManifestDescriptor)
 			if e == nil && base != nil {
 				projected = *base
