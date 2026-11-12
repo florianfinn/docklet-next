@@ -69,6 +69,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Dashboard load](dashboard-load.md) | M23 bounded events window, active vulnerability counts, inventory scope retention, metrics lifetime and readiness markers |
 | [Capacity, run gate and density](capacity-gate.md) | M23 single disk source and time axis, run gate confirmation read and supported containers per host |
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
-| [Proxy UI concept](proxy-ui-concept.md) | Local Traefik UI and three routing-map placements |
+| [Proxy UI concept](proxy-ui-concept.md) | Development-only Traefik/Caddy UI, live lab bridge and three routing-map placements |
+| [Proxy import analysis](proxy-import-analysis.md) | Dated read-only findings from a real Traefik edge and their constraints on the proxy module |
 
 Historical plans belong in the [history index](../history/README.md).
