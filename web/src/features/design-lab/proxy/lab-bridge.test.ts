@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original development-only proxy design concept with synthetic data; no upstream implementation copied.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyLabRoute, deleteLabRoute, discoverLab, labRouteStatus, labStore, reapplyLab } from "./lab-bridge";
+import { applyLabRoute, deleteLabRoute, discoverLab, labRouteStatus, labStore, listLabRoutes, reapplyLab, removeLabRoutes } from "./lab-bridge";
 import { INITIAL_ROUTES, proxyStore } from "./model";
 import { routeText } from "./route-text";
 const route = { ...INITIAL_ROUTES[0]!, name: "lab-example", proxy: "lab-example", resolver: "", backends: ["http://192.0.2.81:8080"] };
@@ -78,5 +78,23 @@ describe("same-origin lab transport and observations", () => {
     fetchMock.mockRejectedValue(new Error("network")); await reapplyLab(route.proxy);
     expect(fetchMock).toHaveBeenCalledTimes(1); expect(labStore.get().busy).toBe(false);
     expect(labRouteStatus(route, labStore.get().records[route.id])).toBe("labError");
+  });
+  it("cleans up listed lab routes explicitly and keeps browser routes", async () => {
+    proxyStore.set((s) => ({ ...s, routes: [{ ...route, labNames: ["lab-example", "stale"] }] }));
+    fetchMock.mockResolvedValue(response({ ok: true })); await applyLabRoute(route);
+    fetchMock.mockReset(); fetchMock.mockResolvedValueOnce(response([{ name: "lab-example" }, { name: "foreign" }]));
+    expect(await listLabRoutes("caddy")).toEqual(["lab-example", "foreign"]);
+    fetchMock.mockImplementation(async () => response({ ok: true }));
+    expect((await removeLabRoutes("caddy", ["lab-example", "foreign"])).ok).toBe(true);
+    expect(fetchMock.mock.calls.slice(1).map(([url, req]) => [url, req.method])).toEqual([["/lab-api/caddy/routes/lab-example", "DELETE"], ["/lab-api/caddy/routes/foreign", "DELETE"]]);
+    expect(proxyStore.get().routes.map((r) => [r.id, r.labNames])).toEqual([[route.id, ["stale"]]]);
+    expect(labStore.get().records[route.id]).toBeUndefined();
+  });
+  it("stops cleanup at the first failure and keeps tracking of names not removed", async () => {
+    proxyStore.set((s) => ({ ...s, routes: [{ ...route, labNames: ["lab-example", "second"] }] }));
+    fetchMock.mockResolvedValueOnce(response({ ok: true })).mockResolvedValueOnce(response({ ok: false, stage: "load", error: "unreachable" }, 502));
+    const result = await removeLabRoutes("caddy", ["lab-example", "second"]);
+    expect([result.ok, result.error]).toEqual([false, "unreachable"]);
+    expect(proxyStore.get().routes[0]!.labNames).toEqual(["second"]);
   });
 });

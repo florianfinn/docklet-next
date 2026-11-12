@@ -90,6 +90,30 @@ export async function deleteLabRoute(route: ProxyRoute): Promise<LabResult> {
   labStore.set((s) => ({ ...s, records: Object.fromEntries(Object.entries(s.records).filter(([id]) => id !== route.id)) }));
   return { ok: true };
 }
+export async function listLabRoutes(kind: ProxyKind): Promise<string[]> {
+  const response = await fetch("/lab-api/" + kind + "/routes", { signal: AbortSignal.timeout(8000) });
+  const routes = await response.json() as { name?: unknown }[];
+  if (!response.ok || !Array.isArray(routes)) throw new Error("lab-routes");
+  return routes.map((r) => r.name).filter((n): n is string => typeof n === "string");
+}
+/** Explicit lab cleanup: removes live routes by name; browser routes stay, only their lab tracking is cleared. */
+export async function removeLabRoutes(kind: ProxyKind, names: string[]): Promise<LabResult> {
+  const removed: string[] = [];
+  let failure: LabResult | undefined;
+  for (const name of names) {
+    const result = await request(kind, name, "DELETE");
+    if (!result.ok) { failure = result; break; }
+    removed.push(name);
+  }
+  const linked = new Set(Object.entries(proxyStore.get().connections).filter(([, c]) => c.lab === kind).map(([id]) => id));
+  const gone = (list?: string[]) => list?.filter((n) => !removed.includes(n));
+  proxyStore.set((s) => ({ ...s, routes: s.routes.map((r) => linked.has(r.proxy) && r.labNames ? { ...r, labNames: gone(r.labNames) } : r) }));
+  labStore.set((s) => ({ ...s, records: Object.fromEntries(Object.entries(s.records).filter(([id, record]) => {
+    const route = proxyStore.get().routes.find((r) => r.id === id);
+    return !(route && linked.has(route.proxy) && record.names.some((n) => removed.includes(n)));
+  })) }));
+  return failure ?? { ok: true };
+}
 export async function reapplyLab(instance: string) {
   if (labStore.get().busy) return;
   labStore.set((s) => ({ ...s, busy: true }));

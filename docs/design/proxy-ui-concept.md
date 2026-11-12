@@ -178,6 +178,12 @@ failed rename can still be cleaned up after reload; observations themselves do n
 persist. Applied names must be deleted before unlinking the lab connection.
 Cancelling an unsaved applied draft removes its lab names first. Synthetic and production instances never use this bridge.
 
+Maintainer decisions: Reset demo resets browser data only and keeps live lab
+routes; a separate confirmed Remove lab routes action in Settings lists every
+route live on the lab proxy, including untracked ones, and removes them while
+browser routes stay. Lab status is verified on demand rather than reconciled on
+load, and the unlink guard stays until a route ownership contract exists.
+
 The lab uses local/default TLS certificates and cannot demonstrate public ACME.
 Missing Caddy DNS modules surface as real adapt errors. A Traefik API success does
 not validate an unknown certificate resolver. Certificate collection operations
