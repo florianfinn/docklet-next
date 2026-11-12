@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v10.json", import.meta.url);
+export function agentFixturePath() {
+  const source = readFileSync(agentURL, "utf8");
+  const version = source.match(/const AgentHubVersion = (\d+)/)?.[1];
+  if (!version) throw new Error("missing agent contract version");
+  return `types/contract/testdata/agent-hub-v${version}.json`;
+}
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -39,10 +44,10 @@ export function agentFixture(spec, fixture) {
     };
     const envelope = schema("RuntimeExecutionEnvelope")[1];
     const operations = envelope.properties.operation.enum;
-    if (!operations?.includes("update-project") || !operations.includes("restore-project"))
+    if (!operations?.includes("update-project") || !operations.includes("restore-project") || !operations.includes("update-container") || !operations.includes("restore-container-image"))
       throw new Error("missing lifecycle execution producer");
     manifest.lifecycleOperations = operations;
-    const schemaNames = ["LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
+    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
     const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
     const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
       .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))
@@ -50,7 +55,7 @@ export function agentFixture(spec, fixture) {
     manifest.imageLifecycle = {
       targetKinds: ["project"],
       routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point"].includes(op?.operationId))
+        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point", "update-container", "restore-container-image"].includes(op?.operationId))
         .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
       schemas: Object.fromEntries(schemaNames.map((name) => {
         const [key, value] = schema(name);
@@ -58,7 +63,7 @@ export function agentFixture(spec, fixture) {
       })),
       edgeRoutes,
       retiredRoutes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-        .filter(([, op]) => ["update-project-services", "update-container", "run-updater"].includes(op?.operationId))
+        .filter(([, op]) => ["update-project-services", "run-updater"].includes(op?.operationId))
         .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
       runtimePreflightSha256: createHash("sha256").update(JSON.stringify(document.paths["/environments/0/runtime-target"].post)).digest("hex"),
       retainedPoints: 5,
@@ -77,22 +82,22 @@ export function agentFixture(spec, fixture) {
     };
     manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));
     manifest.imageSafety.capabilities = [...new Set([...manifest.imageSafety.capabilities, "stack-update", "restore"])];
-    if (document.paths["/environments/{id}/updater/schedules"]) {
+    if (document.paths["/environments/{id}/updater/policies"]) {
       manifest.imagePolicies = {
-        targetKinds: ["project"], defaultMode: "off", modes: ["off", "notify", "apply"],
-        owner: "hub", jobs: ["image-polling", "auto-update"], timeZone: "hub IANA zone",
+        targetKinds: ["stack", "container"], defaultMode: "check", modes: ["check", "scheduled"],
+        owner: "hub", jobs: ["update-check", "update-window:<env>:<kind>:<target>"], timeZone: "hub IANA zone",
         routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-          .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "get-update-schedules", "set-update-schedules", "get-system-image-hints"].includes(op?.operationId))
+          .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "list-update-policies", "check-all-updates", "get-system-image-hints"].includes(op?.operationId))
           .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
-        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateScheduleConfig", "UpdateScheduleInput", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
+        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateWindow", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
           const [key, value] = schema(name);
           return [key, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }];
         })),
         admission: "current actor/key, registration, baseline and revision; freeze revision in runtime receipt transaction",
-        execution: "existing update-project runtime; serial children per host; retry/restart queries original receipts only",
-        agentLocalCode: "update.agent-local-job-disabled", legacyScheduleWriteCode: "update.schedule-hub-owned",
-        legacyScheduleFields: "autoUpdateInterval and pollingInterval omitted from reads/schema; any write including null or mixed fields refuses before forwarding",
-        notificationIdentity: ["host", "registration", "stack identity", "repository", "platform", "normalized version/tag", "immutable digest"],
+        execution: "update-project or update-container runtime; serial children per host; retry/restart queries original receipts only",
+        retiredSettings: ["autoUpdate", "autoUpdateInterval", "pollingEnabled", "pollingInterval", "vulnerabilityScanEnabled"],
+        agentLocalJobs: [],
+        notificationIdentity: ["host", "registration", "target kind", "target ID", "target identity", "repository", "platform", "normalized version/tag", "immutable digest"],
         notificationCommit: "candidate dedup row and linked durable notification entry in one hub transaction",
         notificationRecovery: "reuse entry across checks, restart and policy toggles; failed/unknown delivery never creates another entry",
       };
@@ -127,8 +132,8 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
-  manifest.version = 10;
-  manifest.minimumAgentContractVersion = 10;
+  manifest.version = Number(readFileSync(agentURL, "utf8").match(/const AgentHubVersion = (\d+)/)[1]);
+  manifest.minimumAgentContractVersion = Number(readFileSync(agentURL, "utf8").match(/const MinimumAgentVersion = (\d+)/)[1]);
   const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
     .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
     .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
@@ -189,16 +194,61 @@ export function agentFixture(spec, fixture) {
     restoreStatus:202, policyLimit:1, targetAuthority:"UUID generation, preserved restored version counter", localRecovery:"verify before attach; never re-key",
     retiredWorkspaceOperation:"restore_file", retiredRoutes:["/backups/volumes/config","/backups/volumes/options","/backups/volumes/run"],
   };
+  const bindRoutes = Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["list-volume-binds","measure-volume-bind","test-backup-target-draft"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")})));
+  for (const route of bindRoutes) collectVolume(document.paths[route.path][route.method.toLowerCase()]);
+  for (const name of ["BackupTargetProbeRequest", "BackupTargetProbeResult"]) collectVolume({$ref:`#/components/schemas/${name}`});
+  manifest.bindMounts = {
+    key: "bind:lowercase-hex-UTF8; absolute, clean, non-root, no NUL, <=255 bytes",
+    rules: ["system/docker segment overlap including ancestors", "Docklet and stored local/mount targets", "observed workload source or retained rows", "per-operation source witness"],
+    routes: bindRoutes,
+    edgeRoutes: [...commands.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)].filter((m)=>/^volume\.binds\./.test(m[3])||m[3]==="volume.backup.target.probe").map(([,method,path,command])=>({method:method.toUpperCase(),path,command})),
+    probe: document["x-agent-volume-target-probe"],
+    registrationRevision: schemas.EnvironmentEnvironment.properties.registrationRevision,
+    defaultRetention: schemas.SettingsUpdate.properties.backupDefaultRetentionCount,
+    sizeDeadlineSeconds: 120,
+  };
   manifest.autoHeal = {
     routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["get-auto-heal-settings","update-auto-heal-settings"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
     settings: schemas.AutohealSettings, update: schemas.AutohealUpdate,
+    cooldownSetting:"autoHealCooldownMinutes", cooldownDefault:10, cooldownRange:[1,60], invalidFields:"effective values pause healing; same validator as the job",
     edgeCommands:["auto_heal.settings.get","auto_heal.settings.update"],
   };
   manifest.notificationDispatch = { request:schemas.NotificationDispatchRequest, autoHeal:schemas.NotificationDispatchAutoHeal, backupFailed:schemas.NotificationDispatchBackupFailed, origin:"captured credential and Edge session; transaction rechecks binding", legacy:"direct fan-out, no eventId", hostEvents:"best effort; no agent outbox" };
+  const names = ["OriginAssignment", "RecreateRequest", "RecreateResult", "ContainerProblem", "ShellQuery", "ShellClose", "ShellResize", "ShellExit", "AgentRestartResponse", "AgentRestartRun", "HostProblem", "HealthResponse", "RuntimeOptions", "RuntimeSnapshot"];
+  manifest.containerHostOperations = {
+    routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item)
+      .filter(([,op])=>["assign-container-origin","reset-container-origin","recreate-container","redeploy-container","stop-project","restartEnvironmentAgent","getEnvironmentAgentRestart"].includes(op?.operationId))
+      .map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
+    schemas: Object.fromEntries(names.map(name => {
+      const key = [name, `Container${name}`, `Environment${name}`, `System${name}`, `Activity${name}`].find(key => schemas[key]);
+      if (!schemas[key]) throw new Error(`missing M14 schema ${name}`);
+      return [key, schemas[key]];
+    })),
+    runtimeOperations: schemas.ActivityRuntimeExecutionEnvelope.properties.operation.enum,
+    imagePlatform: schemas.ContainerSummary.properties.imagePlatform,
+    origin: schemas.ContainerSummary.properties.origin,
+    originSource: schemas.ContainerSummary.properties.originSource,
+    stackServiceState: schemas.ProjectRuntimeService.properties.status, stackHint: schemas.ProjectDetails.properties.definitionHint,
+    hostFields: {name: schemas.EnvironmentUpdate.properties.name, color: schemas.EnvironmentUpdate.properties.color, read: schemas.EnvironmentEnvironment.properties.color},
+    settings: schemas.SettingsUpdate.properties.stackStopMode,
+    stackStopMode: {values:["down","stop"], default:"down", environment:"0"},
+    shell: {frameProtocolVersion:1, binary:"stdin/stdout", text:"resize/close/exit", closeCodes:[1000,1008], wsStart:"allowlisted", closeReasonTransport:true},
+    restart: {method:"POST", path:"/api/system/agent/restart", command:"system.agent.restart", route:"agent-only 202 after inspected self resolution; hub one-shot persisted observer", hubIntake:"POST /environments/{id}/agent/restart", hubRead:"GET /environments/{id}/agent/restarts/{runId}", recovery:"reserved interrupted; sent/awaiting observe without resend", acknowledgement:"durable acknowledged_at; response instance is evidence only"},
+  };
+  const sample = document.paths["/environments/{id}/history/sample"]?.get;
+  if (!sample) throw new Error("missing history sample producer");
+  manifest.history = {
+    route: "GET /api/environments/0/history/sample", command: "history.sample",
+    responseLimit: 4 * 1024 * 1024, maxContainers: 2000, maxProjects: 1000,
+    stopIntentOwner: "Docker owning process", stopIntentValidity: "StartedAt <= recorded_at",
+    schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => name.startsWith("History")).map(([name, value]) => [name, {sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex")}])),
+    operationSha256: createHash("sha256").update(JSON.stringify(sample)).digest("hex"),
+  };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }
 
 export function updateAgentContract(spec, mode) {
+  const fixtureURL = new URL(`../${agentFixturePath()}`, import.meta.url);
   const current = readFileSync(fixtureURL);
   const fixture = agentFixture(spec, current);
   const digest = createHash("sha256").update(fixture).digest("hex");
@@ -223,6 +273,7 @@ function formatFixture(value, depth = 0) {
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
   if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
+  if (depth >= 3 && JSON.stringify(value).length <= 300) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

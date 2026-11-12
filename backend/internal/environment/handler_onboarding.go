@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original hub discovery and installation metadata.
+// Deviations: Original hub discovery and installation metadata; operator agent image overrides are free (K-P3, #362).
 
 package environment
 
@@ -10,33 +10,31 @@ import (
 	"context"
 	"net"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/base"
 	environmenttypes "github.com/florianfinn/docklet-next/types/environment"
+	productVersion "github.com/florianfinn/docklet-next/types/version"
 )
 
-var pinnedAgentImage = regexp.MustCompile(`^[a-zA-Z0-9./:_-]+:[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:@sha256:[a-f0-9]{64})?$`)
-var imageVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$`)
-
+// agentImageReference accepts any valid operator override (K-P3); only the
+// release-stamped default must be a release pin.
 func agentImageReference(cfg *config.Config) (string, error) {
-	image := strings.TrimSpace(cfg.AgentImage)
-	if image == "" {
-		tag := strings.TrimPrefix(config.Version, "v")
-		if !imageVersion.MatchString(tag) {
-			tag = "0.0.0"
+	image, operator := config.AgentImageReference(cfg.AgentImage)
+	if operator {
+		if _, err := reference.ParseNormalizedNamed(image); err != nil {
+			return "", huma.Error503ServiceUnavailable("DOCKLET_AGENT_IMAGE is not a valid image reference")
 		}
-		// The deploy/hub/Dockerfile agent target supplies this registry-free fallback.
-		image = "docklet-next-agent:" + tag
+		return image, nil
 	}
-	if !pinnedAgentImage.MatchString(image) {
-		return "", huma.Error503ServiceUnavailable("Configure a pinned DOCKLET_AGENT_IMAGE")
+	if config.DefaultAgentImage != "" && !productVersion.ReleaseReference(image) {
+		return "", huma.Error503ServiceUnavailable("The release default agent image is not pinned; set DOCKLET_AGENT_IMAGE")
 	}
 	return image, nil
 }

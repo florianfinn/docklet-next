@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { useCapability } from "@/data/use-capability";
 import { useNetworkCapabilities } from "./use-network-capabilities";
 import { ArrowRight, Box, ChevronsDownUp, ChevronsUpDown, Link2, Network, Trash2, Unlink, X } from "lucide-react";
@@ -74,7 +75,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
   };
   const name = (id: string) => topology.networks.find((n) => n.id === id)?.name ?? containerName(id);
   const host = hosts.get(net?.hostId ?? container?.hostId ?? "");
-  const online = host?.status === "online";
+  const online = isHostAvailable(host);
   const hostAddr = hostAddress(host);
   const peers = topology.attachments.filter((a) => (net ? a.networkId === net.id : a.containerId === container?.id));
   const dependsOn = container ? topology.dependencies.filter((d) => d.from === container.id).map((d) => d.to) : [];

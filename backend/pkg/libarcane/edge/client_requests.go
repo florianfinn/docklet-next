@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation; M16 bind mounts and backup completion; aborted handlers send no response. M23 #435: active counts cancellation ingress.
 
 package edge
 
@@ -35,7 +35,7 @@ func (c *TunnelClient) messageLoop(ctx context.Context, conn TunnelConnection, w
 			case MessageTypeRequest:
 				c.scheduleRuntimeRequestInternal(ctx, conn, msg, workers, false)
 			case MessageTypeCommandRequest:
-				if runtimeRequestPathInternal(msg.Path) || volumeBackupCancelableRequest(msg.Method, msg.Path) {
+				if runtimeRequestPathInternal(msg.Path) || (volumeBackupCancelableRequest(msg.Method, msg.Path) || activeSummaryRequest(msg.Method, msg.Path)) {
 					c.scheduleRuntimeRequestInternal(ctx, conn, msg, workers, true)
 				} else if transferID := strings.TrimSpace(msg.Metadata[bodyTransferMetadataKey]); transferID != "" {
 					c.beginCommandRequestTransferInternal(ctx, conn, transferID, msg)
@@ -98,7 +98,7 @@ func (c *TunnelClient) beginCommandRequestTransferInternal(ctx context.Context, 
 	if loaded {
 		if previous, ok := previous.(*commandRequestTransfer); ok {
 			previous.stopInternal()
-			if runtimeRequestPathInternal(previous.request.Path) || volumeBackupCancelableRequest(previous.request.Method, previous.request.Path) {
+			if runtimeRequestPathInternal(previous.request.Path) || (volumeBackupCancelableRequest(previous.request.Method, previous.request.Path) || activeSummaryRequest(previous.request.Method, previous.request.Path)) {
 				c.cancelRuntimeRequestInternal(previous.conn, previous.request.ID)
 			}
 			c.sendCommandCompleteInternal(previous.conn, previous.request.ID, http.StatusBadRequest, "duplicate command body transfer ID")
@@ -125,7 +125,7 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 	if msg.Sequence != transfer.nextSequence {
 		if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 			transfer.stopInternal()
-			if runtimeRequestPathInternal(transfer.request.Path) || volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) {
+			if runtimeRequestPathInternal(transfer.request.Path) || (volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) || activeSummaryRequest(transfer.request.Method, transfer.request.Path)) {
 				c.cancelRuntimeRequestInternal(transfer.conn, transfer.request.ID)
 			}
 			c.sendCommandCompleteInternal(transfer.conn, transfer.request.ID, http.StatusBadRequest, "command body chunks arrived out of order")
@@ -133,7 +133,7 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 		return
 	}
 
-	if (runtimeRequestPathInternal(transfer.request.Path) || volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path)) && (transfer.ctx.Err() != nil || transfer.body.Len()+len(msg.Body) > runtimeRequestBodyLimit) {
+	if (runtimeRequestPathInternal(transfer.request.Path) || (volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) || activeSummaryRequest(transfer.request.Method, transfer.request.Path))) && (transfer.ctx.Err() != nil || transfer.body.Len()+len(msg.Body) > runtimeRequestBodyLimit) {
 		if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 			transfer.stopInternal()
 			c.cancelRuntimeRequestInternal(transfer.conn, transfer.request.ID)
@@ -150,7 +150,7 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 	if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 		transfer.stopInternal()
 		transfer.request.Body = append([]byte(nil), transfer.body.Bytes()...)
-		if runtimeRequestPathInternal(transfer.request.Path) || volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) {
+		if runtimeRequestPathInternal(transfer.request.Path) || (volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) || activeSummaryRequest(transfer.request.Method, transfer.request.Path)) {
 			c.startRuntimeHandlerInternal(transfer.ctx, transfer.conn, transfer.request, workers, true)
 		} else {
 			workers.Go(func() { c.handleCommandRequest(transfer.ctx, transfer.conn, transfer.request) })
@@ -202,7 +202,9 @@ func (c *TunnelClient) handleCommandRequest(ctx context.Context, conn TunnelConn
 	}
 
 	recorder := newCommandResponseRecorderInternal(msg.ID, msg.Command, conn)
-	c.handler.ServeHTTP(recorder, req)
+	if c.serveLocalInternal(recorder, req) {
+		return
+	}
 	if closeErr := recorder.Close(); closeErr != nil {
 		slog.WarnContext(reqCtx, "Failed to finalize command response", "id", msg.ID, "command", msg.Command, "error", closeErr)
 	}
@@ -277,7 +279,9 @@ func (c *TunnelClient) handleRequest(ctx context.Context, conn TunnelConnection,
 	}
 
 	// Execute the request through the local handler
-	c.handler.ServeHTTP(rw, req)
+	if c.serveLocalInternal(rw, req) {
+		return
+	}
 
 	// Build response message
 	respHeaders := make(map[string]string)
@@ -302,6 +306,21 @@ func (c *TunnelClient) handleRequest(ctx context.Context, conn TunnelConnection,
 	}
 }
 
+// serveLocalInternal runs the local handler. A handler that aborts with http.ErrAbortHandler gets no response, as
+// with net/http: nothing is sent and the hub fails the pending request when the tunnel closes.
+func (c *TunnelClient) serveLocalInternal(w http.ResponseWriter, req *http.Request) (aborted bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if recovered != http.ErrAbortHandler { //nolint:errorlint // net/http compares the sentinel the same way
+				panic(recovered)
+			}
+			aborted = true
+		}
+	}()
+	c.handler.ServeHTTP(w, req)
+	return false
+}
+
 func isGRPCConnection(conn TunnelConnection) bool {
 	if conn == nil {
 		return false
@@ -323,7 +342,9 @@ func (c *TunnelClient) handleRequestStreaming(ctx context.Context, conn TunnelCo
 	}
 
 	recorder := newStreamingResponseRecorder(msg.ID, conn)
-	c.handler.ServeHTTP(recorder, req)
+	if c.serveLocalInternal(recorder, req) {
+		return
+	}
 
 	if closeErr := recorder.Close(); closeErr != nil {
 		slog.WarnContext(reqCtx, "Failed to finalize streamed response", "id", msg.ID, "error", closeErr)

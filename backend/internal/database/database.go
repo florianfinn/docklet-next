@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only connection policy and forward migrations under a lifetime file lock.
+// Deviations: Local module namespace; SQLite-only connection policy, read-only preflight and source-bound forward migrations under a lifetime file lock.
 
 package database
 
@@ -29,11 +29,16 @@ import (
 
 type DB struct {
 	*gorm.DB
-	hubLock *HubLock
-	path    string
+	hubLock    *HubLock
+	path       string
+	migrations MigrationOptions
 }
 
-type MigrationOptions struct{}
+type MigrationOptions struct {
+	// Source is a test-only migration filesystem rooted at the SQL files.
+	// Production callers leave it nil to use the embedded release migrations.
+	Source fs.FS
+}
 
 const (
 	dbProviderSQLite   = "sqlite"
@@ -63,6 +68,11 @@ func initializeInternal(ctx context.Context, databaseURL string, options Migrati
 	if err != nil {
 		return nil, err
 	}
+	if err := preflightDatabase(ctx, path, options); err != nil {
+		_ = lifetimeLock.Stop()
+		return nil, err
+	}
+
 	db, err := connectDatabaseInternal(ctx, databaseURL)
 	if err != nil {
 		_ = lifetimeLock.Stop()
@@ -70,6 +80,7 @@ func initializeInternal(ctx context.Context, databaseURL string, options Migrati
 	}
 	db.path = path
 	db.hubLock = lifetimeLock
+	db.migrations = options
 
 	// Initialization opens a connection pool before it can fail on migrations or
 	// provider detection; release it rather than leaking it into a failed startup.
@@ -121,7 +132,7 @@ func connectDatabaseInternal(ctx context.Context, databaseURL string) (*DB, erro
 }
 
 func migrateDatabaseInternal(ctx context.Context, db *sql.DB, dbProvider string, options MigrationOptions) error {
-	requiredVersion, err := getHighestEmbeddedMigrationVersionInternal(dbProvider)
+	requiredVersion, err := getHighestEmbeddedMigrationVersionInternal(dbProvider, options)
 	if err != nil {
 		return fmt.Errorf("failed to determine target migration version for %s: %w", dbProvider, err)
 	}
@@ -129,11 +140,11 @@ func migrateDatabaseInternal(ctx context.Context, db *sql.DB, dbProvider string,
 	return migrateDatabaseToVersionInternal(ctx, db, dbProvider, options, requiredVersion)
 }
 
-func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvider string, _ MigrationOptions, requiredVersion int64) error {
-	if err := validateIdentity(ctx, db, requiredVersion); err != nil {
+func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvider string, options MigrationOptions, requiredVersion int64) error {
+	if err := validateIdentity(ctx, db, requiredVersion, options); err != nil {
 		return err
 	}
-	provider, err := newGooseProviderInternal(db, dbProvider)
+	provider, err := newGooseProviderInternal(db, dbProvider, options)
 	if err != nil {
 		return fmt.Errorf("create goose provider: %w", err)
 	}
@@ -154,8 +165,8 @@ func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvide
 	return nil
 }
 
-func newGooseProviderInternal(db *sql.DB, dbProvider string) (*goose.Provider, error) {
-	migrationsFS, err := embeddedMigrationFSInternal(dbProvider)
+func newGooseProviderInternal(db *sql.DB, dbProvider string, options ...MigrationOptions) (*goose.Provider, error) {
+	migrationsFS, err := embeddedMigrationFSInternal(dbProvider, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +179,10 @@ func newGooseProviderInternal(db *sql.DB, dbProvider string) (*goose.Provider, e
 	return goose.NewProvider(dialect, db, migrationsFS)
 }
 
-func embeddedMigrationFSInternal(dbProvider string) (fs.FS, error) {
+func embeddedMigrationFSInternal(dbProvider string, options ...MigrationOptions) (fs.FS, error) {
+	if len(options) > 0 && options[0].Source != nil {
+		return options[0].Source, nil
+	}
 	migrationsFS, err := fs.Sub(resources.FS, "migrations/"+dbProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load embedded migrations for %s: %w", dbProvider, err)
@@ -186,8 +200,8 @@ func gooseDialectInternal(dbProvider string) (goose.Dialect, error) {
 	}
 }
 
-func getHighestEmbeddedMigrationVersionInternal(dbProvider string) (int64, error) {
-	versions, err := getEmbeddedMigrationVersionsInternal(dbProvider)
+func getHighestEmbeddedMigrationVersionInternal(dbProvider string, options ...MigrationOptions) (int64, error) {
+	versions, err := getEmbeddedMigrationVersionsInternal(dbProvider, options...)
 	if err != nil {
 		return 0, err
 	}
@@ -198,8 +212,12 @@ func getHighestEmbeddedMigrationVersionInternal(dbProvider string) (int64, error
 	return versions[len(versions)-1], nil
 }
 
-func getEmbeddedMigrationVersionsInternal(dbProvider string) ([]int64, error) {
-	entries, err := resources.FS.ReadDir("migrations/" + dbProvider)
+func getEmbeddedMigrationVersionsInternal(dbProvider string, options ...MigrationOptions) ([]int64, error) {
+	source, err := embeddedMigrationFSInternal(dbProvider, options...)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := fs.ReadDir(source, ".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read embedded migrations for %s: %w", dbProvider, err)
 	}

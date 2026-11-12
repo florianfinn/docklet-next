@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Actual Fx runtime construction, registered Huma/Echo APIs and Direct/Edge SDK matrix.
+// Deviations: Actual Fx runtime construction, registered Huma/Echo APIs and Direct/Edge SDK matrix. M18 initialize the real image admission before startup reconciliation; share the real role invalidator with authorization tests.
 
 package activity_test
 
@@ -36,6 +36,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/google/uuid"
@@ -54,6 +56,7 @@ type activationFixture struct {
 	receiver *activity.RuntimeReceiver
 	remote   *activity.RuntimeRemoteCoordinator
 	cfg      *config.Config
+	roles    *role.RoleService
 }
 
 type activationSetup struct {
@@ -67,6 +70,11 @@ type activationSetup struct {
 func activationApp(t *testing.T, agent bool, token string, setup ...activationSetup) *activationFixture {
 	t.Helper()
 	f := newRuntimeServicesFixture(t, false)
+	framework := francistest.New(t)
+	gate := runs.NewAdmission(framework.Service(), t.Name()+uuid.NewString())
+	require.NoError(t, gate.Register(framework))
+	francistest.Start(t, framework)
+	f.images.SetImageAdmission(gate, nil)
 	cfg := &config.Config{AgentMode: agent, AgentToken: token, AuthMode: "none", Environment: config.AppEnvironmentTest}
 	var options activationSetup
 	if len(setup) > 0 {
@@ -92,7 +100,7 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 	var httpService *activity.RuntimeHTTPService
 	var receiver *activity.RuntimeReceiver
 	var remote *activity.RuntimeRemoteCoordinator
-	app := fx.New(fx.NopLogger, fx.Supply(local, f.projects, f.containers, environments, f.settings, cfg, client, registry),
+	app := fx.New(fx.NopLogger, fx.Supply(f.db, local, f.projects, f.containers, environments, f.settings, cfg, client, registry),
 		fx.Provide(func() context.Context { return t.Context() }), di.RuntimeOptions, fx.Populate(&runtime, &httpService, &receiver, &remote))
 	require.NoError(t, app.Err())
 	activity.UseImmediateRuntimeReconcileScheduleForTest(remote)
@@ -135,11 +143,11 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 		Environment: environment.New(environments, f.settings, keys, nil, cfg, local),
 		Project:     project.New(f.projects, local), Container: container.New(f.containers, f.docker, f.settings, local),
 		System:  system.New(nil, f.docker, environments, local, cfg),
-		Version: version.NewVersionService(client, true, "0.0.0", "", nil, f.docker, nil, f.settings),
+		Version: version.NewVersionService(client, true, "", "0.0.0", "", f.docker, f.settings),
 	})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
-	return &activationFixture{f, environments, registry, router, server, httpService, receiver, remote, cfg}
+	return &activationFixture{f, environments, registry, router, server, httpService, receiver, remote, cfg, roles}
 }
 
 func activationRemote(t *testing.T, hub, agent *activationFixture, transport string, registration ...string) string {

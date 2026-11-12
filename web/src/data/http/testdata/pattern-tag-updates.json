@@ -1,0 +1,6 @@
+[
+  {"name": "release pattern", "pattern": "release-(?P<version>\\d+\\.\\d+\\.\\d+)", "currentTag": "release-1.0.0", "nextTag": "release-1.1.0", "update": {"state": "version", "hasUpdate": true, "updateType": "minor", "currentVersion": "1.0.0", "latestVersion": "1.1.0"}},
+  {"name": "repeated version text", "pattern": "base-1\\.0\\.0-(?P<version>\\d+\\.\\d+\\.\\d+)", "currentTag": "base-1.0.0-1.0.0", "nextTag": "base-1.0.0-1.1.0", "update": {"state": "version", "hasUpdate": true, "updateType": "minor", "currentVersion": "1.0.0", "latestVersion": "1.1.0"}},
+  {"name": "changing prefix", "pattern": "(?:old|new)-(?P<version>\\d+\\.\\d+\\.\\d+)", "currentTag": "old-1.0.0", "nextTag": "new-1.1.0", "update": {"state": "version", "hasUpdate": true, "updateType": "minor", "currentVersion": "1.0.0", "latestVersion": "1.1.0"}},
+  {"name": "v control", "pattern": "", "currentTag": "v1.0.0", "nextTag": "v1.1.0", "update": {"state": "version", "hasUpdate": true, "updateType": "minor", "currentVersion": "1.0.0", "latestVersion": "1.1.0"}}
+]

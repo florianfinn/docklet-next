@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/stacks/detail/ServicesCard.tsx
+// Revision: f8eda509ac4ee01f09962b84a53fabbcfd8954381a94036c10f10ce141f3b6ad
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule.
+
+import { useIsUser } from "@/data/use-principal";
 import { useCapability } from "@/data/use-capability";
 import { Boxes, FileText, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -20,11 +27,14 @@ import { requestServiceRestart } from "@/shared/components/service-restart-store
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
 export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host | undefined }) {
+  const serviceText = useTranslations("common.stackUpdates");
   const t = useTranslations("stacks.overview");
+  const stopText = useTranslations("stacks.stopMode");
   const ts = useTranslations("common.status");
   const navigate = useNavigate();
   const cmd = useStackCommands();
-  const restart = useCapability("restartService");
+  const user = useIsUser();
+  const restart = useCapability("restartService", { kind: "stack", id: stack.id });
   const rowFor = (svc: Service) => {
     const rt = serviceRuntime(svc, host);
     const tone = RUNTIME_TONE[rt];
@@ -38,6 +48,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
         </TableCell>
         <TableCell>
           <ToneBadge tone={tone}>{ts(rt)}</ToneBadge>
+          {svc.containersRemoved && <p className="mt-1 text-xs text-muted-foreground">{stopText("containersRemoved")}</p>}
         </TableCell>
         <TableCell className="max-w-56">
           <span className="block truncate font-mono text-xs">{versionLabel(svc.image)}</span>
@@ -51,21 +62,21 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           <UpdateIndicator
             name={svc.name}
             update={svc.update}
-            actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
+            actions={{ resourceRef: user ? { kind: "stack", id: stack.id } : undefined, updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: serviceText("service", { name: svc.name }), busy: !!stack.busyActionId }}
           />
         </TableCell>
         <TableCell className="text-right">
-          <Tooltip>
+          {!svc.containersRemoved && <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => navigate(`/stacks/${stack.id}?tab=logs&service=${svc.name}`)} aria-label={t("logs", { name: svc.name })}>
+              <Button variant="ghost" size="icon" className="size-8" onClick={() => navigate(`/stacks/${stack.id}?tab=logs&service=${encodeURIComponent(svc.name)}`)} aria-label={t("logs", { name: svc.name })}>
                 <FileText />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("logs", { name: svc.name })}</TooltipContent>
-          </Tooltip>
+          </Tooltip>}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="group/btn size-8" disabled={!restart.available || !!stack.busyActionId} title={restart.reason} onClick={() => requestServiceRestart([{ stackId: stack.id, stackName: stack.name, service: svc.name }], () => cmd.restartService(stack.id, svc.name))} aria-label={t("restart", { name: svc.name })}>
+              <Button variant="ghost" size="icon" className="group/btn size-8" disabled={!restart.available || !!stack.busyActionId || !!svc.containersRemoved || !!stack.inventory?.stale} title={restart.reason} onClick={() => requestServiceRestart([{ stackId: stack.id, stackName: stack.name, service: svc.name }], () => cmd.restartService(stack.id, svc.name))} aria-label={t("restart", { name: svc.name })}>
                 <RotateCw className="transition-transform duration-(--dur-slow) group-hover/btn:rotate-90" />
               </Button>
             </TooltipTrigger>

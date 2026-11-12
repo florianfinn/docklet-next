@@ -2,12 +2,13 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original target form with immutable locations and volatile credentials.
+// Deviations: Original target form with immutable locations and volatile credentials; M16 draft connection test (#329). M19: total contract-code catalogue maps.
 
+import { BACKUP_TARGET_KIND_KEYS } from "@/data/wire-catalogue-states";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
-import { backupErrorMessage } from "@/data/backup-error";
+import { backupCodeKey, backupErrorMessage } from "@/data/backup-error";
 import type { BackupTarget, BackupTargetInput } from "@/domain/settings";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { TextField } from "@/shared/components/form-field";
@@ -49,6 +50,15 @@ export function TargetDialog({
     [error, setError] = useState<string>();
   const patch = (value: Partial<BackupTargetInput>) => setDraft((old) => ({ ...old, ...value }));
   const remote = draft.kind === "smb" || draft.kind === "nfs";
+  // Local and mount targets are probed on their owner; SMB and NFS on a chosen host, by default the hub's own.
+  const [chosen, setProbe] = useState<string>();
+  const probe = chosen || (hosts.all.find((host) => host.id === "0") ?? hosts.all[0])?.id || "";
+  const probeHost = remote ? probe : draft.hostId ?? "";
+  // A result belongs to the exact definition and host it was taken with; any change hides it.
+  const stamp = JSON.stringify([draft, secret, probeHost]);
+  const [result, setResult] = useState<{ stamp: string; ok: boolean; code?: string; error?: string }>(),
+    [testing, setTesting] = useState(false);
+  const shown = result?.stamp === stamp ? result : undefined;
   const invalid =
     !draft.name.trim() ||
     (remote
@@ -112,7 +122,7 @@ export function TargetDialog({
                 <SelectContent>
                   {(["local", "mount", "smb", "nfs"] as const).map((kind) => (
                     <SelectItem key={kind} value={kind}>
-                      {t(`kinds.${kind}`)}
+                      {all(BACKUP_TARGET_KIND_KEYS[kind])}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -198,6 +208,51 @@ export function TargetDialog({
               autoComplete="off"
               description={t("existingKeyHint")}
             />
+          )}
+          {adapter.testBackupTargetDraft && (
+            <div className="flex flex-wrap items-end gap-2 rounded-xl border p-3">
+              {remote && (
+                <Field className="min-w-48 flex-1">
+                  <FieldLabel htmlFor="tg-probe">{t("testHost")}</FieldLabel>
+                  <Select value={probe} onValueChange={setProbe}>
+                    <SelectTrigger id="tg-probe">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hosts.all.map((host) => (
+                        <SelectItem key={host.id} value={host.id}>
+                          {host.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || testing || !!invalid || !probeHost}
+                onClick={async () => {
+                  setTesting(true);
+                  const taken = stamp;
+                  try {
+                    const answer = await adapter.testBackupTargetDraft!({ target: { ...draft, ...(secret ? { secret } : {}) }, probeHostId: probeHost, ...(target ? { targetId: target.id } : {}) });
+                    setResult({ stamp: taken, ...answer });
+                  } catch (cause) {
+                    setResult({ stamp: taken, ok: false, error: backupErrorMessage(cause, all) });
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                {testing ? t("testing") : t("test")}
+              </Button>
+              {shown && (
+                <p role="status" className={shown.ok ? "w-full text-sm text-success" : "w-full text-sm text-destructive"}>
+                  {shown.ok ? t("testOk") : `${t("testFailed")}: ${shown.error ?? all(backupCodeKey(shown.code) ?? "common.commandErrors.failed")}`}
+                </p>
+              )}
+            </div>
           )}
           <p className="text-xs text-muted-foreground">{t("permissionsNote")}</p>
           {error && (

@@ -2,7 +2,7 @@
 // Revision: 60d2471b62b12e1af64c54060a50102a2e39d1c1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original exhaustive storage route coverage for issue #179.
+// Deviations: Original exhaustive storage route coverage for issue #179; M16 bind list and measurement contracts; M16 bind mounts and backup completion.
 package api
 
 import (
@@ -28,6 +28,8 @@ func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
 		"update-project-workspace":            "project.workspace.update",
 		"get-project-workspace-file":          "project.workspace.read_file",
 		"download-project-workspace-file":     "project.workspace.download",
+		"list-volume-binds":                   "volume.binds.list",
+		"measure-volume-bind":                 "volume.binds.size",
 		"list-volumes":                        "volume.list",
 		"create-volume":                       "volume.create",
 		"delete-volume-backup":                "volume.backup.delete",
@@ -82,7 +84,7 @@ func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
 				require.NotNil(t, storageOperations(agentItem)[method], op.OperationID)
 			}
 		}
-		require.Equal(t, 37, count, "every current volume and project workspace operation must be checked")
+		require.Equal(t, 39, count, "every current volume and project workspace operation must be checked")
 	}
 	require.False(t, edge.ValidateEdgeCommand("volume.backup.upload", "POST", "/api/environments/0/volumes/backups/example/upload", false))
 }

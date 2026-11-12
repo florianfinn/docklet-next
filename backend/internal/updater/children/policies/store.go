@@ -29,19 +29,32 @@ func Key(parts ...string) string {
 
 type Store struct{ DB *gorm.DB }
 
-func (s Store) Policy(ctx context.Context, env, reg, target string) (Policy, error) {
+func (s Store) Policy(ctx context.Context, env, reg, target string, kinds ...string) (Policy, error) {
+	kind := "stack"
+	if len(kinds) > 0 {
+		kind = kinds[0]
+	}
 	var p Policy
-	err := s.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ? AND target_id = ?", env, reg, target).Take(&p).Error
+	err := s.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ? AND target_kind = ? AND target_id = ?", env, reg, kind, target).Take(&p).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return Policy{ID: Key(env, reg, target), EnvironmentID: env, RegistrationID: reg, TargetID: target, Mode: "off", Candidates: "[]"}, nil
+		return Policy{ID: Key(env, reg, kind, target), EnvironmentID: env, RegistrationID: reg, TargetKind: kind, TargetID: target, Mode: "check", Candidates: "[]"}, nil
 	}
 	return p, err
 }
 func (s Store) SavePolicy(ctx context.Context, p Policy, expected uint64) error {
-	if p.Mode != "off" && p.Mode != "notify" && p.Mode != "apply" {
+	if p.TargetKind == "" {
+		p.TargetKind = "stack"
+	}
+	if p.Mode != "check" && p.Mode != "scheduled" {
+		return image.Failure("update.invalid-policy", 400)
+	}
+	if p.Mode == "scheduled" && !p.Window().Valid() || p.Mode == "check" && p.Window() != nil {
 		return image.Failure("update.invalid-policy", 400)
 	}
 	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := environmentExists(tx, p.EnvironmentID); err != nil {
+			return err
+		}
 		var old Policy
 		err := tx.First(&old, "id = ?", p.ID).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -64,42 +77,14 @@ func (s Store) SavePolicy(ctx context.Context, p Policy, expected uint64) error 
 		return nil
 	})
 }
-func (s Store) Schedule(ctx context.Context, env, reg string) (HostSchedule, error) {
-	var p HostSchedule
-	err := s.DB.WithContext(ctx).Where("environment_id = ?", env).Take(&p).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return HostSchedule{ID: Key(env, reg), EnvironmentID: env, RegistrationID: reg, PollingInterval: "0 0 * * * *", AutoUpdateInterval: "0 0 0 * * *", PollingEnabled: true, AutoUpdateEnabled: true}, nil
-	}
-	if err == nil && p.RegistrationID != reg {
-		return HostSchedule{}, image.Failure("update.target-changed", 409)
-	}
-	return p, err
-}
-func (s Store) SaveSchedule(ctx context.Context, p HostSchedule, expected uint64) error {
-	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var old HostSchedule
-		err := tx.First(&old, "id = ?", p.ID).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if old.Revision != expected {
-			return image.Failure("update.policy-changed", 409)
-		}
-		p.Revision = expected + 1
-		if err != nil {
-			return tx.Create(&p).Error
-		}
-		changed := tx.Model(&HostSchedule{}).Where("id = ? AND revision = ?", p.ID, expected).Select("*").Updates(&p)
-		if changed.Error != nil {
-			return changed.Error
-		}
-		if changed.RowsAffected != 1 {
-			return image.Failure("update.policy-changed", 409)
-		}
-		return nil
-	})
-}
 func (s Store) PrepareChild(ctx context.Context, p Policy, job string) (Child, bool, error) {
+	var current Policy
+	if err := s.DB.WithContext(ctx).First(&current, "id = ? AND registration_id = ? AND revision = ?", p.ID, p.RegistrationID, p.Revision).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return Child{}, false, image.Failure("update.policy-changed", 409)
+		}
+		return Child{}, false, err
+	}
 	c := Child{ID: uuid.NewString(), PolicyID: p.ID, JobRunID: job, Revision: p.Revision, Status: "prepared"}
 	changed := s.DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&c)
 	if changed.Error != nil {
@@ -115,15 +100,19 @@ func (s Store) PrepareChild(ctx context.Context, p Policy, job string) (Child, b
 
 // ValidateAdmission runs inside the same transaction that commits runtime receipt
 // and frozen intent. Later policy edits cannot revoke an already accepted child.
-func ValidateAdmission(tx *gorm.DB, b *dto.PolicyBinding, env, reg, target, identity, actor string) error {
+func ValidateAdmission(tx *gorm.DB, b *dto.PolicyBinding, env, reg, target, identity, actor string, kinds ...string) error {
 	if b == nil {
 		return nil
 	}
 	var p Policy
+	kind := "stack"
+	if len(kinds) > 0 {
+		kind = kinds[0]
+	}
 	var child Child
 	if tx.First(&p, "id = ?", b.PolicyID).Error != nil || tx.First(&child, "id = ?", b.ChildID).Error != nil ||
-		p.EnvironmentID != env || p.RegistrationID != reg || p.TargetID != target || p.TargetIdentity != identity ||
-		p.Mode != "apply" || p.Revision != b.Revision || p.ActorID != actor ||
+		p.EnvironmentID != env || p.RegistrationID != reg || p.TargetKind != kind || p.TargetID != target || p.TargetIdentity != identity ||
+		p.Mode != "scheduled" || p.Revision != b.Revision || p.ActorID != actor ||
 		child.PolicyID != p.ID || child.Revision != p.Revision || child.JobRunID != b.JobRunID || child.Status != "prepared" {
 		return image.Failure("update.policy-changed", 409)
 	}
@@ -148,7 +137,19 @@ func (s Store) RecordCandidate(ctx context.Context, policy Policy, c dto.UpdateC
 	if named, err := reference.ParseNormalizedNamed(repository); err == nil {
 		repository = reference.TrimNamed(named).String()
 	}
-	id := Key(policy.EnvironmentID, policy.RegistrationID, policy.TargetIdentity, repository, c.Platform, c.Version, c.Digest)
+	id := Key(policy.EnvironmentID, policy.RegistrationID, policy.TargetKind, policy.TargetID, policy.TargetIdentity, repository, c.Platform, c.Version, c.Digest)
+	// Preserve already-published stack candidate entries across the v14 identity
+	// expansion. New targets always use the kind-and-target-qualified identity.
+	if policy.TargetKind == "stack" || policy.TargetKind == "" {
+		legacy := Key(policy.EnvironmentID, policy.RegistrationID, policy.TargetIdentity, repository, c.Platform, c.Version, c.Digest)
+		var count int64
+		if err := s.DB.WithContext(ctx).Model(&Candidate{}).Where("id = ? AND policy_id = ?", legacy, policy.ID).Count(&count).Error; err != nil {
+			return c, err
+		}
+		if count == 1 {
+			id = legacy
+		}
+	}
 	if !notice {
 		var existing Notice
 		err := s.DB.WithContext(ctx).Where("candidate_id = ?", id).Take(&existing).Error
@@ -169,7 +170,7 @@ func (s Store) RecordCandidate(ctx context.Context, policy Policy, c dto.UpdateC
 	entry.Payload = string(payload)
 	err = s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current Policy
-		if tx.First(&current, "id = ?", policy.ID).Error != nil || current.Revision != policy.Revision {
+		if tx.First(&current, "id = ?", policy.ID).Error != nil || current.Revision != policy.Revision || current.RegistrationID != policy.RegistrationID {
 			return image.Failure("update.policy-changed", 409)
 		}
 		created := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&Candidate{ID: id, PolicyID: policy.ID, CreatedAt: entry.CreatedAt})

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
 import { simulationStore } from "@/data/demo/simulation";
+import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
 
 import { guardUnreachable, placeInfoCard } from "./fleet-segments";
@@ -11,9 +12,12 @@ import { fleetUnits } from "./fleet-status";
 import { FleetRing } from "./FleetRing";
 
 beforeEach(() => {
+  // Geometry and menu fixtures explicitly include every origin group.
+  preferencesStore.set((state) => ({ ...state, showUnraidRing: true }));
   simulationStore.set((s) => ({ ...s, latency: "instant", live: false }));
 });
 afterEach(() => {
+  preferencesStore.set((state) => ({ ...state, showUnraidRing: false }));
   simulationStore.reset();
   localStorage.clear();
 });

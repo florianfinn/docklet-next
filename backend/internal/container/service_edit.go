@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M18 standalone image update and restore safety.
 
 package container
 
@@ -32,6 +32,7 @@ import (
 	"go.getarcane.app/updater/labels"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
@@ -355,6 +356,9 @@ func (s *ContainerService) EditContainer(ctx context.Context, containerID string
 	}
 
 	containerName := strings.TrimPrefix(containerInfo.Name, "/")
+	if err := effectOriginGuard(containerInfo); err != nil {
+		return "", err
+	}
 
 	if localProject := docker.ComposeProjectLabel(containerInfo.Config.Labels); localProject != "" {
 		return "", fmt.Errorf("compose project %s: %w", localProject, common.ErrContainerComposeManaged)
@@ -440,6 +444,7 @@ func (s *ContainerService) GetContainerDetails(ctx context.Context, id string) (
 	}
 
 	details := containertypes.NewDetails(containerInspect)
+	details.OriginFields = origin.Detect(details.Labels)
 	details.Ports = mergePortBindings(details.Ports)
 	currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
 	details.RedeployDisabled = labels.ShouldDisableArcaneServerRedeploy(details.Labels, details.ID, currentContainerID, currentContainerErr)
@@ -451,6 +456,11 @@ func (s *ContainerService) GetContainerDetails(ctx context.Context, id string) (
 	updates := s.lookupContainerUpdateInfoInternal(ctx, []container.Summary{{ID: details.ID, Image: details.Image, ImageID: details.ImageID, Labels: details.Labels}})
 	details.UpdateInfo = updates[details.ID]
 	s.applyContainerDetailsIconInternal(ctx, &details)
+	// The restore offer is optional: a failed slot read hides it, never the details.
+	if err := s.projectPreviousImage(ctx, &details); err != nil {
+		details.PreviousImage = nil
+		slog.WarnContext(ctx, "Previous image slot read failed; restore offer hidden", "container", details.ID, "error", err)
+	}
 
 	return details, nil
 }

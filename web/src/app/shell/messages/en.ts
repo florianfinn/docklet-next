@@ -1,11 +1,20 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/messages/en.ts
+// Revision: fd1ea0afb7f3373b87d565e9465f180a4244d34f7476aab43eace99b81f3ef33
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: hub maintenance status.
+
 // American English texts of the application shell (navigation, host filter, profile menu).
 
 export const enShell = {
+  search: { title: "Search", shortcutMac: "⌘+K", shortcutOther: "Ctrl+K", hint: "Find pages, resources and quick actions.", placeholder: "Search …", empty: "No results", results: "Results", pages: "Pages", settings: "Settings", actions: "Quick actions", loading: "Loading …", showAll: "Show all in {list}", theme: "Toggle theme", signOut: "Sign out", newStack: "New stack", checkUpdates: "Check all updates", activity: "Activity centre" },
   brand: "Docklet",
   brandSub: (import.meta.env.DEV ? "React prototype · Demo data" : "Hub interface"),
   skip: "Skip to content",
   toggleSidebar: "Expand or collapse navigation",
   breadcrumb: "Breadcrumb",
+  navigationTitle: "Navigation",
+  navigationDescription: "Main navigation",
   groups: { operate: "Operations", resources: "Resources", system: "System", later: "Later" },
   nav: {
     dashboard: "Dashboard",
@@ -27,8 +36,8 @@ export const enShell = {
     setup: "First-run setup",
     newHost: "Add host",
   },
+  maintenance: { backup: "Hub maintenance: backup", restore: "Hub maintenance: restore", active: "Hub maintenance", overdue: "Hub maintenance takes longer than expected" },
   partialSecurity: "Partial security total: scan data is unavailable for one or more hosts.",
-  preview: "Preview",
   hostFilter: {
     title: "Host filter",
     all: "All hosts",
@@ -44,12 +53,16 @@ export const enShell = {
     on: (import.meta.env.DEV ? "Live simulation running – click to pause" : ""),
     off: (import.meta.env.DEV ? "Live simulation paused – click to resume" : ""),
   },
+  unavailable: { title: "Not available", body: "This page is available to administrators only." },
   user: {
+    userRole: "User",
+    proxyHint: "Sign out at your reverse proxy",
+    logoutError: "Sign-out failed. Try again.",
     name: import.meta.env.DEV ? "Alex Beispiel" : "",
     email: import.meta.env.DEV ? "alex@example.com" : "",
     unknownName: "Unknown user",
     unknownStatus: "No session connected",
-    role: "Hub administration",
+    role: "Administrator",
     signedInAs: "Signed in as",
     labShortcut: "Alt ⇧ D",
     menu: "Profile and hub settings",

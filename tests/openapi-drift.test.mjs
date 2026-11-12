@@ -7,7 +7,7 @@ import { agentFixture } from "../scripts/agent-contract.mjs";
 
 test("the v9 manifest records the merged activity discovery producer", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v10.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v18.json", import.meta.url));
   assert.deepEqual(agentFixture(spec, fixture), fixture);
   const changed = JSON.parse(spec);
   const recoveryName = JSON.parse(fixture).activityDiscovery.recovery.$ref.split("/").at(-1);
@@ -40,11 +40,11 @@ test("the contract guard rejects a changed Huma operation", () => {
 
 test("v7 lifecycle manifest changes with executable DTOs and admission operations", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v10.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v18.json", import.meta.url));
   const manifest = JSON.parse(fixture);
-  assert.equal(manifest.imageLifecycle.routes.length, 7);
+  assert.equal(manifest.imageLifecycle.routes.length, 9);
   assert.equal(manifest.imageLifecycle.edgeRoutes.length, 6);
-  assert.equal(manifest.imageLifecycle.retiredRoutes.length, 3);
+  assert.equal(manifest.imageLifecycle.retiredRoutes.length, 2);
   for (const route of manifest.imageLifecycle.retiredRoutes) {
     const operation = JSON.parse(spec).paths[route.path][route.method.toLowerCase()];
     assert.equal(operation.deprecated, true);
@@ -102,18 +102,18 @@ test("every lifecycle and policy producer reason is declared and translated", ()
 
 test("v7 policy manifest binds hub schedules, frozen revisions and notification producers", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v10.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v18.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imagePolicies.owner, "hub");
-  assert.equal(manifest.imagePolicies.defaultMode, "off");
-  assert.deepEqual(manifest.imagePolicies.targetKinds, ["project"]);
+  assert.equal(manifest.imagePolicies.defaultMode, "check");
+  assert.deepEqual(manifest.imagePolicies.targetKinds, ["stack", "container"]);
   assert.equal(manifest.imagePolicies.routes.length, 5);
   const document = JSON.parse(spec);
   for (const schema of ["JobscheduleConfig", "JobscheduleUpdate"]) {
     assert.equal(document.components.schemas[schema].properties.pollingInterval, undefined);
     assert.equal(document.components.schemas[schema].properties.autoUpdateInterval, undefined);
   }
-  for (const suffix of ["AutoUpdatePolicy", "UpdateScheduleConfig", "UpdateCandidate", "SystemImageHints", "ProjectUpdateInfo"]) {
+  for (const suffix of ["AutoUpdatePolicy", "UpdateWindow", "UpdateCandidate", "SystemImageHints", "ProjectUpdateInfo"]) {
     const changed = JSON.parse(spec);
     const name = Object.keys(manifest.imagePolicies.schemas).find((key) => key.endsWith(suffix));
     delete changed.components.schemas[name].properties[Object.keys(changed.components.schemas[name].properties)[0]];
@@ -150,7 +150,7 @@ test("reason helper guard catches unprefixed arguments and returns", () => {
 
 test("vulnerability producers and Edge routes change the v8 fingerprint", () => {
  const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v10.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v18.json",import.meta.url));
  const original=agentFixture(spec,fixture);
  const changed=JSON.parse(spec);
  const name=Object.keys(changed.components.schemas).find(name=>name.endsWith("ScanRun") && changed.components.schemas[name].properties.status);
@@ -168,7 +168,7 @@ test("vulnerability producers and Edge routes change the v8 fingerprint", () => 
 
 test("vulnerability problem fields and shared routes are covered by the v8 fingerprint", () => {
  const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v10.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v18.json",import.meta.url));
  const original=agentFixture(spec,fixture);
  const manifest=JSON.parse(original);
  assert.ok(manifest.vulnerability.schemas.VulnerabilityProblem);
@@ -182,4 +182,34 @@ test("vulnerability problem fields and shared routes are covered by the v8 finge
  for (const route of manifest.vulnerability.edgeRoutes) {
   assert.ok(document.paths[route.path.slice(4)]?.[route.method.toLowerCase()]?.tags.includes("Vulnerabilities"),route.path);
  }
+});
+
+function assertCodeEnums(spec) {
+ const reasonSource=readFileSync(new URL("../types/image/reason.go",import.meta.url),"utf8");
+ const declared=new Set(reasonSource.match(/const ReasonEnum = "([^"]+)"/)[1].split(","));
+ for(const file of readdirSync(new URL("../types/activity/",import.meta.url))) {
+  if(!file.endsWith(".go")||file.endsWith("_test.go"))continue;
+  const source=readFileSync(new URL("../types/activity/"+file,import.meta.url),"utf8");
+  for(const [,code] of source.matchAll(/\bCode\s*=\s*"([^"]+)"/g))declared.add(code);
+ }
+ let fields=0;
+ for(const [name,schema] of Object.entries(spec.components.schemas)) {
+  if(!/^(Activity|Updater)/.test(name))continue;
+  for(const [field,shape] of Object.entries(schema.properties??{})) {
+   if(!/(?:^code$|Code$)/.test(field))continue;
+   fields++;
+   assert.ok(Array.isArray(shape.enum)&&shape.enum.length>0,`${name}.${field}: undeclared code field`);
+   for(const code of shape.enum)if(code!==null)assert.ok(declared.has(code),`${name}.${field}: undeclared reason ${code}`);
+  }
+ }
+ assert.ok(fields>=15,"lifecycle and activity code surfaces were not scanned");
+}
+
+test("#254 every lifecycle and activity code field declares its vocabulary",()=>{
+ const spec=JSON.parse(readFileSync(new URL("../api/openapi.json",import.meta.url)));
+ assertCodeEnums(spec);
+ const missing=structuredClone(spec);delete missing.components.schemas.UpdaterLifecycleResult.properties.pointCode.enum;
+ assert.throws(()=>assertCodeEnums(missing),/UpdaterLifecycleResult.pointCode: undeclared code field/);
+ const unknown=structuredClone(spec);unknown.components.schemas.ActivityRuntimeAdmission.properties.code.enum.push("synthetic.undeclared");
+ assert.throws(()=>assertCodeEnums(unknown),/undeclared reason synthetic.undeclared/);
 });

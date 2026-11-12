@@ -27,8 +27,8 @@ func TestPolicyAdmissionErrorAndWaitErrorHoldSerialHost(t *testing.T) {
 	for _, boundary := range []string{"committed-receipt", "receipt-unavailable", "wait-error", "mismatched-acceptance", "settle-write-failure"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "a-stack", "apply")
-			f.save(t, "b-stack", "apply")
+			f.save(t, "a-stack", "scheduled")
+			f.save(t, "b-stack", "scheduled")
 			original := f.p.ports.admit
 			f.afterAdmission = func(b dto.PolicyBinding) {
 				f.receipts[b.ChildID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusRunning}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeUnknown}}
@@ -83,8 +83,8 @@ func TestPolicyAdmissionErrorAndWaitErrorHoldSerialHost(t *testing.T) {
 
 func TestPolicyLateTerminalReceiptAllowsNextChild(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	f.save(t, "b-stack", "scheduled")
 	original := f.p.ports.admit
 	f.p.ports.admit = func(ctx context.Context, env, target, key string, r dto.LifecycleRequest, b dto.PolicyBinding) (activity.RuntimeAdmissionResult, error) {
 		result, err := original(ctx, env, target, key, r, b)
@@ -103,8 +103,8 @@ func TestPolicyLateTerminalReceiptAllowsNextChild(t *testing.T) {
 
 func TestPolicyBusySettlementIsSkipped(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	f.save(t, "b-stack", "scheduled")
 	f.wait = func(id string) (a.RuntimeSnapshot, error) {
 		snapshot := f.receipts[id]
 		snapshot.Status = a.StatusFailed
@@ -123,7 +123,7 @@ func TestPolicyBusySettlementIsSkipped(t *testing.T) {
 func TestPolicyCheckAndApplyStatusAreIndependent(t *testing.T) {
 	t.Run("notify check then apply skip", func(t *testing.T) {
 		f := newPolicyFixture(t)
-		f.save(t, "stack", "notify")
+		f.save(t, "stack", "check")
 		f.run(t, "image-polling", st.Run{})
 		before, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
 		require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestPolicyCheckAndApplyStatusAreIndependent(t *testing.T) {
 	})
 	t.Run("drift refusal then poll", func(t *testing.T) {
 		f := newPolicyFixture(t)
-		f.save(t, "stack", "apply")
+		f.save(t, "stack", "scheduled")
 		f.baseline.Available = false
 		f.baseline.Code = "update.config-drift"
 		f.run(t, "auto-update", st.Run{})
@@ -162,29 +162,29 @@ func TestManualCheckSucceedsDespitePolicyBookkeepingFailure(t *testing.T) {
 	for _, boundary := range []string{"invalid-candidate", "revision-race", "entry-write", "status-write", "host-read", "policy-read"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			p := f.save(t, "stack", "notify")
+			p := f.save(t, "stack", "check")
 			expected := "update.check-unavailable"
 			switch boundary {
 			case "invalid-candidate":
 				f.check.ServiceUpdates["app"].UpdateInfo.LatestDigest = "invalid-digest"
 			case "revision-race":
 				expected = "update.policy-changed"
-				f.p.ports.baseline = func(context.Context, string, string) (dto.BaselineStatus, error) {
-					f.save(t, "stack", "notify")
-					return f.baseline, nil
+				f.p.ports.check = func(context.Context, string, string) (*projectDTO.UpdateInfo, error) {
+					f.save(t, "stack", "check")
+					return f.check, nil
 				}
 			case "entry-write":
 				expected = "update.persistence-failed"
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_entry_failure BEFORE INSERT ON image_update_notifications BEGIN SELECT RAISE(ABORT,'synthetic entry failure'); END").Error)
 			case "status-write":
 				expected = "update.persistence-failed"
-				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_bookkeeping_failure BEFORE UPDATE ON stack_update_policies WHEN NEW.bookkeeping_at IS NOT NULL BEGIN SELECT RAISE(ABORT,'synthetic bookkeeping failure'); END").Error)
+				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_bookkeeping_failure BEFORE UPDATE ON update_policies WHEN NEW.bookkeeping_at IS NOT NULL BEGIN SELECT RAISE(ABORT,'synthetic bookkeeping failure'); END").Error)
 			case "host-read":
 				expected = "update.persistence-failed"
 				f.p.ports.host = func(context.Context, string) (string, error) { return "", errors.New("synthetic host read failure") }
 			case "policy-read":
 				expected = "update.persistence-failed"
-				require.NoError(t, f.db.Exec("DROP TABLE stack_update_policies").Error)
+				require.NoError(t, f.db.Exec("DROP TABLE update_policies").Error)
 			}
 			response, err := (&UpdaterHandler{updaterService: f.s}).CheckProjectUpdates(t.Context(), &dto.CheckProjectInput{EnvironmentID: "0", ProjectID: "stack"})
 			var out *projectDTO.UpdateInfo
@@ -221,10 +221,10 @@ func TestPolicyEmissionReasonsAndPermissionStatus(t *testing.T) {
 	for _, boundary := range []string{"before-check", "after-check", "before-admit"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "stack", "apply")
+			f.save(t, "stack", "scheduled")
 			original := f.p.ports.actor
 			f.p.ports.actor = func(ctx context.Context, env, actor, key string, apply bool) (context.Context, error) {
-				limit := map[string]int{"before-check": 0, "after-check": 1, "before-admit": 2}[boundary]
+				limit := map[string]int{"before-check": 0, "after-check": 1, "before-admit": 1}[boundary]
 				if f.actors >= limit {
 					f.revoked = true
 				}
@@ -242,21 +242,11 @@ func TestPolicyEmissionReasonsAndPermissionStatus(t *testing.T) {
 	}
 }
 
-func TestPolicyEmptyScheduleOwnerHasDedicatedReason(t *testing.T) {
-	f := newPolicyFixture(t)
-	f.save(t, "stack", "apply")
-	require.NoError(t, f.db.Model(&policy.HostSchedule{}).Where("environment_id = ?", "0").Update("actor_id", "").Error)
-	out := f.run(t, "auto-update", st.Run{})
-	require.Equal(t, "update.schedule-owner-unset", out.Code)
-	require.Equal(t, st.Skipped, out.Status)
-	require.Zero(t, f.checks)
-}
-
 func TestPolicyRejectsUncomparableObservationParts(t *testing.T) {
 	for _, part := range []string{"reference", "platform", "platform-os", "platform-arch", "digest"} {
 		t.Run(part, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "stack", "apply")
+			f.save(t, "stack", "scheduled")
 			one := f.check.ServiceUpdates["app"]
 			switch part {
 			case "reference":
@@ -283,7 +273,7 @@ func TestPolicyRejectsUncomparableObservationParts(t *testing.T) {
 
 func TestManualPolicyBookkeepingRecoversWithoutChangingApplyStatus(t *testing.T) {
 	f := newPolicyFixture(t)
-	p := f.save(t, "stack", "notify")
+	p := f.save(t, "stack", "check")
 	require.NoError(t, f.db.Model(&policy.Policy{}).Where("id = ?", p.ID).Update("apply_code", "update.config-drift").Error)
 	info := f.check.ServiceUpdates["app"].UpdateInfo
 	digest := info.LatestDigest

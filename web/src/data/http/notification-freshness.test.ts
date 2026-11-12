@@ -43,7 +43,7 @@ it("logout during held discovery drops queued work and prevents late publication
   try {
     f.sources[0]!.send("unknown-1", "good"); await reached.promise;
     f.sources[0]!.send("unknown-2", "good");
-    await f.adapter.logout(); const reads = f.requests.length; const publications = runs.mock.calls.length;
+    const out = f.adapter.logout(); await vi.advanceTimersByTimeAsync(5_000); await out; const reads = f.requests.length; const publications = runs.mock.calls.length;
     expect(runs.mock.lastCall?.[0]).toEqual([]);
     held.resolve(); await drain();
     expect(f.requests).toHaveLength(reads);
@@ -86,7 +86,7 @@ it("held old discovery cannot start a read after logout and subsequent renewal",
     const old = f.adapter.listActions(); const rejected = old.catch((e: unknown) => e);
     const response = await reached.promise; f.state.hold = undefined;
     f.sources[0]!.send("unknown", "good");
-    await f.adapter.logout(); await f.adapter.login("operator", "Example-password1!");
+    const out = f.adapter.logout(); await vi.advanceTimersByTimeAsync(5_000); await out; await f.adapter.login("operator", "Example-password1!");
     const requests = f.requests.length;
     held.resolve(response); await rejected; await drain();
     expect(f.requests).toHaveLength(requests);

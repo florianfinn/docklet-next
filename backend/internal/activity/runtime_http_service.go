@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Legacy and stack image routes share durable admission and application-owned execution.
+// Deviations: Legacy and stack image routes share durable admission and application-owned execution; a restarting host is refused before remote preparation. M19 #349 an unreachable agent is refused as agent.unavailable before admission.
 
 package activity
 
@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
@@ -25,11 +26,13 @@ import (
 // RuntimeHTTPPorts are trusted construction ports; no browser execution envelope
 // can select an executor, registration, storage generation or actor.
 type RuntimeHTTPPorts struct {
-	ApplicationContext context.Context
-	Agent              bool
-	Store              func(context.Context, string) (RuntimeStoreBinding, error)
-	PrepareLifecycle   func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
-	PrepareTarget      func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
+	InvalidateInventory func(string)
+	GuardContainer      func(context.Context, string, string) error
+	ApplicationContext  context.Context
+	Agent               bool
+	Store               func(context.Context, string) (RuntimeStoreBinding, error)
+	PrepareLifecycle    func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
+	PrepareTarget       func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
 }
 
 type RuntimeHTTPService struct {
@@ -60,10 +63,16 @@ func runtimePermissionInternal(operation RuntimeOperation) string {
 		return authz.PermProjectsDeploy
 	case RuntimeDeployProject, RuntimeRedeployProject:
 		return authz.PermProjectsDeploy
-	case RuntimeDownProject:
+	case RuntimeDownProject, RuntimeStopProject:
 		return authz.PermProjectsDown
 	case RuntimeRestartProject:
 		return authz.PermProjectsRestart
+	case RuntimeRecreateContainer:
+		return authz.PermContainersEdit
+	case RuntimeRedeployContainer:
+		return authz.PermContainersRedeploy
+	case RuntimeUpdateContainer, RuntimeRestoreContainerImage:
+		return authz.PermContainersRedeploy
 	case RuntimeStartContainer:
 		return authz.PermContainersStart
 	case RuntimeStopContainer:
@@ -110,8 +119,11 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	// tuple is used only by the pure validator and never persisted or dispatched.
 	command := RuntimeCommand{Store: RuntimeStoreBinding{EnvironmentID: environmentID, StoreGeneration: "validation", ExecutorGeneration: "validation", ManagerID: "validation", RegistrationID: "validation"},
 		Key: key, Actor: *actor, Operation: operation, Target: target, Options: options}
+	// A policy-owned run is admitted under its child ID; the policy waits on it.
 	if options.Lifecycle != nil && options.Lifecycle.Policy != nil {
 		command.ProposedRunID = options.Lifecycle.Policy.ChildID
+	} else if options.ContainerImage != nil && options.ContainerImage.Policy != nil {
+		command.ProposedRunID = options.ContainerImage.Policy.ChildID
 	}
 	var err error
 	if runtimeImageOperation(operation) {
@@ -139,13 +151,28 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		if err := h.service.refuseRemovedEnvironmentInternal(ctx, environmentID); err != nil {
 			return empty, noRef, err
 		}
+		if err := h.service.refuseRestartingEnvironmentInternal(ctx, environmentID); err != nil {
+			return empty, noRef, err
+		}
 		command.Store, err = h.ports.Store(ctx, environmentID)
 		if err != nil {
+			// Nothing is admitted yet: an unreachable agent answers agent.unavailable like other agent routes.
+			if access := handlerutil.AgentAccess(err); access != nil {
+				return empty, noRef, access
+			}
 			return empty, noRef, err
 		}
 		resolved, err := h.ports.PrepareTarget(ctx, environmentID, target)
 		if err != nil {
 			return empty, noRef, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
+		}
+		if runtimeRecreateOperation(operation) || runtimeContainerImageOperation(operation) {
+			if h.ports.GuardContainer == nil {
+				return empty, noRef, &RuntimeTargetError{Code: "container.origin-locked"}
+			}
+			if err := h.ports.GuardContainer(ctx, environmentID, resolved.Target.ID); err != nil {
+				return empty, noRef, err
+			}
 		}
 		if resolved.ComposeManaged && resolved.Target.ParentProjectID == nil {
 			return empty, noRef, &RuntimeTargetError{Code: string(activitytypes.CodeRuntimeParentUnresolved)}

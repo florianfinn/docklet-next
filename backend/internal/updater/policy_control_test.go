@@ -23,7 +23,7 @@ import (
 
 func TestPolicyRemoteOfflineOrDisabledIsStale(t *testing.T) {
 	f := newPolicyFixture(t)
-	one := f.save(t, "stack", "notify")
+	one := f.save(t, "stack", "check")
 	now := time.Now().UTC()
 	require.NoError(t, f.db.Model(&policy.Policy{}).Where("id = ?", one.ID).Updates(map[string]any{"environment_id": "remote", "checked_at": now}).Error)
 	host := environment.Environment{BaseModel: database.BaseModel{ID: "remote"}, Name: "Example remote", ApiUrl: "https://agent.example.com", Status: "online", Enabled: true}
@@ -39,14 +39,14 @@ func TestPolicyRemoteOfflineOrDisabledIsStale(t *testing.T) {
 			require.Equal(t, tc.stale, got.Stale)
 			require.NotNil(t, got.CheckedAt)
 			require.Empty(t, got.Code)
-			require.Equal(t, "notify", got.Mode)
+			require.Equal(t, "check", got.Mode)
 		})
 	}
 }
 
 func TestPolicyNotificationCrashRemainsSendingWithoutReplay(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "stack", "notify")
+	f.save(t, "stack", "check")
 	require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_delivery_commit_failure BEFORE UPDATE ON image_update_notifications WHEN NEW.status='sent' BEGIN SELECT RAISE(ABORT,'synthetic delivery commit failure'); END").Error)
 	first, err := f.s.CheckPolicyProject(t.Context(), "0", "stack")
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestPolicyNotificationCrashRemainsSendingWithoutReplay(t *testing.T) {
 
 func TestPolicyConcurrentObserverReportsSendingThenSent(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "stack", "notify")
+	f.save(t, "stack", "check")
 	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var sends atomic.Int32
 	var once sync.Once
@@ -110,8 +110,8 @@ func TestPolicyConcurrentObserverReportsSendingThenSent(t *testing.T) {
 
 func TestPolicyUnknownExecutorCodeUsesDeclaredFallbackAndReceiptRetry(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	f.save(t, "b-stack", "scheduled")
 	f.wait = func(id string) (a.RuntimeSnapshot, error) {
 		snapshot := f.receipts[id]
 		snapshot.ImageLifecycle = &dto.LifecycleResult{Code: "agent.future-result"}
@@ -145,14 +145,14 @@ func TestPolicyUnknownExecutorCodeUsesDeclaredFallbackAndReceiptRetry(t *testing
 
 func TestPolicyNotifyToApplyPreservesSentHistory(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "stack", "notify")
+	f.save(t, "stack", "check")
 	_, err := f.s.CheckPolicyProject(t.Context(), "0", "stack")
 	require.NoError(t, err)
 	before, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
 	require.NoError(t, err)
 	require.Len(t, before.Candidates, 1)
 	require.Equal(t, "sent", before.Candidates[0].NotificationState)
-	f.save(t, "stack", "apply")
+	f.save(t, "stack", "scheduled")
 	_, err = f.s.CheckPolicyProject(t.Context(), "0", "stack")
 	require.NoError(t, err)
 	after, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
@@ -167,19 +167,19 @@ func TestPolicyNotifyToApplyPreservesSentHistory(t *testing.T) {
 	require.EqualValues(t, 1, notices)
 }
 
-func TestPolicyApplyDoesNotDispatchPreviouslyPendingNotice(t *testing.T) {
+func TestScheduledPolicyCheckDeliversPendingNoticeWhenNotifyEnabled(t *testing.T) {
 	f := newPolicyFixture(t)
-	one := f.save(t, "stack", "notify")
+	one := f.save(t, "stack", "check")
 	candidate := dto.UpdateCandidate{ImageRef: "registry.example.com/app:1.0.0", Version: "1.1.0", Digest: f.check.ServiceUpdates["app"].UpdateInfo.LatestDigest, Platform: "linux/amd64"}
 	entry, err := f.p.store.RecordCandidate(t.Context(), one, candidate, true)
 	require.NoError(t, err)
-	f.save(t, "stack", "apply")
+	f.save(t, "stack", "scheduled")
 	_, err = f.s.CheckPolicyProject(t.Context(), "0", "stack")
 	require.NoError(t, err)
 	after, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
 	require.NoError(t, err)
 	require.Len(t, after.Candidates, 1)
-	require.Equal(t, "pending", after.Candidates[0].NotificationState)
+	require.Equal(t, "sent", after.Candidates[0].NotificationState)
 	require.Equal(t, entry.EntryID, after.Candidates[0].EntryID)
-	require.Zero(t, f.notifications)
+	require.Equal(t, 1, f.notifications)
 }

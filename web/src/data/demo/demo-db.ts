@@ -19,7 +19,7 @@ import type {
 
 import type { HubSettings } from "@/domain/settings";
 import { withoutSystem } from "@/domain/system";
-import type { BackupPolicy, BackupRun } from "@/domain/volumes";
+import type { BackupPolicy, BackupRun, RestoreRun } from "@/domain/volumes";
 
 import type { Topic } from "../adapter";
 import { FileStore } from "./file-store";
@@ -62,6 +62,8 @@ export class DemoDb {
   createdVolumes = new Map<string, { name: string; hostId: string; createdAt: string; labels: Record<string, string>; seeded?: boolean }>();
   backupPolicies = new Map<string, BackupPolicy>(Object.entries(structuredClone(BACKUP_POLICIES)));
   backupRuns: BackupRun[] = structuredClone(BACKUP_RUNS);
+  /** Newest restore per volume key; with policies and runs it is the stored backup state of a key (K3). */
+  restoreRuns = new Map<string, RestoreRun>();
 
   private readonly changeListeners = new Set<(topics: Topic[]) => void>();
   private seq = 100;
@@ -93,7 +95,22 @@ export class DemoDb {
   /** Stacks as discovery finds them, including the agent's project when it sits in the project directory. */
   discoveredStacks(): Stack[] {
     const agents = this.hosts.filter((h) => h.status !== "pending" && agentInsideProject(h)).map(agentStack);
-    return [...this.stacks, ...agents];
+    return [...this.stacks.filter(stack => this.host(stack.hostId)).map((stack) => this.stoppedDefinition(stack)), ...agents];
+  }
+
+  /** Removed containers leave definition services; invalid text never drops the stack. */
+  private stoppedDefinition(stack: Stack): Stack {
+    if (!stack.services.length || !stack.services.every((service) => service.containersRemoved)) return stack;
+    const parsed = parseCompose(this.compose[stack.id] ?? "");
+    if (!parsed.ok) return { ...stack, reportedStatus: "stopped", definitionHint: "definition-invalid", services: [] };
+    const services = parsed.model.services.map((model): Service => {
+      const prior = stack.services.find((service) => service.name === model.key);
+      const image = splitImage(model.image);
+      return { ...prior, name: model.key, image, state: "stopped", health: "none", containersRemoved: true, containerId: undefined,
+        ports: [], networks: model.networks, restartPolicy: model.restart ?? "no", memLimitMb: prior?.memLimitMb ?? 0,
+        restarts24h: 0, update: prior?.update ?? { state: "unchecked", current: image } };
+    });
+    return { ...stack, reportedStatus: "stopped", definitionHint: undefined, services };
   }
 
   /** Every container Docker reports, including Docklet's own agent on each connected host. */
@@ -103,7 +120,7 @@ export class DemoDb {
 
   /** User workloads only: the system label rule removes the agent from every list and count. */
   containers(): ContainerInfo[] {
-    return withoutSystem(this.discoveredContainers());
+    return withoutSystem(this.discoveredContainers()).filter(container => this.host(container.hostId));
   }
 
   /** Network names from the topology attachments, which connect and disconnect change. */
@@ -116,7 +133,7 @@ export class DemoDb {
   private workloadContainers(): ContainerInfo[] {
     const fromStacks = this.stacks.flatMap((stack) => {
       const details = serviceDetails(this.compose[stack.id] ?? "");
-      return stack.services.map((svc): ContainerInfo => {
+      return stack.services.filter((svc) => !svc.containersRemoved).map((svc): ContainerInfo => {
         const d = details[svc.name];
         return {
           id: containerId(stack.id, svc.name),
@@ -125,6 +142,7 @@ export class DemoDb {
           stackId: stack.id,
           serviceName: svc.name,
           origin: "compose",
+          originSource: "detected",
           originNote: `Compose-Projekt ${stack.id}`,
           image: svc.image,
           state: svc.state,
@@ -140,7 +158,7 @@ export class DemoDb {
         };
       });
     });
-    return [...fromStacks, ...this.standalone.map((c) => ({ ...c, networks: this.networkNames(c.id) ?? c.networks }))];
+    return [...fromStacks, ...this.standalone.map((c) => ({ ...c, originSource: c.originSource ?? "detected" as const, networks: this.networkNames(c.id) ?? c.networks }))];
   }
 
   pushEvent(event: Omit<OpsEvent, "id" | "at">): void {
@@ -195,7 +213,9 @@ export class DemoDb {
   }
 
   changed(...topics: Topic[]): void {
-    this.changeListeners.forEach((l) => l(topics));
+    // The Dashboard's recent events follow every event change.
+    const all = topics.includes("events") && !topics.includes("dashboardEvents") ? [...topics, "dashboardEvents" as const] : topics;
+    this.changeListeners.forEach((l) => l(all));
   }
 
   deploymentsFor(stackId: string, runs: ActionRun[]): ActionRun[] {

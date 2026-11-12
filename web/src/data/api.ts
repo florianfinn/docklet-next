@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/data/api.ts
+// Revision: 357dd6dee16118e0880ca694d222699556389d977c3d15d6148e23e2acee23d7
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #439: Compose self-update controls and capability integration. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
 
@@ -8,14 +14,36 @@ import type { HubDiscovery } from "@/domain/hub-discovery";
 import type { AutoUpdatePolicy, FileOwner, Host, HostConnection, NetworkAttachment, Topology, TopologyNetwork } from "@/domain/model";
 import type { NetworkDraft } from "@/domain/networks";
 import type { BackupTarget, BackupTargetInput, BackupTargetReferences, HubSettings, SettingsSection } from "@/domain/settings";
-import type { NotificationProvider, NotificationTarget, NotificationTargetInput, NotificationTargetRow, NotificationTestResult } from "@/domain/notifications";
+import type { NotificationTarget, NotificationTargetInput, NotificationTargetRow, NotificationTestResult } from "@/domain/notifications";
 import type { AutoHealInput, AutoHealSettings } from "@/domain/auto-heal";
 import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
 import type { BackupBrowse, BackupOverview, BackupPolicy, BackupRepository, BackupSelection, Volume, VolumeDetail } from "@/domain/volumes";
 import type { AuthMode } from "@/domain/settings";
+import type { ReadTag } from "./http/host-read-policy";
+
+export type AppAssignment = components["schemas"]["UserAppAssignment"];
+export type ManagedUser = Pick<components["schemas"]["UserUser"], "id" | "username" | "isAdmin" | "disabledAt" | "requiresPasswordChange"> & { assignments: AppAssignment[] };
+export type PersonalApiKey = Pick<components["schemas"]["ApikeyApiKey"], "id" | "name" | "keyPrefix" | "createdAt" | "expiresAt" | "lastUsedAt">;
+
+export interface UsersApi {
+  listUsers(): Promise<ManagedUser[]>;
+  createUser(input: Pick<components["schemas"]["UserCreateUser"], "username" | "password">): Promise<ManagedUser>;
+  updateUser(id: string, input: Pick<components["schemas"]["UserUpdateUser"], "username">): Promise<ManagedUser>;
+  disableUser(id: string): Promise<void>;
+  enableUser(id: string): Promise<void>;
+  resetUserPassword(id: string, password: string): Promise<void>;
+  deleteUser(id: string): Promise<void>;
+  setUserAdministrator(id: string, isAdmin: boolean): Promise<void>;
+  setUserAppAssignments(id: string, assignments: AppAssignment[]): Promise<void>;
+  listMyApiKeys(): Promise<PersonalApiKey[]>;
+  createMyApiKey(input: components["schemas"]["ApikeyCreateUserApiKey"]): Promise<PersonalApiKey & { key: string }>;
+  deleteMyApiKey(id: string): Promise<void>;
+}
 
 export interface CurrentUser {
+  isAdmin?: boolean;
+  assignments?: AppAssignment[];
   id: string;
   username: string;
   locale?: string | null;
@@ -24,6 +52,7 @@ export interface CurrentUser {
 
 export interface AuthApi {
   getAuthMode(): Promise<AuthMode>;
+  getAuthConfiguration(): Promise<components["schemas"]["AuthSignInConfiguration"]>;
   getCurrentUser(): Promise<CurrentUser>;
   login(username: string, password: string): Promise<CurrentUser>;
   logout(): Promise<void>;
@@ -86,9 +115,11 @@ export interface RegisterHostInput {
 
 export interface UpdateHostInput {
   name: string;
-  /** "#rrggbb"; used for host bars, chips, blocks and topology zones. */
-  color: string;
+  /** Lowercase hex; null resets the stable palette default. */
+  color: string | null;
 }
+
+export interface HostCheckResult { status: "online" | "standby-opened" }
 
 export interface HostsApi {
   /** Renames or recolours a host; every view reads hosts from one query, so names and colours follow at once. */
@@ -98,10 +129,13 @@ export interface HostsApi {
   /** Registers a host that waits for its agent (status "pending"). */
   registerHost(input: RegisterHostInput): Promise<{ host: Host; token: string }>;
   /** Connects the agent and returns the connection run's action id. */
-  connectHost(hostId: string): Promise<string>;
+  connectHost(hostId: string): Promise<string | HostCheckResult>;
   removeHost(hostId: string): Promise<void>;
-  /** Docklet's own components per host; they never appear in stack or container lists. */
-  listSystemComponents(): Promise<SystemComponent[]>;
+  /**
+   * Docklet's own components per host; they never appear in stack or container lists. `attempt` is the caller's fetch
+   * signal: it identifies the attempt for its freshness boundary only and never aborts the read.
+   */
+  listSystemComponents(attempt?: AbortSignal): Promise<SystemComponent[]>;
   /** Rotates an existing host credential and returns the new token once. */
   issueAgentToken(hostId: string): Promise<string>;
 }
@@ -157,11 +191,13 @@ export interface ProjectWorkspaceApi {
 }
 
 export interface VolumesApi extends ProjectWorkspaceApi {
-  listVolumes(onPartial?: (rows: Volume[]) => void): Promise<Volume[]>;
-  getVolume(id: string): Promise<VolumeDetail & { scope?: string }>;
+  listVolumes(onPartial?: (rows: Volume[]) => void, signal?: AbortSignal, tag?: ReadTag): Promise<Volume[]>;
+  getVolume(id: string, signal?: AbortSignal): Promise<VolumeDetail & { scope?: string }>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
   renameVolume(id: string, name: string): Promise<Volume>;
+  /** Measures the apparent size of a bind now; scans longer than the agent deadline fail with `volume.bind.size-timeout`. */
+  measureBind?(id: string): Promise<{ sizeBytes: number; measuredAt: string; partial: boolean }>;
   /** Preview of a prune for the given hosts; computed by the adapter, not the browser. */
   planVolumePrune(input: { hostIds: string[]; all?: boolean }): Promise<VolumePrunePlan>;
   /**
@@ -175,6 +211,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   writeFile(volumeId: string, path: string, content: string, baseline?: WorkspaceBaseline): Promise<WorkspaceWriteResult>;
   createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file", revision?: string): Promise<WorkspaceWriteResult>;
   renameEntry(volumeId: string, path: string, name: string, revision?: string): Promise<WorkspaceWriteResult>;
+  /** Moves an entry into an existing folder of the same volume; owner and mode stay. */
+  moveEntry(volumeId: string, path: string, folder: string, revision?: string): Promise<WorkspaceWriteResult>;
   deleteEntry(volumeId: string, path: string, revision?: string): Promise<WorkspaceWriteResult>;
   uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<WorkspaceWriteResult>;
   downloadFile?(volumeId: string, path: string): Promise<Blob>;
@@ -183,18 +221,25 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   restoreBackup(volumeId: string, runId: string, mode: "replace" | "new", newVolumeName?: string): Promise<string>;
   restoreBackupFiles(volumeId: string, runId: string, selection: BackupSelection): Promise<string>;
   browseBackup(volumeId: string, runId: string, path?: string, start?: number): Promise<BackupBrowse>;
-  downloadBackup(volumeId: string, runId: string): Promise<Blob>;
+  /** Resolves without a Blob when the browser downloads the archive itself (Direct and hub-local hosts). */
+  downloadBackup(volumeId: string, runId: string): Promise<Blob | undefined>;
   deleteBackup(volumeId: string, runId: string): Promise<void>;
   uploadRestore(volumeId: string, file: File, mode?: "replace" | "new", newVolumeName?: string): Promise<string>;
-  getBackupOverview(hostId: string): Promise<BackupOverview>;
-  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void): Promise<BackupOverview[]>;
-  getBackupRepository(hostId: string): Promise<BackupRepository>;
+  getBackupOverview(hostId: string, tag?: ReadTag): Promise<BackupOverview>;
+  /** `tag` marks an automatic read the transport may skip for an unavailable host. */
+  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void, tag?: ReadTag): Promise<BackupOverview[]>;
+  getBackupRepository(hostId: string, tag?: ReadTag): Promise<BackupRepository>;
   checkBackupRepository(hostId: string): Promise<string>;
   listBackupTargets(): Promise<BackupTarget[]>;
+  /** Initial retention count of new plans (hub setting, 0–3650, 0 keeps all); existing plans keep their own. */
+  getBackupDefaultRetention?(): Promise<number>;
+  setBackupDefaultRetention?(count: number): Promise<void>;
   createBackupTarget(input: BackupTargetInput): Promise<BackupTarget>;
   updateBackupTarget(id: string, input: BackupTargetInput): Promise<BackupTarget>;
   deleteBackupTarget(id: string): Promise<void>;
   testBackupTarget(id: string, hostId: string): Promise<string>;
+  /** Tests an unsaved definition on one host without storing anything; `targetId` reuses a stored secret. */
+  testBackupTargetDraft?(input: { target: BackupTargetInput; probeHostId: string; targetId?: string }): Promise<{ ok: boolean; code?: string }>;
   getBackupTargetReferences(id: string, hostId: string): Promise<BackupTargetReferences>;
   getBackupRecoveryKey(id: string, hostId?: string): Promise<string>;
   attachLocalBackupRecoveryKey(hostId: string, recoveryKey: string): Promise<void>;
@@ -218,8 +263,11 @@ export interface ConnectNetworkInput {
  * "containers" topics; every call is checked again on the adapter side.
  */
 export interface NetworksApi {
-  /** The caller supplies its existing query snapshot for host-local read fallback. */
-  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology): Promise<Topology>;
+  /**
+   * The caller supplies its existing query snapshot for host-local read fallback. `attempt` is the caller's fetch
+   * signal: it identifies the attempt for its freshness boundary only and never aborts the read.
+   */
+  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology, tag?: ReadTag, attempt?: AbortSignal): Promise<Topology>;
   /** Field errors throw "invalid-network"; disconnected hosts "host-offline". */
   createNetwork(input: CreateNetworkInput): Promise<TopologyNetwork>;
   /** Refused for Docker's own networks, Compose-owned networks and while containers are attached. */
@@ -242,7 +290,7 @@ export interface PullImageInput {
 
 export interface ImagesApi {
   /** Images of all connected and disconnected hosts with consumers derived from the containers. */
-  listImages(onPartial?: (rows: DockerImage[]) => void): Promise<DockerImage[]>;
+  listImages(onPartial?: (rows: DockerImage[]) => void, signal?: AbortSignal, tag?: ReadTag): Promise<DockerImage[]>;
   /** Resolves after stream completion; the activity frame is optional. */
   pullImage(input: PullImageInput): Promise<ImagePullResult>;
   /** Refused with "in-use" while any container (running or stopped) uses the image. */
@@ -252,8 +300,14 @@ export interface ImagesApi {
 }
 
 export interface SettingsApi {
+  getSelfUpdate(hostId: string): Promise<import("@/domain/self-update").SelfUpdateCheck>;
+  selfUpdate(hostId: string, input: import("@/domain/self-update").SelfUpdateInput): Promise<string>;
   getSetupStatus(): Promise<boolean>;
   getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;
+  getConnectedSettings(section: "hostDefaults"): Promise<Pick<HubSettings, "hostDefaults">>;
+  getConnectedSettings(section: "installation"): Promise<Pick<HubSettings, "general" | "hostDefaults">>;
+  /** Reads only the hub stop mode, the value a stack Stop dispatches by. */
+  getStackStopMode?(): Promise<"down" | "stop">;
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */
@@ -261,13 +315,13 @@ export interface SettingsApi {
   setContainerAutoUpdate(containerId: string, policy: AutoUpdatePolicy): Promise<void>;
 }
 
-/** Hub-global notification targets, one per provider; global administrators only. */
+/** Hub-global notification targets, identified by target ID; global administrators only. */
 export interface NotificationsApi {
   listNotificationTargets(): Promise<NotificationTargetRow[]>;
   saveNotificationTarget(input: NotificationTargetInput): Promise<NotificationTarget>;
-  deleteNotificationTarget(provider: NotificationProvider): Promise<void>;
+  deleteNotificationTarget(targetId: number): Promise<void>;
   /** Sends a test through the saved target. */
-  testNotificationTarget(provider: NotificationProvider): Promise<NotificationTestResult>;
+  testNotificationTarget(targetId: number): Promise<NotificationTestResult>;
 }
 
 /** Auto Heal settings belong to the host that restarts its containers. */

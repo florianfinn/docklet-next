@@ -9,7 +9,9 @@ independent of repository language. User-facing strings belong in feature/platfo
 catalogues, not component literals. Validate matching keys, ICU syntax and matching
 placeholder names/types, including plural/select branches. Double literal ICU
 apostrophes. Backend run messages use stable codes with parameters, not translated
-prose; render them at the UI boundary. The hub provides timezone settings.
+prose; render them at the UI boundary. The hub time zone comes from `TZ` at
+startup; a selectable zone follows in M18
+([core adoption ledger](core-adoption.md#decision-ledger)).
 
 German ASCII-transliteration and umlaut-spelling prose guards are deliberately
 absent. Publication checks still reject malformed UTF-8, replacement characters

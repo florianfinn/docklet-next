@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Trusted command normalization shared by active HTTP admission and executor intake.
+// Deviations: Trusted command normalization shared by active HTTP admission and executor intake. M21 #438: candidate scans and verified manifest binding.
 
 package activity
 
@@ -25,15 +25,20 @@ import (
 type RuntimeOperation = activitytypes.RuntimeOperation
 
 const (
-	RuntimeUpdateProject    = activitytypes.RuntimeUpdateProject
-	RuntimeRestoreProject   = activitytypes.RuntimeRestoreProject
-	RuntimeDeployProject    = activitytypes.RuntimeDeployProject
-	RuntimeDownProject      = activitytypes.RuntimeDownProject
-	RuntimeRestartProject   = activitytypes.RuntimeRestartProject
-	RuntimeRedeployProject  = activitytypes.RuntimeRedeployProject
-	RuntimeStartContainer   = activitytypes.RuntimeStartContainer
-	RuntimeStopContainer    = activitytypes.RuntimeStopContainer
-	RuntimeRestartContainer = activitytypes.RuntimeRestartContainer
+	RuntimeUpdateProject         = activitytypes.RuntimeUpdateProject
+	RuntimeRestoreProject        = activitytypes.RuntimeRestoreProject
+	RuntimeDeployProject         = activitytypes.RuntimeDeployProject
+	RuntimeDownProject           = activitytypes.RuntimeDownProject
+	RuntimeStopProject           = activitytypes.RuntimeStopProject
+	RuntimeRecreateContainer     = activitytypes.RuntimeRecreateContainer
+	RuntimeRedeployContainer     = activitytypes.RuntimeRedeployContainer
+	RuntimeUpdateContainer       = activitytypes.RuntimeUpdateContainer
+	RuntimeRestoreContainerImage = activitytypes.RuntimeRestoreContainerImage
+	RuntimeRestartProject        = activitytypes.RuntimeRestartProject
+	RuntimeRedeployProject       = activitytypes.RuntimeRedeployProject
+	RuntimeStartContainer        = activitytypes.RuntimeStartContainer
+	RuntimeStopContainer         = activitytypes.RuntimeStopContainer
+	RuntimeRestartContainer      = activitytypes.RuntimeRestartContainer
 )
 
 type RuntimeTarget = activitytypes.RuntimeTarget
@@ -133,10 +138,48 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	command.Target.ParentProjectID = copyPtrInternal(command.Target.ParentProjectID)
 	command.Target.Name = copyPtrInternal(command.Target.Name)
 	command.Actor.DisplayName = copyPtrInternal(command.Actor.DisplayName)
+	if command.Options.Recreate != nil && command.Operation != RuntimeRecreateContainer {
+		return invalid()
+	}
+	if command.Options.ContainerImage != nil && !runtimeContainerImageOperation(command.Operation) {
+		return invalid()
+	}
 	if command.Operation != RuntimeUpdateProject && command.Operation != RuntimeRestoreProject && command.Options.Lifecycle != nil {
 		return invalid()
 	}
 	switch command.Operation {
+	case RuntimeUpdateContainer, RuntimeRestoreContainerImage:
+		if command.Options.Deploy != nil || command.Options.RestartServices != nil || command.Options.Lifecycle != nil || command.Options.Recreate != nil {
+			return invalid()
+		}
+		owned := updaterDTO.ContainerImageRequest{}
+		if command.Options.ContainerImage != nil {
+			owned.ExpectedManifest = command.Options.ContainerImage.ExpectedManifest
+			if owned.ExpectedManifest != "" && (command.Operation != RuntimeUpdateContainer || !updaterDTO.ValidManifest(owned.ExpectedManifest)) {
+				return invalid()
+			}
+		}
+		if command.Options.ContainerImage != nil && command.Options.ContainerImage.Policy != nil {
+			binding := *command.Options.ContainerImage.Policy
+			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+				return invalid()
+			}
+			if _, err := runtimeUUIDInternal(binding.ChildID); err != nil {
+				return invalid()
+			}
+			owned.Policy = &binding
+		}
+		command.Options = RuntimeOptions{ContainerImage: &owned}
+	case RuntimeRecreateContainer:
+		if command.Options.Recreate == nil || command.Options.Deploy != nil || command.Options.RestartServices != nil {
+			return invalid()
+		}
+		owned, err := runtimeOwnedEdit(command.Options.Recreate)
+		if err != nil {
+			return invalid()
+		}
+		command.Options.Recreate = owned
+
 	case RuntimeUpdateProject, RuntimeRestoreProject:
 		if command.Options.Deploy != nil || command.Options.RestartServices != nil || command.Options.Lifecycle == nil {
 			return invalid()
@@ -149,6 +192,18 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		var owned = *command.Options.Lifecycle
+		if !owned.Request.VerifiedService() {
+			return invalid()
+		}
+		if len(owned.Request.Services) > updaterDTO.MaxLifecycleServices {
+			return invalid()
+		}
+		for _, name := range owned.Request.Services {
+			if !runtimeTextInternal(name, 256) {
+				return invalid()
+			}
+		}
+		owned.Request = owned.Request.Clone()
 		if owned.Policy != nil {
 			binding := *owned.Policy
 			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
@@ -177,6 +232,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		if len(owned.Selections) > updaterDTO.MaxLifecycleServices {
+			return invalid()
+		}
+		if owned.Request.ExpectedManifest != "" && (len(owned.Selections) != 1 || owned.Selections[0].Service != owned.Request.Service || owned.Selections[0].Digest != owned.Request.ExpectedManifest) {
 			return invalid()
 		}
 		names := map[string]bool{}
@@ -245,7 +303,11 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	// Text validation rejects invalid UTF-8 rather than allowing JSON replacement
 	// characters to collapse distinct byte strings into the same semantic intent.
 	var options any = [0]string{}
-	if command.Options.Lifecycle != nil {
+	if command.Options.Recreate != nil {
+		options = runtimeRecreateSemantic(*command.Options.Recreate)
+	} else if command.Options.ContainerImage != nil {
+		options = command.Options.ContainerImage
+	} else if command.Options.Lifecycle != nil {
 		options = command.Options.Lifecycle
 	} else if deploy := command.Options.Deploy; deploy != nil {
 		options = [4]any{deploy.PullPolicy, deploy.ForceRecreate, deploy.RemoveOrphans, deploy.RecreateVolumes}

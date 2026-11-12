@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; shared exact hub-origin and validated stream-credential policy; session-bound viewer lifetime and durable validation.
+// Deviations: Local module namespace; functional cut: removed Swarm; shared exact hub-origin and validated stream-credential policy; session-bound viewer lifetime and durable validation; M14 terminal registry wiring.
 
 package ws
 
@@ -24,6 +24,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
@@ -39,6 +40,7 @@ var defaultWebSocketMetrics = wshub.NewWebSocketMetrics()
 // WebSocketHandler consolidates all WebSocket and streaming endpoints.
 // REST endpoints are handled by Huma handlers.
 type WebSocketHandler struct {
+	shellSessions       *containershell.Registry
 	projectService      *project.ProjectService
 	containerService    *container.ContainerService
 	systemService       *system.SystemService
@@ -86,6 +88,7 @@ func NewWebSocketHandler(
 	diagnosticsService *diagnostics.DiagnosticsService,
 	authMiddleware *auth.AuthMiddleware,
 	cfg *config.Config,
+	shellSessions ...*containershell.Registry,
 ) {
 	handler := &WebSocketHandler{
 		projectService:     projectService,
@@ -100,6 +103,9 @@ func NewWebSocketHandler(
 			WithTTL(5 * time.Minute).
 			Build(),
 		checkWSOrigin: middleware.WebSocketOriginValidator(cfg, authMiddleware.ValidateNonCookieCredential),
+	}
+	if len(shellSessions) > 0 {
+		handler.shellSessions = shellSessions[0]
 	}
 	if systemService != nil {
 		handler.maintenance = systemService.BackupMaintenanceGate()
@@ -132,7 +138,10 @@ func (h *WebSocketHandler) acceptWSInternal(c *echo.Context, kind, resourceID st
 		slog.DebugContext(c.Request().Context(), "websocket accept failed", "kind", kind, "resourceId", resourceID, "error", err)
 		return nil, nil, false
 	}
-	lease, err := sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+	var lease *sessionlife.Lease
+	if kind != systemtypes.WSKindContainerExec || wshub.Terminal(c.Request().Context()) == nil {
+		lease, err = sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+	}
 	if err != nil {
 		_ = conn.CloseNow()
 		return nil, nil, false
@@ -165,7 +174,9 @@ func keepWSConnAliveInternal(ctx context.Context, cancel context.CancelFunc, con
 		case <-ticker.C:
 			if sessionlife.Check(ctx) != nil {
 				cancel()
-				_ = conn.CloseNow()
+				if wshub.Terminal(ctx) == nil {
+					_ = conn.CloseNow()
+				}
 				return
 			}
 			pctx, pcancel := context.WithTimeout(ctx, 10*time.Second)

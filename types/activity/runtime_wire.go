@@ -28,7 +28,7 @@ var ErrRuntimeWire = errors.New("invalid runtime response")
 // Only an authenticated Execute busy/cancelling response is no-worker authority.
 // Generic conflicts, storage errors and absent Cancel never carry this body.
 type RuntimeExecutionRefusal struct {
-	Code Code `json:"code"`
+	Code Code `json:"code" enum:"container.recreate-recovered,container.recreate-ambiguous,container.origin-locked,runtime.idempotency-mismatch,run.request-mismatch,runtime.outcome-unknown,runtime.interrupted,runtime.cancelled,runtime.failed,runtime.wait-timeout,runtime.waiter-disconnected,runtime.parent-unresolved,runtime.target-removed,runtime.target-changed,runtime.target-unavailable,run.started,run.joined,run.fresh,run.busy,run.cancelling,activity.queued,activity.running,activity.success,activity.failed,activity.cancelled,activity.message,deploy.pull,job.queued,job.waiting,job.running,job.retrying,job.succeeded,job.partial,job.skipped,job.failed,job.needs_attention,job.canceled,container.die,container.oom,container.rename,container.unhealthy,image.untag,image.import,image.prune,volume.prune,network.prune,container.start,container.stop,container.restart,container.delete,container.create,container.scan,container.update,container.deploy,container.kill,container.pause,container.unpause,container.error,image.pull,image.load,image.tag,image.commit,image.delete,image.scan,image.error,image.vulnerability_scan,project.deploy,project.delete,project.start,project.stop,project.create,project.update,project.error,volume.create,volume.rename,volume.delete,volume.error,volume.file.create,volume.file.delete,volume.file.upload,volume.file.update,volume.workspace.update,volume.backup.create,volume.backup.delete,volume.backup.restore,volume.backup.restore_files,volume.backup.download,volume.backup.target.key_viewed,network.create,network.delete,network.connect,network.disconnect,network.error,system.prune,user.login,user.logout,system.auto_update,system.upgrade,environment.create,environment.connect,environment.disconnect,environment.update,environment.delete,environment.api_key.regenerated,environment.mtls.ca_generated,environment.mtls.cert_issued,environment.mtls.enroll,environment.mtls.download,notification.send,autoheal.restarted,autoheal.restart-failed,autoheal.limit-reached,autoheal.interrupted,notification.delivery-failed,load.sustained,container.condition.down,container.condition.unhealthy,container.condition.restart-loop,container.condition.running-again,update.self-failed,update.outcome-unknown"`
 }
 
 func (r RuntimeExecutionRefusal) Safe() bool {
@@ -150,7 +150,7 @@ func runtimeNullShape(body []byte, typ reflect.Type) error {
 		}
 		raw, ok := fields[name]
 		if !ok {
-			if !strings.Contains(tag, "omitempty") {
+			if !strings.Contains(tag, "omitempty") && !strings.Contains(tag, "omitzero") {
 				return ErrRuntimeWire
 			}
 			continue
@@ -237,6 +237,15 @@ func ValidateRuntimeOutcome(o RuntimeExecutionOutcome, identity RuntimeRunIdenti
 	}
 	if err := ValidateRuntimeExecutionDetail(o.Detail, identity.RunID); err != nil {
 		return err
+	}
+	if o.Detail.Activity.Result != nil {
+		result := o.Detail.Activity.Result
+		if o.Detail.Activity.Status != StatusSuccess || o.Detail.Activity.ResourceID == nil || result.OldID != *o.Detail.Activity.ResourceID || len(result.NewID) != 64 || result.NewID == result.OldID || result.OldName == "" || len(result.OldName) > 256 || result.NewName == "" || len(result.NewName) > 256 {
+			return ErrRuntimeWire
+		}
+	}
+	if o.Detail.Activity.Status == StatusSuccess && (o.Detail.Activity.Type == TypeContainerEdit || o.Detail.Activity.Type == TypeContainerRedeploy) && o.Detail.Activity.Result == nil {
+		return ErrRuntimeWire
 	}
 	terminal := o.Detail.Activity.Status == StatusSuccess || o.Detail.Activity.Status == StatusFailed || o.Detail.Activity.Status == StatusCancelled
 	if terminal != (o.State == RuntimeAnswerTerminal) || (terminal && o.Detail.Activity.EndedAt == nil) {

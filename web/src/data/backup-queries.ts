@@ -4,15 +4,27 @@
 // License: Apache-2.0
 // Deviations: Original host-scoped backup queries; recovery keys never enter query caches.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReadTag } from "./http/host-read-policy";
 import { useAdapter } from "./use-adapter";
 import type { BackupOverview } from "@/domain/volumes";
 
+/**
+ * Only an interval refresh of loaded data is a poll (skipped for standby hosts, Q-5a). A first load, an invalidation
+ * and a remount after older data are background reads; an interval refresh finds data about one interval old.
+ */
+function readTag(client: QueryClient, key: readonly unknown[], intervalMs: number): ReadTag {
+  const state = client.getQueryState(key);
+  if (state?.data === undefined || state.isInvalidated) return "background";
+  return Date.now() - state.dataUpdatedAt <= 2 * intervalMs ? "poll" : "background";
+}
+
 export function useBackupOverview(host: string, enabled = true) {
-  const adapter = useAdapter();
+  const adapter = useAdapter(),
+    client = useQueryClient();
   return useQuery({
     queryKey: ["backup-overview", host],
-    queryFn: () => adapter.getBackupOverview(host),
+    queryFn: () => adapter.getBackupOverview(host, readTag(client, ["backup-overview", host], 5000)),
     enabled: enabled && !!host,
     refetchInterval: 5000,
   });
@@ -26,7 +38,7 @@ export function useBackupOverviews() {
       adapter.listBackupOverviews((rows) => {
         if (!signal.aborted && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined)
           client.setQueryData(["backup-overviews"], rows);
-      }),
+      }, readTag(client, ["backup-overviews"], 10000)),
     refetchInterval: 10000,
   });
 }
@@ -34,11 +46,17 @@ export function useBackupTargets(enabled = true) {
   const adapter = useAdapter();
   return useQuery({ queryKey: ["backup-targets"], queryFn: () => adapter.listBackupTargets(), enabled });
 }
-export function useBackupRepository(host: string) {
+export function useBackupDefaultRetention() {
   const adapter = useAdapter();
+  return useQuery({ queryKey: ["backup-default-retention"], queryFn: () => adapter.getBackupDefaultRetention?.() ?? 7 });
+}
+export function useBackupRepository(host: string, enabled = true) {
+  const adapter = useAdapter(),
+    client = useQueryClient();
   return useQuery({
     queryKey: ["backup-repository", host],
-    queryFn: () => adapter.getBackupRepository(host),
+    queryFn: () => adapter.getBackupRepository(host, readTag(client, ["backup-repository", host], 5000)),
+    enabled,
     refetchInterval: 5000,
   });
 }

@@ -2,7 +2,7 @@
 // Revision: 839b98c10360da9b7beada6804d70d3da98ac8ed
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Scoped update capability and restore-point projection implementation for #229.
+// Deviations: Scoped update capability and restore-point projection implementation for #229; M16 bind mounts and backup completion.
 
 package contract
 
@@ -51,7 +51,7 @@ func TestRestorePointProjectionContract(t *testing.T) {
 	require.Equal(t, []string{string(dto.RestoreTarget), string(dto.HealthyBaseline)}, strings.Split(reasonField.Tag.Get("enum"), ","))
 	require.Equal(t, []string{string(dto.HoldNone), string(dto.HoldActive), string(dto.HoldUnknown)}, strings.Split(holdField.Tag.Get("enum"), ","))
 	require.Equal(t, "true", reasonField.Tag.Get("nullable"))
-	body, err = os.ReadFile("testdata/agent-hub-v10.json")
+	body, err = os.ReadFile("testdata/agent-hub-v12.json")
 	require.NoError(t, err)
 	var fixture struct {
 		ImageLifecycle struct{ RetentionProtections, HoldStates, PointRequiredFields []string }

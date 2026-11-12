@@ -34,23 +34,24 @@ const ROW = "nav-row group/free-nav";
 
 function NavEntry({ item, count, active, onNavigate, groupBadge }: { item: NavItem; count: NavCounts[keyof NavCounts]; active: boolean; onNavigate: () => void; groupBadge?: boolean }) {
   const t = useTranslations("shell");
+  const tc = useTranslations("comingSoon");
   const label = t(`nav.${item.key}`);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active} tooltip={label} className={ROW}>
-        <NavLink to={item.to} onClick={onNavigate} data-preview={item.preview || undefined}>
+        <NavLink to={item.to} onClick={onNavigate} data-coming-soon={item.comingSoon || undefined}>
           <item.icon />
           <span>
             {label}
-            {item.preview && <span className="sr-only"> ({t("preview")})</span>}
+            {item.comingSoon && <span className="sr-only"> ({tc("badge")})</span>}
           </span>
         </NavLink>
       </SidebarMenuButton>
-      {count && !item.preview ? (
+      {count && !item.comingSoon ? (
         <SidebarMenuBadge title={count.partial ? t("partialSecurity") : undefined} aria-label={count.partial ? t("partialSecurity") : undefined} className={cn("font-normal tabular-nums", count.tone === "err" ? "text-destructive" : "text-muted-foreground")}>{count.value}{count.partial && count.value !== "?" ? "+" : ""}</SidebarMenuBadge>
-      ) : item.preview && !groupBadge ? (
+      ) : item.comingSoon && !groupBadge ? (
         <SidebarMenuBadge aria-hidden className="h-4 rounded-full border px-1.5 text-[10px] font-normal text-muted-foreground">
-          {t("preview")}
+          {tc("badge")}
         </SidebarMenuBadge>
       ) : null}
     </SidebarMenuItem>
@@ -64,6 +65,7 @@ function NavEntry({ item, count, active, onNavigate, groupBadge }: { item: NavIt
  */
 export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
   const t = useTranslations("shell");
+  const tc = useTranslations("comingSoon");
   const ta = useTranslations("activity");
   const counts = useNavCounts();
   const running = useRunningActionCount();
@@ -129,7 +131,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
           <SidebarGroup key={group.key}>
             <SidebarGroupLabel className="text-[11px] font-medium tracking-wide">
               {t(`groups.${group.key}`)}
-              {group.key === "later" && <span className="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal">{t("preview")}</span>}
+              {group.key === "later" && <span className="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal">{tc("badge")}</span>}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>

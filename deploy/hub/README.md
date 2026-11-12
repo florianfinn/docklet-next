@@ -3,174 +3,98 @@ Source: docklet-next/docs/design/sqlite-database.md
 Revision: b3607be5144101152c8eb7738d389e8c73986fba
 Retrieved: 2026-10-16
 License: Apache-2.0
-Deviations: Original SQLite candidate packaging and offline recovery instructions.
+Deviations: Original SQLite candidate packaging and offline recovery instructions; source-build fallback with release installation and recovery moved to operator guides (#363).
 -->
 
-# Hub candidate package
+# Build the hub and agent from source
 
-Build from the repository root with `docker compose -f deploy/hub/compose.yaml build`.
-The template builds a CGO-free hub with its production web bundle and complete
-Go/web licence evidence. The assessed package target is Linux/amd64. Images use
-version and digest pins. `NODE_IMAGE`, `GO_IMAGE` and `RUNTIME_IMAGE` build arguments
-can override those pins; reassess changed dependencies before distributing a package.
-`HUB_PORT` overrides the loopback host port. `HUB_IMAGE` overrides the runtime image reference; the local build remains available
-without access to a product registry. No product release is published by this template.
+Build local images when you need a fallback without a product image registry.
+The builds still need the pinned toolchain base images and dependencies. For
+release installation, use [the installation guide](../../docs/install.md);
+[upgrading and recovery](../../docs/upgrade.md) and
+[compatibility](../../docs/compatibility.md) apply to persistent storage and hosts.
+For reproducible OCI release builds, see [release packages](../../docs/release.md).
 
-Keep operator values in an untracked private environment file. Set `ENCRYPTION_KEY`
-to a newly generated secret, `APP_URL` to the dedicated domain root and optionally
-`PUID`/`PGID` to the desired numeric identity. Use `--env-file` consistently for all
-Compose commands. The listener is published on loopback; attach the operator's
-reverse proxy to it. Sub-path hosting is unsupported. The Docker socket grants
-management access to the local Docker host.
+Run commands from the repository root. Use the same checkout and version for hub
+and agent; `0.0.0` below is the local source-build version. The assessed image
+target is Linux/amd64. The Dockerfile defaults to the `hub` target, embedding the
+production React bundle and Go/web licence evidence. The separate `agent` target
+contains only the agent executable and Go licence evidence and starts with
+`AGENT_MODE=true`.
 
-`TZ` selects the hub time zone for schedules and date display (default `UTC`).
-Set an IANA zone such as `Europe/Berlin` in the private environment file and recreate
-the hub after changing it. General settings show the effective zone read-only.
+## Build and start the hub
 
-The `hub-data` named volume is mounted at `/app/data`. Keep it on local persistent
-storage. Linux bind mounts are supported when their directory is writable by the
-runtime identity; use the named volume on Docker Desktop and other hosts. Named
-volumes backed by SMB/NFS/FUSE are also unsupported for database files. Startup
-refuses detected network storage or filesystem detection errors. Hub backups
-are described below; copies to network archive targets are a later feature.
-
-The hub owns `docklet.db`, `docklet.francis.db`, each file's SQLite-managed `-wal`
-and `-shm` companions, and the stable `docklet.db.lock`. The data directory is
-private (`0700`); database and lock files are `0600`. The runtime identity needs
-creation and rename rights. Allow space for both databases and their WAL files;
-backup archives live on the separate `hub-backups` volume. WAL autocheckpointing is enabled. Never
-remove a live WAL/SHM file, replace the database beneath a running hub or copy
-only a live main database file as a backup.
-
-Start with `docker compose up -d hub`; inspect health with `docker compose ps`.
-Stop with `docker compose stop hub` before moving or resetting storage. A clean
-restart reopens the same files and runs forward migrations. After a crash SQLite
-recovers its WAL and startup repairs abandoned runs; an accepted remote action
-may still have finished. A second hub refuses startup with `hub.already_running`.
-No previous PostgreSQL, Arcane or Docklet database/registration is imported. Begin
-with an empty volume; unsupported or newer schemas are refused.
-
-
-## Agent image and onboarding
-
-Build the separate agent image from the same checkout and version as the hub:
+Create a private, untracked `.env.source` at the repository root. Set
+`ENCRYPTION_KEY` to a newly generated secret and `APP_URL` to the dedicated public
+origin. Optionally set `AUTH_MODE`, `TZ`, `PUID`, `PGID` and `HUB_PORT` as described
+in the installation guide. Leave `HUB_IMAGE` unset to use the local
+`docklet-next-hub:0.0.0` tag. Use the same env file for every command:
 
 ```sh
-docker build --target agent --tag docklet-next-agent:0.0.0 --file deploy/hub/Dockerfile .
+chmod 600 .env.source
+docker compose -f deploy/hub/compose.yaml --env-file .env.source build --build-arg DOCKLET_VERSION=0.0.0 hub
+docker compose -f deploy/hub/compose.yaml --env-file .env.source up -d --no-build hub
+docker compose -f deploy/hub/compose.yaml --env-file .env.source ps
+```
+
+The source template retains its `build` section; the rendered release package
+removes that section and pins the hub and agent images by digest. Source builds
+without release stamps use a local agent image fallback tagged with the hub
+SemVer (`0.0.0` for development). They do not establish official in-app update
+eligibility. Use manual Compose updates for local images.
+
+The hub port is published on loopback. Configure the operator's proxy using
+[the reverse-proxy guide](../../docs/deployment/reverse-proxy.md). Keep the
+`hub-data` and `hub-backups` volumes on persistent storage; the SQLite data volume
+must be local. Do not import earlier databases or registrations. First login,
+agent installation, sign-in policies and backup recovery are covered in the
+installation and upgrade guides.
+
+## Build and transfer the agent
+
+Build the agent at the same local version:
+
+```sh
+docker build --platform linux/amd64 --target agent --build-arg DOCKLET_VERSION=0.0.0 --tag docklet-next-agent:0.0.0 --file deploy/hub/Dockerfile .
+docker save --output docklet-next-agent.tar docklet-next-agent:0.0.0
+```
+
+Transfer the archive to each agent host, then load it there:
+
+```sh
+docker load --input docklet-next-agent.tar
+```
+
+Alternatively use an operator-controlled registry and set `DOCKLET_AGENT_IMAGE`
+in the hub's private env file, then recreate the hub. Operator overrides accept
+any valid image reference; a version and digest pin gives reproducible installs.
+The generated agent Compose file also accepts an override on its host.
+Environment creation, updates and deletion require a
+global administrator. The former endpoint
+`GET /api/environments/{id}/deployment` no longer exists; use the generated
+one-time installation package and token through the hub instead.
+Ensure the selected agent image
+exists on each target host or is accessible through its configured registry.
+
+## Build arguments and validation
+
+`NODE_IMAGE` and `GO_IMAGE` override the pinned build stages. `RUNTIME_IMAGE`
+names the pinned stage preparing directories and the assessed CA bundle; the
+final hub and agent images are `scratch`. They contain static binaries, embedded
+time zones, the CA bundle and licence texts, with no shell or GPU utilities.
+Reassess changed dependencies and the CA hash before distributing changed images.
+`DOCKLET_VERSION` controls the source-build product version; the release build
+script also stamps revision, build time and the exact default agent image.
+
+CI builds and smoke-tests both local targets without publication. In an approved
+isolated test environment, the existing checks are:
+
+```sh
+node scripts/smoke-hub-image.mjs docklet-next-hub:0.0.0
 node scripts/smoke-agent-image.mjs docklet-next-agent:0.0.0
 ```
 
-Use the hub SemVer instead of `0.0.0` for a versioned candidate. The `agent` target
-contains only the agent executable and Go licence evidence; it has no embedded
-web bundle or hub executable and defaults to `AGENT_MODE=true`. The default
-Dockerfile target remains `hub`. CI builds and smoke-tests both images without
-publishing them.
-
-The hub's onboarding default is `docklet-next-agent:<hub SemVer>` (`0.0.0` for a
-development build). Load that image onto each agent host using `docker save` and
-`docker load`, or publish it to an operator-controlled registry. Set
-`DOCKLET_AGENT_IMAGE` in the hub's private environment file to a pinned registry
-reference when needed, then recreate the hub. The generated Compose also accepts
-that override on the agent host. Direct containers are named `docklet-agent`;
-Edge containers are named `docklet-edge-agent`. Both retain
-`io.docklet.system=agent` for inventory hiding.
-
-Before deploying this onboarding boundary, use a matching hub/agent contract
-version and fingerprint. Environment creation, updates and deletion require a
-global administrator; delegated `environments:*` permissions no longer grant those
-operations. `GET /api/environments/{id}/deployment` returns HTTP 410; use the
-one-time onboarding package and token instead. Ensure the selected agent image
-exists on each target host or is accessible through its configured registry.
-
-## Sign-in and recovery
-
-`AUTH_MODE=local` is the default and uses the local administrator password and
-sessions. `AUTH_MODE=none` grants full administrator access to anyone who can reach
-the hub; the operator deliberately accepts that access. Switching away from none
-revokes sessions but preserves users, API keys, environment tokens and webhook
-tokens created meanwhile. Review users and revoke or rotate unwanted credentials.
-The hub does not allowlist the request Host header; none-mode reads remain
-unauthenticated, including requests using another Host. Browser write and WebSocket
-Origin checks do not add Host validation for reads.
-
-`AUTH_MODE=proxy` accepts
-the identity in `AUTH_PROXY_HEADER` (default `Remote-User`) only from the direct TCP
-peer addresses or CIDRs in `AUTH_TRUSTED_PROXIES`. The list is comma-separated and
-has no default; missing/malformed configuration and all-address `/0` networks
-prevent startup. Identity values must contain printable UTF-8 characters only.
-
-Every accepted proxy name maps to the same administrator; it is used only for
-activity attribution. Configure the proxy to authenticate every request and strip
-and replace the identity header. Trust the address seen by the hub after any
-container networking or address translation. For example, a documentation-only
-policy can list `192.0.2.10,2001:db8::/32`. Forwarded addresses, including
-`X-Forwarded-For`, never establish sign-in identity. `TRUSTED_PROXIES` separately
-controls forwarded client/TLS metadata and does not grant identity trust. Local
-passwords, sessions and personal API keys cannot bypass proxy sign-in.
-
-Put these values in the private Compose environment file and recreate the hub
-with `docker compose up -d --force-recreate hub` using the same `--env-file` as for
-installation. Merely restarting a container does not update its environment.
-Changing modes revokes previous sessions; a same-mode restart preserves them.
-`GET /api/auth/mode` exposes the active mode without credentials. The UI cannot
-change it. Production login, setup and profile screens use this policy.
-After switching to local mode, the initial password remains valid until changed;
-the UI forces the password change even when setup was already completed.
-
-For recovery, set `AUTH_RESET_ADMIN_PASSWORD` in that private environment file to
-a new password satisfying the configured password policy, then recreate the hub.
-Startup updates the global administrator password and revokes its sessions once
-per start. The log records that a reset occurred without printing the password.
-Remove the variable after successful recovery and recreate the hub again; leaving
-it set repeats the reset on the next start. Alternatively select `AUTH_MODE=none`,
-restart, and restore the intended mode when operator work is complete. There is
-no password-reset CLI.
-
-`AUTH_MODE`, `AUTH_PROXY_HEADER`, `AUTH_TRUSTED_PROXIES` and
-`AUTH_RESET_ADMIN_PASSWORD` all support `_FILE` and `__FILE` variants. Mount the
-referenced files into the hub container and set their container paths. `__FILE`
-has precedence over `_FILE`, then the direct value; the existing loader warns
-and falls back to the direct value if a file cannot be read. Empty direct mode
-values use `local`. An invalid recovery value prevents startup.
-
-For every hub mode, fetch `GET /api/auth/mode`, retain the returned CSRF cookie
-and `X-CSRF-Token` header, then send that token header plus the exact `APP_URL`
-Origin on every POST, PUT, PATCH or DELETE. Missing/wrong Origin or CSRF tokens
-return 403, including requests carrying local Bearer/API-key or proxy identity
-headers. Machine transports authenticated by environment/agent tokens and
-path-token webhook ingress retain their separate authentication contracts.
-
-For a local candidate check, run `node scripts/smoke-hub-image.mjs IMAGE` after
-building. It checks an empty temporary volume, `/api/health`, the served web
-bundle, second-hub refusal, persistent restart and every extracted licence hash.
-It removes only its own labelled containers and volume. This automated smoke does
-not replace operator approval and practical acceptance of a release package.
-
-## Database archives and recovery
-
-The separate `hub-backups` volume holds unencrypted `<backup-id>.tar` archives of
-both SQLite files. Backups pause database requests and live views briefly; a
-restore revokes all sessions. Keep a protected downloaded copy and the external
-encryption key away from the Hub host. Volume data, project files and external
-secrets are not in these archives. Mount/SMB target copying is a follow-up.
-
-For an empty replacement data volume, stop the hub, place a trusted archive under
-its server-owned filename in the backup volume, and run:
-
-```sh
-docker compose stop hub
-docker compose run --rm hub restore-hub --backup-id example-archive
-docker compose up -d hub
-```
-
-The offline command takes the lifetime lock and refuses a running hub. It
-validates both images, retains safety copies beside the databases, replaces the
-pair, migrates forward and revokes restored sessions before readiness. A durable
-restore marker causes startup to repeat an interrupted installation from protected
-inputs. Keep the marker, recovery directory and safety files if startup refuses
-recovery; do not delete them to bypass validation. Safety copies and staged images
-consume local space and are retained for operator removal after verification.
-
-The UI round-trip acceptance waits for M4 sign-in; a browser check with a synthetic
-session is implementation evidence only. See the indexed backup design and
-practical acceptance procedure.
+These checks create temporary containers and volumes. They need Docker, Go and
+OpenSSL. They verify health, persistence where applicable, licence hashes,
+private directory modes, numeric non-root startup and CA trust without a runtime
+shell. They do not replace practical release acceptance or authorise a deploy.

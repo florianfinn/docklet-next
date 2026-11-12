@@ -27,7 +27,7 @@ func TestPolicyPreparedOrRefusedDuplicateNeverAdmits(t *testing.T) {
 	for _, status := range []string{"prepared", "refused"} {
 		t.Run(status, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			p := f.save(t, "stack", "apply")
+			p := f.save(t, "stack", "scheduled")
 			child, _, err := f.p.store.PrepareChild(t.Context(), p, "same-wrapper")
 			require.NoError(t, err)
 			if status == "refused" {
@@ -77,8 +77,8 @@ func TestPolicyHostStopsOnProgressFailureOrCancellation(t *testing.T) {
 	for _, boundary := range []string{"progress", "cancelled"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "a-stack", "apply")
-			f.save(t, "b-stack", "apply")
+			f.save(t, "a-stack", "scheduled")
+			f.save(t, "b-stack", "scheduled")
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			failure := errors.New("synthetic progress write failure")
@@ -88,7 +88,7 @@ func TestPolicyHostStopsOnProgressFailureOrCancellation(t *testing.T) {
 			} else {
 				persist = func(st.TargetOutcome) error { cancel(); return nil }
 			}
-			out, err := f.s.RunImagePolicyHost(jobcontext.WithExecution(ctx, st.Run{ID: "wrapper", AttemptCount: 1}, persist), "0", "auto-update")
+			out, err := runFixtureWindows(f.s, jobcontext.WithExecution(ctx, st.Run{ID: "wrapper", AttemptCount: 1}, persist), "0", "auto-update")
 			require.Error(t, err)
 			require.Len(t, out.Targets, 1)
 			require.Equal(t, 1, f.admissions)
@@ -98,13 +98,13 @@ func TestPolicyHostStopsOnProgressFailureOrCancellation(t *testing.T) {
 }
 
 func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
-	for _, boundary := range []string{"host-error", "registration", "baseline-error", "check-error", "nil-check", "unknown-check", "error-check", "not-pulled-check", "prepare-write", "refusal-write", "policy-status-write", "candidate-write", "candidate-status-write", "notice-claim", "notice-read", "notice-settle"} {
+	for _, boundary := range []string{"baseline-error", "check-error", "nil-check", "unknown-check", "error-check", "not-pulled-check", "prepare-write", "refusal-write", "policy-status-write", "candidate-write", "candidate-status-write", "notice-claim", "notice-read", "notice-settle"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			mode := "apply"
+			mode := "scheduled"
 			job := "auto-update"
 			if boundary == "candidate-write" || boundary == "candidate-status-write" || boundary == "notice-claim" || boundary == "notice-read" || boundary == "notice-settle" {
-				mode = "notify"
+				mode = "check"
 				job = "image-polling"
 			}
 			f.save(t, "stack", mode)
@@ -161,11 +161,11 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON image_policy_children WHEN NEW.status='refused' BEGIN SELECT RAISE(ABORT,'synthetic refusal failure'); END").Error)
 			case "policy-status-write":
 				f.baseline.Available = false
-				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON stack_update_policies WHEN NEW.apply_code != OLD.apply_code BEGIN SELECT RAISE(ABORT,'synthetic status failure'); END").Error)
+				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON update_policies WHEN NEW.apply_code != OLD.apply_code BEGIN SELECT RAISE(ABORT,'synthetic status failure'); END").Error)
 			case "candidate-write":
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE INSERT ON image_update_candidates BEGIN SELECT RAISE(ABORT,'synthetic candidate failure'); END").Error)
 			case "candidate-status-write":
-				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON stack_update_policies WHEN NEW.candidates != OLD.candidates BEGIN SELECT RAISE(ABORT,'synthetic candidate status failure'); END").Error)
+				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON update_policies WHEN NEW.candidates != OLD.candidates BEGIN SELECT RAISE(ABORT,'synthetic candidate status failure'); END").Error)
 			case "notice-claim":
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON image_update_notifications WHEN NEW.status='sending' BEGIN SELECT RAISE(ABORT,'synthetic claim failure'); END").Error)
 			case "notice-read":
@@ -192,12 +192,12 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 
 func TestPolicyCandidateWriteCASBeforeCheckpoint(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "stack", "apply")
+	f.save(t, "stack", "scheduled")
 	original := f.p.ports.actor
 	f.p.ports.actor = func(ctx context.Context, env, actor, key string, apply bool) (context.Context, error) {
 		result, err := original(ctx, env, actor, key, apply)
 		if f.actors == 2 {
-			f.save(t, "stack", "apply")
+			f.save(t, "stack", "scheduled")
 		}
 		return result, err
 	}
@@ -211,7 +211,7 @@ func TestPolicyCandidateWriteCASBeforeCheckpoint(t *testing.T) {
 
 func TestPolicyReconcileUsesRecordedRuntimeIDAndNoReplay(t *testing.T) {
 	f := newPolicyFixture(t)
-	p := f.save(t, "stack", "apply")
+	p := f.save(t, "stack", "scheduled")
 	child, _, err := f.p.store.PrepareChild(t.Context(), p, "wrapper")
 	require.NoError(t, err)
 	require.NoError(t, f.db.Model(&policy.Child{}).Where("id = ?", child.ID).Update("status", "admitted").Error)
@@ -228,23 +228,9 @@ func TestPolicyReasonFallbackRejectsUnknownDynamicCodes(t *testing.T) {
 	}
 }
 
-func TestPolicyManualTriggerUsesItsCurrentActor(t *testing.T) {
-	f := newPolicyFixture(t)
-	f.save(t, "stack", "apply")
-	f.p.ports.scheduleActor = func(_ context.Context, env, actor, key string) error {
-		if actor != "manual-operator" || key != "manual-key" {
-			return errors.New("synthetic wrong trigger owner")
-		}
-		return nil
-	}
-	out := f.run(t, "auto-update", st.Run{RequestedBy: "manual-operator", RequestedWithKey: "manual-key"})
-	require.Equal(t, st.Succeeded, out.Status)
-	require.Equal(t, 1, f.admissions)
-}
-
 func TestPolicyNoCandidateDoesNotAdmit(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "stack", "apply")
+	f.save(t, "stack", "scheduled")
 	f.check.HasUpdate = false
 	f.check.ServiceUpdates["app"].UpdateInfo.HasUpdate = false
 	out := f.run(t, "auto-update", st.Run{})
@@ -254,7 +240,7 @@ func TestPolicyNoCandidateDoesNotAdmit(t *testing.T) {
 
 func TestPolicyReconcileReadFailureNeverDispatches(t *testing.T) {
 	f := newPolicyFixture(t)
-	p := f.save(t, "stack", "apply")
+	p := f.save(t, "stack", "scheduled")
 	child, _, err := f.p.store.PrepareChild(t.Context(), p, "wrapper")
 	require.NoError(t, err)
 	require.NoError(t, policy.AdmitChild(f.db.DB, &dto.PolicyBinding{ChildID: child.ID}, child.ID))
@@ -269,10 +255,11 @@ func TestPolicyReconcileReadFailureNeverDispatches(t *testing.T) {
 
 func TestPolicyListIsHostScoped(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "a-stack", "apply")
-	other := f.save(t, "b-stack", "apply")
+	f.save(t, "a-stack", "scheduled")
+	other := f.save(t, "b-stack", "scheduled")
 	require.NoError(t, f.db.Delete(&policy.Policy{}, "id = ?", other.ID).Error)
 	other.EnvironmentID = "other-host"
+	require.NoError(t, f.db.Exec("INSERT INTO environments(id,name,api_url,enabled) VALUES(?,?,?,1)", other.EnvironmentID, "Other", "https://agent.example.com").Error)
 	other.ID = policy.Key(other.EnvironmentID, other.RegistrationID, other.TargetID)
 	require.NoError(t, f.p.store.SavePolicy(t.Context(), other, 0))
 	out := f.run(t, "auto-update", st.Run{})
@@ -283,13 +270,13 @@ func TestPolicyListIsHostScoped(t *testing.T) {
 
 func TestPolicyApplyStatusCannotOverwriteNewRevision(t *testing.T) {
 	f := newPolicyFixture(t)
-	f.save(t, "stack", "apply")
-	f.afterAdmission = func(dto.PolicyBinding) { f.save(t, "stack", "off") }
+	f.save(t, "stack", "scheduled")
+	f.afterAdmission = func(dto.PolicyBinding) { f.save(t, "stack", "check") }
 	out := f.run(t, "auto-update", st.Run{})
 	require.Equal(t, st.Succeeded, out.Targets[0].Status)
 	row, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
 	require.NoError(t, err)
-	require.Equal(t, "off", row.Mode)
+	require.Equal(t, "check", row.Mode)
 	require.Nil(t, row.ApplyCheckedAt)
 }
 
@@ -297,7 +284,7 @@ func TestPolicyCandidateRequiresPositiveComparableState(t *testing.T) {
 	for _, state := range []string{"current", "unknown", "error", "missing"} {
 		t.Run(state, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "stack", "apply")
+			f.save(t, "stack", "scheduled")
 			row := f.check.ServiceUpdates["app"]
 			if state == "missing" {
 				row.UpdateInfo = nil
@@ -316,7 +303,7 @@ func TestPolicyCandidateVersionNormalizationDeduplicates(t *testing.T) {
 	for _, source := range []string{"explicit", "tag-fallback"} {
 		t.Run(source, func(t *testing.T) {
 			f := newPolicyFixture(t)
-			f.save(t, "stack", "notify")
+			f.save(t, "stack", "check")
 			row := f.check.ServiceUpdates["app"]
 			row.ImageRef = "registry.example.com/app:v1.0.0"
 			row.UpdateInfo.State = "rebuild"

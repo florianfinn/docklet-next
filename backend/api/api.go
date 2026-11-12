@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences; hub-only service widget routes and neutral errors; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Docklet Next API title (#362).
 
 package api
 
@@ -29,12 +29,14 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/autoheal"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/health"
+	"github.com/florianfinn/docklet-next/backend/internal/history"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
@@ -45,8 +47,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
-	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/stackimport"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
@@ -54,7 +56,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
-	"github.com/florianfinn/docklet-next/backend/internal/webhook"
+	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
@@ -66,7 +68,7 @@ const (
 	scalarDocsHTML = `<!doctype html>
 <html>
   <head>
-    <title>Arcane API Reference</title>
+    <title>Docklet Next API Reference</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
@@ -246,7 +248,6 @@ type HandlerDeps struct {
 	Environment       *environment.Module
 	Settings          *settings.Module
 	JobSchedule       *job.Module
-	Search            *search.Module
 	Container         *container.Module
 	Image             *image.Module
 	Volume            *volume.Module
@@ -265,9 +266,11 @@ type HandlerDeps struct {
 	Notification      *notification.Module
 	AutoHeal          *autoheal.Module
 	ApiKey            *apikey.Module
-	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.Module
 	Dashboard         *dashboard.Module
+	History           *history.Module
+	StackImport       *stackimport.Module
+	Widget            *widget.Module
 	Role              *role.Module
 	Upload            *upload.Module
 }
@@ -276,8 +279,8 @@ type HandlerDeps struct {
 func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityAppContext, cfg *config.Config, deps HandlerDeps) huma.API {
 	e.JSONSerializer = jsonV2Serializer{}
 
-	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer)
+	humaConfig := huma.DefaultConfig("Docklet Next API", config.Version)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -329,13 +332,27 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	// Create Huma API wrapping the Echo router group
 	api := humaecho.NewWithGroup(e, apiGroup, humaConfig)
 
+	if deps.User != nil {
+		deps.User.Config = cfg
+		if deps.Environment.Service() != nil {
+			WireAssignmentCleanup(deps.Environment.Service(), deps.User.Service())
+		}
+	}
+	if deps.Role.Service() != nil {
+		deps.Role.Service().UserChanged = func(id string) {
+			deps.Auth.Service().InvalidateUserTokenCache(id)
+			deps.ApiKey.Service().InvalidateAfterRestore()
+		}
+	}
 	// Add authentication middleware
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
 	api.UseMiddleware(deps.Auth.Service().ViewerMiddleware(api))
+	api.UseMiddleware(middleware.AccessMiddleware(api))
 	api.UseMiddleware(middleware.NewActivityBatchID())
 	api.UseMiddleware(middleware.RejectInlineImageCredentials(api))
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
+	registerContainerHostSchemasInternal(api)
 
 	// Register all Huma handlers
 	registerHandlersInternal(api, deps, appCtx, cfg)
@@ -346,6 +363,9 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	}
 
 	registerImageSafetyErrors(api)
+	registerHistoryErrors(api)
+	registerRequestErrors(api)
+	registerAccessSchemaInternal(api)
 	return api
 }
 
@@ -354,6 +374,12 @@ func registerScalarDocs(apiGroup *echo.Group) {
 	apiGroup.GET("/docs", func(c *echo.Context) error {
 		return c.HTML(http.StatusOK, scalarDocsHTML)
 	})
+}
+
+// WireAssignmentCleanup re-evaluates each account whose assignments a host removal deleted:
+// users lose their streams, administrators with retained assignment rows keep them.
+func WireAssignmentCleanup(hosts *environment.EnvironmentService, users *user.UserService) {
+	hosts.AssignmentUserChanged = users.UserRightsChanged
 }
 
 // SetupAPIForSpec creates a Huma API instance for OpenAPI spec generation only.
@@ -368,8 +394,8 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	e := echo.New()
 	apiGroup := e.Group("/api")
 
-	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer)
+	humaConfig := huma.DefaultConfig("Docklet Next API", config.Version)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -409,9 +435,13 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
+	registerContainerHostSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	registerImageSafetyErrors(api)
+	registerHistoryErrors(api)
+	registerRequestErrors(api)
+	registerAccessSchemaInternal(api)
 	return api
 }
 
@@ -424,6 +454,9 @@ type routeModule struct {
 }
 
 var routeModules = []routeModule{
+	{"history", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		d.History.RegisterRoutes(api, cfg != nil && (cfg.AgentMode || cfg.EdgeAgent))
+	}},
 	{"runtime", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
 		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
 			activity.RegisterRuntimeReceiverRoutes(api, d.RuntimeReceiver, "")
@@ -458,7 +491,9 @@ var routeModules = []routeModule{
 	{"event", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Event.RegisterRoutes(api)
 	}},
-	{"capabilities", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+	{"capabilities", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		api.UseMiddleware(activity.OperationCapabilityContext(operationCapabilityReaders(d, cfg)))
+		api.UseMiddleware(containershell.CapabilityContext(d.Container.Service().ShellCapabilityReader(d.Environment.Service())))
 		activity.RegisterCapabilities(api, func(ctx context.Context, env, target, point string) error {
 			return d.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, d.Environment.Service())
 		})
@@ -494,8 +529,8 @@ var routeModules = []routeModule{
 	{"volume", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
 		d.Volume.RegisterRoutes(api, c, cfg)
 	}},
-	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
-		d.Container.RegisterRoutes(api, c)
+	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
+		d.Container.RegisterRoutes(api, c, cfg)
 	}},
 	{"port", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		port.RegisterPorts(api, d.Port)
@@ -512,9 +547,6 @@ var routeModules = []routeModule{
 	{"updater", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Updater.RegisterRoutes(api, c)
 	}},
-	{"search", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
-		d.Search.RegisterRoutes(api)
-	}},
 	{"system", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
 		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
 			d.System.RegisterAgentRoutes(api, c)
@@ -525,14 +557,17 @@ var routeModules = []routeModule{
 	{"diagnostics", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		handlers.RegisterDiagnostics(api, d.Diagnostics)
 	}},
-	{"webhook", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
-		d.Webhook.RegisterRoutes(api)
-	}},
 	{"vulnerability", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Vulnerability.RegisterRoutes(api, c)
 	}},
 	{"dashboard", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Dashboard.RegisterRoutes(api)
+	}},
+	{"stackimport", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.StackImport.RegisterRoutes(api)
+	}},
+	{"widget", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Widget.RegisterRoutes(api)
 	}},
 	{"stream", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		handlers.RegisterStream(api, d.Dashboard.Handler(), d.Activity.Handler(), d.Environment.Handler(), d.Event.Service(), d.Version)

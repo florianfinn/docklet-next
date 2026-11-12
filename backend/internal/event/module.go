@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; event-local window validation
 
 // Package event owns persisted system events, manager ingestion, and event HTTP routes.
 package event
@@ -126,7 +126,7 @@ func RegisterEvents(api huma.API, eventService *EventService) {
 		Description: "Get a paginated list of system events",
 		Tags:        []string{"Events"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermEventsRead),
+		Middlewares: append(middleware.RequirePermission(api, authz.PermEventsRead), validateEventWindow(api)),
 	}, h.ListEvents)
 
 	huma.Register(api, huma.Operation{
@@ -159,6 +159,6 @@ func RegisterEvents(api huma.API, eventService *EventService) {
 		Description: "Get a paginated list of events for a specific environment",
 		Tags:        []string{"Events"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermEventsRead),
+		Middlewares: append(middleware.RequirePermission(api, authz.PermEventsRead), validateEventWindow(api)),
 	}, h.GetEventsByEnvironment)
 }

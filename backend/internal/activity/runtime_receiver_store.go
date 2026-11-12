@@ -53,6 +53,9 @@ func runtimeReceiveTxInternal(tx *gorm.DB, now time.Time, c runtimeCanonicalComm
 		ResourceType: row.TargetKind, ResourceID: row.TargetID, ResourceName: row.TargetName,
 		StartedByUserID: row.CallerID, StartedByUsername: row.CallerName, StartedByDisplayName: new(display),
 		StartedAt: now, GateScope: c.gateScope, GateKey: c.gateKey, MessageCode: string(activitytypes.CodeRunStarted)}
+	if c.command.Operation == RuntimeRecreateContainer {
+		model.Metadata = database.JSON{"changedFields": runtimeRecreateFields(c.command.Options)}
+	}
 	if err := runtimeReceiverCreateTxInternal(tx, model); err != nil {
 		return nil, runtimeWriteErrorInternal(err)
 	}

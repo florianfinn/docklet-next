@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; stable event codes; extracted retention and actor normalization.
+// Deviations: Local module namespace; functional cut: removed federated credentials; stable event codes; extracted retention and actor normalization; injectable event signal boundary.
 
 package event
 
@@ -47,7 +47,7 @@ import (
 )
 
 type EventService struct {
-	changes     *concurrency.Signal[struct{}]
+	changes     eventChangeSignal
 	correlation *correlation.Service
 	db          *database.DB
 	cfg         *config.Config
@@ -299,7 +299,7 @@ func (s *EventService) ListEventsPaginated(ctx context.Context, params paginatio
 	q = pagination.ApplyFilter(q, "username", params.Filters["username"])
 	q = pagination.ApplyFilter(q, "environment_id", params.Filters["environmentId"])
 
-	paginationResp, err := pagination.PaginateAndSortDB(params, q, &eventRecords)
+	paginationResp, err := paginateEventsInternal(params, q, &eventRecords)
 	if err != nil {
 		return nil, pagination.Response{}, fmt.Errorf("failed to paginate events: %w", err)
 	}
@@ -329,7 +329,7 @@ func (s *EventService) GetEventsByEnvironmentPaginated(ctx context.Context, envi
 	q = pagination.ApplyFilter(q, "resource_type", params.Filters["resourceType"])
 	q = pagination.ApplyFilter(q, "username", params.Filters["username"])
 
-	paginationResp, err := pagination.PaginateAndSortDB(params, q, &eventRecords)
+	paginationResp, err := paginateEventsInternal(params, q, &eventRecords)
 	if err != nil {
 		return nil, pagination.Response{}, fmt.Errorf("failed to paginate events: %w", err)
 	}

@@ -9,8 +9,8 @@ require operator configuration and a restart; the API exposes no mode mutation.
 `local` authenticates the existing local administrator using a password, database
 sessions, access tokens and browser cookies. The proxy identity header has no
 meaning in this mode. The mutable legacy `authLocalEnabled` setting cannot select
-another mode; API updates to it are rejected. Additional user identities and their
-resource rights are outside this decision and belong to M15.
+another mode; API updates to it are rejected. Additional users and their resource
+rights are decided in [simple users](simple-users.md) (M15).
 Clients read the active policy from `GET /api/auth/mode`, not the legacy
 `authLocalEnabled` setting, whose stored value does not describe none/proxy mode.
 
@@ -22,8 +22,12 @@ password before completion. The administrator's profile language is stored in
 the core and applied when the UI loads.
 
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
-each accepted proxy identity to that same persisted administrator ID. Proxy names
-are request-scoped activity attribution, not local accounts, role assignments or
+each accepted proxy identity to that same persisted administrator ID unless
+`AUTH_PROXY_ADMIN_USERS` is set and not blank; then the listed identities map to the
+administrator, other identities map to the account with exactly that username (with that
+account's rights, administrator included) or are refused, and `AUTH_PROXY_LOGOUT_URL` names the proxy's sign-out address
+([simple users](simple-users.md) §6 and §8). For identities mapped to the
+administrator, proxy names are request-scoped activity attribution, not local accounts, role assignments or
 password identities. The account is resolved by effective global administrative
 permissions, so renaming its username does not change the mapping.
 
@@ -58,8 +62,8 @@ Huma REST routes, Echo WebSocket/diagnostics streams and environment forwarding
 share the startup policy. Proxy mode does not accept local password login,
 refresh, local Bearer tokens, browser sessions or personal API keys as a second
 sign-in path. In none mode local login/refresh/password endpoints are also
-unavailable. Environment bootstrap keys, agent access tokens, Edge tunnel
-credentials and webhook path tokens retain their existing machine contracts.
+unavailable. Environment bootstrap keys, agent access tokens and Edge tunnel
+credentials retain their existing machine contracts.
 They do not become proxy user identities. Public API operations retain their
 existing contracts, including health probes and the pairing handler that validates
 its own environment bootstrap key; mode selection does not add a user sign-in
@@ -73,7 +77,7 @@ cache hit. Startup clears the verification cache; returning to local mode cannot
 resurrect an older session. A same-mode restart preserves valid local sessions.
 Restored database sessions are independently revoked by the backup subsystem.
 Mode changes revoke sessions only. Users, personal/scoped API keys, environment
-bootstrap/access tokens and webhook tokens created or retained during none/proxy
+bootstrap/access tokens created or retained during none/proxy
 mode persist when local mode resumes. Operators must review users and credentials
 and revoke or rotate unwanted access; switching modes does not remove it.
 
@@ -112,8 +116,7 @@ and retries the write once. Credential-check 401s stay inline rather than
 broadcasting session loss.
 
 Only independently authenticated machine ingress keeps its separate contract:
-agent-only listeners, validated environment-token requests, Edge tunnel tokens
-and webhook path-token routes. Unvalidated Bearer/API-key or proxy headers do
+agent-only listeners, validated environment-token requests and Edge tunnel tokens. Unvalidated Bearer/API-key or proxy headers do
 not qualify. Local, direct environment and Edge-proxied WebSockets require the
 same exact allowed Origin, including terminal upgrades. Request Host and other
 localhost ports never expand that list. An absent Origin requires a validated

@@ -53,7 +53,7 @@ export const ContainerRow = memo(function ContainerRow({ container: c, host, mod
       {ts(rt)}
     </ToneBadge>
   );
-  const origin = <OriginBadge origin={c.origin} note={c.originNote} />;
+  const origin = <OriginBadge origin={c.origin} source={c.originSource} note={c.originNote} />;
   const muted = "text-xs text-muted-foreground [overflow-wrap:anywhere]";
   const ports = <span className={cn("font-mono", muted)}>{formatPorts(c.ports) || "–"}</span>;
   const networks = <span className={muted}>{c.networks.join(", ") || "–"}</span>;

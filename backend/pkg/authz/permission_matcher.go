@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; M12 persisted volume lifecycle and legacy restore cut.; M15 resource authorization and isolated transport helpers.
 
 package authz
 
@@ -33,9 +33,10 @@ type PermissionMatcher struct {
 }
 
 type permRoute struct {
-	method   string
-	segments []string // literal segment, or "*" for a path parameter
-	perm     string
+	method    string
+	segments  []string // literal segment, or "*" for a path parameter
+	perm      string
+	operation string
 }
 
 // NewPermissionMatcher returns an empty matcher.
@@ -172,4 +173,40 @@ func VolumeWorkspaceRequiredPermissions(changes []volumetypes.WorkspaceFileChang
 		}
 	}
 	return kit.Unique(required), true
+}
+
+// AddOperation records the same operation identity used by Huma authorization.
+func (m *PermissionMatcher) AddOperation(method, path, perm, operation string) {
+	m.Add(method, path, perm)
+	m.routes[len(m.routes)-1].operation = operation
+}
+func (m *PermissionMatcher) LookupOperation(method, path string) string {
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	segs := pathSegmentsInternal(path)
+	best := -1
+	op := ""
+	for _, r := range m.routes {
+		if r.method != strings.ToUpper(method) || len(r.segments) != len(segs) {
+			continue
+		}
+		score := 0
+		ok := true
+		for i, s := range r.segments {
+			if s == "*" {
+				continue
+			}
+			if s != segs[i] {
+				ok = false
+				break
+			}
+			score++
+		}
+		if ok && score > best {
+			best = score
+			op = r.operation
+		}
+	}
+	return op
 }

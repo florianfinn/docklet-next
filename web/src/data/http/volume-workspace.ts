@@ -10,7 +10,7 @@ import { entryIdentity, touchedPaths, underPath } from "@/data/workspace-freshne
 import { joinPath, parentPath } from "@/domain/files";
 import { createWorkspaceTransport, WorkspaceConflictError, WorkspaceError, workspacePath, type WorkspaceOptions } from "./workspace";
 
-type VolumeWorkspace = Pick<DockletAdapter, "listFiles" | "readFile" | "writeFile" | "createEntry" | "renameEntry" | "deleteEntry" | "uploadFile" | "downloadFile">;
+type VolumeWorkspace = Pick<DockletAdapter, "listFiles" | "readFile" | "writeFile" | "createEntry" | "renameEntry" | "moveEntry" | "deleteEntry" | "uploadFile" | "downloadFile">;
 
 export function createVolumeWorkspace(options: WorkspaceOptions): VolumeWorkspace {
   const transport = createWorkspaceTransport(options);
@@ -71,6 +71,8 @@ export function createVolumeWorkspace(options: WorkspaceOptions): VolumeWorkspac
     },
     async createEntry(id, dir, name, type, revision) { const result = await mutate(id, "createEntry", type === "dir" ? { kind: "create-folder", path: joinPath(dir, name) } : { kind: "create-file", path: joinPath(dir, name), content: "" }, revision); return { revision: result.fileTreeRevision }; },
     async renameEntry(id, path, name, revision) { const result = await mutate(id, "renameEntry", { kind: "rename", path, name }, revision); return { revision: result.fileTreeRevision }; },
+    // Moving needs the same right as renaming; the hub has no separate move capability.
+    async moveEntry(id, path, folder, revision) { const result = await mutate(id, "renameEntry", { kind: "move", path, parent: folder }, revision); return { revision: result.fileTreeRevision }; },
     async deleteEntry(id, path, revision) { const result = await mutate(id, "deleteEntry", { kind: "delete", path }, revision); return { revision: result.fileTreeRevision }; },
     async uploadFile(id, dir, file, revision) { const result = await mutate(id, "uploadFile", { kind: "upload", path: joinPath(dir, file.name), file }, revision); return { revision: result.fileTreeRevision }; },
     async downloadFile(id, path) { await transport.require("downloadFile", "volume", id); return transport.download("volume", id, path); },

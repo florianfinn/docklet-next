@@ -2,8 +2,9 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original localized inventory observation notices.
+// Deviations: Original localized inventory observation notices. M14 host maintenance and availability. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
+import { isHostAvailable } from "@/domain/hosts";
 import { useFormatter, useTranslations } from "use-intl";
 import type { Host, InventoryObservation } from "@/domain/model";
 
@@ -14,9 +15,14 @@ export function InventoryNotice({ hosts, items }: { hosts: Host[]; items: { host
     {hosts.map((host) => {
       const retained = items.find((item) => item.hostId === host.id && item.inventory?.stale)?.inventory;
       const state = retained ?? host.inventory;
-      if (!state?.stale && host.status === "online") return null;
+      if (!state?.stale && isHostAvailable(host)) return null;
       const reason = state?.reason ?? (host.status === "update-required" ? "agent.update-required" : "agent.unavailable");
-      return <p key={host.id}>{t("host", { name: host.name, reason: t(reason === "agent.update-required" ? "updateRequired" : reason === "agent.invalid-token" ? "credentialRejected" : reason === "inventory.mapping-error" ? "mappingError" : reason === "inventory.read-error" ? "readError" : "unavailable") })} {state?.observedAt ? t("asOf", { time: format.dateTime(new Date(state.observedAt), { dateStyle: "medium", timeStyle: "medium" }) }) : t("noSnapshot")}</p>;
+      // A stale catalogue of an available host is the only fact; it names no host reason.
+      const scopeOnly = !!state?.scopeStale && !state.reason && isHostAvailable(host);
+      const label = scopeOnly ? t("scopeStale") : t(reason === "agent.update-required" ? "updateRequired" : reason === "agent.invalid-token" ? "credentialRejected" : reason === "inventory.mapping-error" ? "mappingError" : reason === "inventory.read-error" ? "readError" : "unavailable");
+      const sentences = [t("host", { name: host.name, reason: label }), ...(state?.scopeStale && !scopeOnly ? [t("scopeStaleNote")] : []),
+        state?.observedAt ? t("asOf", { time: format.dateTime(new Date(state.observedAt), { dateStyle: "medium", timeStyle: "medium" }) }) : t("noSnapshot")];
+      return <p key={host.id}>{sentences.join(" ")}</p>;
     })}
   </div>;
 }

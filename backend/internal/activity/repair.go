@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-14
 // License: BSD-3-Clause
-// Deviations: Immediate single-hub startup repair and ungated periodic sweep.
+// Deviations: Immediate single-hub startup repair and ungated periodic sweep; durable self-update runs retain their explicit owner.
 
 package activity
 
@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"time"
 
+	"encoding/json"
+	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/types/activity"
 )
 
@@ -66,6 +68,26 @@ func (s *ActivityService) repairMatchingInternal(ctx context.Context, kind activ
 	if len(protectedIDs) != 0 {
 		query = query.Where("id NOT IN ?", protectedIDs)
 	}
+	// The correlated durable operation owns these runs until settlement. A new
+	// process becoming ready cannot prove the detached helper's health result.
+	if s.db.Migrator().HasTable(&kv.KVEntry{}) {
+		var entries []kv.KVEntry
+		if err := s.db.WithContext(ctx).Where("key = ? OR key LIKE ?", "selfupdate.operation", "selfupdate.remote.%").Find(&entries).Error; err != nil {
+			return 0, err
+		}
+		for _, entry := range entries {
+			var owner struct {
+				RunID string `json:"runId"`
+				Phase string `json:"phase"`
+			}
+			if err := json.Unmarshal([]byte(entry.Value), &owner); err != nil {
+				return 0, err
+			}
+			if owner.Phase != "settled" && owner.RunID != "" {
+				query = query.Where("id <> ?", owner.RunID)
+			}
+		}
+	}
 	var rows []Activity
 	if err := query.Find(&rows).Error; err != nil {
 		return 0, fmt.Errorf("find abandoned activities: %w", err)
@@ -87,13 +109,7 @@ func (s *ActivityService) repairMatchingInternal(ctx context.Context, kind activ
 			message = "Image update check failed because it was stale after hub restart"
 			failure = &message
 		}
-		if row.Type == activity.TypeAutoUpdate {
-			if triggered, _ := row.Metadata["selfUpdateTriggered"].(bool); triggered {
-				result = activity.StatusSuccess
-				message = "Auto-update completed: hub restarted with the updated image"
-				failure = nil
-			}
-		}
+
 		repairCtx := context.WithValue(ctx, startupRepairContextKey{}, true)
 		finished, err := s.CompleteActivity(repairCtx, row.ID, result, message, failure)
 		if err != nil {

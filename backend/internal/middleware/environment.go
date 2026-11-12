@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; single-host upgrade routes are hub-owned before dispatch; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
 
 package middleware
 
@@ -11,6 +11,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
+	containertypes "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
@@ -31,6 +33,7 @@ import (
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -80,6 +83,7 @@ type AuthValidator func(ctx context.Context, c *echo.Context) (*authz.Permission
 
 // EnvironmentMiddleware proxies requests for remote environments to their respective agents.
 type EnvironmentMiddleware struct {
+	shellSessions *containershell.Registry
 	localID       string
 	paramName     string
 	resolver      EnvResolver
@@ -90,6 +94,8 @@ type EnvironmentMiddleware struct {
 	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin                func(*http.Request) bool
 	proxyIdentityHeader        string
+	policyCleanup              func(context.Context, string, string) error
+	originOverlay              func(context.Context, string, []byte) ([]byte, error)
 	snapshots                  *hoststate.Store
 	inventoryPending           func(context.Context, string) (bool, error)
 	agentAccess                remenv.AgentAccessCheck
@@ -127,10 +133,13 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.shellSessions = options[0].ShellSessions
 		m.vulnerabilityEnabled = options[0].VulnerabilityEnabled
 		m.vulnerabilityIgnoreUnfixed = options[0].VulnerabilityIgnoreUnfixed
 		m.pointHolds = options[0].PointHolds
 		m.pointAccess = options[0].PointAccess
+		m.originOverlay = options[0].OriginOverlay
+		m.policyCleanup = options[0].PolicyCleanup
 		m.snapshots = options[0].Snapshots
 		m.inventoryPending = options[0].InventoryPending
 		if options[0].HTTPClient != nil {
@@ -148,6 +157,13 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 // Handle is the main middleware handler.
 func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) error {
 	envID := m.extractEnvironmentID(c)
+	if err := validateProxiedVolumeEntry(c.Request()); err != nil {
+		var problem interface{ GetStatus() int }
+		if errors.As(err, &problem) {
+			return c.JSON(problem.GetStatus(), err)
+		}
+		return err
+	}
 	isVulnerability := isVulnerabilityRequest(c)
 	// Refusals answer in the shape declared for the operation the hub router matched.
 	vulnerabilityShape := isVulnerability || isVulnerabilityOperation(c)
@@ -162,6 +178,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if m.authValidator != nil {
 		ps, u, ok := m.authValidator(c.Request().Context(), c)
 		if !ok {
+			if code, ok := c.Get("accessAuthError").(string); ok {
+				return genericProblem(c, 403, code)
+			}
 			if vulnerabilityShape {
 				return genericProblem(c, http.StatusUnauthorized, "Authentication required to access remote environments")
 			}
@@ -172,6 +191,32 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		}
 		perms, user = ps, u
 		c.Set("pointHostAdmin", ps.IsGlobalAdmin())
+	}
+	if access.FromPermissions(perms).IsUser() {
+		op, env, params := access.Match(c.Request().Method, c.Request().URL.Path)
+		if m.matcher != nil {
+			if matched := m.matcher.LookupOperation(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)); matched != "" {
+				op = matched
+			}
+		}
+		if op == "deploy-project" {
+			if body, err := readAccessBody(c); err == nil {
+				params.Body = body
+			} else {
+				return genericProblem(c, 400, "Invalid deployment options")
+			}
+		}
+		if op == "list-projects" {
+			body, err := access.ProjectList(c.Request().Context(), access.FromPermissions(perms), env, c.QueryParams())
+			if err != nil {
+				return genericProblem(c, 503, "access.unavailable")
+			}
+			return c.JSON(200, body)
+		}
+		if d := access.Decide(c.Request().Context(), access.FromPermissions(perms), op, env, params); d != access.Allow {
+			return genericProblem(c, d.Status(), string(d))
+		}
+		c.Set("simpleUserAuthorized", true)
 	}
 	if isVulnerability {
 		if m.proxyPermissionDenied(c, perms, envID) {
@@ -215,7 +260,8 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if i := strings.IndexAny(scanSuffix, "?#"); i >= 0 {
 		scanSuffix = scanSuffix[:i]
 	}
-	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(scanSuffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
+	// Only installed-image scans carry the hub's unfixed policy; candidate scans are always unfiltered.
+	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(scanSuffix, "/scan") && !strings.HasSuffix(scanSuffix, "/candidates/scan") && m.vulnerabilityIgnoreUnfixed != nil {
 		if handled, err := m.canonicalizeVulnerabilityScan(c); handled {
 			return err
 		}
@@ -252,6 +298,21 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			"success": false,
 			"data":    map[string]any{"error": "You don't have permission to perform this action on this environment"},
 		})
+	}
+
+	if strings.HasPrefix(suffix, "/ws/containers/") && strings.HasSuffix(suffix, "/terminal") && m.shellSessions != nil {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		ctx, handle, err := m.shellSessions.Accept(c.Request().Context(), c.QueryParams(), user, envID, parts[2], httpx.IsWebSocketUpgradeRequest(c.Request()))
+		if err != nil {
+			if problem, ok := err.(*containertypes.Problem); ok {
+				return c.JSON(problem.Status, problem)
+			}
+			return c.NoContent(http.StatusServiceUnavailable)
+		}
+		if handle != nil {
+			defer handle.Release()
+		}
+		c.SetRequest(c.Request().WithContext(ctx))
 	}
 
 	if list, point := pointRoute(suffix); (list || point != "") && !perms.IsGlobalAdmin() {
@@ -315,6 +376,7 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
 	// Pending credentials retain snapshots without probing an unpaired agent.
 	inventory := m.snapshots != nil && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/"))
+	defer boundInventoryRead(c, inventory)()
 	if inventory && m.inventoryPending != nil {
 		pending, err := m.inventoryPending(c.Request().Context(), envID)
 		if err != nil || pending {
@@ -335,8 +397,7 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 			}
 			return c.JSON(status, map[string]any{"success": false, "code": code})
 		}
-		defer cancel()
-		c.SetRequest(c.Request().WithContext(ctx))
+		defer forwardOnContext(c, ctx, cancel)()
 	}
 	isEdgeEnvironment := isEdgeEnvironmentURLInternal(apiURL)
 
@@ -407,6 +468,11 @@ func (m *EnvironmentMiddleware) setUpdateInitiatorHeadersInternal(c *echo.Contex
 // permission mapping are denied (default-deny), so a newly added proxied route
 // cannot silently bypass authorization before it is mapped.
 func (m *EnvironmentMiddleware) proxyPermissionDenied(c *echo.Context, ps *authz.PermissionSet, envID string) bool {
+	if authorized, _ := c.Get("simpleUserAuthorized").(bool); !authorized {
+		if d := echoAccessDecision(c, ps); d != access.Allow {
+			return true
+		}
+	}
 	if m.matcher == nil {
 		return false
 	}
@@ -637,6 +703,9 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)) {
 		return m.proxyLifecycleResponse(c, tunnel, envID)
 	}
+	if destroyedStack(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)) != "" {
+		return m.proxyStackDestroy(c, tunnel, envID)
+	}
 	return edge.ProxyHTTPRequest(c, tunnel, proxyPath)
 }
 
@@ -646,73 +715,10 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 	if !ok || len(suffix) <= 1 || suffix[0] != '/' {
 		return false
 	}
+	if c.Request().Method == http.MethodPost && suffix == "/system/upgrade" || c.Request().Method == http.MethodGet && suffix == "/system/upgrade/check" {
+		return false
+	}
 	return !isManagementPathInternal(c.Request().Method, suffix)
-}
-
-func isManagementPathInternal(method, suffix string) bool {
-	if suffix == "/updater/schedules" || suffix == "/updater/system-image-hints" || strings.HasPrefix(suffix, "/updater/policies/") {
-		return true
-	}
-	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/projects/") && strings.HasSuffix(suffix, "/check") {
-		return true
-	}
-	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/") && (strings.HasSuffix(suffix, "/update") || strings.HasSuffix(suffix, "/restore")) {
-		return true
-	}
-	if suffix == "/runtime-runs" || strings.HasPrefix(suffix, "/runtime-runs/") || suffix == "/runtime-registration" || suffix == "/runtime-target" {
-		return true
-	}
-	if method == http.MethodPost {
-		parts := strings.Split(strings.Trim(suffix, "/"), "/")
-		if len(parts) == 3 && parts[1] != "" {
-			if parts[0] == "projects" && (parts[2] == "up" || parts[2] == "down" || parts[2] == "restart" || parts[2] == "redeploy") {
-				return true
-			}
-			if parts[0] == "containers" && (parts[2] == "start" || parts[2] == "stop" || parts[2] == "restart") {
-				return true
-			}
-		}
-	}
-
-	if suffix == "/jobs" || strings.HasPrefix(suffix, "/jobs/") {
-		return true
-	}
-	if method == http.MethodPost {
-		parts := strings.Split(strings.Trim(suffix, "/"), "/")
-		if len(parts) == 3 && parts[0] == "volumes" && parts[1] != "" && parts[2] == "backups" {
-			return true
-		}
-	}
-	if isCentralVolumeBackupPolicyPathInternal(method, suffix) {
-		return true
-	}
-	// Only the hub pushes backup target sets; clients never reach an agent's receiver.
-	if method == http.MethodPut && suffix == "/volumes/backups/targets" {
-		return true
-	}
-	if suffix == "/activities" || strings.HasPrefix(suffix, "/activities/") {
-		return true
-	}
-
-	if suffix == "/auto-heal" {
-		return true
-	}
-	if strings.HasPrefix(suffix, "/notifications") {
-		return true
-	}
-
-	// Webhooks are managed centrally: rows live in the manager DB (keyed by the
-	// real environment ID) and the public trigger endpoint resolves tokens there.
-	if suffix == "/webhooks" || strings.HasPrefix(suffix, "/webhooks/") {
-		return true
-	}
-
-	if strings.HasPrefix(suffix, "/deployment/mtls/") {
-		return true
-	}
-
-	_, isManagement := managementEndpointSet[suffix]
-	return isManagement
 }
 
 func isCentralVolumeBackupPolicyPathInternal(method, suffix string) bool {
@@ -877,6 +883,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
+	resp.Body = watchInventoryBody(c.Response(), resp.Body)
 	if isVulnerabilityRequest(c) {
 		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
 	}
@@ -887,93 +894,6 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))) {
 		return m.writeLifecycleResponse(c, resp.StatusCode, resp.Header, resp.Body)
 	}
+	m.cleanupStack(c, resp.StatusCode)
 	return m.writeProxyResponse(c, resp)
-}
-
-// createProxyRequest builds the HTTP request to forward to the remote environment.
-func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target string, accessToken *string) (*http.Request, error) {
-	srcReq := c.Request()
-	validatedTarget, err := httpx.ValidateOutboundHTTPURL(target)
-	if err != nil {
-		return nil, common.Classify(common.ErrEnvironmentInvalidProxyTarget, fmt.Errorf("Invalid proxy target URL: %w", err)) //nolint:staticcheck // Preserve the existing error message.
-	}
-
-	// The body is streamed straight through rather than buffered: volume backup
-	// and image import uploads run to gigabytes, and reading them into memory
-	// cost roughly twice their size per in-flight request. This drops GetBody,
-	// so the transport can no longer replay the body across a redirect or an
-	// idle-connection retry; a proxied API call has no legitimate need for
-	// either, and a failure surfaces as a 502 rather than silent corruption.
-	//
-	// A server request's ContentLength is 0 only when there is genuinely no
-	// body (-1 means chunked/unknown), so it is the safe signal for whether to
-	// forward one at all.
-	var requestBody io.ReadCloser
-	var contentLength int64
-	switch {
-	case srcReq.Body == nil:
-	case srcReq.ContentLength != 0:
-		requestBody, contentLength = srcReq.Body, srcReq.ContentLength
-	default:
-		_ = srcReq.Body.Close()
-	}
-
-	// The body is deliberately not logged: at debug level it would put compose
-	// files and registry credentials into the ring buffer served by
-	// /api/diagnostics/logs, and stringifying it allocated even when debug was off.
-	slog.DebugContext(srcReq.Context(), "Creating proxy request", "method", srcReq.Method, "target", target, "contentLength", srcReq.ContentLength, "contentType", srcReq.Header.Get("Content-Type"))
-
-	requestURL := *validatedTarget
-	req := (&http.Request{
-		Method:        srcReq.Method,
-		URL:           &requestURL,
-		Host:          requestURL.Host,
-		Header:        make(http.Header),
-		Body:          requestBody,
-		ContentLength: contentLength,
-	}).WithContext(srcReq.Context())
-
-	skip := edge.GetSkipHeaders()
-	edge.CopyRequestHeaders(srcReq.Header, req.Header, skip)
-	remenv.StripHubCredentials(req.Header, m.proxyIdentityHeader)
-	edge.SetAgentToken(req, accessToken)
-	edge.SetForwardedHeaders(req, c.RealIP(), srcReq.Host)
-
-	return req, nil
-}
-
-// writeProxyResponse copies the proxy response back to the client. An upstream
-// 401 means the agent rejected the manager's credentials; passing it through
-// makes browser clients treat it as a lost session, so it becomes a 502.
-func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.Response) error {
-	if remenv.AgentAuthRejected(resp.StatusCode) {
-		slog.WarnContext(c.Request().Context(), "Remote environment rejected the manager's credentials", "target", resp.Request.URL.Host)
-		return c.JSON(http.StatusBadGateway, map[string]any{
-			"success": false,
-			"code":    "agent.invalid-token",
-			"data":    map[string]any{"error": "Remote environment rejected the manager's credentials"},
-		})
-	}
-	w := c.Response()
-	hopByHop := edge.BuildHopByHopHeaders(resp.Header)
-	edge.CopyResponseHeaders(resp.Header, w.Header(), hopByHop)
-
-	w.WriteHeader(resp.StatusCode)
-	if c.Request().Method != http.MethodHead {
-		edge.CopyBodyWithFlush(w, resp.Body)
-	}
-	return nil
-}
-
-// EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
-type EnvironmentProxySecurity struct {
-	VulnerabilityEnabled       func(context.Context) bool
-	VulnerabilityIgnoreUnfixed func() bool
-	PointHolds                 PointHoldReader
-	PointAccess                PointAccessReader
-	Snapshots                  *hoststate.Store
-	InventoryPending           func(context.Context, string) (bool, error)
-	HTTPClient                 *http.Client
-	ProxyIdentityHeader        string
-	AgentAccess                remenv.AgentAccessCheck
 }

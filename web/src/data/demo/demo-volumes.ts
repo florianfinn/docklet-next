@@ -1,3 +1,5 @@
+import { isHostAvailable } from "@/domain/hosts";
+import { demoBind, demoStored, protectedPaths } from "./demo-binds";
 import { createDemoBackups } from "./demo-backups";
 import { collectMountUsage, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
 import { planVolumePrune, pruneBlock } from "@/domain/volume-prune";
@@ -28,9 +30,12 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
     db.files.ensure(id, () => u.files);
   }
 
+  const measured = new Map<string, { size: number; at: string }>();
   function toVolume(u: MountUsage): Volume {
     db.files.ensure(u.id, () => seedFiles(u));
     const runs = db.backupRuns.filter((r) => r.volumeId === u.id);
+    const snapshot = latest(runs.filter((r) => r.status === "succeeded" && r.sizeBytes != null));
+    const bind = u.kind === "bind" ? demoBind(u.name, u.fileBind, protectedPaths(db.settings.backups.targets, u.hostId), measured.get(u.id), snapshot && { size: snapshot.sizeBytes!, at: snapshot.finishedAt ?? snapshot.startedAt }) : undefined;
     return {
       id: u.id,
       name: u.name,
@@ -41,17 +46,39 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       composeName: u.composeName,
       stackId: u.stackId,
       fileBind: u.fileBind,
+      bind,
       sizeBytes: db.files.size(u.id),
       createdAt: new Date(Date.now() - (20 + (hash(u.id) % 300)) * DAY).toISOString(),
       consumers: u.consumers,
       labels: u.stackId && u.composeName ? { "com.docker.compose.project": u.stackId, "com.docker.compose.volume": u.composeName } : {},
-      backup: db.backupPolicies.get(u.id),
-      lastBackup: latest(runs),
+      ...stored(u.id),
     };
+  }
+
+  /** Stored backup state of a key: plan, newest finished backup, running operation and restore rows. */
+  function stored(id: string): Pick<Volume, "backup" | "lastBackup" | "running" | "lastRestore" | "pendingRestores"> {
+    const restore = db.restoreRuns.get(id),
+      runs = outcome(db.backupRuns.filter((r) => r.volumeId === id));
+    return {
+      backup: db.backupPolicies.get(id),
+      ...runs,
+      ...(restore && { lastRestore: restore, pendingRestores: restore.pendingRestart ? [restore] : [] }),
+      running: restore?.status === "running" ? { kind: "restore", activityId: restore.activityId } : runs.running,
+    };
+  }
+
+  // A stored bind key stays reachable after its last consumer is gone (K3); without a mount it has no live verdict.
+  const seenBinds = new Map<string, Volume>();
+  function retained(): Volume[] {
+    const mounted = new Set(usageOf().map((u) => u.id));
+    return [...seenBinds.values()]
+      .filter((v) => !mounted.has(v.id) && demoStored(db, v.id))
+      .map((v) => ({ ...v, consumers: [], bind: undefined, ...stored(v.id) }));
   }
 
   function all(): Volume[] {
     const derived = usageOf().map(toVolume);
+    for (const v of derived) if (v.kind === "bind") seenBinds.set(v.id, v);
     const mounted = new Map(derived.map((v) => [v.id, v]));
     const created = [...db.createdVolumes].map(([id, v]): Volume => {
       db.files.ensure(id, () => []);
@@ -70,8 +97,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
         createdAt: v.createdAt,
         consumers: used?.consumers ?? [],
         labels: { ...used?.labels, ...v.labels },
-        backup: db.backupPolicies.get(id),
-        lastBackup: latest(db.backupRuns.filter((r) => r.volumeId === id)),
+        ...stored(id),
         demoCreated: v.seeded ? undefined : true,
       };
     });
@@ -79,14 +105,14 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
   }
 
   function find(id: string): Volume {
-    const v = all().find((x) => x.id === id);
+    const v = all().find((x) => x.id === id) ?? retained().find((x) => x.id === id);
     if (!v) throw new DemoError("not-found");
     return v;
   }
 
   /** File access goes through the host agent; disconnected hosts cannot be browsed. */
   function online(v: Volume): Volume {
-    if (db.host(v.hostId)?.status !== "online") throw new DemoError("host-offline");
+    if (!isHostAvailable(db.host(v.hostId))) throw new DemoError("host-offline");
     return v;
   }
 
@@ -115,7 +141,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
 
     async createVolume(input) {
       await wait(300);
-      if (db.host(input.hostId)?.status !== "online") throw new DemoError("host-offline");
+      if (!isHostAvailable(db.host(input.hostId))) throw new DemoError("host-offline");
       const taken = all()
         .filter((v) => v.hostId === input.hostId && v.kind === "volume")
         .map((v) => v.name);
@@ -143,12 +169,22 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       return structuredClone(find(nextId));
     },
 
+    async measureBind(id) {
+      await wait(600);
+      const v = online(find(id));
+      if (v.kind !== "bind") throw new DemoError("invalid-name");
+      if (!v.bind?.eligible) throw new DemoError("not-editable");
+      const at = new Date().toISOString();
+      measured.set(id, { size: db.files.size(id), at });
+      return { sizeBytes: db.files.size(id), measuredAt: at, partial: false };
+    },
+
     async deleteVolume(id) {
       await wait(300);
       const v = find(id);
       if (v.kind === "bind") throw new DemoError("bind-not-deletable");
       if (v.consumers.length) throw new DemoError("in-use");
-      if (db.host(v.hostId)?.status !== "online") throw new DemoError("host-offline");
+      if (!isHostAvailable(db.host(v.hostId))) throw new DemoError("host-offline");
       db.createdVolumes.delete(id);
       db.files.drop(id);
       db.backupPolicies.delete(id);
@@ -205,6 +241,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
     writeFile: (id, path, content) => fileOp(id, () => db.files.write(id, path, content)),
     createEntry: (id, dir, name, type) => fileOp(id, () => db.files.create(id, dir, name.trim(), type)),
     renameEntry: (id, path, name) => fileOp(id, () => db.files.rename(id, path, name.trim())),
+    moveEntry: (id, path, folder) => fileOp(id, () => db.files.move(id, path, folder)),
     deleteEntry: (id, path) => fileOp(id, () => db.files.remove(id, path)),
     async uploadFile(id, dir, file) {
       const text = file.content ?? (file.blob && file.size <= 256 * 1024 ? await file.blob.text() : undefined);
@@ -216,8 +253,14 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       return new Blob([file.content], { type: "text/plain" });
     },
 
-    ...createDemoBackups(ctx, all, find),
+    ...createDemoBackups(ctx, () => [...all(), ...retained()], find),
   };
+}
+
+/** Like the agent: the newest finished backup, and a capture in progress as the running operation. */
+function outcome(runs: BackupRun[]): Pick<Volume, "lastBackup" | "running"> {
+  const active = runs.find((r) => r.status === "running" && r.actionId);
+  return { lastBackup: latest(runs.filter((r) => r.status !== "running")), running: active && { kind: "backup", activityId: active.actionId! } };
 }
 
 function latest(runs: BackupRun[]): BackupRun | undefined {

@@ -29,7 +29,7 @@ describe("host settings", () => {
 
   it("renames and recolours a host for every view, refuses duplicates and keeps the id", async () => {
     const adapter = createDemoAdapter();
-    expect(await adapter.updateHost("atlas", { name: "boreal", color: "#22c55e" }).catch(errorCode)).toBe("exists");
+    await expect(adapter.updateHost("atlas", { name: "boreal", color: "#22c55e" })).rejects.toMatchObject({ outcome: { code: "host.name-taken" } });
     expect(await adapter.updateHost("atlas", { name: "Atlas", color: "pink" }).catch(errorCode)).toBe("invalid-color");
     const saved = await adapter.updateHost("atlas", { name: "Atlas Nord", color: "#EC4899" });
     expect([saved.id, saved.name, saved.color]).toEqual(["atlas", "Atlas Nord", "#ec4899"]);

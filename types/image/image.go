@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M15 simple-user rights and identity contracts.
 
 package image
 
@@ -186,10 +186,10 @@ type Summary struct {
 	// Required: false
 	UpdateInfo *UpdateInfo `json:"updateInfo,omitempty"`
 
-	// VulnerabilityScan contains the latest vulnerability scan summary for the image.
+	// VulnerabilityScan is private sort input and is never included in list responses.
 	//
 	// Required: false
-	VulnerabilityScan *vulnerability.ScanSummary `json:"vulnerabilityScan,omitempty"`
+	VulnerabilityScan *vulnerability.ScanSummary `json:"-"`
 
 	// PinnedReferences contains exact digest-pinned references used by containers.
 	//

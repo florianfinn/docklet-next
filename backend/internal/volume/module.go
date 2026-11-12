@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; prune preview registration; typed API create and rename conflict schemas; M12 backup foundation.
+// Deviations: Local module namespace; prune preview registration; typed API create and rename conflict schemas; M12 backup foundation; M16 bind mounts and backup completion.
 
 // Package volume owns Docker volumes: CRUD and pruning, the helper-container
 // file browser, backup and restore, and the HTTP surface for all of it.
@@ -69,6 +69,7 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 		service = &VolumeService{}
 	}
 
+	registerBindRoutes(api, service)
 	RegisterVolumes(api, m.dockerService, m.service, m.activityService, m.environmentService, appCtx)
 	workspace.RegisterRoutes(api, workspace.NewHandler(service.workspace, m.activityService, appCtx.Context()))
 	var cfg *config.Config

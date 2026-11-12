@@ -2,11 +2,12 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration; M21 self-update descriptor. M21 #438: candidate scans and verified manifest binding.
 package activity
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"net/http"
 	"slices"
 	"strings"
@@ -15,29 +16,33 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/capability"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
+
+const TypeVulnerabilityCandidateScan activitytypes.Type = "vulnerability.candidate-scan"
 
 var adapterOperationIDs = []string{
 	"listContainerRegistries", "getContainerRegistry", "createContainerRegistry", "updateContainerRegistry",
 	"clearContainerRegistryCredential", "testContainerRegistry", "deleteContainerRegistry",
-	"getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply", "saveUpdateSchedule",
-	"checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
+	"getUpdateBaseline", "listRestorePoints", "listUpdatePolicies", "restoreContainerImage", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply",
+	"checkAllUpdates", "checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
-	"getScanSettings", "saveScanSettings", "cancelScan",
+	"getScanSettings", "saveScanSettings", "cancelScan", "ignore-vulnerability", "unignore-vulnerability",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
-	"getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
+	"openContainerShell", "getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
 	"issueAgentToken", "listActions", "listContainers", "listEvents", "listFiles",
-	"listHosts", "listImages", "listSchedule", "listStacks", "listSystemComponents",
+	"listHosts", "listImages", "listStacks", "listSystemComponents",
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
 	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
-	"restoreRestorePoint", "runContainerCommand", "runScan",
-	"runStackCommand", "saveSettings", "saveStackFiles", "setAutoUpdate",
+	"restoreRestorePoint", "runContainerCommand", "runScan", "scan-vulnerability-candidates", "get-vulnerability-candidates",
+	"runStackCommand", "redeployStack", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
-	"subscribeMetrics", "updateHost", "uploadFile",
+	"subscribeMetrics", "updateHost", "uploadFile", "selfUpdate",
 	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
@@ -62,14 +67,27 @@ func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Desc
 }
 
 func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
+	if ps, _ := middleware.PermissionsFromContext(ctx); ps != nil && ps.UserID != "" {
+		return userCapabilities(ctx, input, ps)
+	}
 	descriptors := capabilityDescriptorsInternal(capability.ResourceRef{Kind: input.Kind, ID: input.ID})
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {
 		switch descriptors[i].OperationID {
-		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan":
+		case "importSource":
+			descriptors[i].Available = permissions.IsGlobalAdmin()
+			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "access.admin-required"
+			}
+		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan", "ignore-vulnerability", "unignore-vulnerability", "scan-vulnerability-candidates", "get-vulnerability-candidates":
 			ref := descriptors[i].ResourceRef
 			grant := authz.PermVulnsRead
-			if descriptors[i].OperationID == "runScan" {
+			if descriptors[i].OperationID == "ignore-vulnerability" || descriptors[i].OperationID == "unignore-vulnerability" {
+				grant = authz.PermVulnsManage
+			}
+			if descriptors[i].OperationID == "runScan" || descriptors[i].OperationID == "scan-vulnerability-candidates" {
 				grant = authz.PermVulnsScan
 			}
 			if descriptors[i].OperationID == "cancelScan" {
@@ -96,14 +114,14 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
-		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents":
+		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "installContainerUpdate", "setContainerAutoUpdate", "checkAllUpdates", "listSystemComponents", "listUpdatePolicies", "restoreContainerImage":
 			descriptors[i].Available = updateCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
-		case "runStackCommand", "runContainerCommand":
+		case "runStackCommand", "redeployStack", "runContainerCommand":
 			ref := descriptors[i].ResourceRef
 			kind := "stack"
 			required := deployRuntimeGrantsInternal
@@ -122,6 +140,20 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
+		case "recreateContainer", "setContainerOrigin", "restartService", "getSettings", "saveSettings", "updateHost", "connectHost", "reconnectHost", "restartAgent":
+			reason := operationCapability(ctx, descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
+			descriptors[i].Available = reason == ""
+			descriptors[i].DisabledReasonCode = reason
+		case "openContainerShell":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == "container" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(authz.PermContainersExec, env)
+			reason := "capability.unavailable"
+			if valid {
+				reason = containershell.Availability(ctx, env, raw)
+			}
+			descriptors[i].Available = valid && reason == ""
+			descriptors[i].DisabledReasonCode = reason
 		case "subscribeLogs", "subscribeContainerLogs":
 			ref := descriptors[i].ResourceRef
 			kind, logGrant, readGrant := "stack", authz.PermProjectsLogs, authz.PermProjectsRead
@@ -226,7 +258,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		case "listFiles", "readFile", "downloadFile", "writeFile", "createEntry", "uploadFile", "renameEntry", "deleteEntry":
 			ref := descriptors[i].ResourceRef
 			env, raw, scoped := strings.Cut(ref.ID, "~")
-			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && !strings.HasPrefix(raw, "bind:") && permissions.Allows(authz.PermVolumesRead, env)
+			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && volumetypes.ValidateName(raw) == nil && permissions.Allows(authz.PermVolumesRead, env)
 			switch descriptors[i].OperationID {
 			case "writeFile", "createEntry", "uploadFile":
 				valid = valid && permissions.Allows(authz.PermVolumesUpload, env)
@@ -253,6 +285,21 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "selfUpdate":
+			// Hub (hub/0) or one agent (host/<id>); administrators only. No host
+			// status gate: agents in update-required are updated through the
+			// recovery route, and eligibility comes from the update check.
+			ref := descriptors[i].ResourceRef
+			target := (ref.Kind == "hub" && ref.ID == "0") || (ref.Kind == "host" && ref.ID != "" && ref.ID != "0" && !strings.Contains(ref.ID, "~"))
+			descriptors[i].Available = target && permissions.IsGlobalAdmin()
+			switch {
+			case descriptors[i].Available:
+				descriptors[i].DisabledReasonCode = ""
+			case target:
+				descriptors[i].DisabledReasonCode = "access.admin-required"
+			default:
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
 		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":
@@ -334,7 +381,16 @@ func RegisterCapabilities(api huma.API, readers ...middleware.PointAccessReader)
 		Tags:        []string{"Capabilities"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, func(ctx context.Context, in *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
-		return getCapabilitiesWithPoints(ctx, in, reader)
+		out, err := getCapabilitiesWithPoints(ctx, in, reader)
+		if err == nil && api.OpenAPI().Paths["/stack-import"] == nil {
+			for i := range out.Body.Data {
+				if out.Body.Data[i].OperationID == "importSource" {
+					out.Body.Data[i].Available = false
+					out.Body.Data[i].DisabledReasonCode = "capability.mapping-unavailable"
+				}
+			}
+		}
+		return out, err
 	})
 }
 

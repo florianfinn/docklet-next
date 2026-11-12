@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Canonical provider wire types; provider config components exported from the wire vocabulary; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Canonical provider wire types; provider config components exported from the wire vocabulary; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -15,6 +15,8 @@ const (
 	NotificationEventBackupFailed       EventType = "backup_failed"
 	NotificationEventDeployFailed       EventType = "deploy_failed"
 	NotificationEventHostOffline        EventType = "host_offline"
+	NotificationEventContainerUnhealthy EventType = "container_unhealthy"
+	NotificationEventSustainedLoad      EventType = "sustained_load"
 
 	TLSModeNone     TLSMode = "none"
 	TLSModeStartTLS TLSMode = "starttls"
@@ -49,6 +51,8 @@ func IsValidProvider(provider Provider) bool {
 type EventType string
 
 var AllEventTypes = []EventType{
+	NotificationEventContainerUnhealthy,
+	NotificationEventSustainedLoad,
 	NotificationEventImageUpdate,
 	NotificationEventContainerUpdate,
 	NotificationEventVulnerabilityFound,
@@ -198,8 +202,10 @@ type ConfigGeneric struct {
 	PayloadTemplate string `json:"payloadTemplate,omitempty"`
 }
 
-// EventMap names all subscription keys; an omitted key remains enabled.
+// EventMap names subscription keys; sustained_load and container_unhealthy are opt-in.
 type EventMap struct {
+	ContainerUnhealthy *bool `json:"container_unhealthy,omitempty"`
+	SustainedLoad      *bool `json:"sustained_load,omitempty"`
 	ImageUpdate        *bool `json:"image_update,omitempty"`
 	ContainerUpdate    *bool `json:"container_update,omitempty"`
 	VulnerabilityFound *bool `json:"vulnerability_found,omitempty"`

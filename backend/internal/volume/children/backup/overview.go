@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original single-query host overview with bounded metadata and operation rediscovery.
+// Deviations: Original single-query host overview with bounded metadata and operation rediscovery; M16 bind mounts and backup completion.
 
 package backup
 
@@ -92,7 +92,9 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		return volume.BackupOverview{}, err
 	}
 	result := volume.BackupOverview{TimeZone: "UTC", Volumes: []volume.BackupVolumeOverview{}, Targets: []volume.UsableBackupTarget{{ID: "local", Name: "Local", Kind: "local"}}, Repository: volume.BackupRepositorySummary{Mode: "volume", Available: true}}
-	if s.deps.Location != nil {
+	if s.deps.ZoneProvider != nil {
+		result.TimeZone = s.deps.ZoneProvider.Location().String()
+	} else if s.deps.Location != nil {
 		result.TimeZone = s.deps.Location.String()
 	}
 	settings := map[string]string{}
@@ -124,6 +126,9 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 	get := func(name string) *volume.BackupVolumeOverview {
 		if byName[name] == nil {
 			byName[name] = &volume.BackupVolumeOverview{Name: name}
+			if volume.IsBindKey(name) {
+				byName[name].DisplayName = volume.DisplayName(name)
+			}
 		}
 		return byName[name]
 	}
@@ -140,6 +145,14 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		}
 		return rows[i].CreatedAt.After(*rows[j].CreatedAt)
 	})
+	// Running rows claim the volume newest first. A safety capture claims for its volume's running restore when the
+	// snapshot has one; without one it is the volume's running backup.
+	restoring := map[string]*volume.BackupRunning{}
+	for _, r := range rows {
+		if r.Kind == "restore" && r.Status == "running" && restoring[r.VolumeName] == nil {
+			restoring[r.VolumeName] = &volume.BackupRunning{Kind: "restore", ActivityID: r.ActivityID, RestoreID: r.ID}
+		}
+	}
 	for _, r := range rows {
 		switch r.Kind {
 		case "target":
@@ -153,7 +166,8 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 		case "backup":
 			item := get(r.VolumeName)
 			item.Count++
-			if item.LastBackup == nil {
+			// The last backup is the newest finished one; a capture in progress is reported by Running.
+			if item.LastBackup == nil && r.Status != "running" {
 				item.LastBackup = new(entryInternal(r.backupInternal()))
 			}
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {
@@ -161,6 +175,9 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			}
 			if r.Status == "running" && item.Running == nil {
 				item.Running = &volume.BackupRunning{Kind: "backup", ActivityID: r.ActivityID}
+				if owner := restoring[r.VolumeName]; owner != nil && r.Trigger == dto.VolumeBackupTriggerSafety {
+					item.Running = owner
+				}
 			}
 		case "download":
 			item := get(r.VolumeName)
@@ -186,7 +203,7 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 				}
 			}
 			if r.Status == "running" && item.Running == nil {
-				item.Running = &volume.BackupRunning{Kind: "restore", ActivityID: r.ActivityID, RestoreID: r.ID}
+				item.Running = restoring[r.VolumeName]
 			}
 		}
 	}

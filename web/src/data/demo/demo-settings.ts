@@ -1,6 +1,8 @@
 import { pruneEvents, validateHistoryLimit } from "@/domain/activity-history";
 import type { HubSettings, SettingsSection } from "@/domain/settings";
 
+import { unavailable } from "../capability";
+import { selfUpdateRef } from "@/domain/self-update";
 import type { SettingsApi } from "../api";
 import { DemoError, wait, type DemoContext } from "./demo-context";
 import { simulateRead } from "./simulation";
@@ -20,7 +22,10 @@ export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
   const snapshot = (): HubSettings => ({ ...structuredClone(db.settings), security: { scanEnabled: db.security.enabled, schedule: db.security.schedule } });
 
   return {
+    getSelfUpdate: async () => ({ version: "1.0.0", eligibility: { state: "not-eligible", code: "update.self-not-compose", manual: [] } }),
+    selfUpdate: async (hostId) => { throw unavailable("selfUpdate", selfUpdateRef(hostId)); },
     getSetupStatus: async () => db.settings.setupCompleted,
+    getStackStopMode: async () => db.settings.general.stackStopMode ?? "down",
     getConnectedSettings: async () => ({ general: structuredClone(db.settings.general), activity: structuredClone(db.settings.activity), hostDefaults: structuredClone(db.settings.hostDefaults) }),
     getSettings: () => simulateRead("settings", snapshot),
 

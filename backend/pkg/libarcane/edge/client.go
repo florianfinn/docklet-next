@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Edge protocol marker (#362).
 
 package edge
 
@@ -406,7 +406,7 @@ func (c *TunnelClient) grpcFailureStreakInternal() int {
 
 func (c *TunnelClient) registerMessageInternal() *TunnelMessage {
 	capabilities := AdvertisedEdgeCommands()
-	capabilities = append(capabilities, tunnelCapabilityChunkedRequest, tunnelCapabilityProtoParity)
+	capabilities = append(capabilities, tunnelCapabilityChunkedRequest, tunnelCapabilityProtoParity, ownEdgeProtocolCapabilityInternal())
 	registration, _ := c.registration.Load()
 	return &TunnelMessage{
 		Type:          MessageTypeRegister,
@@ -460,7 +460,7 @@ func (c *TunnelClient) awaitRegistrationInternal(ctx context.Context, conn Tunne
 		if !result.msg.Accepted {
 			return nil, fmt.Errorf("manager rejected tunnel registration: %s", result.msg.Error)
 		}
-		c.registration.Store(clientRegistrationInternal{sessionID: result.msg.SessionID})
+		c.registration.Store(clientRegistrationInternal{sessionID: result.msg.SessionID, hubEdgeProtocol: hubEdgeProtocolInternal(ctx, result.msg)})
 		return result.msg, nil
 	}
 }

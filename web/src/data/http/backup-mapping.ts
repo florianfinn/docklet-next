@@ -5,7 +5,7 @@
 // Deviations: Original volume backup DTO projection.
 
 import type { components } from "@/api/generated/schema";
-import type { BackupOverview, BackupPolicy, BackupRun, BackupSchedule } from "@/domain/volumes";
+import { bindPath, type BackupOverview, type BackupPolicy, type BackupRun, type BackupSchedule } from "@/domain/volumes";
 import {
   parseSimpleBackupSchedule,
   formatSimpleBackupSchedule,
@@ -15,6 +15,7 @@ import { inventoryId } from "./inventory-mapping";
 
 type Schema = components["schemas"];
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+const DEFAULT_CRON = "0 0 3 * * *";
 
 export function backupSchedule(cron: string): BackupSchedule {
   const parsed = parseSimpleBackupSchedule(cron);
@@ -26,7 +27,7 @@ export function backupSchedule(cron: string): BackupSchedule {
 
 export function backupCron(schedule: BackupSchedule): string {
   if (schedule.mode === "custom") return schedule.cron;
-  if (schedule.mode === "manual") return "0 0 3 * * *";
+  if (schedule.mode === "manual") return schedule.cron ?? DEFAULT_CRON;
   return formatSimpleBackupSchedule(
     schedule.mode === "daily"
       ? { frequency: "daily", time: schedule.time }
@@ -39,7 +40,8 @@ export function mapBackupPolicy(row: Schema["VolumeBackupPolicy"]): BackupPolicy
     id: row.id,
     enabled: row.enabled,
     targetId: row.targetId,
-    schedule: backupSchedule(row.schedule),
+    // A disabled plan is the manual mode; its stored cron travels with it unchanged.
+    schedule: row.enabled ? backupSchedule(row.schedule) : { mode: "manual", cron: row.schedule },
     retentionCount: row.retentionCount,
     stopContainers: row.stopContainers,
     nextRunAt: row.nextRunAt,
@@ -79,16 +81,18 @@ export function mapBackupOverview(dto: Schema["VolumeBackupOverview"], host: str
     targets: dto.targets ?? [],
     volumes: (dto.volumes ?? []).map((v) => ({
       id: inventoryId(host, v.name),
-      name: v.name,
+      // Bind keys are identities only; display text is the source path.
+      name: bindPath(v.name) ?? v.name,
       hostId: host,
-      kind: "volume",
-      source: "",
+      kind: bindPath(v.name) === undefined ? "volume" as const : "bind" as const,
+      source: bindPath(v.name) ?? "",
       createdAt: "",
       sizeBytes: 0,
       sizeUnavailable: true,
       consumers: [],
       labels: {},
-      volumeExists: v.volumeExists,
+      // The agent reports Docker volume existence; a bind source is observed by the bind list instead.
+      volumeExists: bindPath(v.name) === undefined ? v.volumeExists : undefined,
       backup: v.policy ? mapBackupPolicy(v.policy) : undefined,
       lastBackup: v.lastBackup ? mapBackup(v.lastBackup, host) : undefined,
       running: v.running,

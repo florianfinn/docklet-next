@@ -16,10 +16,14 @@ export function scanSchedule(v: unknown): ScanSchedule {
   if (v === "") return { mode: "manual" };
   let raw: unknown;
   try { raw = typeof v === "string" ? JSON.parse(v) : v; } catch { invalid(); }
-  const o = object(raw), mode = choice(o.mode, ["daily", "weekly"]), time = string(o.time, 5);
+  const o = object(raw), mode = choice(o.mode, ["manual", "daily", "weekly"]);
+  // The hub stores empty or null day/time keys as written (vulnerability_schedule.go); they carry no value.
+  const blank = (k: string) => o[k] === undefined || o[k] === null || o[k] === "";
+  if (mode === "manual") { if (Object.keys(o).some((k) => k !== "mode" && !(["day", "time"].includes(k) && blank(k)))) invalid(); return { mode }; }
+  const time = string(o.time, 5);
   if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(time) || Object.keys(o).some((k) => !["mode", "time", "day"].includes(k))) invalid();
   if (mode === "weekly") return { mode, time, day: choice(o.day, ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]) };
-  if (o.day !== undefined && o.day !== "") invalid();
+  if (!blank("day")) invalid();
   return { mode, time };
 }
 export function settingsValues(v: unknown): Record<string, string> {
@@ -35,22 +39,23 @@ export function createSecuritySettings(request: Request, capability: (op: string
       const b = (key: string) => { if (values[key] !== "true" && values[key] !== "false") invalid(); return values[key] === "true"; };
       const timeZone = string(values.effectiveTimeZone, 256);
       try { new Intl.DateTimeFormat("en", { timeZone }); } catch { invalid(); }
-      const result: ScanSettings = { enabled: b("featureVulnerabilityManagementEnabled"), automatic: b("vulnerabilityScanEnabled"), schedule: scanSchedule(values.vulnerabilityScanSchedule), ignoreUnfixed: b("trivyIgnoreUnfixed"), notifyCritical: b("vulnerabilityNotifyCritical"), notifyHigh: b("vulnerabilityNotifyHigh"), notifyFailed: b("vulnerabilityNotifyFailed"), timeZone };
+      const result: ScanSettings = { enabled: b("featureVulnerabilityManagementEnabled"), schedule: scanSchedule(values.vulnerabilityScanSchedule), ignoreUnfixed: b("trivyIgnoreUnfixed"), notifyCritical: b("vulnerabilityNotifyCritical"), notifyHigh: b("vulnerabilityNotifyHigh"), notifyFailed: b("vulnerabilityNotifyFailed"), timeZone };
       // Jobs have a separate permission. Missing projection never becomes a local recurrence.
       try {
         const jobs = object(await request("/environments/0/jobs", "GET", undefined, false));
         const job = array(jobs.jobs).map(object).find((j) => j.id === "vulnerability-scan");
+        if (!job && result.schedule.mode === "manual") return result;
         if (!job) invalid();
         boolean(job.enabled);
-        result.nextRun = job.nextRun == null ? undefined : date(job.nextRun);
+        result.nextRun = result.schedule.mode === "manual" || job.nextRun == null ? undefined : date(job.nextRun);
       } catch { result.projectionUnavailable = true; }
       return result;
     },
     async saveScanSettings(v: ScanSettingsInput) {
       await require("saveScanSettings");
       // The stored empty default is readable, but the producer rejects explicit empty updates.
-      const schedule: Record<string, string> = v.schedule.mode === "manual" ? {} : { vulnerabilityScanSchedule: JSON.stringify(scanSchedule(v.schedule)) };
-      await write({ featureVulnerabilityManagementEnabled: String(boolean(v.enabled)), vulnerabilityScanEnabled: String(boolean(v.automatic)), ...schedule, trivyIgnoreUnfixed: String(boolean(v.ignoreUnfixed)), vulnerabilityNotifyCritical: String(boolean(v.notifyCritical)), vulnerabilityNotifyHigh: String(boolean(v.notifyHigh)), vulnerabilityNotifyFailed: String(boolean(v.notifyFailed)) });
+      const schedule = { vulnerabilityScanSchedule: JSON.stringify(scanSchedule(v.schedule)) };
+      await write({ featureVulnerabilityManagementEnabled: String(boolean(v.enabled)), ...schedule, trivyIgnoreUnfixed: String(boolean(v.ignoreUnfixed)), vulnerabilityNotifyCritical: String(boolean(v.notifyCritical)), vulnerabilityNotifyHigh: String(boolean(v.notifyHigh)), vulnerabilityNotifyFailed: String(boolean(v.notifyFailed)) });
     },
     async setScanEnabled(enabled) { await require("setScanEnabled"); await write({ featureVulnerabilityManagementEnabled: String(boolean(enabled)) }); },
   };

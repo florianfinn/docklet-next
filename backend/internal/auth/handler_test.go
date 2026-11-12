@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture.; M15 resource authorization and isolated transport helpers. Cross-version sessions authenticate without cookie rotation.
 
 package auth
 
@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/mldsa"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -351,11 +352,9 @@ func TestNewHumaMiddleware_OpportunisticAuthOnPublicRoute(t *testing.T) {
 	})
 }
 
-// After a self-update the app version changes and old access tokens fail the version
-// check. That must be RECOVERABLE (the refresh path rotates the token), so the
-// middleware returns a refreshable 401 and must NOT clear the auth cookies — otherwise
-// the user is logged out on every update.
-func TestNewHumaMiddleware_VersionMismatchIsRecoverable(t *testing.T) {
+// Application releases keep valid sessions and their existing cookies; token
+// subject and signature checks still distinguish browser and bearer credentials.
+func TestNewHumaMiddleware_VersionChangeKeepsSession(t *testing.T) {
 	db := setupAuthMiddlewareTestDBInternal(t)
 	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
 	sessionSvc := session.NewSessionService(db)
@@ -376,7 +375,7 @@ func TestNewHumaMiddleware_VersionMismatchIsRecoverable(t *testing.T) {
 	localSession, _, err := sessionSvc.CreateSession(t.Context(), "u-ver", exp, auth.SessionMeta{})
 	require.NoError(t, err)
 
-	// An empty appVersion omits the claim, which passes the version check (no pin).
+	// The version claim is optional and informational.
 	mintToken := func(appVersion string) string {
 		builder := jwt.NewBuilder().
 			JwtID("browser-"+appVersion).
@@ -413,16 +412,13 @@ func TestNewHumaMiddleware_VersionMismatchIsRecoverable(t *testing.T) {
 		return &secureOutput{}, nil
 	})
 
-	t.Run("version mismatch returns a recoverable 401 without clearing cookies", func(t *testing.T) {
+	t.Run("different version authenticates without changing cookies", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/protected", http.NoBody)
 		req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: mintToken("v0.0.0-stale")})
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		require.Equal(t, http.StatusUnauthorized, rec.Code)
-		require.Contains(t, rec.Body.String(), "Application has been updated")
-		// The frontend recovers via refresh; clearing the cookies here would log the
-		// user out on every self-update.
+		require.Equal(t, http.StatusOK, rec.Code)
 		require.Empty(t, rec.Header().Values("Set-Cookie"))
 	})
 
@@ -495,7 +491,7 @@ func setupAuthMiddlewareTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}, &user.User{}, &session.UserSession{}))
+	require.NoError(t, db.AutoMigrate(&access.Assignment{}, &settings.SettingVariable{}, &user.User{}, &session.UserSession{}))
 	return &database.DB{DB: db}
 }
 

@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { useImageHostCapabilities } from "./use-image-capabilities";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { useCapability } from "@/data/use-capability";
@@ -16,7 +17,7 @@ import { RemoveImageDialog } from "./RemoveImageDialog";
 import { HostBlocks } from "@/shared/components/host-blocks";
 import { OverviewViewControls } from "@/shared/components/overview-mode-toggle";
 import { OverviewSkeleton } from "@/shared/components/overview-skeleton";
-import { OverviewTable, type OverviewColumn, type TableView } from "@/shared/components/overview/overview-table";
+import { OverviewTable, type TableView } from "@/shared/components/overview/overview-table";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
@@ -29,6 +30,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/shared/ui/input-
 import { PruneDialog, PullDialog } from "./ImageDialogs";
 import { ImageDetails } from "./ImageDetails";
 import { DEFAULT_IMAGE_SORT, filterImages, imageSortDefaultDir, sortImages, type ImageSort, type ImageSortKey, type UsageFilter } from "./image-filters";
+import { imageColumns } from "./image-columns";
 import { ImageRow } from "./ImageRow";
 
 const USAGES = ["all", "in-use", "unused", "dangling", "unknown"] as const;
@@ -90,28 +92,7 @@ export default function ImagesPage() {
   const current = (images.data ?? []).find((i) => i.id === openId);
   const scope = hosts.filtered ? ts("scopeSome", { hosts: hosts.visible.map((h) => h.name).join(", ") }) : ts("scopeAll");
   const pending = images.isPending;
-  const key = (k: ImageSortKey) => ({ key: k, label: t(`columns.${k}`) });
-  const columns =
-    (inBlock: boolean) =>
-    (view: TableView): OverviewColumn<ImageSortKey>[] =>
-      view === "condensed"
-        ? [
-            { id: "name", label: t("columns.name"), sorts: [key("name"), key("version"), key("usage"), ...(inBlock ? [] : [key("host")])], className: "min-w-52" },
-            { id: "consumers", label: t("columns.consumers"), sorts: [key("consumers")], className: "max-w-72", wide: true },
-            { id: "meta", label: t("columns.size"), sorts: [key("size"), key("created")] },
-            { id: "update", label: t("columns.update"), sorts: [key("update")], wide: true },
-          ]
-        : [
-            { id: "name", label: t("columns.name"), sorts: [key("name")], className: "min-w-52" },
-            { id: "version", label: t("columns.version"), sorts: [key("version")] },
-            ...(inBlock ? [] : [{ id: "host", label: t("columns.host"), sorts: [key("host")] }]),
-            { id: "usage", label: t("columns.usage"), sorts: [key("usage")] },
-            { id: "consumers", label: t("columns.consumers"), sorts: [key("consumers")], className: "max-w-72", wide: true },
-            { id: "size", label: t("columns.size"), sorts: [key("size")] },
-            { id: "created", label: t("columns.created"), sorts: [key("created")] },
-            { id: "update", label: t("columns.update"), sorts: [key("update")], wide: true },
-            { id: "security", label: t("columns.security") },
-          ];
+  const columns = (inBlock: boolean) => (view: TableView) => imageColumns((column) => t(`columns.${column}`), inBlock, view);
   const headProps = { sort, onSort, sortLabel: (column: string) => t("sortBy", { column }), selecting: false, actionsLabel: t("columns.actions"), dense: false };
   const filtersActive = !!query.trim() || usage !== "all";
   const pull = (img: DockerImage) => {
@@ -119,7 +100,7 @@ export default function ImagesPage() {
   };
   const scopeHosts = hosts.visible.length ? hosts.visible : hosts.all;
   const scopedPull = useImageHostCapabilities("pullImage", scopeHosts.map((h) => h.id));
-  const initialPullHost = scopeHosts.find((h) => h.status === "online" && scopedPull.get(h.id));
+  const initialPullHost = scopeHosts.find((h) => isHostAvailable(h) && scopedPull.get(h.id));
 
   return (
     <>

@@ -2,14 +2,17 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections.
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration.
 
-import { discardResponse } from "./identity-reads";
+import { settingsProblem, SettingsProblemError } from "../settings-error";
+import { discardResponse, drainResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
+import type { DockletAdapter } from "@/data/adapter";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
-import type { HubSettings, SettingsSection } from "@/domain/settings";
+import { LOAD_ALERT_DEFAULTS, type HubSettings, type LoadAlertSettings, type SettingsSection } from "@/domain/settings";
 import { unavailable } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { maintenanceOutcome } from "./problem-code";
 
 export type CoreSettings = Record<string, string>;
 
@@ -25,10 +28,21 @@ function boolean(values: CoreSettings, key: string): boolean {
   return value === "true";
 }
 
-export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "saveSettings"> {
+/** The hub seeds these keys; a missing key reads as its documented default. */
+function loadAlerts(values: CoreSettings): LoadAlertSettings {
+  const number = (key: string, fallback: number) => (values[key] === undefined ? fallback : Number(values[key]));
+  return {
+    enabled: values.loadAlertsEnabled === undefined ? LOAD_ALERT_DEFAULTS.enabled : boolean(values, "loadAlertsEnabled"),
+    cpuPercent: number("loadAlertCpuPercent", LOAD_ALERT_DEFAULTS.cpuPercent),
+    memoryPercent: number("loadAlertMemoryPercent", LOAD_ALERT_DEFAULTS.memoryPercent),
+    minutes: number("loadAlertMinutes", LOAD_ALERT_DEFAULTS.minutes),
+  };
+}
+
+export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> & Pick<DockletAdapter, "getBackupDefaultRetention" | "setBackupDefaultRetention"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
-    if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
+    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new Error(`settings.read.${response.status}`); }
     const items = await response.json() as { key?: unknown; value?: unknown }[];
     if (!Array.isArray(items) || !items.every((item) => typeof item.key === "string" && typeof item.value === "string")) throw new Error("settings.invalid-response");
     return Object.fromEntries(items.map((item) => [item.key, item.value])) as CoreSettings;
@@ -38,8 +52,14 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, {
       method: "PUT", credentials: "same-origin", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(values),
     });
-    discardResponse(response);
-    if (!response.ok) throw new Error(`settings.write.${response.status}`);
+    if (!response.ok) {
+      if (/\bjson\b/i.test(response.headers.get("Content-Type") ?? "")) {
+        const problem = settingsProblem(await response.json().catch(() => undefined), response.status);
+        if (problem instanceof SettingsProblemError) throw problem;
+      } else discardResponse(response);
+      throw new Error(`settings.write.${response.status}`);
+    }
+    drainResponse(response);
   }
 
   return {
@@ -50,6 +70,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     },
     async completeSetup(input: Pick<HubSettings, "general" | "auth" | "hostDefaults">) {
       await write({
+        ...(input.general.configuredTimeZone === undefined ? {} : { timeZone: input.general.configuredTimeZone }),
         hubName: input.general.hubName,
         hubAddress: input.general.hubAddress,
         domainUrl: input.general.domainUrl,
@@ -63,34 +84,73 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         setupCompleted: "true",
       });
     },
-    async getConnectedSettings() {
+    getStackStopMode: () => readStackStopMode(baseUrl, client),
+    async getBackupDefaultRetention() {
+      // Older hubs without the setting use the established default.
+      const raw = (await read()).backupDefaultRetentionCount ?? "7";
+      const count = Number(raw);
+      if (!/^\d+$/.test(raw) || count > 3650) throw new Error("settings.invalid.backupDefaultRetentionCount");
+      return count;
+    },
+    async setBackupDefaultRetention(count) {
+      await write({ backupDefaultRetentionCount: String(count) });
+    },
+    getConnectedSettings: (async (section?: "hostDefaults" | "installation") => {
       const values = await read();
+      const connection = field(values, "defaultHostConnection");
+      if (connection !== "direct" && connection !== "edge") throw new Error("settings.invalid.defaultHostConnection");
+      const hostDefaults = { connection, projectDir: field(values, "agentProjectsDirectory"), installDir: field(values, "agentInstallDirectory"), puid: field(values, "defaultPuid"), pgid: field(values, "defaultPgid"), detectSocketGroup: boolean(values, "detectSocketGroup") };
+      if (section === "hostDefaults") return { hostDefaults };
+      const timeZone = field(values, "effectiveTimeZone");
+      try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
+      if (section === "installation") return { hostDefaults, general: { hubName: values.hubName ?? "", hubAddress: field(values, "hubAddress"), domainUrl: values.domainUrl ?? "", linkBase: "auto", timeZone } };
       const linkBase = field(values, "linkBase");
       const actionPresentation = field(values, "actionPresentation");
       if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
       if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
-      const connection = field(values, "defaultHostConnection");
-      if (connection !== "direct" && connection !== "edge") throw new Error("settings.invalid.defaultHostConnection");
-      const timeZone = field(values, "effectiveTimeZone");
-      try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
       return {
-        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
-        hostDefaults: { connection, projectDir: field(values, "agentProjectsDirectory"), installDir: field(values, "agentInstallDirectory"), puid: field(values, "defaultPuid"), pgid: field(values, "defaultPgid"), detectSocketGroup: boolean(values, "detectSocketGroup") },
-        activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
+        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, configuredTimeZone: values.timeZone ?? "", stackStopMode: stackStopMode(values) },
+        hostDefaults,
+        activity: { maxEvents: Number(values.activityEventLimit ?? HISTORY_LIMITS.events.default), maxFinishedActions: Number(values.activityRunLimit ?? HISTORY_LIMITS.actions.default), keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation, loadAlerts: loadAlerts(values) },
       };
-    },
+    }) as SettingsApi["getConnectedSettings"],
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
       if (section === "general") {
         const general = value as HubSettings["general"];
-        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase });
+        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, stackStopMode: general.stackStopMode ?? "down", timeZone: general.configuredTimeZone ?? general.timeZone });
+        return;
+      }
+      if (section === "updates") {
+        const updates = value as HubSettings["updates"];
+        await write({ updateCheckInterval: updates.interval, updateNotify: String(updates.notify) }); return;
+      }
+      if (section === "hostDefaults") {
+        const host = value as HubSettings["hostDefaults"];
+        await write({ agentProjectsDirectory: host.projectDir, agentInstallDirectory: host.installDir, defaultHostConnection: host.connection, defaultPuid: host.puid, defaultPgid: host.pgid, detectSocketGroup: String(host.detectSocketGroup) });
         return;
       }
       if (section === "activity") {
         const activity = value as HubSettings["activity"];
-        await write({ keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation });
+        const load = activity.loadAlerts;
+        await write({ activityEventLimit: String(activity.maxEvents), activityRunLimit: String(activity.maxFinishedActions), keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation, loadAlertsEnabled: String(load.enabled), loadAlertCpuPercent: String(load.cpuPercent), loadAlertMemoryPercent: String(load.memoryPercent), loadAlertMinutes: String(load.minutes) });
         return;
       }
       throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");
     },
   };
+}
+
+/** Missing values on older hubs preserve the established down default. */
+function stackStopMode(values: CoreSettings): "down" | "stop" {
+  const value = values.stackStopMode ?? "down";
+  if (value !== "down" && value !== "stop") throw new Error("settings.invalid.stackStopMode");
+  return value;
+}
+
+export async function readStackStopMode(baseUrl: string, client: CsrfClient): Promise<"down" | "stop"> {
+  const response = await client.fetch(`${baseUrl}/environments/0/settings`, { headers: { Accept: "application/json" } });
+  if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new Error(`settings.read.${response.status}`); }
+  const items: unknown = await response.json();
+  if (!Array.isArray(items) || !items.every((item) => typeof item?.key === "string" && typeof item?.value === "string")) throw new Error("settings.invalid-response");
+  return stackStopMode(Object.fromEntries(items.map((item) => [item.key, item.value])));
 }

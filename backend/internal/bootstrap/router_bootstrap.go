@@ -2,19 +2,21 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; one environment route identity guard before every path consumer (#264).
 
 package bootstrap
 
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/types/features"
 	"log/slog"
 	"net"
 	"net/http"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/florianfinn/docklet-next/types"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
@@ -31,6 +33,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -131,14 +134,27 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 					return authz.EnvironmentPermissionSet(*envID), nil, true
 				}
 			}
-			actor, ok := verifyRouterRequestUserInternal(ctx, deps.Auth.Service(), req)
-			return authz.SudoPermissionSet(), actor, ok
+			requestUser, err := deps.Auth.Service().ModeRequestUser(ctx, req)
+			if err != nil {
+				if strings.HasPrefix(err.Error(), "access.") {
+					c.Set("accessAuthError", err.Error())
+				}
+				return nil, nil, false
+			}
+			*req = *req.WithContext(deps.Auth.Service().ViewerContext(req.Context(), "", requestUser.ID))
+			actor := requestUser.Actor()
+			ps := resolveUser(ctx, actor)
+			if ps.IsGlobalAdmin() {
+				ps = authz.SudoPermissionSet()
+			}
+			return ps, actor, true
 		}
 		// Check for API key authentication
 		if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
 			// User-owned API key: personal keys inherit the owner's role
 			// permissions; scoped keys are limited to their own grants.
 			if user, key, err := deps.ApiKey.Service().ValidateApiKeyWithID(ctx, apiKey); err == nil && user != nil {
+				*req = *req.WithContext(deps.Auth.Service().ViewerContext(req.Context(), "", user.ID))
 				if key != nil && key.Kind != apikey.ApiKeyKindPersonal {
 					return resolveKey(ctx, key.ID), user.Actor(), true
 				}
@@ -163,6 +179,9 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.AuthService, req *http.Request) (*usertypes.Actor, bool) {
 	if authService.SignInMode() != "local" {
 		requestUser, err := authService.ModeRequestUser(ctx, req)
+		if err == nil && requestUser != nil {
+			*req = *req.WithContext(authService.ViewerContext(ctx, "", requestUser.ID))
+		}
 		return requestUser.Actor(), err == nil && requestUser != nil
 	}
 	if token, ok := auth.BearerToken(req.Header.Get("Authorization")); ok {
@@ -193,6 +212,7 @@ type RouterParams struct {
 	HandlerDeps    api.HandlerDeps
 	AuthMiddleware *auth.AuthMiddleware
 	TunnelRegistry *edge.TunnelRegistry
+	ShellSessions  *containershell.Registry `optional:"true"`
 }
 
 // newEchoInternal builds the Echo instance with path parameter values
@@ -215,6 +235,15 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	hubMode := !cfg.AgentMode && !cfg.EdgeAgent
 
 	e := newEchoInternal()
+	if hubMode {
+		controller := resourceAccessController(deps)
+		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c *echo.Context) error {
+				c.SetRequest(c.Request().WithContext(access.WithController(c.Request().Context(), controller)))
+				return next(c)
+			}
+		})
+	}
 
 	trustedProxyNets := parseTrustedProxyCIDRsInternal(cfg.TrustedProxies)
 	if cfg.TrustedProxies != "" && len(trustedProxyNets) == 0 {
@@ -230,8 +259,17 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		e.IPExtractor = echo.ExtractIPFromXFFHeader(opts...)
 	}
 
+	apiNotFound := func(c *echo.Context) error {
+		return c.JSON(http.StatusNotFound, map[string]any{
+			"success": false,
+			"error":   "API endpoint not found: " + c.Request().URL.Path,
+		})
+	}
+
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.RequestID())
+	// One route identity for environment paths before any path consumer (#264).
+	e.Use(middleware.PathIdentityGuard(apiNotFound))
 	e.Use(activity.RuntimeReceiverMiddleware(cfg.AgentMode || cfg.EdgeAgent, activity.RuntimeAdmissionLimit))
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
@@ -258,13 +296,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 			"/api/auth/refresh",
 		}, 5, 5,
 	))
-	// Keyed per token for stored tokens, per source IP for everything else.
-	apiGroup.Use(middleware.PerTokenRateLimitForPaths(
-		[]string{"/api/webhooks/trigger/:token"}, 60, 10, deps.Webhook.Service().IsKnownToken,
-	))
 	// Only POST agent ingestion needs this brute-force ceiling outside session auth.
 	// Authenticated GET pagination consumes no ingestion budget. Other registrations:
-	// login/refresh per IP, webhook per token/IP, and edge_bootstrap.go per-route
+	// login/refresh per IP and edge_bootstrap.go per-route
 	// enroll POST and connect GET, each with separate IP and agent-token limits.
 	eventIngestionLimit := middleware.PerIPRateLimitForPaths([]string{"/api/events"}, 60, 30)
 	apiGroup.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -288,7 +322,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	if hubMode {
 		// These token ingress endpoints belong to the hub only.
-		api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
 		deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
 			env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(ctx, token)
 			if err != nil {
@@ -307,6 +340,13 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	if hubMode {
 		inventorySnapshots = deps.Environment.Service().ReadSnapshots()
 	}
+	var shellSessions *containershell.Registry
+	if hubMode {
+		shellSessions = p.ShellSessions
+		if shellSessions == nil {
+			shellSessions = containershell.New(deps.Activity.Service(), ctx)
+		}
+	}
 	envProxyMiddleware := middleware.NewEnvProxyMiddlewareWithParamAndRegistry(
 		types.LocalDockerEnvironmentID,
 		"id",
@@ -317,13 +357,13 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
-		middleware.EnvironmentProxySecurity{VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
+		middleware.EnvironmentProxySecurity{ShellSessions: shellSessions, VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
 			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
 		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
 		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
-		}, InventoryPending: deps.Environment.Service().InventoryPending},
+		}, PolicyCleanup: deps.Updater.Service().StackDestroyed, OriginOverlay: deps.Container.Service().OverlayInventory, InventoryPending: deps.Environment.Service().InventoryPending},
 	)
 	apiGroup.Use(envProxyMiddleware)
 
@@ -343,7 +383,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 
 	// Remaining echo handlers (WebSocket/streaming)
-	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg)
+	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg, shellSessions)
 
 	// Register edge tunnel endpoint for manager to accept agent connections
 	// This is only registered when NOT in agent mode (i.e., running as manager)
@@ -358,12 +398,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		}
 	}
 
-	apiNotFound := func(c *echo.Context) error {
-		return c.JSON(http.StatusNotFound, map[string]any{
-			"success": false,
-			"error":   "API endpoint not found: " + c.Request().URL.Path,
-		})
-	}
 	apiGroup.RouteNotFound("", apiNotFound)
 	apiGroup.RouteNotFound("/*", apiNotFound)
 
@@ -399,7 +433,8 @@ func maintenanceMiddlewareInternal(gate *hubbackup.MaintenanceGate) echo.Middlew
 				return next(c)
 			}
 			ctx, cancel := context.WithCancel(req.Context())
-			release, err := gate.AdmitCancel(cancel)
+			var cancelled atomic.Bool
+			release, err := gate.AdmitCancel(func() { cancelled.Store(true); cancel() })
 			if err != nil {
 				cancel()
 				return maintenanceReadOrErrorInternal(c, gate.Status())
@@ -407,6 +442,7 @@ func maintenanceMiddlewareInternal(gate *hubbackup.MaintenanceGate) echo.Middlew
 			defer release()
 			defer cancel()
 			c.SetRequest(req.WithContext(ctx))
+			c.SetResponse(&maintenanceResponseInternal{ResponseWriter: c.Response(), cancelled: &cancelled})
 			return next(c)
 		}
 	}

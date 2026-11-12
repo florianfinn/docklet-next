@@ -1,12 +1,21 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/messages/de.ts
+// Revision: 44a851951c82b6e8436e9757815305a4fb8ee276ca95831902245b096fe7e362
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: hub maintenance status.
+
 // German texts of the application shell (navigation, host filter, profile menu).
 import type { enShell } from "./en";
 
 export const deShell: typeof enShell = {
+  search: { title: "Suchen", shortcutMac: "⌘+K", shortcutOther: "Strg+K", hint: "Seiten, Ressourcen und Schnellaktionen finden.", placeholder: "Suchen …", empty: "Keine Ergebnisse", results: "Ergebnisse", pages: "Seiten", settings: "Einstellungen", actions: "Schnellaktionen", loading: "Wird geladen …", showAll: "Alle in {list} anzeigen", theme: "Design wechseln", signOut: "Abmelden", newStack: "Neuer Stack", checkUpdates: "Alle Updates prüfen", activity: "Aktivitätszentrum" },
   brand: "Docklet",
   brandSub: (import.meta.env.DEV ? "React-Prototyp · Demo-Daten" : "Hub-Oberfläche"),
   skip: "Zum Inhalt springen",
   toggleSidebar: "Navigation ein- oder ausklappen",
-  breadcrumb: "Brotkrumen",
+  breadcrumb: "Brotkrümelnavigation",
+  navigationTitle: "Navigation",
+  navigationDescription: "Hauptnavigation",
   groups: { operate: "Betrieb", resources: "Ressourcen", system: "System", later: "Später" },
   nav: {
     dashboard: "Dashboard",
@@ -28,8 +37,8 @@ export const deShell: typeof enShell = {
     setup: "Ersteinrichtung",
     newHost: "Host hinzufügen",
   },
+  maintenance: { backup: "Hub-Wartung: Sicherung", restore: "Hub-Wartung: Wiederherstellung", active: "Hub-Wartung", overdue: "Die Hub-Wartung dauert länger als erwartet" },
   partialSecurity: "Unvollständige Sicherheitssumme: Scan-Daten für mindestens einen Host sind nicht verfügbar.",
-  preview: "Vorschau",
   hostFilter: {
     title: "Hostfilter",
     all: "Alle Hosts",
@@ -45,12 +54,16 @@ export const deShell: typeof enShell = {
     on: (import.meta.env.DEV ? "Live-Simulation läuft – zum Pausieren klicken" : ""),
     off: (import.meta.env.DEV ? "Live-Simulation pausiert – zum Fortsetzen klicken" : ""),
   },
+  unavailable: { title: "Nicht verfügbar", body: "Diese Seite ist nur für Administratoren verfügbar." },
   user: {
+    userRole: "Benutzer",
+    proxyHint: "Melde dich an deinem Reverse-Proxy ab",
+    logoutError: "Abmeldung fehlgeschlagen. Versuche es erneut.",
     name: import.meta.env.DEV ? "Alex Beispiel" : "",
     email: import.meta.env.DEV ? "alex@example.com" : "",
     unknownName: "Benutzer unbekannt",
     unknownStatus: "Keine Sitzung verbunden",
-    role: "Hub-Administration",
+    role: "Administrator",
     signedInAs: "Angemeldet als",
     labShortcut: "Alt ⇧ D",
     menu: "Profil und Hub-Einstellungen",

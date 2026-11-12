@@ -2,26 +2,30 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; M12 persisted volume lifecycle and legacy restore cut; M16 bind mounts and backup completion.
 
 package restore
 
 import (
 	"context"
 	"fmt"
+	"path"
+	"strings"
+
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/client"
+
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/backupbrowser"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/client"
-	"path"
-	"strings"
 )
 
 type Dependencies struct {
+	DB          *database.DB
 	Docker      *docker.DockerClientService
 	Engine      *backup.Engine
 	Run         func(context.Context, string) (*volume.Backup, error)
@@ -99,6 +103,13 @@ func (
 		return err
 	}
 	target := mount.Mount{Type: mount.TypeVolume, Source: volumeName, Target: "/volume"}
+	if volume.IsBindKey(volumeName) {
+		var err error
+		target, _, err = s.bindSourceMount(ctx, dockerClient, volumeName)
+		if err != nil {
+			return err
+		}
+	}
 	if selection.globalRoot {
 		if restoreSnapshotErr := s.deps.Engine.RestoreSnapshot(ctx, dockerClient, repository, password, snapshotID, target, backup.RestoreOptions{DeleteExtra: true}); restoreSnapshotErr != nil {
 			return fmt.Errorf("failed to restore Rustic snapshot: %w", restoreSnapshotErr)
@@ -106,6 +117,12 @@ func (
 		return nil
 	}
 	for _, selectedEntry := range selection.entries {
+		if volume.IsBindKey(volumeName) {
+			target, _, err = s.bindSourceMount(ctx, dockerClient, volumeName)
+			if err != nil {
+				return err
+			}
+		}
 		sourcePath := selectedEntry.Path
 		if selectedEntry.IsDirectory {
 			sourcePath += "/"

@@ -317,6 +317,11 @@ func TestEnvScopedOperationsDeclarePermission(t *testing.T) {
 			if op.Security != nil && len(op.Security) == 0 {
 				continue
 			}
+			// This exact hub-owned management route uses the global-admin gate,
+			// covered by TestHostRestartHTTPRequiresGlobalAdmin; it is never proxied.
+			if path == "/environments/{id}/agent/restart" && method == http.MethodPost {
+				continue
+			}
 			permission, ok := op.Metadata[authz.MetaRequiredPermission].(string)
 			if !ok || permission == "" {
 				missing = append(missing, method+" "+path)

@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { useImageSecurity } from "./use-image-security";
 import { useCapability } from "@/data/use-capability";
 import { Download, Eye, Layers, ShieldAlert, Trash2 } from "lucide-react";
@@ -18,7 +19,7 @@ export function useImageMenu(image: DockerImage, host: Host | undefined, open: {
   const security = useImageSecurity(image);
   const pull = useCapability("pullImage", { kind: "host", id: image.hostId });
   const remove = useCapability("removeImage", { kind: "image", id: image.id });
-  const online = host?.status === "online";
+  const online = isHostAvailable(host);
   const stack = image.consumers.find((c) => c.stackId && !c.system)?.stackId;
   return [
     [{ id: "details", label: t("details"), icon: <Eye />, onSelect: () => open.details(image.id) }],

@@ -1,3 +1,10 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/features/activity/ActionDialog.tsx
+// Revision: ffced14e7fe77d8f283ae8eb095b4165f719ba9069086e5b073930208fda3ca0
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #126 console count and duration use existing catalogue keys. #126 R1: distinct dialog state keys and truthful permission, admission and retained outcome presentation. M9 D1: show command rejections inline, preserve dialog drafts and clear feedback on edits. List summaries and owned detail reads with bounded recovery (#225, #223). Simple-user management, assigned-stack access and mode-aware self-service.
+
+import { useIsUser } from "@/data/use-principal";
 import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
 import { History, Layers, ListTree, X } from "lucide-react";
 import { useState } from "react";
@@ -124,6 +131,7 @@ export function ActionDialog() {
 }
 
 function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiting: string[]; feedback: DialogCommand }) {
+  const user = useIsUser();
   const close = () => { feedback.dismiss(); closeActionDialog(); };
   const t = useTranslations("activity");
   const design = useUiStyle("actionDialogDesign");
@@ -173,9 +181,9 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
         </>}</ActionDetail>
       </div>
       <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
-        <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t("dialog.closeHint")}</p>
+        <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t(user ? "dialog.closeHintUser" : "dialog.closeHint")}</p>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          {run.status === "failed" && run.restorePointId && run.stackId && (
+          {!user && run.status === "failed" && run.restorePointId && run.stackId && (
             <Button asChild size="sm" variant="outline">
               <Link to={`/stacks/${run.stackId}?tab=deployments`} onClick={close}>
                 <History data-icon="inline-start" />
@@ -183,7 +191,7 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
               </Link>
             </Button>
           )}
-          <Button
+          {!user && <Button
             size="sm"
             variant="ghost"
             onClick={() => {
@@ -193,7 +201,7 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
           >
             <ListTree data-icon="inline-start" />
             {t("dialog.openCentre")}
-          </Button>
+          </Button>}
           <Button size="sm" variant="secondary" onClick={close}>
             {t("dialog.closeShort")}
           </Button>

@@ -1,0 +1,356 @@
+// Source: docklet-next/issues/312
+// Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
+// Retrieved: 2026-10-31
+// License: Apache-2.0
+// Deviations: Original real WebSocket to Docker HTTP shell protocol tests.
+
+package container
+
+import (
+	"context"
+	"encoding/json/v2"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/containershell"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/docker"
+	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	dto "github.com/florianfinn/docklet-next/types/container"
+	"github.com/florianfinn/docklet-next/types/user"
+	"github.com/moby/moby/client"
+	"github.com/stretchr/testify/require"
+	"net/url"
+	"path/filepath"
+)
+
+type shellDocker struct {
+	running      atomic.Bool
+	inspections  atomic.Int32
+	exitCode     atomic.Int32
+	execEnded    atomic.Bool
+	orphan       bool
+	stopped      bool
+	failure      string
+	commands     chan []string
+	resizes      chan string
+	tick         chan time.Time
+	attached     chan net.Conn
+	agentSockets chan *websocket.Conn
+}
+
+func (f *shellDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/v1.53")
+	w.Header().Set("Content-Type", "application/json")
+	switch {
+	case path == "/containers/example/json":
+		_, _ = fmt.Fprintf(w, `{"Id":"example","State":{"Running":%t}}`, !f.stopped && f.running.Load())
+	case path == "/containers/example/archive":
+		if f.failure == "missing-sh" || f.failure == "missing-sh-stream" || f.failure == "missing-sh-resize" || f.failure == "missing-sh-input-resize" {
+			w.WriteHeader(404)
+		} else {
+			w.WriteHeader(500)
+		}
+	case path == "/containers/example/exec":
+		var req struct{ Cmd []string }
+		_ = json.UnmarshalRead(r.Body, &req)
+		f.commands <- req.Cmd
+		if f.failure == "create" || f.failure == "stop-create" {
+			if f.failure == "stop-create" {
+				f.running.Store(false)
+			}
+			w.WriteHeader(500)
+			_, _ = io.WriteString(w, `{"message":"synthetic create failure"}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"Id":"example-exec"}`)
+	case path == "/exec/example-exec/start":
+		if f.failure == "attach" || f.failure == "missing-sh" {
+			w.WriteHeader(500)
+			if f.failure == "missing-sh" {
+				_, _ = io.WriteString(w, `{"message":"exec /bin/sh: no such file or directory"}`)
+			} else {
+				_, _ = io.WriteString(w, `{"message":"synthetic attach failure"}`)
+			}
+			return
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		if f.attached != nil {
+			f.attached <- conn
+		}
+		if f.failure == "missing-sh-resize" || f.failure == "missing-sh-input-resize" {
+			// The start fails inside the stream before the browser's first resize reaches Docker.
+			f.exitCode.Store(127)
+			f.execEnded.Store(true)
+		}
+		_, _ = rw.WriteString("HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+		_ = rw.Flush()
+		if f.failure == "missing-sh-input-resize" {
+			// The stream stays open; only the failed in-session resize ends the session.
+			f.tick <- time.Now()
+			_, _ = io.Copy(io.Discard, conn)
+			return
+		}
+		if f.failure == "missing-sh-stream" || f.failure == "exit-127" || f.failure == "missing-sh-resize" {
+			// The daemon hijacks first, then writes the exec start error and ends the stream.
+			_, _ = conn.Write([]byte("OCI runtime exec failed: exec failed: stat /bin/sh: no such file or directory\r\n"))
+			f.exitCode.Store(127)
+			f.execEnded.Store(true)
+			return
+		}
+		_, _ = conn.Write([]byte("ready"))
+		buffer := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buffer)
+			if n > 0 {
+				if strings.Contains(string(buffer[:n]), "exit\n") {
+					if f.orphan {
+						f.tick <- time.Now()
+					} else {
+						f.running.Store(false)
+						_, _ = conn.Write([]byte("bye"))
+						f.tick <- time.Now()
+						return
+					}
+				}
+				_, _ = conn.Write(buffer[:n])
+			}
+			if err != nil {
+				return
+			}
+		}
+	case path == "/exec/example-exec/resize":
+		if f.execEnded.Load() {
+			w.WriteHeader(409)
+			_, _ = io.WriteString(w, `{"message":"exec example-exec is not running"}`)
+			return
+		}
+		f.resizes <- r.URL.RawQuery
+	case path == "/exec/example-exec/json":
+		f.inspections.Add(1)
+		if f.failure == "inspect-error" {
+			w.WriteHeader(500)
+			return
+		}
+		exitCode := f.exitCode.Load()
+		if exitCode == 0 {
+			exitCode = 23
+		}
+		_, _ = fmt.Fprintf(w, `{"ID":"example-exec","Running":%t,"ExitCode":%d}`, f.running.Load() && !f.execEnded.Load(), exitCode)
+	default:
+		w.WriteHeader(404)
+	}
+}
+func shellFixture(t *testing.T, fixture *shellDocker, query dto.ShellQuery, sessions ...*containershell.Registry) (*websocket.Conn, <-chan struct{}) {
+	t.Helper()
+	fixture.running.Store(true)
+	fixture.tick = make(chan time.Time, 1)
+	fixture.commands = make(chan []string, 4)
+	fixture.resizes = make(chan string, 4)
+	dockerHTTP := httptest.NewServer(fixture)
+	t.Cleanup(dockerHTTP.Close)
+	cli, err := client.New(client.WithHost(strings.Replace(dockerHTTP.URL, "http://", "tcp://", 1)), client.WithAPIVersion("1.53"), client.WithHTTPClient(dockerHTTP.Client()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cli.Close() })
+	svc := &ContainerService{dockerService: (&docker.DockerClientService{}).WithClient(cli)}
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		conn, err := wshub.Accept(w, r, func(*http.Request) bool { return true })
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+		ctx := sessionlife.WithCadence(r.Context(), func(time.Duration, bool) sessionlife.Cadence {
+			tick := fixture.tick
+			return sessionlife.Cadence{C: tick, Stop: func() {}}
+		})
+		if len(sessions) > 0 {
+			bound, h, err := sessions[0].Accept(ctx, url.Values{}, &user.Actor{ID: "example-user"}, "example-host", "example")
+			if err != nil {
+				return
+			}
+			defer h.Release()
+			ctx = bound
+		}
+		svc.ServeTerminal(ctx, conn, "example", query)
+	}))
+	t.Cleanup(server.Close)
+	conn, _, err := websocket.Dial(t.Context(), strings.Replace(server.URL, "http", "ws", 1), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.CloseNow() })
+	return conn, done
+}
+func readShell(t *testing.T, conn *websocket.Conn) (websocket.MessageType, []byte) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	kind, data, err := conn.Read(ctx)
+	require.NoError(t, err)
+	return kind, data
+}
+func readShellExit(t *testing.T, conn *websocket.Conn) dto.ShellExit {
+	t.Helper()
+	for {
+		kind, data := readShell(t, conn)
+		if kind == websocket.MessageText {
+			var exit dto.ShellExit
+			require.NoError(t, json.Unmarshal(data, &exit))
+			require.Equal(t, "exit", exit.Type)
+			return exit
+		}
+	}
+}
+func TestShellResizeRealWebSocketDockerHTTP(t *testing.T) {
+	f := &shellDocker{}
+	conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "auto"})
+	kind, data := readShell(t, conn)
+	require.Equal(t, websocket.MessageBinary, kind)
+	require.Equal(t, "ready", string(data))
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageBinary, []byte("hello")))
+	kind, data = readShell(t, conn)
+	require.Equal(t, websocket.MessageBinary, kind)
+	require.Equal(t, "hello", string(data))
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"resize","cols":132,"rows":43}`)))
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageBinary, []byte("barrier")))
+	_, data = readShell(t, conn)
+	require.Equal(t, "barrier", string(data))
+	select {
+	case size := <-f.resizes:
+		require.Equal(t, "h=43&w=132", size)
+	default:
+		t.Fatal("resize was not applied before subsequent stdin")
+	}
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"resize","cols":0,"rows":43}`)))
+	exit := readShellExit(t, conn)
+	require.Equal(t, "container.shell-protocol", exit.Reason)
+	_, _, err := conn.Read(t.Context())
+	require.Equal(t, websocket.StatusPolicyViolation, websocket.CloseStatus(err))
+	<-done
+	require.GreaterOrEqual(t, f.inspections.Load(), int32(2))
+}
+func TestShellEarlyFailuresAndEOF(t *testing.T) {
+	for _, failure := range []string{"create", "attach", "missing-sh", "missing-sh-stream", "missing-sh-resize", "missing-sh-input-resize", "exit-127", "stopped", "stop-create", "EOF"} {
+		t.Run(failure, func(t *testing.T) {
+			f := &shellDocker{failure: failure, stopped: failure == "stopped"}
+			query := dto.ShellQuery{Shell: "sh"}
+			if failure == "missing-sh-resize" {
+				// The browser sends its initial size with the upgrade.
+				cols, rows := 120, 40
+				query.Cols, query.Rows = &cols, &rows
+			}
+			conn, done := shellFixture(t, f, query)
+			if failure == "missing-sh-input-resize" {
+				require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"resize","cols":120,"rows":40}`)))
+			}
+			want := ""
+			if failure == "missing-sh" || strings.HasPrefix(failure, "missing-sh-") {
+				want = "container.shell-unavailable"
+			}
+			if failure == "stopped" || failure == "stop-create" {
+				want = "container.shell-not-running"
+			}
+			if failure == "EOF" {
+				readShell(t, conn)
+				require.NoError(t, conn.Write(t.Context(), websocket.MessageBinary, []byte("exit\n")))
+				want = ""
+			}
+			exit := readShellExit(t, conn)
+			require.Equal(t, want, exit.Reason)
+			if failure == "EOF" {
+				require.NotNil(t, exit.Code)
+				require.Equal(t, 23, *exit.Code)
+			}
+			if strings.HasPrefix(failure, "missing-sh-") || failure == "exit-127" {
+				require.NotNil(t, exit.Code)
+				require.Equal(t, 127, *exit.Code)
+			}
+			_, _, err := conn.Read(t.Context())
+			status := websocket.StatusPolicyViolation
+			if want == "" {
+				status = websocket.StatusNormalClosure
+			}
+			require.Equal(t, status, websocket.CloseStatus(err))
+			<-done
+		})
+	}
+}
+func TestShellOrphanInspectedAndCleanupJoined(t *testing.T) {
+	f := &shellDocker{orphan: true}
+	conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "bash"})
+	readShell(t, conn)
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"unexpected"}`)))
+	exit := readShellExit(t, conn)
+	require.Equal(t, "container.shell-orphaned", exit.Reason)
+	_, _, err := conn.Read(t.Context())
+	require.Equal(t, websocket.StatusPolicyViolation, websocket.CloseStatus(err))
+	<-done
+	require.GreaterOrEqual(t, f.inspections.Load(), int32(2))
+}
+func TestShellCommandSelection(t *testing.T) {
+	for _, shell := range []string{"auto", "sh", "bash"} {
+		t.Run(shell, func(t *testing.T) {
+			f := &shellDocker{failure: "create"}
+			conn, done := shellFixture(t, f, dto.ShellQuery{Shell: shell})
+			readShellExit(t, conn)
+			command := <-f.commands
+			require.Equal(t, []string{"/bin/sh", "-c"}, command[:2])
+			if shell == "auto" {
+				require.Equal(t, "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi", command[2])
+			} else {
+				require.Equal(t, "exec "+shell, command[2])
+			}
+			_, _, _ = conn.Read(t.Context())
+			<-done
+		})
+	}
+}
+
+func TestShellOrphanRecordedWithoutContent(t *testing.T) {
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "shell.db")), database.MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	sessions := containershell.New(activity.NewActivityService(db, nil))
+	f := &shellDocker{orphan: true}
+	conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "auto"}, sessions)
+	readShell(t, conn)
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, []byte(`{"type":"invalid"}`)))
+	require.Equal(t, "container.shell-orphaned", readShellExit(t, conn).Reason)
+	_, _, _ = conn.Read(t.Context())
+	<-done
+	var entries []activity.Activity
+	require.NoError(t, db.Find(&entries).Error)
+	require.Len(t, entries, 1)
+	require.Equal(t, "container.shell-orphaned", entries[0].LatestMessage)
+	require.NotNil(t, entries[0].EndedAt)
+	require.Equal(t, "example-user", *entries[0].StartedByUserID)
+	require.Empty(t, entries[0].Output)
+}
+
+func TestShellInspectFailureDoesNotProveOrphan(t *testing.T) {
+	f := &shellDocker{orphan: true, failure: "inspect-error"}
+	conn, done := shellFixture(t, f, dto.ShellQuery{Shell: "auto"})
+	readShell(t, conn)
+	require.NoError(t, conn.Write(t.Context(), websocket.MessageText, wshub.TerminalCloseControl))
+	exit := readShellExit(t, conn)
+	require.Empty(t, exit.Reason)
+	require.Nil(t, exit.Code)
+	_, _, _ = conn.Read(t.Context())
+	<-done
+}

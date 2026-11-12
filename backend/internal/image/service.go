@@ -574,8 +574,8 @@ func (s *ImageService) GetUpdateInfoByImageIDs(ctx context.Context, imageIDs []s
 
 // GetUpdateInfoByContainers returns the stored check matching each container's
 // current policy, keyed by container ID. Digest policies read the image-level
-// record for the container's runtime image ID, so a check recorded under another
-// local tag of the same image still applies. Tag policies read the container's
+// record for the container's runtime image ID only while it was checked for the
+// container's own reference, never another tag. Tag policies read the container's
 // own record and require an exact policy key. Containers that opted out of update
 // checks are omitted; disabling automatic installation does not hide results.
 func (s *ImageService) GetUpdateInfoByContainers(ctx context.Context, containers []container.Summary) (map[string]*imagetypes.UpdateInfo, error) {
@@ -583,7 +583,7 @@ func (s *ImageService) GetUpdateInfoByContainers(ctx context.Context, containers
 	if s.db == nil || len(containers) == 0 {
 		return result, nil
 	}
-	digestImageIDs := make(map[string]string, len(containers))
+	digestImageIDs, digestRefs := make(map[string]string, len(containers)), make(map[string]string, len(containers))
 	tagContainerIDs := make([]string, 0, len(containers))
 	policies := make(map[string]string, len(containers))
 	for _, cnt := range containers {
@@ -593,7 +593,7 @@ func (s *ImageService) GetUpdateInfoByContainers(ctx context.Context, containers
 		policy, policyErr := tagpolicy.Resolve(cnt.Image, updater.DefaultLabelPolicy().TagPolicy(cnt.Labels))
 		if policyErr == nil && policy.Strategy == "digest" {
 			if imageID := strings.TrimSpace(cnt.ImageID); imageID != "" {
-				digestImageIDs[cnt.ID] = imageID
+				digestImageIDs[cnt.ID], digestRefs[cnt.ID] = imageID, cnt.Image
 			}
 			continue
 		}
@@ -616,7 +616,7 @@ func (s *ImageService) GetUpdateInfoByContainers(ctx context.Context, containers
 			return nil, err
 		}
 		for containerID, imageID := range digestImageIDs {
-			if info := byImageID[imageID]; info != nil {
+			if info := byImageID[imageID]; info != nil && imageupdate.SameUpdateReference(info.ImageRef, digestRefs[containerID]) {
 				// Each container gets its own copy so aggregation never mutates a shared record.
 				scoped := *info
 				result[containerID] = &scoped

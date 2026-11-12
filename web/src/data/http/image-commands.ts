@@ -10,7 +10,7 @@ import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "@/data/capability";
 import type { ImagePruneHostReport } from "@/domain/images";
 import type { CsrfClient } from "./csrf-client";
-import { discardResponse } from "./identity-reads";
+import { discardResponse, releaseResponse } from "./identity-reads";
 import { splitInventoryId, inventoryId } from "./inventory-mapping";
 import { mapPullProgress } from "./image-mapping";
 import { imageErrorCode, imageResponseError, imageUnknown, record } from "./image-errors";
@@ -58,7 +58,7 @@ export function createImageCommands({ baseUrl, client, capability, generation, c
         const response = await request(input.hostId, "/pull", "POST", body, owner);
         const reader = response.body?.getReader();
         if (!reader) throw imageUnknown();
-        const decoder = new TextDecoder(); let pending = "", done = false;
+        const decoder = new TextDecoder(); let pending = "", done = false, ended = false;
         function frame(line: string) {
           if (!line.trim()) return;
           const value: unknown = JSON.parse(line); const row = record(value);
@@ -80,11 +80,15 @@ export function createImageCommands({ baseUrl, client, capability, generation, c
             while ((newline = pending.indexOf("\n")) >= 0) { frame(pending.slice(0, newline)); pending = pending.slice(newline + 1); }
             // Complete frames may arrive together in a large network chunk. Bound only the unfinished line.
             if (pending.length > 65536) throw imageUnknown();
-            if (chunk.done) break;
+            if (chunk.done) { ended = true; break; }
           }
           if (pending.trim()) frame(pending);
           if (!done) throw imageUnknown();
-        } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); discardResponse(response); }
+        } finally {
+          // A stream read to its end is released, not cancelled: cancelling it reports the finished pull as aborted.
+          if (ended) { reader.releaseLock(); releaseResponse(response); }
+          else { await reader.cancel().catch(() => {}); reader.releaseLock(); discardResponse(response); }
+        }
         return { actionId };
       } catch (error) {
         check(owner);

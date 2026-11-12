@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories.
+// Deviations: functional cut: removed GitOps and saved Git repositories; M18 live scheduling, policy and contract foundation.
 
 package scheduler
 
@@ -78,6 +78,7 @@ type JobScheduler interface {
 	RegisterJob(job Job) error
 	RegisterBusWatcher(watcher BusWatcher, canRunManually bool) error
 	StartScheduler(ctx context.Context) error
+	Reinstall(ctx context.Context) error
 	GetLocation() *time.Location
 	Stop(ctx context.Context) error
 }

@@ -54,7 +54,7 @@ it("history generation wiring cancels old waiters before an abort-ignoring held 
   const settled = old.catch((reason: unknown) => { error = reason; }); const response = await reached.promise;
   vi.useFakeTimers();
   try {
-    await f.adapter.logout(); await drain();
+    const out = f.adapter.logout(); await vi.advanceTimersByTimeAsync(5_000); await out; await drain();
     expect(error).toBeInstanceOf(CancelledError);
     await f.adapter.login("operator", "Example-password1!");
     f.state.rows[0] = { ...f.state.rows[0]!, id: "new-identity" };

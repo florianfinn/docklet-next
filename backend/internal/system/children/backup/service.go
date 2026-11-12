@@ -2,32 +2,22 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion.
 
 package backup
 
 import (
 	"context"
 	"errors"
-	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
-	"io"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"time"
-	"uuid"
-
-	activitytypes "github.com/florianfinn/docklet-next/types/activity"
-	backuptypes "github.com/florianfinn/docklet-next/types/backup"
-	usertypes "github.com/florianfinn/docklet-next/types/user"
-
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
@@ -35,6 +25,15 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/entityjobs"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
+	"uuid"
 )
 
 const systemAdmissionID = "system"
@@ -87,6 +86,8 @@ type Dependencies struct {
 }
 
 type Service struct {
+	docker          *dockerInternal.DockerClientService
+	targets         *backuptarget.Service
 	notifier        backupnotify.Notifier
 	apiKeys         *apikey.ApiKeyService
 	store           Store
@@ -113,6 +114,10 @@ func NewService(deps Dependencies) *Service {
 		jobs: entityjobs.New("system-backup:", sharedbackup.SystemAdmissionScope), maintenance: NewMaintenanceGate(),
 		auth: deps.Auth, roles: deps.Roles, coordinator: deps.Coordinator, settings: deps.Settings, runtime: deps.Runtime}
 
+	s.docker = deps.Docker
+	if deps.Volumes != nil {
+		s.targets = deps.Volumes.BackupTargets()
+	}
 	s.notifier = backupnotify.Notifier{DB: deps.DB, Agent: deps.Config != nil && (deps.Config.AgentMode || deps.Config.EdgeAgent)}
 	return s
 }
@@ -160,8 +165,8 @@ func (s *Service) validateRequest(ctx context.Context, request backuptypes.Creat
 		if policy == nil {
 			return ErrSystemBackupNotFound
 		}
-		if policy.TargetID != "" {
-			return ErrSystemBackupTargetUnavailable
+		if err := s.validateCopyTarget(ctx, policy.TargetID); err != nil {
+			return err
 		}
 	}
 	if err := s.databaseProviderError(); err != nil {
@@ -173,6 +178,17 @@ func (s *Service) validateRequest(ctx context.Context, request backuptypes.Creat
 func (s *Service) startRun(ctx context.Context, actor usertypes.Actor, trigger string, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, context.Context, error) {
 	if err := s.validateRequest(ctx, request); err != nil {
 		return nil, nil, err
+	}
+	copyTargetID := ""
+	if request.PolicyID != "" {
+		policy, err := s.store.Policy(ctx, request.PolicyID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if policy == nil {
+			return nil, nil, ErrSystemBackupNotFound
+		}
+		copyTargetID = policy.TargetID
 	}
 	id := "system-" + uuid.New().String()
 	answer, err := s.activityService.StartGatedActivity(ctx, activity.GateRequest{
@@ -189,7 +205,7 @@ func (s *Service) startRun(ctx context.Context, actor usertypes.Actor, trigger s
 	}
 	run := &backuptypes.SystemBackupRun{ID: id, ActivityID: answer.Run.ID,
 		CreatedAt: time.Now().UTC(), Status: backuptypes.SystemBackupStatusRunning,
-		Trigger: trigger, PolicyID: request.PolicyID, CopyState: backuptypes.SystemBackupCopyNone}
+		Trigger: trigger, PolicyID: request.PolicyID, CopyTargetID: copyTargetID, CopyState: backuptypes.SystemBackupCopyNone}
 	if err := s.store.CreateRun(ctx, run); err != nil {
 		code := "backup.failed"
 		_, _ = s.activityService.CompleteActivity(answer.WorkContext, answer.Run.ID, activitytypes.StatusFailed, code, &code)
@@ -305,35 +321,6 @@ func (s *Service) GetPolicies(ctx context.Context) (*backuptypes.SystemBackupPol
 		result.Policies = append(result.Policies, policy)
 	}
 	return result, nil
-}
-func (s *Service) applyRetention(ctx context.Context, policyID string, keep int) error {
-	if keep < 1 {
-		return errors.New("backup.invalid_retention")
-	}
-	ids, err := s.store.ExpiredRunIDs(ctx, policyID, keep)
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		name, err := backuptypes.ArchiveNameForID(id)
-		if err != nil {
-			return err
-		}
-		run, err := s.store.Run(ctx, id)
-		if err != nil {
-			return err
-		}
-		if run.Trigger != backuptypes.SystemBackupTriggerScheduled || run.PolicyID != policyID || run.ArchiveName != name {
-			continue
-		}
-		if err := os.Remove(filepath.Join(s.backupDir(), name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return errors.New("backup.retention_failed")
-		}
-		if err := s.store.DeleteRun(ctx, id); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Recovery keys remain available to the separate volume backup policy.

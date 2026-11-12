@@ -9,6 +9,7 @@ import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import { gapLine, LogBuffer, registerLogLifetime, setLogDelivery, type LogStatus } from "../log-buffer";
 import { logAddress, mapLog, type LogKind } from "./log-mapping";
 import type { MetricsSocket } from "./metrics";
+import { pausableTimeout } from "./deadline-pause";
 
 type Listener = (lines: LogLine[]) => void;
 type LogSocket = MetricsSocket & { onopen?: ((event: Event) => void) | null };
@@ -18,6 +19,8 @@ interface Options {
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
   authenticated: () => boolean;
   checkIdentity: (signal: AbortSignal) => Promise<boolean>;
+  /** Resolves when a socket handshake may start; rejects once the session signed out. */
+  admit?: () => Promise<void>;
 }
 interface Channel {
   address: ReturnType<typeof logAddress>;
@@ -93,17 +96,15 @@ export function createRuntimeLogs(options: Options) {
     ch.check = controller;
     // A closed WS is not proof of logout. Recheck the existing hub identity
     // before retrying, with a bounded request lifetime owned by this channel.
-    ch.timer = setTimeout(() => controller.abort(), 10000);
+    const stopCheck = pausableTimeout(10000, () => controller.abort());
     try {
       const authenticated = await options.checkIdentity(controller.signal);
       if (!current(ch, epoch)) return;
       if (!authenticated) { state(ch, "unauthenticated"); return; }
     } catch { /* A transport failure is retried within the same bounded budget. */ }
     finally {
-      if (current(ch, epoch)) {
-        if (ch.timer !== undefined) clearTimeout(ch.timer);
-        ch.timer = undefined; ch.check = undefined;
-      }
+      stopCheck();
+      if (current(ch, epoch)) ch.check = undefined;
     }
     if (current(ch, epoch)) later(ch);
   }
@@ -116,6 +117,8 @@ export function createRuntimeLogs(options: Options) {
     let capability: CapabilityDescriptor;
     try { capability = await options.capability(ch.kind === "stack" ? "subscribeLogs" : "subscribeContainerLogs", { kind: ch.kind, id: ch.id }); }
     catch { if (current(ch, epoch)) state(ch, "unavailable"); return; }
+    // A sign-out resets every channel; nothing is awaited between admission and the handshake.
+    try { await options.admit?.(); } catch { return; }
     if (!current(ch, epoch) || !options.authenticated()) return;
     if (!capability.available) { state(ch, "unavailable"); return; }
     ch.attempt = ++attempt;

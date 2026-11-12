@@ -30,6 +30,7 @@ export const enActivity = {
   status: { queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" },
   capability: { unavailable: "This action is unavailable because its capability could not be read.", mappingUnavailable: "This action is not available in the current hub version." },
   step: { pending: "Pending", running: "Running", done: "Done", error: "Error", skipped: "Skipped" },
+  jobStep: { queued: "Queued", running: "Running", waiting: "Waiting", retrying: "Retrying", succeeded: "Succeeded", failed: "Failed", partial: "Partially completed", "needs_attention": "Needs attention", canceled: "Cancelled", skipped: "Skipped" },
   phase: "Step {current} of {total}: {label}",
   done: "Completed after {seconds} s",
   failedAt: "Error at {label}",
@@ -71,6 +72,7 @@ export const enActivity = {
     prune: "Cleanup",
     "agent-restart": "Agent restart",
     "auto-heal": "Auto Heal restart",
+    "load-alert": "Sustained load",
   },
   dismiss: "Close notice",
   notices: {
@@ -124,6 +126,7 @@ export const enActivity = {
     close: "Close progress window",
     closeShort: "Close",
     closeHint: "Closing does not end the action. Reopen it via the notice at top right or the action center.",
+    closeHintUser: "Closing does not end the action. Reopen it via the notice at top right while it is shown.",
     openCentre: "Show in action center",
     waiting: "{count, plural, one {Another important action started} other {# more important actions started}}: {title}",
     showWaiting: "Show",

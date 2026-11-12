@@ -2,7 +2,7 @@
 // Revision: 3da7cfd43c4da62bc06fd384b7da5f109ce010fb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements; functional cut: module tidy.
+// Deviations: Relative local helper replacements; functional cut: module tidy; M20 removes the unused sys/bytes replacement.
 
 module go.getarcane.app/acfs
 
@@ -17,7 +17,6 @@ replace (
 	go.getarcane.app/docker/convert => ../docker/convert
 	go.getarcane.app/kit => ../kit
 	go.getarcane.app/streams => ../streams
-	go.getarcane.app/sys/bytes => ../sys/bytes
 	go.getarcane.app/sys/cgroup => ../sys/cgroup
 	go.getarcane.app/sys/crypto => ../sys/crypto
 	go.getarcane.app/updater => ../updater

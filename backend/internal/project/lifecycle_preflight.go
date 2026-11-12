@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission.
+// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection; a partial rebuild of a shared reference is refused; M21 resolves the literal tag of a tag-policy version. M21 #438: candidate scans and verified manifest binding.
 
 package project
 
@@ -16,8 +16,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
+	"go.getarcane.app/updater"
+	"go.getarcane.app/updater/pkg/utils/tagpolicy"
 )
 
 func (s *ProjectService) SetLifecycleChecker(check func(context.Context, string) (*projectDTO.UpdateInfo, error)) {
@@ -74,8 +77,20 @@ func uniqueLifecycleReferences(snapshot *life.Snapshot) error {
 	return nil
 }
 func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registration string, request dto.LifecycleRequest) (*dto.LifecycleIntent, error) {
+	request = request.Clone()
+	if !request.VerifiedService() {
+		return nil, lifecycleFailure("update.invalid-target")
+	}
+	services := request.SelectedServices()
+	// A restore always covers the whole stack; a service selection has no meaning there.
+	if request.PointID != "" && len(request.Services) > 0 {
+		return nil, lifecycleFailure("update.invalid-target")
+	}
 	_, current, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil {
+		return nil, err
+	}
+	if err = lifecycleValidateServiceScope(current, services); err != nil {
 		return nil, err
 	}
 	if _, err = lifecycleOrderedModel(current); err != nil {
@@ -141,6 +156,9 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 	}
 	skipped := false
 	for _, key := range slices.Sorted(maps.Keys(current.Model.Services)) {
+		if !lifecycleServiceSelected(services, key) {
+			continue
+		}
 		img := current.Services[key]
 		row, ok := checked.ServiceUpdates[key]
 		if !ok || row.UpdateInfo == nil {
@@ -151,19 +169,32 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 			if info.Error != "" || info.State == "unknown" || info.State == "error" {
 				return nil, lifecycleFailure("update.check-unavailable")
 			}
-			continue
+			if request.ExpectedManifest == "" {
+				continue
+			}
 		}
 		if current.Model.Services[key].Build != nil {
 			return nil, lifecycleFailure("update.image-binding-unsupported")
 		}
 		selected := img.Reference
 		kind := "rebuild"
-		if info.LatestVersion != "" && info.LatestVersion != info.CurrentVersion {
-			selected, err = lifecycleVersionReference(img.Reference, info.LatestVersion)
+		if lifecycleTagPolicyVersion(info, img.Reference, current.Model.Services[key].Labels) {
+			tag, err := s.lifecycleSelectedTag(ctx, img.Reference, current.Model.Services[key].Labels, info.LatestVersion)
+			if err != nil {
+				return nil, err
+			}
+			selected, err = lifecycleVersionReference(img.Reference, tag)
 			if err != nil {
 				return nil, err
 			}
 			kind = "version"
+		}
+		// A rebuild moves the shared tag; an unselected service on the same
+		// reference would run an image its reference no longer names.
+		for other, peer := range current.Services {
+			if kind == "rebuild" && other != key && equalLifecycleReference(peer.Reference, img.Reference) && !lifecycleServiceSelected(services, other) {
+				return nil, lifecycleFailure("update.service-coupled")
+			}
 		}
 		if err = guard.ValidateReference(selected); err != nil {
 			return nil, err
@@ -178,6 +209,9 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		}
 		if observation.Digest == "" || observation.ConfigDigest == "" {
 			return nil, lifecycleFailure("update.check-unavailable")
+		}
+		if request.ExpectedManifest != "" && observation.Digest != request.ExpectedManifest {
+			return nil, lifecycleFailure("update.candidate-changed")
 		}
 		c, e := s.dockerService.GetClient(ctx)
 		if e != nil {
@@ -235,4 +269,46 @@ func lifecycleVersionReference(source, version string) (string, error) {
 		return "", lifecycleFailure("update.image-binding-unsupported")
 	}
 	return selected, nil
+}
+
+// lifecycleSelectedTag resolves the literal tag behind a checked tag-policy
+// version: observations carry the selected version, execution needs the tag,
+// including a pattern's surrounding text or a "v". A different selection than
+// the checked version is refused rather than installed.
+func (s *ProjectService) lifecycleSelectedTag(ctx context.Context, ref string, labels map[string]string, version string) (string, error) {
+	policy, err := tagpolicy.Resolve(ref, updater.DefaultLabelPolicy().TagPolicy(labels))
+	if err != nil {
+		return "", lifecycleFailure("update.check-unavailable")
+	}
+	named, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	tagged, ok := named.(reference.Tagged)
+	if !ok {
+		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	tags, err := s.containerRegistryService.ListImageTags(ctx, ref, nil)
+	if err != nil {
+		return "", lifecycleFailure("update.check-unavailable")
+	}
+	selected, err := tagpolicy.Select(tagged.Tag(), tags, policy)
+	if err != nil {
+		return "", lifecycleFailure("update.check-unavailable")
+	}
+	selectedVersion, err := tagpolicy.Version(selected, policy)
+	if err != nil || strings.TrimPrefix(selectedVersion, "v") != strings.TrimPrefix(version, "v") {
+		return "", lifecycleFailure("update.target-changed")
+	}
+	return selected, nil
+}
+
+// Only a tag-policy version moves the reference; without one the candidate is
+// the same reference and a newer version label is a rebuild.
+func lifecycleTagPolicyVersion(info *imageDTO.UpdateInfo, ref string, labels map[string]string) bool {
+	if info.State != "version" || info.LatestVersion == "" {
+		return false
+	}
+	policy, err := tagpolicy.Resolve(ref, updater.DefaultLabelPolicy().TagPolicy(labels))
+	return err == nil && policy.Strategy != "digest"
 }

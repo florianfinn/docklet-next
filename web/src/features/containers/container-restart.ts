@@ -18,12 +18,12 @@ export function useContainerRestart() {
   const cmd = useContainerCommands();
   const stacks = useStacks();
   const name = (id: string) => stacks.data?.find((s) => s.id === id)?.name;
-  return (list: ContainerInfo[]) => {
+  return (list: ContainerInfo[], send?: () => Promise<unknown>) => {
     const targets = list.map((c) => serviceTarget(c, name)).filter((x): x is ServiceTarget => !!x);
-    const run = async () => {
+    const run = send ?? (async () => {
       const results = await Promise.all(list.map((c) => cmd.run(c.id, "restart")));
       return results.some((r) => r === undefined) ? undefined : results;
-    };
+    });
     if (targets.length) requestServiceRestart(targets, run);
     else void run();
   };

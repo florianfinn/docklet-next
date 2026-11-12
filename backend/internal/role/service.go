@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut; M15 simple-user rights and identity contracts.
 
 package role
 
@@ -11,6 +11,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
 	"maps"
 	"slices"
 	"strings"
@@ -35,6 +37,7 @@ const (
 )
 
 type RoleService struct {
+	UserChanged    func(string)
 	db             *database.DB
 	userCache      *hot.HotCache[string, *authz.PermissionSet]
 	apiKeyCache    *hot.HotCache[string, *authz.PermissionSet]
@@ -202,6 +205,7 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 	}
 	var out Role
 	var affected []string
+	var wasAdmin, isAdmin []bool
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		var existing Role
 		if err := tx.Where("id = ?", id).First(&existing).Error; err != nil {
@@ -227,6 +231,9 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 			return err
 		}
 		affected = ids
+		if wasAdmin, err = s.adminStatusInDB(ctx, tx, ids); err != nil {
+			return err
+		}
 		existing.Name = input.Name
 		existing.Description = input.Description
 		existing.Permissions = permissions
@@ -241,19 +248,21 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 			return common.ErrRoleNotFound
 		}
 		out = existing
-		return nil
+		isAdmin, err = s.adminStatusInDB(ctx, tx, ids)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	for _, userID := range affected {
-		s.InvalidateUser(userID)
+	for i, userID := range affected {
+		s.rightsChangedInternal(userID, wasAdmin[i], isAdmin[i])
 	}
 	return &out, nil
 }
 
 func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 	var affected []string
+	var wasAdmin, isAdmin []bool
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		var existing Role
 		if err := tx.Where("id = ?", id).First(&existing).Error; err != nil {
@@ -272,6 +281,9 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 			return err
 		}
 		affected = ids
+		if wasAdmin, err = s.adminStatusInDB(ctx, tx, ids); err != nil {
+			return err
+		}
 		result := tx.Delete(&Role{}, "id = ?", id)
 		if deleteRoleErr := result.Error; deleteRoleErr != nil {
 			return fmt.Errorf("failed to delete role: %w", deleteRoleErr)
@@ -279,7 +291,8 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 		if result.RowsAffected != 1 {
 			return common.ErrRoleNotFound
 		}
-		return nil
+		isAdmin, err = s.adminStatusInDB(ctx, tx, ids)
+		return err
 	})
 	if err != nil {
 		return err
@@ -287,8 +300,8 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 	// Invalidate caches AFTER the transaction commits so a concurrent
 	// cache-miss cannot re-populate with stale data from the not-yet-visible
 	// delete. Consistent with UpdateRole / SetUserAssignments.
-	for _, uid := range affected {
-		s.InvalidateUser(uid)
+	for i, uid := range affected {
+		s.rightsChangedInternal(uid, wasAdmin[i], isAdmin[i])
 	}
 	return nil
 }
@@ -329,6 +342,7 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 		desired[i].UserID = userID
 		desired[i].Source = source
 	}
+	var wasAdmin, isAdmin bool
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		// Assignment replacement and admin validation share the immediate transaction.
 		var current struct{ ID string }
@@ -340,6 +354,10 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 				return common.ErrUserNotFound
 			}
 			return fmt.Errorf("failed to read user for assignment update: %w", err)
+		}
+		before, err := s.ResolveUserPermissionsInDB(ctx, tx, userID)
+		if err != nil {
+			return err
 		}
 		if err := validateAssignmentsExistInternal(tx, desired); err != nil {
 			return err
@@ -353,6 +371,14 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 				return fmt.Errorf("failed to insert %s assignments: %w", source, err)
 			}
 		}
+		after, err := s.ResolveUserPermissionsInDB(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		wasAdmin, isAdmin = before.IsGlobalAdmin(), after.IsGlobalAdmin()
+		if actor, ok := userctx.CurrentUserFromContext(ctx); ok && actor.ID == userID && before.IsGlobalAdmin() != after.IsGlobalAdmin() {
+			return errors.New("cannot change your own administrator status")
+		}
 		count, err := s.CountGlobalAdminsExcludingUserInDB(ctx, tx, "")
 		if err != nil {
 			return err
@@ -365,7 +391,7 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 	if err != nil {
 		return err
 	}
-	s.InvalidateUser(userID)
+	s.rightsChangedInternal(userID, wasAdmin, isAdmin)
 	return nil
 }
 
@@ -440,7 +466,7 @@ func (s *RoleService) CountGlobalAdminsExcludingUserInDB(ctx context.Context, tx
 		Table("users AS u").
 		Select("u.id AS user_id, r.permissions AS permissions").
 		Joins("INNER JOIN user_role_assignments ura ON ura.user_id = u.id AND ura.environment_id IS NULL").
-		Joins("INNER JOIN roles r ON r.id = ura.role_id")
+		Joins("INNER JOIN roles r ON r.id = ura.role_id").Where("u.disabled_at IS NULL")
 	if strings.TrimSpace(excludedUserID) != "" {
 		query = query.Where("u.id <> ?", excludedUserID)
 	}
@@ -496,7 +522,7 @@ func (s *RoleService) ResolvePermissions(ctx context.Context, userID string) (*a
 }
 
 // ResolveUserPermissionsInDB resolves permissions using the supplied transaction or database handle.
-func (s *RoleService) ResolveUserPermissionsInDB(_ context.Context, tx *gorm.DB, userID string) (*authz.PermissionSet, error) {
+func (s *RoleService) ResolveUserPermissionsInDB(ctx context.Context, tx *gorm.DB, userID string) (*authz.PermissionSet, error) {
 	// Scan into raw string for the permissions JSON column to avoid GORM's
 	// schema-introspection on anonymous local structs (which can't see the
 	// type tags needed to wire database.StringSlice's Scanner).
@@ -524,7 +550,14 @@ func (s *RoleService) ResolveUserPermissionsInDB(_ context.Context, tx *gorm.DB,
 			ps.AddEnv(*r.EnvironmentID, perms...)
 		}
 	}
-	return ps, nil
+	if ps.IsGlobalAdmin() {
+		return ps, nil
+	}
+	rowsApp, err := access.Assignments(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return access.Synthesize(userID, rowsApp), nil
 }
 
 // decodePermissionsJSONInternal parses the JSON-encoded `roles.permissions` column
@@ -540,140 +573,36 @@ func decodePermissionsJSONInternal(raw string) ([]string, error) {
 	return out, nil
 }
 
-// ResolveExecutionPermissions revalidates durable work against current users,
-// key ownership, expiry and permissions without using authentication caches.
-func (s *RoleService) ResolveExecutionPermissions(ctx context.Context, userID, keyID string) (*authz.PermissionSet, error) {
-	if userID == "" {
-		return nil, errors.New("requesting user unavailable")
-	}
-	db := s.db.WithContext(ctx)
-	var user struct{ ID string }
-	if err := db.Table("users").Select("id").Where("id = ?", userID).Take(&user).Error; err != nil {
-		return nil, fmt.Errorf("failed to load requesting user: %w", err)
-	}
-	if keyID == "" {
-		return s.ResolveUserPermissionsInDB(ctx, db, userID)
-	}
-	var key struct {
-		ID            string
-		Kind          string
-		UserID        *string
-		EnvironmentID *string
-		ExpiresAt     *time.Time
-	}
-	if err := db.Table("api_keys").Select("id, kind, user_id, environment_id, expires_at").Where("id = ?", keyID).Take(&key).Error; err != nil {
-		return nil, fmt.Errorf("failed to load requesting API key: %w", err)
-	}
-	if key.UserID == nil || *key.UserID != userID || (key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now())) {
-		return nil, errors.New("requesting API key is no longer valid")
-	}
-	var permissions *authz.PermissionSet
-	var err error
-	switch key.Kind {
-	case "personal":
-		permissions, err = s.ResolveUserPermissionsInDB(ctx, db, userID)
-	case "scoped":
-		permissions, err = s.resolveApiKeyPermissionsInDBInternal(db, keyID)
-	default:
-		return nil, errors.New("requesting API key kind is invalid")
-	}
-	if err != nil {
-		return nil, err
-	}
-	if key.EnvironmentID == nil {
-		return permissions, nil
-	}
-	if *key.EnvironmentID == "" {
-		return nil, errors.New("requesting API key environment scope is invalid")
-	}
-	restricted := authz.NewPermissionSet()
-	for permission := range permissions.Global {
-		restricted.AddEnv(*key.EnvironmentID, permission)
-	}
-	for permission := range permissions.PerEnv[*key.EnvironmentID] {
-		restricted.AddEnv(*key.EnvironmentID, permission)
-	}
-	return restricted, nil
-}
-
-// ResolveApiKeyPermissions returns the PermissionSet for an API key. Caches
-// per-key. Falls back to an empty set (deny-all) if the key has no perms.
-func (s *RoleService) ResolveApiKeyPermissions(ctx context.Context, apiKeyID string) (*authz.PermissionSet, error) {
-	if ps, ok, _ := s.apiKeyCache.Get(apiKeyID); ok {
-		return ps, nil
-	}
-	gen := s.apiKeyCacheGen.Load()
-	permissions, err := s.resolveApiKeyPermissionsInDBInternal(s.db.WithContext(ctx), apiKeyID)
-	if err != nil {
-		return nil, err
-	}
-	s.cacheFillMu.Lock()
-	if s.apiKeyCacheGen.Load() == gen {
-		s.apiKeyCache.Set(apiKeyID, permissions)
-	}
-	s.cacheFillMu.Unlock()
-	return permissions, nil
-}
-
-func (s *RoleService) resolveApiKeyPermissionsInDBInternal(db *gorm.DB, apiKeyID string) (*authz.PermissionSet, error) {
-	var grants []ApiKeyPermission
-	if err := db.Where("api_key_id = ?", apiKeyID).Find(&grants).Error; err != nil {
-		return nil, fmt.Errorf("failed to resolve api key permissions: %w", err)
-	}
-	permissions := authz.NewPermissionSet()
-	for _, grant := range grants {
-		if grant.EnvironmentID == nil {
-			permissions.AddGlobal(grant.Permission)
-		} else {
-			permissions.AddEnv(*grant.EnvironmentID, grant.Permission)
+// adminStatusInDB reports, per user, whether the account currently resolves as a global administrator.
+func (s *RoleService) adminStatusInDB(ctx context.Context, tx *gorm.DB, userIDs []string) ([]bool, error) {
+	out := make([]bool, len(userIDs))
+	for i, id := range userIDs {
+		ps, err := s.ResolveUserPermissionsInDB(ctx, tx, id)
+		if err != nil {
+			return nil, err
 		}
+		out[i] = ps.IsGlobalAdmin()
 	}
-	return permissions, nil
+	return out, nil
 }
 
-// SetApiKeyPermissions replaces every permission row on the given API key
-// atomically. Validation that the granted permissions don't exceed the
-// creator's capabilities happens in the handler layer.
-func (s *RoleService) SetApiKeyPermissions(ctx context.Context, apiKeyID string, grants []ApiKeyPermission) error {
-	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		return s.SetApiKeyPermissionsInDB(ctx, tx, apiKeyID, grants)
-	})
-	if err != nil {
-		return err
+// rightsChangedInternal purges caches after a role mutation and closes the account's streams
+// unless it stays an administrator, so promotion and demotion both start fresh (resource-rights §7).
+func (s *RoleService) rightsChangedInternal(userID string, wasAdmin, isAdmin bool) {
+	s.InvalidateUser(userID)
+	if !wasAdmin || !isAdmin {
+		access.Revoke(userID)
 	}
-	s.InvalidateApiKey(apiKeyID)
-	return nil
-}
-
-// SetApiKeyPermissionsInDB replaces permission rows using the supplied transaction or database handle.
-func (s *RoleService) SetApiKeyPermissionsInDB(ctx context.Context, tx *gorm.DB, apiKeyID string, grants []ApiKeyPermission) error {
-	for i := range grants {
-		grants[i].ApiKeyID = apiKeyID
-	}
-	if err := tx.WithContext(ctx).Where("api_key_id = ?", apiKeyID).Delete(&ApiKeyPermission{}).Error; err != nil {
-		return fmt.Errorf("failed to clear api key permissions: %w", err)
-	}
-	if len(grants) > 0 {
-		if err := tx.WithContext(ctx).Create(&grants).Error; err != nil {
-			return fmt.Errorf("failed to insert api key permissions: %w", err)
-		}
-	}
-	return nil
 }
 
 func (s *RoleService) InvalidateUser(userID string) {
 	s.cacheFillMu.Lock()
-	defer s.cacheFillMu.Unlock()
 	s.userCacheGen.Add(1)
 	s.userCache.Delete(userID)
-}
-
-// InvalidateApiKey drops the cached PermissionSet for one API key.
-func (s *RoleService) InvalidateApiKey(apiKeyID string) {
-	s.cacheFillMu.Lock()
-	defer s.cacheFillMu.Unlock()
-	s.apiKeyCacheGen.Add(1)
-	s.apiKeyCache.Delete(apiKeyID)
+	s.cacheFillMu.Unlock()
+	if s.UserChanged != nil {
+		s.UserChanged(userID)
+	}
 }
 
 // ---------- helpers ----------

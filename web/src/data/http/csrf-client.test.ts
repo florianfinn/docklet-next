@@ -6,7 +6,9 @@
 // Deviations: Original cookie/header interleaving and bounded CSRF recovery tests.
 
 import { expect, it } from "vitest";
+import { isMaintenanceError } from "../maintenance-retry";
 import { createCsrfClient } from "./csrf-client";
+import { maintenanceResponse } from "./dispatch-gate";
 
 const base = "https://hub.example.com/api";
 const response = (token: string, status = 200, body = "{}") => new Response(body, { status, headers: { "X-CSRF-Token": token } });
@@ -69,4 +71,10 @@ it.each(["A valid CSRF token is required", "Permission denied"])("bounds retries
   expect(result.status).toBe(403);
   expect(writes).toBe(message.includes("CSRF") ? 2 : 1);
   expect(gets).toBe(message.includes("CSRF") ? 2 : 1);
+});
+
+it("B8 a token bootstrap refused by hub maintenance rejects with the maintenance outcome", async () => {
+  const client = createCsrfClient(base, async () => maintenanceResponse());
+  const refused = await client.token().then(() => undefined, (error: unknown) => error);
+  expect(isMaintenanceError(refused)).toBe(true);
 });

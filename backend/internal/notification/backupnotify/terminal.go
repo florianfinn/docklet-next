@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation; agent sends are detached and bounded.
+// Deviations: Original notification and Auto Heal foundation; agent sends are detached and bounded; M16 bind mounts and backup completion.
 
 package backupnotify
 
@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	dto "github.com/florianfinn/docklet-next/types/notification"
+	"github.com/florianfinn/docklet-next/types/volume"
 	"log/slog"
 	"time"
 )
@@ -71,6 +72,7 @@ func (n Notifier) Terminal(ctx context.Context, r Run) {
 	if r.Reason == "volume.backup.retention-failed" || r.Reason == "backup.retention_failed" || r.Suppress || ctx.Err() != nil || (r.Status != "failed" && r.Status != "partial" && r.Status != "interrupted") {
 		return
 	}
+	r.Volume = volume.DisplayName(r.Volume)
 	if r.EnvironmentID == "" {
 		r.EnvironmentID = "0"
 	}

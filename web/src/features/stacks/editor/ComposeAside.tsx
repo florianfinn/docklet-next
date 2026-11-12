@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useVolumes } from "@/data/queries";
-import { mountRef } from "@/domain/volumes";
+import { stackStorage } from "@/domain/volumes";
 import { filesHref } from "@/features/volumes/files/files-href";
 import { cn } from "@/shared/lib/utils";
 import { CodeEditor } from "@/shared/workspace/code-editor";
@@ -24,11 +24,10 @@ interface ComposeAsideProps {
 }
 
 /** Validation, service outline and mounts of the draft, next to the editor. */
-function Details({ draft, hostId, stackId, hostProjectDir, onFile }: Omit<ComposeAsideProps, "mode" | "file">) {
+function Details({ draft, stackId, onFile }: Omit<ComposeAsideProps, "mode" | "file">) {
   const t = useTranslations("editor.aside");
   const text = useEditorText();
   const volumes = useVolumes();
-  const known = new Map((volumes.data ?? []).map((v) => [v.id, v]));
   const model = draft.parsed.ok ? draft.parsed.model : null;
   const errors = draft.parsed.ok ? draft.issues : [];
   return (
@@ -97,8 +96,7 @@ function Details({ draft, hostId, stackId, hostProjectDir, onFile }: Omit<Compos
             return (
               <ul className="flex flex-col gap-1">
                 {mounts.map((m) => {
-                  const ref = stackId ? mountRef({ hostId, stackId }, `${m.source}:${m.target}`, hostProjectDir) : undefined;
-                  const volume = ref ? known.get(ref.id) : undefined;
+                  const volume = stackId ? stackStorage(volumes.data, stackId, m, m.service) : undefined;
                   const bind = /^[./~]/.test(m.source);
                   return (
                     <li key={`${m.service}-${m.index}`} className="flex items-center gap-1.5 text-xs">

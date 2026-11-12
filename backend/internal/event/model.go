@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; coded event persistence.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; coded event persistence; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package event
 
@@ -99,11 +99,6 @@ const (
 	EventTypeEnvironmentMTLSCertIssued    EventType = "environment.mtls.cert_issued"
 	EventTypeEnvironmentMTLSEnroll        EventType = "environment.mtls.enroll"
 	EventTypeEnvironmentMTLSDownload      EventType = "environment.mtls.download"
-
-	EventTypeWebhookCreate  EventType = "webhook.create"
-	EventTypeWebhookUpdate  EventType = "webhook.update"
-	EventTypeWebhookDelete  EventType = "webhook.delete"
-	EventTypeWebhookTrigger EventType = "webhook.trigger"
 
 	// EventTypeNotificationSend is emitted for every notification delivery
 	// attempt; severity is success or error depending on the send result.

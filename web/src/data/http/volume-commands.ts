@@ -47,7 +47,7 @@ export function createVolumeTransport({ baseUrl, client, capability }: VolumeTra
   return { require, request };
 }
 
-export function createVolumeCommands(options: VolumeTransportOptions): Pick<DockletAdapter, "createVolume" | "deleteVolume" | "renameVolume"> {
+export function createVolumeCommands(options: VolumeTransportOptions): Pick<DockletAdapter, "createVolume" | "deleteVolume" | "renameVolume" | "measureBind"> {
   const { require, request } = createVolumeTransport(options);
   const mapped = (row: components["schemas"]["VolumeVolume"], host: string) => mapVolumes([row], host, [], [], { stale: false })[0]!;
   return {
@@ -69,6 +69,16 @@ export function createVolumeCommands(options: VolumeTransportOptions): Pick<Dock
       await require("renameVolume", { kind: "volume", id });
       try { return mapped(await request(host, `/${encodeURIComponent(previous)}/rename`, "POST", { name }), host); }
       finally { options.changed(); }
+    },
+    async measureBind(id) {
+      const [host, key] = splitInventoryId(id);
+      if (!key.startsWith("bind:")) throw new AdapterError("invalid-name");
+      // The scan reads the source like the file browser and needs the same right.
+      await require("listFiles", { kind: "volume", id });
+      try {
+        const row = await request<components["schemas"]["VolumeBindMeasurement"]>(host, "/binds/size", "POST", { key });
+        return { sizeBytes: row.measuredSize, measuredAt: row.measuredAt, partial: row.measuredPartial };
+      } finally { options.changed(); }
     },
   };
 }

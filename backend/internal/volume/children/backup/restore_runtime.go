@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original shared ownership across restore, safety and consumer recovery.
+// Deviations: Original shared ownership across restore, safety and consumer recovery; M16 bind mounts and backup completion.
 
 package backup
 
@@ -19,6 +19,14 @@ func (s *Service) configureRestoreLifecycle() {
 	s.restore.SetLifecycle(s.lifecycle)
 	s.lifecycle.Effects = restore.LifecycleEffects{
 		Validate: func(ctx context.Context, r restore.StartRequest) error {
+			if err := volume.ValidateName(r.VolumeName); err != nil {
+				return err
+			}
+			if volume.IsBindKey(r.VolumeName) && r.Mode != "new" {
+				if _, err := s.listConsumers(ctx, r.VolumeName, true); err != nil {
+					return err
+				}
+			}
 			if err := s.restore.ValidateAdmission(ctx, r); err != nil {
 				return err
 			}
@@ -43,6 +51,7 @@ func (s *Service) configureRestoreLifecycle() {
 			return s.deps.StopContainer(ctx, c.ID, u)
 		},
 		Restart: s.restartConsumers, Safety: s.safetyBackupInternal,
-		Write: s.restore.WriteRestore, CleanupNew: s.restore.CleanupNew, Fence: s.retainWriterFence, PruneSafety: s.pruneSafety,
+		CleanupNew: s.restore.CleanupNew, Fence: s.retainWriterFence, PruneSafety: s.pruneSafety,
 	}
+	s.restore.BindEffects(&s.lifecycle.Effects)
 }

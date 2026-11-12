@@ -1,10 +1,11 @@
+import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -13,6 +14,7 @@ import { useContainers } from "@/data/queries";
 import { formatTime } from "@/domain/format";
 import type { ContainerInfo, Host } from "@/domain/model";
 import { containerRuntime, RUNTIME_TONE } from "@/domain/status";
+import { ContainerScanCoverage } from "./ContainerScanCoverage";
 import { imageHref } from "@/features/images/image-links";
 import { HostChip } from "@/shared/components/host-chip";
 import { ContainerMemory } from "@/shared/components/container-memory";
@@ -22,6 +24,7 @@ import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ToneBadge } from "@/shared/components/tone";
 import { UpdatePanel } from "@/shared/components/updates/update-panel";
 import { HelpTarget } from "@/shared/help/help-tooltip";
+import { ContainerHistory } from "@/shared/history/HistorySection";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -29,9 +32,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Toggle } from "@/shared/ui/toggle";
 
+import { ContainerTerminalTabs } from "./ContainerTerminalTabs";
 import { ContainerFacts, ContainerProvenance } from "./ContainerFacts";
 import { useContainerRestart } from "./container-restart";
 import { OriginBadge } from "./OriginBadge";
+import { ContainerUpdates, ContainerUpdateDialog } from "./ContainerUpdates";
 import { RecreateDialog } from "./RecreateDialog";
 
 const ProxyContext = import.meta.env.DEV ? lazy(() => import("@/features/design-lab/proxy/ProxyContext")) : null;
@@ -44,6 +49,10 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
   const [paused, setPaused] = useState(false);
   const lines = useContainerLogs(c.id, paused);
   const shown = useMemo(() => lines.slice(-120), [lines]);
+  const [follow, setFollow] = useState(true);
+  const scroller = useRef<HTMLDivElement>(null);
+  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
+  const logs = useTranslations("stacks.logs");
   return (
     <Card className="gap-0 overflow-hidden py-0" data-slot="container-logs">
       <CardHeader className="flex flex-row flex-wrap items-center gap-2 border-b px-4 py-3">
@@ -60,15 +69,17 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
         )}
       </CardHeader>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div role="log" tabIndex={0} aria-label={t("logs")} aria-live={paused ? "off" : "polite"} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("logsEmpty")}</p>}
+      <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
+      <div ref={scroller} {...keyboard.region} aria-label={t("logs")} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.map((l) => (
-          <div key={l.id} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level])}>
+          <div key={l.id} {...keyboard.row(l.id)} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level], keyboard.active === l.id && "bg-muted/30 outline outline-primary")}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
-            <span className="w-28 shrink-0 truncate text-muted-foreground select-none"><LogSource line={l} /></span>
+            <span className={cn("shrink-0 text-muted-foreground select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}><LogSource line={l} active={keyboard.active === l.id} /></span>
             <span className="min-w-0 break-words"><LogMessage line={l} /></span>
           </div>
         ))}
+      </div>
+      {shown.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-0 px-4 py-8 text-center text-muted-foreground">{t("logsEmpty")}</p>}
       </div>
     </Card>
   );
@@ -81,7 +92,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
   const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
-  const edit = useCapability("recreateContainer");
+  const edit = useCapability("recreateContainer", { kind: "container", id: c.id });
   const restart = useContainerRestart();
   return (
     <>
@@ -105,7 +116,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
       )}
       {c.origin === "standalone" && (
         <HelpTarget topic="container.recreate">
-          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale || c.restrictions?.recreate} title={edit.reason} onClick={onEdit}>
+          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale} title={edit.reason} onClick={onEdit}>
             <Pencil data-icon="inline-start" /> {t("edit")}
           </Button>
         </HelpTarget>
@@ -118,7 +129,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
         </Button>
       )}
       {(c.origin === "unraid" || c.origin === "unknown") && (
-        <Button size="sm" variant="secondary" disabled title={to(`${c.origin}Body`)}>
+        <Button size="sm" variant="secondary" disabled title={edit.reason ?? to(`${c.origin}Body`)}>
           <Lock data-icon="inline-start" /> {t("editBlocked")}
         </Button>
       )}
@@ -126,12 +137,11 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   );
 }
 
-function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
+function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void; onUpdate: (restore: boolean) => void }) {
   const adapter = useAdapter();
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
-  const [editing, setEditing] = useState(false);
   const m = useMetrics((s) => s?.containers[c.id]);
   const rt = containerRuntime(c, host);
   return (
@@ -146,7 +156,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
         description={
           <span className="flex flex-wrap items-center gap-2 pt-1">
             <ToneBadge tone={RUNTIME_TONE[rt]}>{ts(rt)}</ToneBadge>
-            <OriginBadge origin={c.origin} note={c.originNote} />
+            <OriginBadge origin={c.origin} source={c.originSource} note={c.originNote} />
             <HostChip host={host} />
             {c.stackId && (
               <Link to={`/stacks/${c.stackId}`} className="text-primary-text underline-offset-4 hover:underline">
@@ -155,11 +165,12 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
             )}
           </span>
         }
-        actions={<ContainerActions c={c} onEdit={() => setEditing(true)} />}
+        actions={<ContainerActions c={c} onEdit={onEdit} />}
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <ContainerProvenance c={c} />
+          <ContainerUpdates c={c} select={onUpdate} />
           {ProxyContext && adapter.kind === "demo" && <Suspense fallback={null}><ProxyContext containerId={c.id} hostId={c.hostId} /></Suspense>}
           <Card className="gap-3 py-4">
             <CardHeader className="flex flex-row items-center justify-between px-4">
@@ -192,14 +203,17 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 px-4">
             <ContainerFacts c={c} host={host} />
+            <ContainerScanCoverage c={c} />
             <p className="text-xs text-muted-foreground">{ti("envMasked")}</p>
           </CardContent>
         </Card>
       </div>
       <div className="mt-4">
-        <ContainerLogs key={c.id} c={c} />
+        <ContainerHistory hostId={c.hostId} name={c.name} />
       </div>
-      {c.origin === "standalone" && <RecreateDialog container={editing ? c : undefined} open={editing} onOpenChange={setEditing} />}
+      <div className="mt-4">
+        <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>
+      </div>
     </>
   );
 }
@@ -211,25 +225,33 @@ export default function ContainerPage() {
   const containers = useContainers();
   const hosts = useHostScope();
   const c = containers.data?.find((x) => x.id === containerId);
-  if (containers.isPending || hosts.isPending)
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-64 w-full rounded-2xl" />
-      </div>
-    );
-  if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
-  if (!c)
-    return (
-      <EmptyState
-        icon={<Boxes />}
-        title={t("missing")}
-        action={
-          <Button variant="outline" asChild>
-            <Link to="/containers">{t("back")}</Link>
-          </Button>
-        }
-      />
-    );
-  return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body c={c} host={hosts.byId.get(c.hostId)} /></>;
+  // The page owns the recreate run at a stable position: the old ID leaves the
+  // list before the run settles, and the run must survive that to navigate.
+  const [updating, setUpdating] = useState<{ container: ContainerInfo; restore: boolean }>();
+  const [recreating, setRecreating] = useState<ContainerInfo>();
+  return <>{content()}{updating && <ContainerUpdateDialog key={updating.container.id} container={updating.container} restore={updating.restore} close={() => setUpdating(undefined)} />}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
+
+  function content() {
+    if (containers.isPending || hosts.isPending)
+      return (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
+      );
+    if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
+    if (!c)
+      return (
+        <EmptyState
+          icon={<Boxes />}
+          title={t("missing")}
+          action={
+            <Button variant="outline" asChild>
+              <Link to="/containers">{t("back")}</Link>
+            </Button>
+          }
+        />
+      );
+    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onUpdate={(restore) => setUpdating({ container: c, restore })} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
+  }
 }

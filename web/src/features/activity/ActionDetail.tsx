@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223).
 
+import { RecreateResultLink } from "@/features/containers/RecreateRun";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLocale, useTranslations } from "use-intl";
 import type { ActionDetailState } from "@/data/adapter";
@@ -32,7 +33,7 @@ export function ActionDetail({ run, children }: { run: ActionRun; children: (run
   if (!adapter.observeActionDetail) return children(run);
   const state = view?.key === key ? view.state : undefined;
   const full = state?.status === "ready" || state?.status === "error" ? state.run : undefined;
-  if (full) return <>{children(renderRun(full, locale))}{state?.status === "error" ? <QueryError compact error={state.error} /> : state?.status === "ready" && state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("detailLoading")}</p> : null}</>;
+  if (full) return <>{children(renderRun(full, locale))}<RecreateResultLink run={renderRun(full, locale)} />{state?.status === "error" ? <QueryError compact error={state.error} /> : state?.status === "ready" && state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("detailLoading")}</p> : null}</>;
   if (state?.status === "error") return <QueryError compact error={state.error} />;
   return <p role="status" className="p-3 text-sm text-muted-foreground">{t("detailLoading")}</p>;
 }

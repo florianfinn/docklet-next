@@ -39,6 +39,8 @@ export const deImages: typeof enImages = {
   offlineNote: "Host getrennt – letzter bekannter Stand, Aktionen gesperrt.",
   menu: { details: "Details", pullAgain: "Erneut ziehen", remove: "Entfernen", openUpdate: "Update öffnen", security: "Befunde ansehen" },
   details: {
+    metadataLoading: "Metadaten werden geladen …",
+    metadataError: "Metadaten nicht verfügbar",
     unknown: "Unbekannt",
     title: "Image {name}",
     overview: "Übersicht",
@@ -54,7 +56,6 @@ export const deImages: typeof enImages = {
     size: "Größe",
     layers: "Layer",
     digest: "Digest",
-    digestHint: "Synthetischer Digest – nur zur Unterscheidung im Detail.",
     consumers: "Verwendet von",
     consumersNone: "Kein Container verwendet dieses Image.",
     stopped: "gestoppt",

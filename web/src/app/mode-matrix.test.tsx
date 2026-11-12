@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original none/local/proxy browser route and logout matrix.
+// Deviations: Original none/local/proxy browser route and logout matrix; none mode exposes no sign-out action.
 
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -67,8 +67,11 @@ describe.each(["none", "local", "proxy"] as const)("%s mode", (mode) => {
     const current = server(mode);
     const { router } = renderRoutes(current.routes, ["/dashboard"], current.adapter);
     await screen.findByText("Dashboard");
-    const dialog = await screen.findByRole("alertdialog");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Verstanden" }));
+    if (mode === "none") expect(screen.queryByRole("alertdialog") === null).toBe(true);
+    else {
+      const dialog = await screen.findByRole("alertdialog");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Verstanden" }));
+    }
     if (mode === "local") await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
     else expect(router.state.location.pathname).toBe("/dashboard");
     expect(current.calls.filter((path) => path === "/api/auth/logout")).toHaveLength(mode === "local" ? 1 : 0);

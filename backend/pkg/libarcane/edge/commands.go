@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
 
 package edge
 
@@ -16,6 +16,7 @@ import (
 )
 
 var commandRoutes = withVulnerabilityRoutes([]commandRoute{
+	{Method: http.MethodGet, PathPattern: "/api/environments/0/history/sample", CommandName: "history.sample"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/check", CommandName: "updater.project.check"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/baseline", CommandName: "updater.project.baseline"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/{kind}/{targetId}/restore-points", CommandName: "updater.restore.list"},
@@ -27,6 +28,7 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs", CommandName: "runtime.execute"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/0/runtime-runs/{runId}", CommandName: "runtime.query"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs/{runId}/cancel", CommandName: "runtime.cancel"},
+	{Method: http.MethodPost, PathPattern: "/api/system/agent/restart", CommandName: "system.agent.restart"},
 	{Method: http.MethodGet, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodHead, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodGet, PathPattern: "/api/app-version", CommandName: "system.version"},
@@ -101,6 +103,8 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/counts", CommandName: "volume.counts"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.list"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/binds", CommandName: "volume.binds.list"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/binds/size", CommandName: "volume.binds.size"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.inspect"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.create"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.delete"},
@@ -117,6 +121,7 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/repository", CommandName: "volume.backup.repository.get"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/repository/check", CommandName: "volume.backup.repository.check"},
 	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/volumes/backups/targets", CommandName: "volume.backup.targets.sync"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/targets/probe", CommandName: "volume.backup.target.probe"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/targets/{targetId}/test", CommandName: "volume.backup.targets.test"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/targets/{targetId}/references", CommandName: "volume.backup.targets.references"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/targets/local/recovery-key", CommandName: "volume.backup.targets.key.get"},
@@ -240,7 +245,8 @@ func normalizeCommandPathInternal(requestPath string) string {
 	if idx := strings.IndexByte(requestPath, '?'); idx >= 0 {
 		requestPath = requestPath[:idx]
 	}
-	requestPath = strings.TrimSpace(requestPath)
+	// No trimming: the hub refuses whitespace in paths, and the command must
+	// resolve the same segments the hub checked (#264).
 	if requestPath == "" {
 		return "/"
 	}

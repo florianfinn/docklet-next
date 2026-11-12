@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; Complete helper image default assertions.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; Complete helper image default assertions; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -43,10 +43,10 @@ func TestSettingsService_FeaturePersistenceAndEnvironmentIsolation(t *testing.T)
 	var notifications int
 	unsubscribe := svc.SubscribeSettingsChanges([]string{features.VulnerabilityManagementSettingKey}, func([]libarcane.SettingUpdate) { notifications++ })
 	defer unsubscribe()
-	scheduled := "true"
+	scheduled := `{"mode":"daily","time":"02:30"}`
 	ignore := "CVE-2026-12345"
 	require.Error(t, svc.UpdateSetting(ctx, "trivyIgnore", ignore))
-	_, err = svc.UpdateSettings(ctx, settings.Update{VulnerabilityScanEnabled: &scheduled})
+	_, err = svc.UpdateSettings(ctx, settings.Update{VulnerabilityScanSchedule: &scheduled})
 	require.NoError(t, err)
 	disabled := "false"
 	_, err = svc.UpdateSettings(ctx, settings.Update{FeatureVulnerabilityManagementEnabled: &disabled})
@@ -72,7 +72,7 @@ func TestSettingsService_FeaturePersistenceAndEnvironmentIsolation(t *testing.T)
 	require.True(t, svc.IsFeatureEnabled(ctx, features.VulnerabilityManagement))
 	cfg, err := svc.GetSettings(ctx)
 	require.NoError(t, err)
-	require.Equal(t, scheduled, cfg.VulnerabilityScanEnabled.Value)
+	require.Equal(t, scheduled, cfg.VulnerabilityScanSchedule.Value)
 	require.Empty(t, cfg.TrivyIgnore.Value)
 }
 

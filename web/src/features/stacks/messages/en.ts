@@ -1,7 +1,11 @@
 // American English texts of the stacks feature: overview, stack page, logs and deployments.
 
 export const enStacks = {
-  inventory: { readError: "Inventory could not be read", mappingError: "Invalid inventory data", host: "{name}: {reason}.", asOf: "Stale values, as of {time}.", noSnapshot: "No retained values available yet.", updateRequired: "Agent update required", credentialRejected: "Agent token invalid", unavailable: "Host unreachable" },
+  import: {"found": {"compose": "Compose file", "env-example": "Environment example", "image-config": "Image configuration", "ports": "Ports", "volumes": "Volumes", "environment": "Environment names"}, "missing": {"env-file": "Environment file required", "label-file": "Label file required", "include": "Included file required", "extends": "Extended file required", "build-context": "Build context required", "variables": "Variable values required", "compose": "Compose configuration required"}, "errors": {"invalid-reference": "Invalid source reference", "registry-not-configured": "Registry is not configured", "not-found": "Source not found", "too-large": "Source is too large", "timeout": "Source request timed out", "redirect-refused": "Source redirect refused", "source-unavailable": "Source unavailable", "invalid-compose": "Invalid Compose configuration", "unauthorized": "Registry authentication failed", "busy": "An import is already running"}},
+  stopMode: {"modeUnavailable": "The hub stop mode cannot be read. Choose an explicit action below.", "down": "Shut down (remove containers)", "stop-containers": "Stop containers", "containersRemoved": "Containers removed", "definitionInvalid": "The Compose definition cannot be resolved. Repair it to restore the services list."},
+  inventory: { scopeStaleNote: "Inventory catalogue could not be refreshed.", scopeStale: "Inventory catalogue could not be refreshed", readError: "Inventory could not be read", mappingError: "Invalid inventory data", host: "{name}: {reason}.", asOf: "Stale values, as of {time}.", noSnapshot: "No retained values available yet.", updateRequired: "Agent update required", credentialRejected: "Agent token invalid", unavailable: "Host unreachable" },
+  serviceState: { "not-created": "Containers removed" },
+  definitionHint: { "definition-invalid": "The Compose definition could not be resolved." },
   title: "Stacks",
   description: "{scope} · stacks only. Run, Unraid and other containers without Compose are under Containers.",
   scopeAll: "All hosts combined",
@@ -120,6 +124,7 @@ export const enStacks = {
     trigger: { deploy: "Deploy", redeploy: "Redeploy", update: "Update", restore: "Restore" },
   },
   logs: {
+    keyboardHint: "Arrow keys move between lines; Home and End jump to the first and last line; End resumes the live tail.",
     delivery: {
       connecting: "Connecting to logs …", live: "Live logs", retrying: "Connection lost. Retrying …", offline: "Offline. Reconnect resumes when online.",
       unavailable: "Logs are unavailable for this resource.", error: "Log delivery failed. Retry to request a new tail.", unauthenticated: "Sign in to receive logs.",

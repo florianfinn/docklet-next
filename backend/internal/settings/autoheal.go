@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -17,15 +17,15 @@ import (
 	"strings"
 )
 
-var AutoHealKeys = []string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow"}
+var AutoHealKeys = []string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow", "autoHealCooldownMinutes"}
 
 // AutoHealManagedByEnvironment uses the same presence semantics as the effective loader.
 func AutoHealManagedByEnvironment() bool {
-	cfg := config.Load()
+	cfg := config.LoadRole()
 	if !cfg.AgentMode && !cfg.EdgeAgent && !cfg.UIConfigurationDisabled {
 		return false
 	}
-	for _, name := range []string{"AUTO_HEAL_ENABLED", "AUTO_HEAL_INTERVAL", "AUTO_HEAL_EXCLUDED_CONTAINERS", "AUTO_HEAL_EXCLUDED_STACKS", "AUTO_HEAL_MAX_RESTARTS", "AUTO_HEAL_RESTART_WINDOW"} {
+	for _, name := range []string{"AUTO_HEAL_ENABLED", "AUTO_HEAL_INTERVAL", "AUTO_HEAL_EXCLUDED_CONTAINERS", "AUTO_HEAL_EXCLUDED_STACKS", "AUTO_HEAL_MAX_RESTARTS", "AUTO_HEAL_RESTART_WINDOW", "AUTO_HEAL_COOLDOWN_MINUTES"} {
 		if _, found, _ := utils.LookupEnvOrFile(name); found {
 			return true
 		}
@@ -33,7 +33,7 @@ func AutoHealManagedByEnvironment() bool {
 	return false
 }
 func AutoHealUpdateManaged(u settingsDTO.Update) bool {
-	return u.AutoHealEnabled != nil || u.AutoHealInterval != nil || u.AutoHealExcludedContainers != nil || u.AutoHealExcludedStacks != nil || u.AutoHealMaxRestarts != nil || u.AutoHealRestartWindow != nil
+	return u.AutoHealEnabled != nil || u.AutoHealInterval != nil || u.AutoHealExcludedContainers != nil || u.AutoHealExcludedStacks != nil || u.AutoHealMaxRestarts != nil || u.AutoHealRestartWindow != nil || u.AutoHealCooldownMinutes != nil
 }
 func names(v string) []string {
 	r := []string{}
@@ -49,7 +49,9 @@ func (s *SettingsService) AutoHealSettings(ctx context.Context) (dto.Settings, e
 	if err != nil {
 		return dto.Settings{}, err
 	}
-	return dto.Settings{Enabled: cfg.AutoHealEnabled.IsTrue(), MaxRestarts: cfg.AutoHealMaxRestarts.AsInt(), WindowMinutes: cfg.AutoHealRestartWindow.AsInt(), ExcludedStacks: names(cfg.AutoHealExcludedStacks.Value), ExcludedContainers: names(cfg.AutoHealExcludedContainers.Value), ManagedByEnvironment: AutoHealManagedByEnvironment()}, nil
+	result := dto.Settings{Enabled: cfg.AutoHealEnabled.IsTrue(), MaxRestarts: cfg.AutoHealMaxRestarts.AsInt(), WindowMinutes: cfg.AutoHealRestartWindow.AsInt(), CooldownMinutes: cfg.AutoHealCooldownMinutes.AsInt(), ExcludedStacks: names(cfg.AutoHealExcludedStacks.Value), ExcludedContainers: names(cfg.AutoHealExcludedContainers.Value), ManagedByEnvironment: AutoHealManagedByEnvironment()}
+	result.InvalidFields = result.InvalidFieldNames()
+	return result, nil
 }
 func (s *SettingsService) UpdateAutoHeal(ctx context.Context, u dto.Update) (dto.Settings, error) {
 	if err := u.Validate(); err != nil {
@@ -59,6 +61,9 @@ func (s *SettingsService) UpdateAutoHeal(ctx context.Context, u dto.Update) (dto
 		return dto.Settings{}, &dto.Problem{Code: "autoheal.settings-env-managed", Status: 409}
 	}
 	updates := []libarcane.SettingUpdate{{Key: "autoHealEnabled", Value: strconv.FormatBool(u.Enabled)}, {Key: "autoHealMaxRestarts", Value: strconv.Itoa(u.MaxRestarts)}, {Key: "autoHealRestartWindow", Value: strconv.Itoa(u.WindowMinutes)}, {Key: "autoHealExcludedStacks", Value: strings.Join(u.ExcludedStacks, ",")}, {Key: "autoHealExcludedContainers", Value: strings.Join(u.ExcludedContainers, ",")}}
+	if u.CooldownMinutes != nil {
+		updates = append(updates, libarcane.SettingUpdate{Key: "autoHealCooldownMinutes", Value: strconv.Itoa(*u.CooldownMinutes)})
+	}
 	s.writes.Lock()
 	defer s.writes.Unlock()
 	current := s.GetSettingsConfig()

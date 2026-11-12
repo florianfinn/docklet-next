@@ -2,7 +2,7 @@
 // Revision: 97a16304639854dc5aca368c879689d7a2161671
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original dialog generation and per-host Auto Heal state proofs.
+// Deviations: Original dialog generation and per-host Auto Heal state proofs. M19 web consumer integration.
 
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -47,7 +47,7 @@ describe("notification target dialog generations", () => {
       return save(input);
     };
     renderRoutes(routes, ["/settings/notifications"], adapter);
-    await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: E-Mail" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Email" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(calls).toBe(1));
     await userEvent.keyboard("{Escape}");
@@ -61,7 +61,7 @@ describe("notification target dialog generations", () => {
 
     late.resolve(undefined as never);
     // The E-Mail write settles (refresh done, row enabled again) before the late onSaved runs.
-    await waitFor(() => expect((screen.getByRole("button", { name: "Bearbeiten: E-Mail", hidden: true }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Bearbeiten: Email", hidden: true }) as HTMLButtonElement).disabled).toBe(false));
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByRole("dialog") === second).toBe(true);
     expect(within(second).getByRole("heading", { name: "ntfy bearbeiten" }) !== null).toBe(true);
@@ -114,7 +114,7 @@ describe("Auto Heal per host", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Atlas" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("combobox", { name: "Zeitfenster" }).textContent).toBe("45 Minuten");
-    await userEvent.click(within(dialog).getByRole("switch", { name: "Unhealthy-Container neu starten" }));
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Ungesunde Container neu starten" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
     const saved = await adapter.getAutoHealSettings("atlas");

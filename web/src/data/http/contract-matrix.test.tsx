@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original web contract matrix for issue 38.
+// Deviations: Original web contract matrix for issue 38. M19 web consumer integration.
 // Cases 5–7 and 10–12 exercise HTTP transport, SSE, and recorded DTOs only.
 
 import { act, screen, waitFor } from "@testing-library/react";
@@ -30,7 +30,7 @@ import type { CapabilityDescriptor } from "../capability";
 import { createHttpAdapter } from "./http-adapter";
 import { inventoryId } from "./inventory-mapping";
 import { mapActivityDetail, mapEvent } from "./map-dto";
-import type { HubBackupRun } from "@/domain/hub-backup";
+import { hubBackupErrorCode, type HubBackupRun } from "@/domain/hub-backup";
 
 type Activity = components["schemas"]["ActivityActivitySummary"];
 type Detail = components["schemas"]["ActivityDetail"];
@@ -237,7 +237,8 @@ describe("#38 adapter contract matrix", () => {
     const demoEvent = (await demo.listEvents()).find((item) => item.id === event.id)!;
     const wireEvent = (await http.listEvents())[0]!;
     expect([wireEvent.id, wireEvent.kind, wireEvent.level, wireEvent.stackId]).toEqual([demoEvent.id, demoEvent.kind, demoEvent.level, demoEvent.stackId ? inventoryId(event.environmentId ?? "0", demoEvent.stackId) : undefined]);
-    expect(wireEvent.title.code).toBe("project.deploy");
+    // Hub event titles render from the catalogue, keyed by their wire code.
+    expect(wireEvent.title.code).toBe("runMessages.events.labels.project_deploy");
   });
 
   it("5 rejects transport and DTO mapping errors without an empty fallback", async () => {
@@ -401,13 +402,13 @@ describe("#38 adapter contract matrix", () => {
     expect(screen.queryByText("Simuliert")).toBeNull();
   });
 
-  it("9 exposes no editable history limits in settings", async () => {
+  it("9 exposes validated history limits with accurate hub and host scope", async () => {
     const demo = createDemoAdapter();
     renderWithApp(<ActivitySection settings={await demo.getSettings()} />, demo);
-    expect(screen.queryByLabelText("Höchstens Ereignisse") === null).toBe(true);
-    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") === null).toBe(true);
+    expect(screen.queryByLabelText("Höchstens Ereignisse") !== null).toBe(true);
+    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") !== null).toBe(true);
     const file = await import("@/features/settings/messages/de");
-    expect(file.deSettings.activity.historyNote).toContain("500 Ereignisse und 100 abgeschlossene Abläufe");
+    expect(file.deSettings.activity.historyNote).toContain("Ereignisse werden hubweit gezählt");
   });
 
   it("10 maps raw lines after a detail read", async () => {
@@ -477,6 +478,8 @@ function backupBackend(scenario: BackupScenario) {
     if (scenario === "no-access") return json({ detail: "permission.denied" }, 403);
     if (url.pathname === "/api/backups" && method === "GET") return page(state.runs);
     if (url.pathname === "/api/backups" && method === "POST") {
+      const policyId = (JSON.parse(String(init?.body ?? "{}")) as { policyId?: string }).policyId;
+      if (policyId && !state.policy.some((entry: { id: string }) => entry.id === policyId)) return json({ detail: "backup.not_found" }, 404);
       const created: HubBackupRun = { ...run, id: "system-new-2", activityId: "activity-new-2", status: "running", size: 0 };
       state.runs.unshift(created);
       return json(created, 202);
@@ -507,6 +510,8 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     expect(access.read).toBe(scenario !== "no-access");
     const maintenance = await adapter.getHubBackupMaintenance();
     expect(maintenance.active).toBe(scenario === "maintenance");
+    // The real hub refuses every other read during maintenance; the HTTP adapter holds them until it ends.
+    if (kind === "http" && scenario === "maintenance") { expect(adapter.maintenance?.state().active).toBe(true); return; }
     if (!access.read) {
       await expect(adapter.listHubBackups()).rejects.toBeTruthy();
       await expect(adapter.deleteHubBackup("system-demo-1")).rejects.toBeTruthy();
@@ -518,6 +523,13 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     expect(storage.reasonCode).toBe(scenario === "storage-unavailable" ? "backup.storage_unavailable" : scenario === "tools-unavailable" ? "backup.tools_unavailable" : undefined);
     expect((await adapter.getHubBackupPolicies())[0]?.retentionCount).toBe(7);
     if (scenario === "creating") expect(await adapter.getHubBackupActivityStatus("activity-demo-1")).toBe("running");
+  });
+
+  it("refuses a manual run of an unknown policy", async () => {
+    const setup = backupBackend("list");
+    const adapter = kind === "demo" ? createDemoAdapter() : setup.adapter;
+    const outcome = await adapter.createHubBackup("missing-policy").then(() => "created", (error: unknown) => hubBackupErrorCode(error));
+    expect(outcome).toBe("backup.not_found");
   });
 
   it("creates an archive, saves policy and starts a confirmed restore", async () => {
@@ -535,6 +547,15 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
       expect(setup.state.requests.some((item) => item.path.endsWith("/restore") && item.body?.includes('"confirmBackupId":"system-demo-1"'))).toBe(true);
       expect(setup.state.requests.some((item) => item.path === "/api/backups/policies" && item.method === "PUT")).toBe(true);
     }
+  });
+
+  it("sends the policy of a manual run so its target copy applies", async () => {
+    if (kind !== "http") return;
+    const setup = backupBackend("list");
+    await setup.adapter.createHubBackup("hub-daily");
+    await setup.adapter.createHubBackup();
+    const bodies = setup.state.requests.filter((entry) => entry.path === "/api/backups" && entry.method === "POST").map((entry) => JSON.parse(entry.body!));
+    expect(bodies).toEqual([{ policyId: "hub-daily" }, {}]);
   });
 
   it("omits an unassigned policy ID on first save", async () => {

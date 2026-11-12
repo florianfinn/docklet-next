@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Remove self-swap completion bookkeeping; Local module namespace; M20 removes references to the retired inbound-webhook update helper.
 
 package updater
 
@@ -338,8 +338,7 @@ func imageUpdateRecordToModuleInternal(record imageupdate.ImageUpdateRecord) upd
 // what the engine acts on. Options.Type and Options.ResourceIds stay behind:
 // the engine never read them, and ApplyPending already routes a scoped request
 // through applyScopedUpdatesInternal before reaching the engine. Settings
-// exclusions always apply to these runs; only UpdateSingleContainer overrides
-// them for its explicitly requested container.
+// exclusions always apply to these runs.
 func moduleOptionsFromUpdaterOptionsInternal(options arcaneupdater.Options) updater.Options {
 	return updater.Options{
 		Force:  options.ForceUpdate,
@@ -737,10 +736,8 @@ func (s *UpdaterService) acquireUpdateInternal(ctx context.Context) (context.Con
 type (
 	updateProgressKeyInternal struct{}
 	updateProgressInternal    struct {
-		mu            sync.Mutex
-		err           error
-		selfTriggered bool
-		selfID        string
+		mu  sync.Mutex
+		err error
 	}
 )
 
@@ -819,9 +816,6 @@ func (p *updateProgressInternal) completeBatchInternal(ctx context.Context, opti
 	p.mu.Lock()
 	err = errors.Join(err, p.err)
 	recordingFailed := p.err != nil
-	_, durableRun := jobcontext.Run(ctx)
-	selfTriggered := p.selfTriggered && durableRun
-	selfID := p.selfID
 	p.mu.Unlock()
 	status := scheduler.Succeeded
 	if !batchCompleted && err == nil {
@@ -834,23 +828,7 @@ func (p *updateProgressInternal) completeBatchInternal(ctx context.Context, opti
 	if recordingFailed {
 		status = scheduler.NeedsAttention
 	}
-	if selfTriggered {
-		err = errors.Join(
-			err,
-			jobcontext.Progress(
-				ctx,
-				scheduler.TargetOutcome{
-					ID:           selfID,
-					ResourceType: "container",
-					Status:       scheduler.NeedsAttention,
-					ActivityID:   activityID,
-					Message:      "Self-update completion requires review",
-				},
-			),
-		)
-		status = scheduler.NeedsAttention
-		err = errors.Join(err, errors.New("self-update was triggered but completion requires review"))
-	}
+
 	batchType := updateBatchTypeInternal(ctx, options, batchCompleted)
 	checkpoint := scheduler.TargetOutcome{ID: "auto-update", ResourceType: batchType, Status: status, ActivityID: activityID}
 	if err != nil {
@@ -861,7 +839,7 @@ func (p *updateProgressInternal) completeBatchInternal(ctx context.Context, opti
 	if err != nil {
 		out.Success = false
 	}
-	if recordingFailed || selfTriggered || checkpointErr != nil {
+	if recordingFailed || checkpointErr != nil {
 		err = &scheduler.OutcomeError{Outcome: scheduler.Outcome{Status: scheduler.NeedsAttention, Message: err.Error(), ActivityID: activityID}, Cause: err}
 	}
 	return err

@@ -124,6 +124,10 @@ func runtimeReceiverHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 				runtimeHTTPErrorInternal(ctx, 400, "Invalid runtime request")
 				return
 			}
+			if runtimeRecreateOperation(envelope.Operation) && !runtimeRecreateWireBound(body) {
+				runtimeHTTPErrorInternal(ctx, 400, "Recreate edit too large")
+				return
+			}
 			result, err = receiver.Execute(ctx.Context(), envelope)
 		} else {
 			var request activitytypes.RuntimeCancellation

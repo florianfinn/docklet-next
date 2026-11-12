@@ -2,7 +2,7 @@
 // Revision: d9c8c81f2ef74cb4a47f002e1acb69d85f01c1de
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original provider draft, write ownership and test feedback proofs.
+// Deviations: Original provider draft, write ownership and test feedback proofs. M19 web consumer integration.
 
 import { CancelledError } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
@@ -90,7 +90,7 @@ describe("one full-target write per provider", () => {
     adapter.saveNotificationTarget = async (input) => { await held.promise; return save(input); };
     renderRoutes(routes, ["/settings/notifications"], adapter);
     await userEvent.click(await screen.findByRole("switch", { name: "Aktiv: ntfy" }));
-    expect([disabled("Bearbeiten: ntfy"), disabled("Entfernen: ntfy"), disabled("Bearbeiten: E-Mail")]).toEqual([true, true, false]);
+    expect([disabled("Bearbeiten: ntfy"), disabled("Entfernen: ntfy"), disabled("Bearbeiten: Email")]).toEqual([true, true, false]);
     held.release();
     await waitFor(() => expect(disabled("Bearbeiten: ntfy")).toBe(false));
     const ntfy = (await adapter.listNotificationTargets()).find((t) => t.provider === "ntfy");
@@ -121,22 +121,22 @@ describe("one full-target write per provider", () => {
     const held = barrier();
     adapter.saveNotificationTarget = async (input) => { await held.promise; return save(input); };
     renderRoutes(routes, ["/settings/notifications"], adapter);
-    await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: E-Mail" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Email" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Speichern" }));
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
-    expect([disabled("Bearbeiten: E-Mail"), disabled("Entfernen: E-Mail"), (screen.getByRole("switch", { name: "Aktiv: E-Mail" }) as HTMLButtonElement).disabled]).toEqual([true, true, true]);
+    expect([disabled("Bearbeiten: Email"), disabled("Entfernen: Email"), (screen.getByRole("switch", { name: "Aktiv: Email" }) as HTMLButtonElement).disabled]).toEqual([true, true, true]);
     held.release();
-    await waitFor(() => expect(disabled("Bearbeiten: E-Mail")).toBe(false));
+    await waitFor(() => expect(disabled("Bearbeiten: Email")).toBe(false));
   });
 });
 
 describe("write ownership across section navigation", () => {
   async function leaveAndReturn(view: ReturnType<typeof renderRoutes>) {
     await view.router.navigate("/settings/autoHeal");
-    await waitFor(() => expect(screen.queryByRole("switch", { name: "Aktiv: E-Mail", hidden: true }) === null).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("switch", { name: "Aktiv: Email", hidden: true }) === null).toBe(true));
     await view.router.navigate("/settings/notifications");
-    await screen.findByRole("switch", { name: "Aktiv: E-Mail" });
+    await screen.findByRole("switch", { name: "Aktiv: Email" });
   }
 
   it("keeps a held toggle owning its provider after leaving and returning", async () => {
@@ -147,7 +147,7 @@ describe("write ownership across section navigation", () => {
     const view = renderRoutes(routes, ["/settings/notifications"], adapter);
     await userEvent.click(await screen.findByRole("switch", { name: "Aktiv: ntfy" }));
     await leaveAndReturn(view);
-    expect([disabled("Bearbeiten: ntfy"), disabled("Entfernen: ntfy"), (screen.getByRole("switch", { name: "Aktiv: ntfy" }) as HTMLButtonElement).disabled, disabled("Bearbeiten: E-Mail")]).toEqual([true, true, true, false]);
+    expect([disabled("Bearbeiten: ntfy"), disabled("Entfernen: ntfy"), (screen.getByRole("switch", { name: "Aktiv: ntfy" }) as HTMLButtonElement).disabled, disabled("Bearbeiten: Email")]).toEqual([true, true, true, false]);
     held.release();
     await waitFor(() => expect(disabled("Bearbeiten: ntfy")).toBe(false));
     const ntfy = (await adapter.listNotificationTargets()).find((t) => t.provider === "ntfy");
@@ -167,11 +167,7 @@ describe("write ownership across section navigation", () => {
     await userEvent.type(within(dialog).getByLabelText("Webhook-Adresse"), "https://chat.example.com/credential");
     await userEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
     await leaveAndReturn(view);
-    await waitFor(() => expect(disabled("Ziel hinzufügen")).toBe(false));
-    await userEvent.click(screen.getByRole("button", { name: "Ziel hinzufügen" }));
-    const again = await screen.findByRole("dialog");
-    expect([within(again).queryByRole("button", { name: "Google Chat" }) === null, within(again).queryByRole("button", { name: "Gotify" }) !== null]).toEqual([true, true]);
-    await userEvent.keyboard("{Escape}");
+    expect(disabled("Ziel hinzufügen")).toBe(true);
     held.release();
     await waitFor(() => expect(screen.queryByRole("switch", { name: "Aktiv: Google Chat" }) !== null).toBe(true));
   });
@@ -186,12 +182,12 @@ describe("write ownership across section navigation", () => {
     }
     renderWithApp(<Probe />, adapter);
     await waitFor(() => expect(owner !== undefined).toBe(true));
-    const first = owner!.write("ntfy", () => held.promise);
-    const results = await Promise.allSettled([owner!.write("ntfy", async () => "late"), owner!.write("email", async () => "other")]);
+    const first = owner!.write(1, () => held.promise);
+    const results = await Promise.allSettled([owner!.write(1, async () => "late"), owner!.write(2, async () => "other")]);
     expect([results[0].status === "rejected" && results[0].reason instanceof CancelledError, results[1].status === "fulfilled" && results[1].value]).toEqual([true, "other"]);
     held.release();
     await first;
-    await expect(owner!.write("ntfy", async () => "after")).resolves.toBe("after");
+    await expect(owner!.write(1, async () => "after")).resolves.toBe("after");
   });
 });
 

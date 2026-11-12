@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M14 container and host operation contracts.
 
 // Package container owns Docker container lifecycle, inspection, listing and
 // stats, plus the HTTP surface that exposes them.
 package container
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -44,7 +45,15 @@ func (m *Module) Service() *ContainerService {
 
 // RegisterRoutes mounts the container endpoints. A nil module still registers,
 // so OpenAPI spec generation can discover the routes without a service graph.
-func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppContext) {
+func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppContext, configs ...*config.Config) {
+	agent := len(configs) > 0 && configs[0] != nil && (configs[0].AgentMode || configs[0].EdgeAgent)
+	if !agent {
+		var svc *ContainerService
+		if m != nil {
+			svc = m.service
+		}
+		RegisterOrigins(api, svc)
+	}
 	if m == nil {
 		RegisterContainers(api, nil, nil, nil, nil, appCtx)
 		return
@@ -180,15 +189,8 @@ func RegisterContainers(
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermImagesCommit, h.CommitContainer)
 
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "redeploy-container",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/containers/{containerId}/redeploy",
-		Summary:     "Redeploy container",
-		Description: "Pull latest image and recreate container",
-		Tags:        []string{"Containers"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermContainersRedeploy, h.RedeployContainer)
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeRedeployContainer, huma.Operation{OperationID: "redeploy-container", Method: http.MethodPost, Path: "/environments/{id}/containers/{containerId}/redeploy", Tags: []string{"Containers"}, Security: handlerutil.DefaultOperationSecurity()})
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeRecreateContainer, huma.Operation{OperationID: "recreate-container", Method: http.MethodPost, Path: "/environments/{id}/containers/{containerId}/recreate", Tags: []string{"Containers"}, Security: handlerutil.DefaultOperationSecurity()})
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "generate-compose",
@@ -212,6 +214,7 @@ func RegisterContainers(
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "edit-container",
+		Deprecated:  true,
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/containers/{containerId}/edit",
 		Summary:     "Edit container",

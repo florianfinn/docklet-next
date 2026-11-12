@@ -20,19 +20,19 @@ afterEach(() => { localStorage.clear(); });
 
 it("renders one workspace listing error with a retry action", async () => {
   const refetch = vi.fn();
-  renderWithApp(<FolderView listing={{ isPending: false, isError: true, isPlaceholderData: false, error: new WorkspaceError("helper-incompatible"), refetch }} singleFile={false} onOpen={() => {}} onDownload={() => {}} onRename={() => {}} onDelete={() => {}} />);
+  renderWithApp(<FolderView listing={{ isPending: false, isError: true, isPlaceholderData: false, error: new WorkspaceError("helper-incompatible"), refetch }} singleFile={false} onOpen={() => {}} onDownload={() => {}} onRename={() => {}} onMove={() => {}} onDelete={() => {}} />);
   expect(screen.getAllByRole("alert").length).toBe(1);
   expect(screen.getByRole("alert").textContent).toContain("Hilfsimage ist inkompatibel");
   await userEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
   expect(refetch).toHaveBeenCalledOnce();
 });
 
-it("presents bind mounts neutrally without trying workspace reads", async () => {
+it("explains a refused bind without trying workspace reads", async () => {
   const adapter = createDemoAdapter();
   adapter.listFiles = vi.fn(async () => { throw new WorkspaceError("forbidden"); });
-  const volume = { id: "example~bind:/data", kind: "bind" } as Volume;
+  const volume = { id: "example~bind:2f657463", kind: "bind", bind: { kind: "directory", eligible: false, reason: "volume.bind.unsupported-type" } } as Volume;
   renderWithApp(<FileWorkspace volume={volume} />, adapter);
-  expect(screen.getByRole("status").textContent).toBe("Dateizugriff ist für Bind-Mounts nicht verfügbar.");
+  expect(screen.getByRole("status").textContent).toBe("Für diesen Bind-Mount werden Dateien und Backups nicht angeboten. Nur Verzeichnisse und reguläre Dateien werden unterstützt.");
   expect(screen.queryByRole("alert") === null).toBe(true);
   expect(adapter.listFiles).not.toHaveBeenCalled();
 });

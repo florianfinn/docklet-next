@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; typed host edit validation; pairing confirms without a status write.
 
 package environment
 
@@ -12,8 +12,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
-	"github.com/florianfinn/docklet-next/backend/internal/middleware"
-	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -65,7 +63,11 @@ func (h *EnvironmentHandler) createEnvironmentWithApiKeyInternal(ctx context.Con
 
 	created, err := h.environmentService.CreateEnvironment(ctx, env, &user.ID, &user.Username)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to create environment: " + err.Error())
+		var problem *environment.HostProblem
+		if errors.As(err, &problem) {
+			return nil, problem
+		}
+		return nil, huma.Error500InternalServerError("Failed to create environment")
 	}
 
 	// Generate API key for environment
@@ -125,7 +127,11 @@ func (h *EnvironmentHandler) createEnvironmentLegacyInternal(ctx context.Context
 
 	created, err := h.environmentService.CreateEnvironment(ctx, env, &user.ID, &user.Username)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to create environment: " + err.Error())
+		var problem *environment.HostProblem
+		if errors.As(err, &problem) {
+			return nil, problem
+		}
+		return nil, huma.Error500InternalServerError("Failed to create environment")
 	}
 
 	// Registry delivery is detached from the request and gated by agent compatibility.
@@ -178,6 +184,15 @@ func (h *EnvironmentHandler) GetEnvironment(ctx context.Context, input *GetEnvir
 // UpdateEnvironment updates an environment.
 func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *UpdateEnvironmentInput) (*handlerutil.Out[environment.Environment], error) {
 	isLocalEnv := input.ID == localDockerEnvironmentID
+	if input.Body.Color != nil {
+		var value any
+		if *input.Body.Color != nil {
+			value = **input.Body.Color
+		}
+		if err := validateHostColor(value); err != nil {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+	}
 	updates := h.buildUpdateMapInternal(&input.Body, isLocalEnv)
 
 	h.handleEnvironmentPairingInternal(ctx, input.ID, &input.Body, updates, isLocalEnv)
@@ -190,6 +205,10 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 	}
 	updated, updateErr := h.environmentService.UpdateEnvironment(ctx, input.ID, updates, userID, username)
 	if updateErr != nil {
+		var problem *environment.HostProblem
+		if errors.As(updateErr, &problem) {
+			return nil, problem
+		}
 		apiErr := common.ToAPIError(updateErr)
 		if apiErr.HTTPStatus() == http.StatusInternalServerError {
 			return nil, huma.Error500InternalServerError("Failed to update environment")
@@ -283,44 +302,6 @@ func (h *EnvironmentHandler) DeleteEnvironment(ctx context.Context, input *Delet
 	}, nil
 }
 
-// TestConnection tests connectivity to an environment.
-func (h *EnvironmentHandler) TestConnection(ctx context.Context, input *TestConnectionInput) (*handlerutil.Out[environment.Test], error) {
-	var apiUrl *string
-	if input.Body != nil {
-		apiUrl = input.Body.ApiUrl
-	}
-	if apiUrl != nil {
-		permissions, ok := middleware.PermissionsFromContext(ctx)
-		if !ok || !permissions.Allows(authz.PermEnvironmentsUpdate, "") {
-			return nil, huma.Error403Forbidden("permission denied: " + authz.PermEnvironmentsUpdate)
-		}
-	}
-
-	status, err := h.environmentService.TestConnection(ctx, input.ID, apiUrl)
-	resp := environment.Test{Status: status}
-	if err != nil {
-		if apiUrl == nil {
-			resp.Message = new(err.Error())
-		} else {
-			apiErr := common.ToAPIError(err)
-			err = huma.NewError(apiErr.HTTPStatus(), apiErr.Message)
-		}
-		return &handlerutil.Out[environment.Test]{
-			Body: base.ApiResponse[environment.Test]{
-				Success: false,
-				Data:    resp,
-			},
-		}, err
-	}
-
-	return &handlerutil.Out[environment.Test]{
-		Body: base.ApiResponse[environment.Test]{
-			Success: true,
-			Data:    resp,
-		},
-	}, nil
-}
-
 // UpdateHeartbeat updates the heartbeat for an environment.
 func (h *EnvironmentHandler) UpdateHeartbeat(ctx context.Context, input *UpdateHeartbeatInput) (*handlerutil.Out[base.MessageResponse], error) {
 	if err := h.environmentService.UpdateEnvironmentHeartbeat(ctx, input.ID); err != nil {
@@ -388,6 +369,12 @@ func (h *EnvironmentHandler) SyncEnvironment(ctx context.Context, input *SyncEnv
 
 func (h *EnvironmentHandler) buildUpdateMapInternal(req *environment.Update, isLocalEnv bool) map[string]any {
 	updates := map[string]any{}
+	if req.Color != nil {
+		updates["color"] = nil
+		if *req.Color != nil {
+			updates["color"] = **req.Color
+		}
+	}
 
 	if !isLocalEnv {
 		if req.ApiUrl != nil {
@@ -485,15 +472,8 @@ func (h *EnvironmentHandler) PairEnvironment(ctx context.Context, input *PairEnv
 		return nil, huma.Error400BadRequest("Environment is not in pending status")
 	}
 
-	updates := map[string]any{
-		"status": string(EnvironmentStatusPending),
-	}
-	_, err = h.environmentService.UpdateEnvironment(ctx, *envID, updates, nil, nil)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to update environment status", "environmentId", *envID, "error", err.Error())
-		return nil, huma.Error500InternalServerError("Failed to complete pairing")
-	}
-
+	// Pairing confirms the pending registration without a status write: only a
+	// compatibility check or a registration transition owns the host status.
 	slog.InfoContext(ctx, "Environment pairing completed", "environmentId", *envID, "environmentName", env.Name)
 	h.triggerEnvironmentResourceSyncInternal(ctx, *envID, env.Name, "environment pairing")
 

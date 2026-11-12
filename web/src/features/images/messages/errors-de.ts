@@ -2,11 +2,41 @@
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230.
+// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys.
 
 import { deBackend } from "@/data/messages/de";
+import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "candidate_unavailable": deBackend.errors.candidate.unavailable,
+  "candidate_deferred": deBackend.errors.candidate.deferred,
+  "update_candidate-changed": deBackend.errors.update["candidate-changed"],
+  "update_self-not-compose": "Diese Installation wird nicht mit Compose verwaltet. Verwende die manuellen Update-Befehle.",
+  "update_self-unsupported-layout": "Diese Compose-Konfiguration lässt sich nicht sicher übernehmen. Verwende die manuellen Update-Befehle.",
+  "update_self-custom-image": "Diese Installation verwendet ein eigenes Image oder einen veränderlichen Tag. Aktualisiere sie manuell.",
+  "update_self-failed": "Das Update ist fehlgeschlagen. Bewahre die vorherige Konfiguration auf und stelle sie manuell wieder her.",
+  "update_outcome-unknown": "Das Update-Ergebnis konnte nicht bestätigt werden. Prüfe den Host vor einem erneuten Versuch.",
+  "agent_unavailable": deBackend.errors.agent.unavailable,
+  "container_origin-locked": "Docklet verwaltet keine Updates für diesen Container.",
+  "container_recreate-ambiguous": "Der Ersatzcontainer konnte nicht eindeutig ermittelt werden.",
+  "container_recreate-recovered": "Der Ersatzcontainer wurde wiederhergestellt.",
+  "deploy_point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen.",
+  "settings_invalid-time-zone": "Wähle eine gültige Zeitzone.",
+  "update_service-coupled": "Dieser Dienst muss zusammen mit seinem Stack aktualisiert werden.",
+  "history_invalid-range": deBackend.errors.history["invalid-range"],
+  "history_sample-invalid": deBackend.errors.history["sample-invalid"],
+  "history_sample-too-large": deBackend.errors.history["sample-too-large"],
+  "history_unavailable": deBackend.errors.history["unavailable"],
+  "preferences_invalid": deBackend.errors.preferences["invalid"],
+  "preferences_no-user": deBackend.errors.preferences["no-user"],
+  "preferences_too-large": deBackend.errors.preferences["too-large"],
+  "preferences_unknown-section": deBackend.errors.preferences["unknown-section"],
+  "volume_workspace-busy": "Das Volume ist beschäftigt. Aktive Vorgänge abschließen und erneut versuchen.",
+  "backup_copy_mount-failed": "Das Archiv wurde lokal gespeichert, aber das Kopierziel konnte nicht eingebunden werden.",
+  "backup_copy_write-failed": "Das Archiv wurde lokal gespeichert, aber die Zielkopie ist fehlgeschlagen.",
+  "backup_copy_insufficient-space": "Das Archiv wurde lokal gespeichert. Für die Zielkopie ist nicht genügend Speicherplatz vorhanden.",
+
+  "host_restarting": deRunMessages.codes.host["restarting"],
   "update_permission-denied": deBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": deBackend.errors.update["schedule-owner-unset"],
   "autoheal_interrupted": deBackend.errors.autoheal["interrupted"],
@@ -54,7 +84,7 @@ export const deImageErrors = {
   "image_pull-failed": "Das Image konnte nicht gezogen werden. Referenz und gespeicherte Registry-Konfiguration prüfen.",
   "image_remove-failed": "Das Image konnte nicht entfernt werden.",
   "image_reserved-reference": "Diese Referenz ist für die interne Image-Aufbewahrung reserviert.",
-  "image_restore-point-protected": "Ein Wiederherstellungspunkt schützt dieses Image.",
+  "image_restore-point-protected": "Ein gespeichertes Wiederherstellungsimage schützt dieses Image.",
   "image_system-protected": "Dieses Image ist geschützt, weil Docklet es verwendet.",
   "image_tag-failed": "Der Image-Tag konnte nicht geändert werden.",
   "image_usage-unavailable": "Die Image-Nutzung konnte nicht geprüft werden. Kein Image gilt deshalb als ungenutzt.",

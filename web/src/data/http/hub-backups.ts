@@ -2,24 +2,25 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original HTTP mapping for the Hub backup UI in issue #32.
+// Deviations: Original HTTP mapping for the Hub backup UI in issue #32. M23 #391: shared problem-code decoding.
 
 import type { components, operations } from "@/api/generated/schema";
 import type { HubBackupApi, HubBackupAccess, HubBackupOperation, HubBackupPolicy, HubBackupRun } from "@/domain/hub-backup";
 
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { problemCode } from "./problem-code";
 
 type User = components["schemas"]["UserUser"];
 type Activity = operations["get-activity"]["responses"][200]["content"]["application/json"];
 
 function responseCode(body: unknown): string {
   if (!body || typeof body !== "object") return "http.error";
-  const value = body as { code?: unknown; detail?: unknown; title?: unknown };
-  for (const entry of [value.code, value.detail, value.title]) {
-    if (typeof entry === "string" && /^[a-z][a-z0-9_.-]+$/.test(entry)) return entry;
-  }
-  return "http.error";
+  // The shared decoder reads code, enveloped data.code and a coded problem detail; a coded title stays a fallback.
+  const shared = problemCode(body);
+  if (shared && /^[a-z][a-z0-9_.-]+$/.test(shared)) return shared;
+  const title = (body as { title?: unknown }).title;
+  return typeof title === "string" && /^[a-z][a-z0-9_.-]+$/.test(title) ? title : "http.error";
 }
 
 function error(body: unknown, status: number): AdapterOutcomeError {
@@ -32,7 +33,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function createHttpHubBackups(baseUrl: string, client: CsrfClient, uploadFactory: () => XMLHttpRequest = () => new XMLHttpRequest()): HubBackupApi {
+export function createHttpHubBackups(baseUrl: string, client: CsrfClient, uploadFactory: () => XMLHttpRequest = () => new XMLHttpRequest(), admit: () => Promise<void> = async () => {}): HubBackupApi {
   async function request(route: string, init?: RequestInit): Promise<unknown> {
     let response: Response;
     try {
@@ -90,8 +91,9 @@ export function createHttpHubBackups(baseUrl: string, client: CsrfClient, upload
       if (!isRecord(body) || !Array.isArray(body.policies)) throw error({ code: "backup.invalid_response" }, 200);
       return body.policies as HubBackupPolicy[];
     },
+    // Every save carries the copy target; an omitted target clears it (backend contract).
     async saveHubBackupPolicies(policies) {
-      const body = await request("/backups/policies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policies: policies.map(({ id, enabled, retentionCount, schedule }) => ({ ...(id ? { id } : {}), enabled, retentionCount, schedule })) }) });
+      const body = await request("/backups/policies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policies: policies.map(({ id, enabled, retentionCount, schedule, targetId }) => ({ ...(id ? { id } : {}), enabled, retentionCount, schedule, ...(targetId ? { targetId } : {}) })) }) });
       if (!isRecord(body) || !Array.isArray(body.policies)) throw error({ code: "backup.invalid_response" }, 200);
       return body.policies as HubBackupPolicy[];
     },
@@ -116,8 +118,8 @@ export function createHttpHubBackups(baseUrl: string, client: CsrfClient, upload
       if (!body?.activity || typeof body.activity.status !== "string") throw error({ code: "backup.invalid_response" }, 200);
       return body.activity.status;
     },
-    async createHubBackup() {
-      const body = await request("/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    async createHubBackup(policyId) {
+      const body = await request("/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(policyId ? { policyId } : {}) });
       if (!isRecord(body) || typeof body.id !== "string") throw error({ code: "backup.invalid_response" }, 200);
       return body as HubBackupRun;
     },
@@ -159,6 +161,8 @@ export function createHttpHubBackups(baseUrl: string, client: CsrfClient, upload
       return body as HubBackupOperation;
     },
     async downloadHubBackup(id) {
+      // The browser navigation bypasses fetch, so it takes the session's logout admission itself.
+      await admit();
       const link = document.createElement("a");
       link.href = `${baseUrl}/backups/${encodeURIComponent(id)}/download`;
       link.download = "";

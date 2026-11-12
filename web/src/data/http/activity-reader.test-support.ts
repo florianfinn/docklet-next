@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Controlled activity fetch and stream fixtures with explicit message kinds; transport labels are synthetic.
+// Deviations: Controlled activity fetch and stream fixtures with explicit message kinds; transport labels are synthetic. Simple-user management, assigned-stack access and mode-aware self-service.
 
 import { vi } from "vitest";
 import type { components } from "@/api/generated/schema";
@@ -46,6 +46,7 @@ export function activityFixture(isEdge = false, reverse = false) {
     let response: Response;
     if (path === "/api/capabilities") response = json(["listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })));
     else if (path === "/api/environments") response = json(state.hosts.map((id) => ({ id, name: id === "good" ? "Available example" : "Unavailable example", apiUrl: "https://agent.example.com", isEdge, enabled: true, status: "online" })), state.hubStatus);
+    else if (path === "/api/auth/me/api-keys") response = json([], state.authStatus);
     else if (path.startsWith("/api/auth/")) response = json(path.endsWith("/mode") ? { mode: "local" } : path.endsWith("/me") ? state.user : path.endsWith("/login") ? { user: state.user } : {}, state.authStatus);
     else if (path === "/api/settings/timezone") response = json({ timezone: "UTC" });
     else {

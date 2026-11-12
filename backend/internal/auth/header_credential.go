@@ -15,7 +15,7 @@ import (
 )
 
 // ValidateLocalHeaderCredential never falls back to browser cookies or proxy identity.
-// An invalid explicit credential returns an error so CLI clients can refresh after 401.
+// An invalid explicit credential returns an error so script clients can refresh after 401.
 func (m *AuthMiddleware) ValidateLocalHeaderCredential(req *http.Request) (bool, error) {
 	if m.authService == nil || m.authService.SignInMode() != "local" {
 		return false, nil

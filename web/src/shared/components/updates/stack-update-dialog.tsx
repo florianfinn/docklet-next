@@ -4,9 +4,14 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { useIsUser } from "@/data/use-principal";
+import { openActionDialog } from "@/features/activity/action-dialog-store";
 import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { formatDateTime } from "@/domain/format";
 
+import { useStack } from "@/data/queries";
+import { AdapterOutcomeError } from "@/data/capability";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { useUpdateAction } from "./use-update-action";
 
 import { useEffect, useState } from "react";
@@ -23,13 +28,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useImageError } from "@/features/images/use-image-error";
 import { UpdateUnavailable } from "./live-state";
 
-export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string; point?: UpdatePoint; onClose: () => void }) {
+export function StackUpdateDialog({ stackId, point, services: initialServices, onClose }: { stackId: string; point?: UpdatePoint; services?: string[]; onClose: () => void }) {
+  const user = useIsUser();
+  const stack = useStack(stackId);
+  const [service, setService] = useState(initialServices?.[0] ?? "*"), [wholeStackHint, setWholeStackHint] = useState(false);
   const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), errorText = useImageError();
   const read = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
   const write = useCapability(point ? "restoreRestorePoint" : "installStackUpdates", { kind: "stack", id: stackId });
   const points = useCapability("listRestorePoints", { kind: "stack", id: stackId });
   const baseline = useQuery({ queryKey: ["stack", stackId, "update-baseline"], queryFn: () => adapter.getUpdateBaseline!(stackId), enabled: read.available && !!adapter.getUpdateBaseline, staleTime: 0 });
-  const action = useUpdateAction(`${stackId}:${baseline.data?.targetIdentity}:${baseline.data?.savedRevision}`);
+  const action = useUpdateAction(`${stackId}:${baseline.data?.targetIdentity}:${baseline.data?.savedRevision}:${service}`);
   const [ack, setAck] = useState<string>(), [receipt, setReceipt] = useState<{ id: string; identity: string }>();
   const data = baseline.data;
   const runId = receipt?.identity === data?.targetIdentity ? receipt?.id : undefined;
@@ -42,14 +50,16 @@ export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string
       {!data.available && <p role="status">{errorText(data.code ?? "update.baseline-unavailable")}</p>}
       {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} /><span className="min-w-0 flex-1 break-all">{t("replace", { revision: data.savedRevision })}</span></label></>}
     </>}
+    {!point && <Select value={service} onValueChange={(v) => { setService(v); setWholeStackHint(false); action.reset(); }}><SelectTrigger aria-label={t("update")}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="*">{t("update")}</SelectItem>{(stack.data?.services ?? []).map((s) => <SelectItem key={s.name} value={s.name}>{t("service", { name: s.name })}</SelectItem>)}</SelectGroup></SelectContent></Select>}
+    {wholeStackHint && <p role="status">{t("wholeStack")}</p>}
     {action.error && <p role="alert">{action.error}</p>}
-    {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=deployments`}>{t("openRun", { id: runId })}</Link></p>}
-    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision }), (id) => setReceipt({ id, identity: data!.targetIdentity }))}>{t(point ? "restore" : "update")}</Button></div>
+    {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=${user ? "overview" : "deployments"}`} onClick={() => { if (user) openActionDialog(runId); }}>{t("openRun", { id: runId })}</Link></p>}
+    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(service === "*" ? {} : { services: [service] }) }), (id) => setReceipt({ id, identity: data!.targetIdentity }), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button></div>
   </DialogContent></Dialog>;
 }
 export function StackUpdateDialogController() {
-  const adapter = useAdapter(), location = useLocation(), [selection, setSelection] = useState<{ stackId: string; location: string }>();
-  useEffect(() => { const receive = (event: Event) => { const id = (event as CustomEvent<{ stackId?: unknown }>).detail?.stackId; if (typeof id === "string") setSelection({ stackId: id, location: location.key }); }; window.addEventListener("docklet:stack-update", receive); const off = identityLifetime(adapter).listen(() => setSelection(undefined)); return () => { off(); window.removeEventListener("docklet:stack-update", receive); }; }, [adapter, location.key]);
+  const adapter = useAdapter(), location = useLocation(), [selection, setSelection] = useState<{ stackId: string; services?: string[]; location: string }>();
+  useEffect(() => { const receive = (event: Event) => { const id = (event as CustomEvent<{ stackId?: unknown; services?: string[] }>).detail?.stackId; if (typeof id === "string") setSelection({ stackId: id, services: (event as CustomEvent<{ services?: string[] }>).detail.services, location: location.key }); }; window.addEventListener("docklet:stack-update", receive); const off = identityLifetime(adapter).listen(() => setSelection(undefined)); return () => { off(); window.removeEventListener("docklet:stack-update", receive); }; }, [adapter, location.key]);
   const stackId = selection?.location === location.key ? selection.stackId : undefined;
-  return stackId ? <StackUpdateDialog key={stackId} stackId={stackId} onClose={() => setSelection(undefined)} /> : null;
+  return stackId ? <StackUpdateDialog key={`${stackId}:${selection?.services?.join(",") ?? "*"}`} stackId={stackId} services={selection?.services} onClose={() => setSelection(undefined)} /> : null;
 }

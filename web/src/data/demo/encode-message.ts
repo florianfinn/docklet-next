@@ -1,3 +1,4 @@
+import { operationReasonKey } from "../operation-reason";
 import type { MessageCode } from "../message-code";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "../message-code";
 import type { ActionRun, OpsEvent, StackDetail } from "@/domain/model";
@@ -11,6 +12,8 @@ const plural = new Set([0, 1, 2, 3, 4, 8, 39, 40, 56, 57]);
 
 /** Convert demo prose to the same code and parameter shape used by a backend. */
 export function encodeDemoMessage(text: string): MessageCode {
+  const operation = operationReasonKey(text);
+  if (operation) return { code: `containers.operationReasons.${operation}`, params: {} };
   if (Object.hasOwn(EXACT_CODES, text)) return { code: `runMessages.exact.${EXACT_CODES[text]}`, params: {} };
   for (let i = 0; i < PATTERN_CODES.length; i++) {
     const match = text.match(PATTERNS[i]![0]);

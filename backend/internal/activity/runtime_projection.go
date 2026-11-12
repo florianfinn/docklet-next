@@ -67,5 +67,9 @@ func runtimeSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt) (activitytypes.
 	knowledge := runtimeKnowledgeInternal(row)
 	dto := activityToDTOInternal(&model)
 	dto.RuntimeKnowledge = &knowledge
-	return activitytypes.RuntimeSnapshot{Activity: dto, RuntimeKnowledge: knowledge}, nil
+	result, err := runtimeRecreateResult(row)
+	if err != nil {
+		return activitytypes.RuntimeSnapshot{}, err
+	}
+	return activitytypes.RuntimeSnapshot{Activity: dto, RuntimeKnowledge: knowledge, Result: result}, nil
 }

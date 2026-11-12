@@ -1,0 +1,13 @@
+// Source: docklet-next/issues/323
+// Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
+// Retrieved: 2026-11-01
+// License: Apache-2.0
+// Deviations: Original simple-user and personal-key catalogue.
+
+export const usersEn = {
+  title: "Users", description: "Manage sign-in and access to assigned stacks.", add: "Add user", name: "Username", administrator: "Administrator", user: "User", disabled: "Disabled", enabled: "Enabled", state: "State", assignments: "Assigned stacks", edit: "Edit", remove: "Delete", disable: "Disable", enable: "Enable", reset: "Reset password", initialValue: "Initial password", localHint: "The user must change this password at the first sign-in. Use at least 12 characters.", proxyHint: "The username must exactly match the reverse proxy identity. @ is allowed.", noneHint: "Users are inactive in No login mode. Stored users and assignments are kept.", save: "Save", cancel: "Cancel", editTitle: "Edit {name}", createTitle: "Add user", assignmentTitle: "Stack assignments for {name}", assign: "Assign stacks", none: "None", restricted: "Restricted", full: "Full", fullHint: "Full access can control the host through the Compose file; not a security boundary.", ownAdmin: "You cannot change your own administrator status.", ownAccount: "You cannot disable or delete your own account.", lastAdmin: "The last enabled administrator cannot be demoted, disabled or deleted.", empty: "No stacks assigned", confirmDelete: "Delete {name}?", deleteHint: "This deletes the user, their assignments, sessions and API keys.", error: "The change could not be saved. Check the values and try again.", loading: "Loading users …", retry: "Retry", resetTitle: "Reset password for {name}", proxyLogout: "Proxy logout address", noProxyLogout: "Sign out at your reverse proxy", stackLoadError: "Stack assignments could not be loaded.",
+};
+
+export const keysEn = {
+  title: "Personal API keys", hint: "Keys carry your current rights. Disabling your account or revoking a key blocks access.", unavailable: "API keys are not available in this sign-in mode.", name: "Name", prefix: "Prefix", expiry: "Expiry", lastUse: "Last use", never: "Never", noExpiry: "No expiry", add: "Create API key", revoke: "Revoke", confirm: "Revoke {name}?", revokeHint: "Applications using this key will lose access.", create: "Create", cancel: "Cancel", revealTitle: "Copy your API key", revealHint: "This secret is shown once. Copy it before closing.", copy: "Copy", copied: "Copied", close: "Close", empty: "No personal API keys", error: "The API key operation failed. Try again.", expiryHint: "Optional. The key expires at the start of this date in UTC.", loading: "Loading API keys …",
+};

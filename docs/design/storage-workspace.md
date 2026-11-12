@@ -61,8 +61,10 @@ but obtains a fresh plan and executes that exact candidate list.
 Scheduled prune keeps its separate recoverable plan: it selects volumes from
 Docker disk-usage reference counts and the internal/anonymous labels, without
 excluding non-local drivers or mount options. It does not re-check `createdAt`
-or hold the workspace lock, and stops helpers before removal. Alignment with
-the manual volume contract remains follow-up work for the scheduled-prune owner.
+and uses the volume delete path, which holds the workspace lock and stops idle
+helpers before removal. A busy workspace is skipped as `in-use` with the neutral
+`volume.workspace-busy` code. Driver, mount-option and identity alignment with the
+manual volume contract remains follow-up work for the scheduled-prune owner.
 If some candidates fail, manual and scheduled system prune retain successful
 removals in their result and completion log while reporting the failure.
 

@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/app/shell/free/FreeUserMenu.tsx
+// Revision: 15d018102fa64d9ac7fdd2b572848101f2495a8112d235dc3375056757d8476b
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Simple-user management, assigned-stack access and mode-aware self-service.
+
 import { ChevronsUpDown, Languages, LogOut, Moon, Settings2, Sun, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
@@ -39,7 +45,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
   const currentUser = useCurrentUser(adapter.kind === "http");
   const connected = adapter.kind === "http";
   const name = connected ? currentUser.data?.username ?? t("unknownName") : t(disconnected ? "unknownName" : "name");
-  const detail = connected ? t("role") : t(disconnected ? "unknownStatus" : "email");
+  const detail = connected ? t(currentUser.data?.isAdmin === false ? "userRole" : "role") : t(disconnected ? "unknownStatus" : "email");
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -69,17 +75,17 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
             {!disconnected && <DropdownMenuLabel className="font-normal">
               <span className="block text-xs text-muted-foreground">{t("signedInAs")}</span>
               <span className="block truncate text-sm font-medium">{connected ? name : t("email")}</span>
-              <span className="block truncate text-xs text-muted-foreground">{t("role")}</span>
+              <span className="block truncate text-xs text-muted-foreground">{t(currentUser.data?.isAdmin === false ? "userRole" : "role")}</span>
             </DropdownMenuLabel>}
             {!disconnected && <DropdownMenuSeparator />}
             <DropdownMenuItem onSelect={() => go("/profile")}>
               <UserRound />
               {t("profile")}
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => go("/settings")}>
+            {currentUser.data?.isAdmin !== false && <DropdownMenuItem onSelect={() => go("/settings")}>
               <Settings2 />
               {t("settings")}
-            </DropdownMenuItem>
+            </DropdownMenuItem>}
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="py-1 text-xs font-normal text-muted-foreground">{t("theme")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={tokens.theme} onValueChange={(v) => setTokens({ theme: v === "light" ? "light" : "dark" })}>
@@ -103,7 +109,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
             </DropdownMenuRadioGroup>}
             {!disconnected && <DropdownMenuSeparator />}
             <LabMenuItem />
-            {!disconnected && (adapter.kind === "demo" || mode.data === "local") && <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
+            {!disconnected && (mode.data === "local" || mode.data === "proxy") && <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
               <LogOut />
               {t("logout")}
             </DropdownMenuItem>}

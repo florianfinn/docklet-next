@@ -25,6 +25,13 @@ export function withoutSystem<T extends { dockerLabels?: Readonly<Record<string,
 
 /** Agent container as reported for the host details; never part of stack or container lists. */
 export interface SystemComponent {
+  /** Production metadata is reported without inventing Docker inspect fields. */
+  metadataOnly?: boolean;
+  agentVersion?: string;
+  contractVersion?: number;
+  toolsImage?: string;
+  updateRequired?: boolean;
+  errorCode?: string;
   hostId: string;
   role: SystemRole;
   containerName: string;

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -20,7 +20,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
-	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 )
@@ -40,11 +39,17 @@ type GetAllNotificationSettingsOutput struct {
 
 type GetNotificationSettingsInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
-	Provider      string `path:"provider" doc:"Provider"`
+	TargetID      uint   `path:"targetId" doc:"Notification target ID"`
 }
 
 type GetNotificationSettingsOutput struct {
 	Body notification.Response
+}
+
+type UpdateNotificationSettingsInput struct {
+	EnvironmentID string `path:"id"`
+	TargetID      uint   `path:"targetId"`
+	Body          notification.Update
 }
 
 type CreateOrUpdateNotificationSettingsInput struct {
@@ -58,12 +63,12 @@ type CreateOrUpdateNotificationSettingsOutput struct {
 
 type DeleteNotificationSettingsInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
-	Provider      string `path:"provider" doc:"Provider"`
+	TargetID      uint   `path:"targetId" doc:"Notification target ID"`
 }
 
 type TestNotificationInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
-	Provider      string `path:"provider" doc:"Provider"`
+	TargetID      uint   `path:"targetId" doc:"Notification target ID"`
 	Type          string `query:"type" default:"simple"`
 }
 
@@ -116,6 +121,7 @@ func (h *NotificationHandler) GetAllNotificationSettings(ctx context.Context, in
 	responses := make([]notification.Response, len(settings))
 	for i, setting := range settings {
 		responses[i] = notification.Response{
+			Name:           setting.Name,
 			ID:             setting.ID,
 			Provider:       notification.Provider(setting.Provider),
 			Enabled:        setting.Enabled,
@@ -131,14 +137,13 @@ func (h *NotificationHandler) GetNotificationSettings(ctx context.Context, input
 	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
-	provider := notifications.NotificationProvider(input.Provider)
-
-	settings, err := h.notificationService.GetSettingsByProvider(ctx, provider)
+	settings, err := h.notificationService.GetSettingsByID(ctx, input.TargetID)
 	if err != nil {
-		return nil, huma.Error404NotFound("Settings not found")
+		return nil, err
 	}
 
 	response := notification.Response{
+		Name:           settings.Name,
 		ID:             settings.ID,
 		Provider:       notification.Provider(settings.Provider),
 		Enabled:        settings.Enabled,
@@ -158,12 +163,18 @@ func (h *NotificationHandler) CreateOrUpdateNotificationSettings(ctx context.Con
 		return nil, huma.Error400BadRequest("invalid provider")
 	}
 
-	settings, err := h.notificationService.CreateOrUpdateSettings(
-		ctx,
-		provider,
-		input.Body.Enabled,
-		database.JSON(input.Body.Config),
-	)
+	return h.saveTarget(ctx, 0, input.Body)
+}
+
+func (h *NotificationHandler) UpdateNotificationSettings(ctx context.Context, input *UpdateNotificationSettingsInput) (*CreateOrUpdateNotificationSettingsOutput, error) {
+	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
+		return nil, err
+	}
+	return h.saveTarget(ctx, input.TargetID, input.Body)
+}
+
+func (h *NotificationHandler) saveTarget(ctx context.Context, id uint, input notification.Update) (*CreateOrUpdateNotificationSettingsOutput, error) {
+	settings, err := h.notificationService.SaveTarget(ctx, id, input)
 	if err != nil {
 		if p, ok := errors.AsType[*notification.Problem](err); ok {
 			return nil, p
@@ -176,6 +187,7 @@ func (h *NotificationHandler) CreateOrUpdateNotificationSettings(ctx context.Con
 	}
 
 	response := notification.Response{
+		Name:           settings.Name,
 		ID:             settings.ID,
 		Provider:       notification.Provider(settings.Provider),
 		Enabled:        settings.Enabled,
@@ -190,10 +202,8 @@ func (h *NotificationHandler) DeleteNotificationSettings(ctx context.Context, in
 	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
-	provider := notifications.NotificationProvider(input.Provider)
-
-	if err := h.notificationService.DeleteSettings(ctx, provider); err != nil {
-		return nil, huma.Error500InternalServerError("Failed to delete notification settings: " + err.Error())
+	if err := h.notificationService.DeleteSettings(ctx, input.TargetID); err != nil {
+		return nil, err
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -208,17 +218,19 @@ func (h *NotificationHandler) TestNotification(ctx context.Context, input *TestN
 	if err := h.rejectHubRoute(input.EnvironmentID); err != nil {
 		return nil, err
 	}
-	provider := notifications.NotificationProvider(input.Provider)
+	if _, err := h.notificationService.GetSettingsByID(ctx, input.TargetID); err != nil {
+		return nil, err
+	}
 	testType := normalizeNotificationTestType(input.Type)
 	if !isSupportedNotificationTestType(testType) {
 		return nil, huma.Error400BadRequest("invalid notification test type")
 	}
 
-	if _, loaded := h.notificationService.tests.LoadOrStore(provider, true); loaded {
+	if _, loaded := h.notificationService.tests.LoadOrStore(input.TargetID, true); loaded {
 		return nil, &notification.Problem{Code: "notification.test-busy", Status: 409}
 	}
-	defer h.notificationService.tests.Delete(provider)
-	warning, err := h.notificationService.TestNotification(ctx, input.EnvironmentID, provider, testType)
+	defer h.notificationService.tests.Delete(input.TargetID)
+	warning, err := h.notificationService.TestNotification(ctx, input.EnvironmentID, input.TargetID, testType)
 	code, reason := "notification.test-sent", ""
 	if err != nil {
 		code = "notification.test-failed"

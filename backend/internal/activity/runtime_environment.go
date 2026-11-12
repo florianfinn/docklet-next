@@ -68,6 +68,9 @@ func (s *RuntimeService) RemoveEnvironment(ctx context.Context, environment stri
 		if err := tx.Model(&RuntimeReceipt{}).Where("environment_id = ? AND final_write_at < ?", environment, now).UpdateColumn("final_write_at", now).Error; err != nil {
 			return err
 		}
+		if err := tx.Exec("DELETE FROM container_origin_overrides WHERE registration_id=?", environment).Error; err != nil {
+			return err
+		}
 		return remove(tx)
 	})
 }

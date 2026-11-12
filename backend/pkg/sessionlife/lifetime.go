@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original session-bound viewer and browser identity lifecycle implementation.
+// Deviations: Original session-bound viewer and browser identity lifecycle implementation; M15 simple-user rights and identity contracts.
 
 // Package sessionlife binds viewer lifetimes to durable browser sessions without
 // coupling transport packages to authentication or database implementations.
@@ -23,7 +23,7 @@ type contextKey struct{}
 // WithSession carries only a local revocation key and durable validator. It is
 // never serialized or forwarded to an agent.
 func WithSession(ctx context.Context, sessionID, userID string, validate func(context.Context) error) context.Context {
-	if sessionID == "" {
+	if sessionID == "" && userID == "" {
 		return ctx
 	}
 	return context.WithValue(ctx, contextKey{}, &binding{sessionID, userID, validate})

@@ -1,12 +1,12 @@
 import { HISTORY_LIMITS } from "@/domain/activity-history";
-import type { HubSettings } from "@/domain/settings";
+import { LOAD_ALERT_DEFAULTS, type HubSettings } from "@/domain/settings";
 
 import { daysAgo } from "./time";
 
 /** Synthetic hub settings; example domains and RFC 5737 addresses only. */
 export const SETTINGS: HubSettings = {
   setupCompleted: true,
-  general: { hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "https://docklet.example.com", linkBase: "auto", timeZone: "Europe/Berlin" },
+  general: { stackStopMode: "down", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "https://docklet.example.com", linkBase: "auto", timeZone: "Europe/Berlin" },
   auth: {
     mode: "local",
     local: { username: "admin", passwordSet: true },
@@ -30,6 +30,7 @@ export const SETTINGS: HubSettings = {
         hasSecret: false,
         createdAt: daysAgo(10),
         configVersion: 1,
+        delivery: [{ hostId: "atlas", state: "current" }],
         checks: [{
           hostId: "atlas",
           activityId: "test",
@@ -52,6 +53,7 @@ export const SETTINGS: HubSettings = {
         hasSecret: true,
         createdAt: daysAgo(10),
         configVersion: 1,
+        delivery: [{ hostId: "atlas", state: "current" }],
         checks: [{
           hostId: "atlas",
           activityId: "test",
@@ -73,6 +75,7 @@ export const SETTINGS: HubSettings = {
         hasSecret: false,
         createdAt: daysAgo(10),
         configVersion: 1,
+        delivery: [{ hostId: "atlas", state: "current" }],
         checks: [{
           hostId: "atlas",
           activityId: "test",
@@ -91,11 +94,12 @@ export const SETTINGS: HubSettings = {
         path: "/mnt/backup-disk/docklet",
         hasSecret: false,
         configVersion: 1,
+        delivery: [{ hostId: "boreal", state: "current" }],
         createdAt: daysAgo(10),
         checks: [],
       },
     ],
   },
   security: { scanEnabled: true, schedule: { mode: "daily", time: "03:00" } },
-  activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: true, actionPresentation: "dialog" },
+  activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: true, actionPresentation: "dialog", loadAlerts: { ...LOAD_ALERT_DEFAULTS } },
 };

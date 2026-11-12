@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; update joins match equivalent image reference spellings.
 
 // Package details derives project runtime state: service status from Compose
 // and containers, include files, logs and image update checks.
@@ -282,21 +282,29 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 	result := make(map[string]*imagetypes.UpdateInfo, len(base))
 	maps.Copy(result, base)
 	// Shared image results are dropped for references used only by services
-	// that opted out of update checks.
+	// that opted out of update checks; spellings are compared normalized.
 	monitored := make(map[string]bool)
 	for _, service := range services {
 		imageRef := strings.TrimSpace(service.Image)
 		if imageRef == "" {
 			continue
 		}
-		monitored[imageRef] = monitored[imageRef] || !imageref.IsUpdateCheckDisabled(service.ContainerLabels)
+		if _, ok := result[imageRef]; !ok {
+			if info := UpdateInfoForRef(base, imageRef); info != nil {
+				result[imageRef] = info
+			}
+		}
+		key := NormalizedImageRef(imageRef)
+		monitored[key] = monitored[key] || !imageref.IsUpdateCheckDisabled(service.ContainerLabels)
 	}
-	for imageRef, isMonitored := range monitored {
-		if !isMonitored {
+	for imageRef := range result {
+		if isMonitored, ok := monitored[NormalizedImageRef(imageRef)]; ok && !isMonitored {
 			delete(result, imageRef)
 		}
 	}
-	seen := make(map[string]bool)
+	// A scoped result replaces every equivalent spelling, so no stale shared
+	// result under another spelling can win a later normalized lookup.
+	seen := make(map[string]string)
 	for _, service := range services {
 		info := scoped[service.ContainerID]
 		if info == nil {
@@ -306,24 +314,47 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 		if imageRef == "" {
 			continue
 		}
+		key := NormalizedImageRef(imageRef)
 		merged := *info
-		if seen[imageRef] {
-			previous := result[imageRef]
-			merged.HasUpdate = merged.HasUpdate || previous.HasUpdate
-			if previous.CheckTime.After(merged.CheckTime) {
-				merged.CheckTime = previous.CheckTime
-			}
-			if previous.LatestVersion != merged.LatestVersion || previous.LatestDigest != merged.LatestDigest || previous.UpdateType != merged.UpdateType {
-				merged.LatestVersion, merged.LatestDigest, merged.UpdateType = "", "", ""
-			}
-			if merged.Error == "" {
-				merged.Error = previous.Error
+		if written, ok := seen[key]; ok {
+			// Replicas never mix state from one observation with hasUpdate from
+			// another. Replicas that disagree on the candidate keep the update but
+			// choose no version.
+			imageRef = written
+			merged = mergeReplicaObservation(info, result[imageRef])
+		} else {
+			for existing := range result {
+				if existing != imageRef && NormalizedImageRef(existing) == key {
+					delete(result, existing)
+				}
 			}
 		}
 		result[imageRef] = &merged
-		seen[imageRef] = true
+		seen[key] = imageRef
 	}
 	return result
+}
+
+// mergeReplicaObservation prefers the replica that still needs its update,
+// then the newer check.
+func mergeReplicaObservation(candidate, previous *imagetypes.UpdateInfo) imagetypes.UpdateInfo {
+	if candidate.HasUpdate != previous.HasUpdate {
+		if candidate.HasUpdate {
+			return *candidate
+		}
+		return *previous
+	}
+	merged := *previous
+	if candidate.CheckTime.After(previous.CheckTime) {
+		merged = *candidate
+	}
+	if candidate.HasUpdate && (candidate.LatestVersion != previous.LatestVersion || candidate.LatestDigest != previous.LatestDigest || candidate.UpdateType != previous.UpdateType) {
+		merged.LatestVersion, merged.LatestDigest, merged.UpdateType = "", "", ""
+	}
+	if merged.Error == "" {
+		merged.Error = cmp.Or(candidate.Error, previous.Error)
+	}
+	return merged
 }
 
 // ConfiguredRuntimeServiceUpdateInfo binds runtime checks to the current Compose

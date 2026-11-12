@@ -63,6 +63,15 @@ function headerRecord(file) {
     )
   );
 }
+// An inline provenance header comes first: only blank or comment lines may precede its Source field. The whole file is
+// searched, since a sidecar can supply the record while an inline header sits further down.
+const HEADER_LEAD = /^\s*(?:\/\/|#|\/\*|\*|--|<!--|\{\{\/\*)/;
+function headerOrdered(file) {
+  if (file.content.includes(0)) return true;
+  const lines = file.content.toString("utf8").split(/\r\n|\r|\n/);
+  const at = lines.findIndex((line) => /^(?:\/\/|--|#|\*)? ?Source: /.test(line));
+  return at < 0 || lines.slice(0, at).every((line) => !line.trim() || HEADER_LEAD.test(line));
+}
 export function sizeProblems(
   list, policy, previous = { adopted: {} }, previousCounts = {}, provenance = {}, origins = new Map(),
 ) {
@@ -133,6 +142,7 @@ export function provenanceProblems(list, policy) {
       findings.push({ path: file.path, category: "migration-provenance-sidecar" });
     const record = sidecars.get(file.path) ?? headerRecord(file);
     if (!validProvenance(record)) findings.push({ path: file.path, category: "provenance-header" });
+    if (!headerOrdered(file)) findings.push({ path: file.path, category: "provenance-header-order" });
     if (sidecars.has(file.path) && record.sha256 !== sha256(file.content))
       findings.push({ path: file.path, category: "provenance-hash" });
     if (file.path.startsWith(MIGRATION_PREFIX) && sidecars.has(file.path)) {

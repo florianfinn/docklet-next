@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { parse } from "yaml";
 
 import type { NetworkAttachment, Topology, TopologyDependency, TopologyNetwork } from "@/domain/model";
@@ -144,7 +145,7 @@ export function createNetworksApi(ctx: DemoContext): NetworksApi & HubApi {
   }
 
   function online(hostId: string): void {
-    if (db.host(hostId)?.status !== "online") throw new DemoError("host-offline");
+    if (!isHostAvailable(db.host(hostId))) throw new DemoError("host-offline");
   }
 
   function commit(event: string, hostId: string): void {

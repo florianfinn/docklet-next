@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 // Which volumes a prune removes. The same rule builds the preview and is
 // applied again per volume when the prune runs.
 
@@ -18,7 +19,7 @@ export interface VolumePrunePlan {
 
 /** Bind mounts belong to the host; consumers count whether their container runs or not. */
 export function pruneBlock(v: Pick<Volume, "kind" | "consumers">, host: Pick<Host, "status"> | undefined): PruneSkipReason | undefined {
-  if (host?.status !== "online") return "host-offline";
+  if (!isHostAvailable(host)) return "host-offline";
   if (v.kind === "bind") return "bind";
   if (v.consumers.length > 0) return "in-use";
   return undefined;
@@ -26,7 +27,7 @@ export function pruneBlock(v: Pick<Volume, "kind" | "consumers">, host: Pick<Hos
 
 export function planVolumePrune(volumes: readonly Volume[], hosts: readonly Pick<Host, "id" | "status">[], hostIds: readonly string[]): VolumePrunePlan {
   const scope = hosts.filter((h) => hostIds.includes(h.id));
-  const online = new Set(scope.filter((h) => h.status === "online").map((h) => h.id));
+  const online = new Set(scope.filter((h) => isHostAvailable(h)).map((h) => h.id));
   const candidates: Volume[] = [];
   const kept: VolumePrunePlan["kept"] = [];
   for (const v of volumes) {

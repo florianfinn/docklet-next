@@ -93,6 +93,29 @@ describe.each([{ transport: "Direct", isEdge: false }, { transport: "Edge", isEd
     expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
   });
 
+  it.each(["en-US", "de"] as const)("titles only a provably partial host in the host picker in %s", async (locale) => {
+    setAppLocale(locale);
+    const f = topologyFixture(isEdge);
+    const view = page(f, "first");
+    await settled(4);
+    const radio = () => screen.getByRole("radio", { name: "second" });
+    const stale = () => radio().querySelector("svg.text-warning") !== null;
+    expect(radio().hasAttribute("title")).toBe(false);
+    // A failed list keeps complete retained rows: stale, but not a partial read.
+    f.failures.add("/api/environments/second/networks");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
+    await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("1"));
+    expect(stale()).toBe(true);
+    expect(radio().hasAttribute("title")).toBe(false);
+    f.failures.clear();
+    f.failures.add("/api/environments/second/networks/missing");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
+    await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("2"));
+    const partial = locale === "de" ? "Bei second sind Netzwerklesevorgänge fehlgeschlagen" : "second: Some network reads failed";
+    expect(radio().getAttribute("title")?.startsWith(partial)).toBe(true);
+    expect(view.router.state.location.search).toBe("?host=first");
+  });
+
   it.each(["en-US", "de"] as const)("uses the conservative notice for ambiguous timestamp-free all-detail failures in %s", async (locale) => {
     setAppLocale(locale);
     const f = topologyFixture(isEdge);

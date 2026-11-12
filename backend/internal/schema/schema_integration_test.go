@@ -2,7 +2,7 @@
 // Revision: b3607be5144101152c8eb7738d389e8c73986fba
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Bidirectional SQLite schema proof and independent retained-integrity assertions.
+// Deviations: Bidirectional SQLite schema proof and independent retained-integrity assertions; M19 target-name collation and condition persistence.
 
 package schema
 
@@ -103,10 +103,11 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, model.AutoMigrate(Models()...))
 	require.NoError(t, ApplyIntegrity(model))
-	require.NoError(t, model.Exec("CREATE TABLE docklet_database_metadata (identity TEXT PRIMARY KEY NOT NULL CHECK (identity = 'docklet-next:sqlite:1'))").Error)
+	require.NoError(t, model.Exec("CREATE TABLE docklet_database_metadata (identity TEXT PRIMARY KEY NOT NULL CHECK (identity = 'docklet-next:sqlite:2'))").Error)
 	actual, err := migrated.SQLDB()
 	require.NoError(t, err)
 	require.Equal(t, catalog(t, pool), catalog(t, actual))
+	require.False(t, migrated.Migrator().HasTable("webhooks"))
 	require.Empty(t, sqlRows(t, actual, "PRAGMA foreign_key_check"))
 	require.Equal(t, [][]string{{"ok"}}, sqlRows(t, actual, "PRAGMA integrity_check"))
 	var expected [][]string
@@ -179,6 +180,10 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 		}
 	}
 	for table := range tableSQL {
+		if table == "settings" {
+			require.Equal(t, [][]string{{"updateNotify", "false"}, {"vulnerabilityScanSchedule", `{"mode":"manual"}`}}, sqlRows(t, actual, "SELECT key,value FROM settings ORDER BY key"))
+			continue
+		}
 		if table == "docklet_database_metadata" {
 			continue
 		}

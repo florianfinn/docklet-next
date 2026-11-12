@@ -2,8 +2,10 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live host schedule and count retention editor.
+// Deviations: Original live host schedule and count retention editor; manual mode is the only disabled-plan control (#291). M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19: total contract-code catalogue maps.
 
+import { BACKUP_TARGET_KIND_KEYS } from "@/data/wire-catalogue-states";
+import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { useState } from "react";
 import { Link } from "react-router";
 import { useLocale, useTranslations } from "use-intl";
@@ -20,6 +22,7 @@ import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { useVolumeCapability } from "../use-volume-capability";
+import { customCron, withMode } from "./schedule-mode";
 
 export function BackupPolicyCard({
   volume,
@@ -33,6 +36,7 @@ export function BackupPolicyCard({
   hostOnline: boolean;
 }) {
   const locale = useLocale();
+  const hubTimeZone = useHubTimeZone();
   const t = useTranslations("volumes.backups"),
     ts = useTranslations("common.schedule"),
     all = useTranslations();
@@ -65,6 +69,7 @@ export function BackupPolicyCard({
     }
   }
   const schedule = draft.schedule;
+  const custom = customCron(schedule);
   const timeZone = volume.timeZone || "UTC";
   return <Card className="gap-3 py-4">
     <CardHeader><CardTitle>{t("policy")}</CardTitle></CardHeader>
@@ -75,17 +80,14 @@ export function BackupPolicyCard({
             .format(new Date(volume.backup.nextRunAt))
           : t("nextManual")} · {timeZone}
       </p>
-      <Field orientation="horizontal">
-        <Switch id="bk-enabled" checked={draft.enabled} onCheckedChange={(enabled) => patch({ enabled })} />
-        <FieldLabel htmlFor="bk-enabled">{t("enabled")}</FieldLabel>
-      </Field>
+      {volume.timeZone && timeZone !== hubTimeZone && <p className="text-xs text-muted-foreground">{t("hostZoneHint", { host: timeZone, hub: hubTimeZone })}</p>}
       <Field>
         <FieldLabel htmlFor="bk-target">{t("target")}</FieldLabel>
         <Select value={draft.targetId} onValueChange={(targetId) => patch({ targetId })}>
           <SelectTrigger id="bk-target" className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
             {targets.map((target) => <SelectItem key={target.id} value={target.id}>
-              {target.name} · {t(`targetKinds.${target.kind}`)}
+              {target.name} · {all(BACKUP_TARGET_KIND_KEYS[target.kind])}
             </SelectItem>)}
           </SelectContent>
         </Select>
@@ -93,8 +95,16 @@ export function BackupPolicyCard({
           <Link to="/settings/backups" className="text-primary-text hover:underline">{t("manageTargets")}</Link>
         </FieldDescription>
       </Field>
-      {schedule.mode === "custom" ? <div className="space-y-2">
-        <p>{t("customSchedule")}: <code>{schedule.cron}</code></p>
+      {schedule.mode === "custom" || custom ? <div className="space-y-2">
+        {/* Manual pauses the custom plan and keeps its cron for a later switch back. */}
+        <SegmentedToggle
+          label={ts("recurrence.label")}
+          value={schedule.mode === "custom" ? "custom" : "manual"}
+          onChange={(mode: "manual" | "custom") => patch(mode === "custom" ? { enabled: true, schedule: { mode, cron: custom! } } : withMode(schedule, mode))}
+          options={[{ value: "manual" as const, label: ts("manual") }, { value: "custom" as const, label: t("customSchedule") }]}
+          wrap
+        />
+        <p>{t("customSchedule")}: <code>{custom}</code></p>
         <Button variant="outline" onClick={() => patch({ schedule: { mode: "daily", time: "03:00" } })}>
           {t("replaceSchedule")}
         </Button>
@@ -102,17 +112,7 @@ export function BackupPolicyCard({
         <SegmentedToggle
           label={ts("recurrence.label")}
           value={schedule.mode}
-          onChange={(mode: "manual" | "daily" | "weekly") => patch({
-            schedule: mode === "manual"
-              ? { mode }
-              : mode === "daily"
-                ? { mode, time: schedule.mode === "manual" ? "03:00" : schedule.time }
-                : {
-                    mode,
-                    day: schedule.mode === "weekly" ? schedule.day : "sun",
-                    time: schedule.mode === "manual" ? "03:00" : schedule.time,
-                  },
-          })}
+          onChange={(mode: "manual" | "daily" | "weekly") => patch(withMode(schedule, mode))}
           options={(["manual", "daily", "weekly"] as const).map((mode) => ({
             value: mode,
             label: mode === "manual" ? ts("manual") : ts(`recurrence.${mode}`),

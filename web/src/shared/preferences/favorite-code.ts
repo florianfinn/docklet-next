@@ -76,7 +76,7 @@ function cleanUiStyle(raw: unknown): UiStyle {
 
 function cleanDashboard(raw: unknown): DesignSnapshot["dashboard"] {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const merged = mergeLayout({ order: Array.isArray(r.order) ? r.order : DEFAULT_LAYOUT.order, hidden: Array.isArray(r.hidden) ? r.hidden : DEFAULT_LAYOUT.hidden, sizes: r.sizes && typeof r.sizes === "object" ? r.sizes : {}, services: DEFAULT_LAYOUT.services }, DEFAULT_LAYOUT);
+  const merged = mergeLayout({ order: Array.isArray(r.order) ? r.order : DEFAULT_LAYOUT.order, hidden: Array.isArray(r.hidden) ? r.hidden : DEFAULT_LAYOUT.hidden, sizes: r.sizes && typeof r.sizes === "object" ? r.sizes : {} }, DEFAULT_LAYOUT);
   return { order: merged.order, hidden: merged.hidden, sizes: merged.sizes };
 }
 
@@ -187,7 +187,7 @@ export function applySnapshot(raw: DesignSnapshot): SectionId[] {
   if (s.visual) visualStyleStore.set(s.visual);
   if (s.dashboard) {
     const dashboard = s.dashboard;
-    layoutStore.set((l) => mergeLayout({ ...dashboard, services: l.services }, DEFAULT_LAYOUT));
+    layoutStore.set(() => mergeLayout(dashboard, DEFAULT_LAYOUT));
   }
   if (s.fleet) {
     const fleet = s.fleet;

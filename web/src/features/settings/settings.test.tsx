@@ -133,7 +133,7 @@ describe("hub settings", () => {
     await waitFor(async () => expect((await adapter.listNotificationTargets()).map((t) => t.provider)).toEqual(["email", "ntfy", "gotify"]));
     const gotify = (await adapter.listNotificationTargets()).find((t) => t.provider === "gotify");
     expect(gotify?.kind === "target" ? [gotify.config.token, gotify.credentialsSet, gotify.events] : undefined).toEqual(["", ["token"], ["deployFailed", "hostOffline", "backupFailed", "autoHeal"]]);
-    expect((await adapter.testNotificationTarget("gotify")).code).toBe("notification.test-sent");
+    expect((await adapter.testNotificationTarget(gotify!.id)).code).toBe("notification.test-sent");
     expect(screen.queryByRole("dialog") === null).toBe(true);
   });
 });

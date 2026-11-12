@@ -1,13 +1,24 @@
-import { vulnerabilityTransport } from "./vulnerability-transport";
-import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
-import { createStackUpdates } from "./stack-updates";
-import { createImageCommands } from "./image-commands";
-import { createRegistryCommands } from "./registry-commands";
 // Source: docklet-next/docs/design/adapter-live-capabilities.md
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211).
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+
+import { createSelfUpdates } from "./self-update";
+import { inventoryReadBudget } from "./host-read-deadline";
+import { skipReason, skipsReads } from "./host-read-policy";
+import { inventoryId } from "./inventory-mapping";
+import { createImageMetadata } from "./image-metadata";
+import { createStackImport } from "./stack-import";
+import { createScheduleReader } from "./inventory-schedule";
+import { createInventoryOwner } from "./inventory-owner";
+import { freshFrom } from "../refresh-owner";
+import { vulnerabilityTransport } from "./vulnerability-transport";
+import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
+import { createUpdateSettings } from "./update-settings";
+import { createStackUpdates } from "./stack-updates";
+import { createImageCommands } from "./image-commands";
+import { createRegistryCommands } from "./registry-commands";
 
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
@@ -19,27 +30,43 @@ import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type Capabil
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
+import { backupAccess } from "@/domain/volumes";
 import { createMetricsReader, type MetricsSocket } from "./metrics";
 import { createObservedHostImageReader, createResourceReader } from "./resources";
+import type { CurrentUser } from "../api";
+import { createHttpUsers, USER_OPERATIONS } from "./users";
+import { createUserInventory } from "./user-inventory";
 import { createInventoryReader } from "./inventory";
+import { createConditionReader } from "./runtime-conditions";
 import { mapHost } from "./hosts";
+import { createSystemComponents } from "./system-components";
+import { createHostRestarts } from "./host-restarts";
+import { createHostChecks } from "./host-checks";
 import { createHostCommands } from "./host-commands";
-import { mapEvent } from "./map-dto";
+import { mapEvent, mapStatus } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
-import { createCsrfClient } from "./csrf-client";
+import { createHttpHistory, createHttpUiPreferences } from "./history";
+import { createHttpServiceWidgets } from "./service-widgets";
+import { problemCode } from "./problem-code";
+import { createTransportChain } from "./transport-chain";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
-import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
+import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
+import { createVulnerabilityCandidates } from "./vulnerability-candidates";
+import { createVulnerabilityAdvisories } from "./vulnerability-advisory";
 import { registerIdentityLifetime } from "../identity-lifetime";
-import { createIdentityReads } from "./identity-reads";
 import { activityDeadline } from "./activity-deadline";
 import { createActivityTargets } from "./activity-targets";
 import { mapActivityDetail } from "./map-dto";
 import { createActivityReader } from "./activity-reader";
 import { createEventReader } from "./event-reader";
+import { DASHBOARD_EVENT_LIMIT, DASHBOARD_EVENT_WINDOW_MS, createDashboardEvents } from "./dashboard-events";
+import { type Body, type ReadOperation, createPager } from "./paged-read";
+import { pausableTimeout } from "./deadline-pause";
+import { isMaintenanceError } from "../maintenance-retry";
 import { createVolumePrune } from "./volume-prune";
 import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
@@ -48,33 +75,35 @@ import { createVolumeWorkspace } from "./volume-workspace";
 import { BACKUP_OPERATIONS, createBackups } from "./backups";
 import { createNotificationSettings, NOTIFICATION_SETTINGS_OPERATIONS } from "./notification-settings";
 import { createVolumeReads } from "./volumes";
+import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
+import { createStackTerminals } from "./stack-terminals";
 
-type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
-type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
 const IMPLEMENTED = new Set<string>([
+  ...USER_OPERATIONS,
   ...BACKUP_OPERATIONS,
   ...NOTIFICATION_SETTINGS_OPERATIONS,
-  "getSecurity",
-  "runScan",
+  "getSecurity", "getVulnerabilityAdvisory", "ignore-vulnerability", "unignore-vulnerability",
+  "runScan", "scan-vulnerability-candidates", "get-vulnerability-candidates",
   "setScanEnabled",
   "getScanSettings",
   "saveScanSettings",
   "cancelScan",
-  "deleteRestorePoint",
-  "deleteHostRestorePoint",
-  "listHostRestorePoints",
+  "deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints",
   "getUpdateBaseline",
   "listRestorePoints",
-  "getAutoUpdatePolicy",
-  "saveAutoUpdatePolicy",
-  "setAutoUpdate",
-  "setAutoUpdateApply",
-  "getUpdateSchedules",
-  "saveUpdateSchedule",
+  "getAutoUpdatePolicy", "saveAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply",
+  "listUpdatePolicies",
+  "getContainerUpdatePolicy",
+  "saveContainerUpdatePolicy",
+  "installContainerUpdate",
+  "restoreContainerImage",
+  "getContainerPreviousImage",
+  "checkAllUpdates",
+  "getUpdateSettings",
   "listSchedule",
   "getSystemImageHints",
   "listSystemComponents",
@@ -114,12 +143,17 @@ const IMPLEMENTED = new Set<string>([
   "renameVolume",
   "subscribeLogs",
   "subscribeContainerLogs",
+  "openContainerShell",
+  "redeployStack",
   "runStackCommand",
   "runContainerCommand",
   "deployStack",
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
+  "restartAgent", "selfUpdate", "getSelfUpdate",
+  "connectHost", "reconnectHost",
+  "updateHost",
   "registerHost",
   "issueAgentToken",
   "removeHost",
@@ -142,6 +176,10 @@ const IMPLEMENTED = new Set<string>([
   "completeSetup",
   "getConnectedSettings",
   "saveSettings",
+  "setContainerOrigin",
+  "recreateContainer",
+  "restartService",
+  "importSource", "getImageMetadata",
   "listImages",
   "listVolumes",
   "getVolume",
@@ -149,12 +187,17 @@ const IMPLEMENTED = new Set<string>([
   "subscribeMetrics",
 ]);
 const RECONNECT_MS = 250;
+// Longest wait of a logout for answers to reads sent before it.
+const LOGOUT_DRAIN_MS = 5_000;
+// Public reads of `/auth/...` routes keep their own outcomes after a sign-out.
+const AUTH_READS = new Set(["getAuthConfiguration", "getUiPreferences"]);
 
 export interface HttpAdapterOptions {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
   eventSource?: (url: string) => Source;
   webSocket?: (url: string) => MetricsSocket;
+  shellWebSocket?: (url: string) => ShellSocket;
   uploadFactory?: () => XMLHttpRequest;
 }
 
@@ -178,39 +221,49 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
   if ((object.code === "run.busy" || object.code === "run.cancelling") && typeof object.activeRunId === "string" && object.activeRunId) {
     return new AdapterOutcomeError({ kind: "conflict", code: object.code, activeRunId: object.activeRunId });
   }
-  return new AdapterOutcomeError({ kind: "error", code: typeof object.code === "string" ? object.code : "http.error", status });
+  return new AdapterOutcomeError({ kind: "error", code: problemCode(error) ?? "http.error", status });
 }
 
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
-  const identityReads = createIdentityReads(options.fetch ?? globalThis.fetch);
-  const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
-  const client = { token: rawClient.token, fetch: (async (input, init) => {
+  // The outcome of a running logout (true: signed out), and whether reads stay closed until the next sign-in.
+  let closing: Promise<boolean> | undefined;
+  let signedOut = false;
+  /** The one admission rule for every physical non-auth read and socket handshake: wait while a logout runs, refuse
+   * once it signed out. Requests dispatched earlier keep running. */
+  async function admit(): Promise<void> {
+    if (closing && await closing) throw new CancelledError();
+    if (signedOut) throw new CancelledError();
+  }
+  const { maintenance, hostPolicy, identityReads, answering, client } = createTransportChain({
+    baseUrl, fetch: options.fetch ?? globalThis.fetch, admit, closing: () => !!closing || signedOut,
+    generation: () => identityGeneration, suspend: () => suspendIdentity(),
+  });
+  // A hub backup download is a browser navigation outside fetch: it waits for logout admission and maintenance itself.
+  const hubBackups = createHttpHubBackups(baseUrl, client, options.uploadFactory, async () => {
+    await admit();
     const version = identityGeneration;
-    const response = await rawClient.fetch(input, init);
-    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
-    // Auth and activity/runtime consumers already own their authoritative 401 path.
-    const ownedRejection = ["/auth/login", "/auth/password", "/auth/me"].some((suffix) => path.endsWith(suffix)) || /\/(activities|runtime-runs)(\/|$)|\/(capabilities|environments)$/.test(path);
-    if (version === identityGeneration && response.status === 401 && !ownedRejection) {
-      const body = await response.arrayBuffer();
-      if (version === identityGeneration) suspendIdentity();
-      return new Response(body, { status: response.status, headers: response.headers });
-    }
-    return response;
-  }) as typeof fetch };
+    await maintenance.released();
+    if (version !== identityGeneration) throw new CancelledError();
+    await admit();
+  });
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
   const changeListeners = new Set<(topics: Topic[]) => void>();
+  const stackListeners = new Set<(target: { stackId: string; hostId: string }) => void>();
   const actionListeners = new Set<(runs: CodedActionRun[]) => void>();
   let source: Source | undefined;
   const healthListeners = new Set<(health: ActionReadHealth) => void>();
   let lastEventId: number | undefined;
   let sourceOpen = false;
   let authenticated = true;
+  let principal: CurrentUser | undefined;
   let identityGeneration = 0;
   let lifetimeGeneration = 0;
+  // Aborted when another identity takes over, so a pending or retried owner write never runs as the next user.
+  let ownedWrites = new AbortController();
   const identityListeners = new Set<() => void>();
   let identityCheck: Promise<boolean> | undefined;
   let stopIdentityCheck: (() => void) | undefined;
@@ -245,29 +298,44 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let environmentState: string | undefined;
   const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology", "security"];
   const environmentCache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, gcTime: 30_000 } } });
-  const environmentsKey = ["environments"];
-  const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
+  // Each invalidation starts a new catalogue version: a read in flight from before it is never joined by later callers.
+  let catalogueVersion = 0;
+  const environments = () => environmentCache.fetchQuery({ queryKey: ["environments", catalogueVersion], queryFn: async () => {
+    const catalogue = catalogueVersion, token = hostPolicy.beginCatalogue();
+    const rows = await page("listEnvironments", "/environments", 100);
+    // An obsolete catalogue version still answers its own callers but no longer sets the dispatch policy.
+    if (catalogue === catalogueVersion) hostPolicy.applyCatalogue(token, rows);
+    return rows;
+  } });
   function invalidateCapabilities() { capabilityReads.clear(); }
-  function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
+  function invalidateEnvironments() { sharedReads.clear(); catalogueVersion++; }
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
+    inventoryOwner.reset();
     backups.invalidate();
-    events.identityChanged();
+    events.identityChanged(); dashboardEvents.identityChanged();
     authenticated = nextActive;
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
     runtime.reset(retain);
+    stackTerminals.reset();
+    restarts.reset();
+    if (!retain) selfUpdates.reset();
     targets.reset(retain);
     logs.reset();
+    shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
+    maintenanceSeen = false; maintenance.reset(); hostPolicy.reset();
+    conditions.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
-    if (!retain) { actions.reset(true); ++lifetimeGeneration; identityListeners.forEach((notify) => notify()); }
+    if (!retain) { actions.reset(true); ++lifetimeGeneration; ownedWrites.abort(); ownedWrites = new AbortController(); identityListeners.forEach((notify) => notify()); }
   }
   function invalidateIdentity(change: SessionChange) {
+    if (change === "established" || change === "renewed") signedOut = false;
     if (change === "confirmed" && authenticated) return;
     const retain = change === "renewed" && authenticated;
     suspendIdentity(retain, change !== "lost");
@@ -276,7 +344,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (authenticated) { metrics.reset(true, retain); connect(); }
   }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
-    return JSON.stringify(rows.map((row) => [
+    // A host whose reads are skipped reads alike in every status with the same refusal (offline, pending): moving
+    // between them changes no inventory, so it refreshes the host list only.
+    return JSON.stringify(rows.map((row) => skipsReads(row.status) ? [row.id, skipReason(row.status), row.enabled, row.registrationRevision] : [
       row.id,
       row.connectedAt,
       row.edgeSessionId,
@@ -285,6 +355,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       row.enabled,
       row.apiUrl,
       row.isEdge,
+      // Credential rotation and Edge re-pairing keep every other field; the revision still discards held reads.
+      row.registrationRevision,
       row.agentReport?.version.currentVersion,
       row.agentReport?.version.agentContractVersion,
       row.agentReport?.version.agentContractFingerprint,
@@ -309,6 +381,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       descriptors = await pending;
     } catch (error) {
       if (operationId === "listActions" && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
+      // Hub maintenance decides nothing about the capability: the caller meets the maintenance outcome.
+      if (isMaintenanceError(error)) throw error;
       // Transport loss or a server failure can recover; a refusal or a missing or denied descriptor cannot.
       const status = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.status : 0;
       const lost = error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "http.error" && (status === undefined || status < 400 || status >= 500);
@@ -327,28 +401,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!descriptor.available) throw unavailable(operationId, descriptor.resourceRef, descriptor.disabledReasonCode);
   }
 
-  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<NonNullable<Body<I>["data"]>> {
-    const result: NonNullable<Body<I>["data"]> = [] as unknown as NonNullable<Body<I>["data"]>;
-    let start = 0;
-    for (;;) {
-      if (signal?.aborted) throw new CancelledError();
-      let responseIncomplete = false;
-      const body = await read(operationId, route, { start, limit, order: "desc", ...(operationId === "list-activities" ? { includeSummary: "true" } : {}) }, (response) => { responseIncomplete = response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable"; observeResponse?.(response); }, signal);
-      if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
-      result.push(...body.data as never[]);
-      start += body.data.length;
-      if (limit === -1 && start < body.pagination.totalItems && responseIncomplete === false) throw classifiedError({ code: `${operationId}.short-page` });
-      if (limit === -1 || start >= body.pagination.totalItems) return result;
-      if (body.data.length === 0) throw classifiedError({ code: `${operationId}.short-page` });
-    }
-  }
+  const page = createPager(read, classifiedError);
 
   async function checkIdentity(): Promise<boolean> {
     if (identityCheck) return identityCheck;
     const version = identityGeneration;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const stop = () => { clearTimeout(timeout); controller.abort(); };
+    const stopTimer = pausableTimeout(10_000, () => controller.abort());
+    const stop = () => { stopTimer(); controller.abort(); };
     stopIdentityCheck = stop;
     const pending = (async () => {
       try {
@@ -358,16 +418,16 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         if (response.status === 401) { suspendIdentity(); return false; }
         if (!response.ok) throw classifiedError(null, response.status);
         return authenticated;
-      } finally { clearTimeout(timeout); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
+      } finally { stopTimer(); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
     })();
     identityCheck = pending;
     void pending.finally(() => { if (identityCheck === pending) identityCheck = undefined; }).catch(() => undefined);
     return pending;
   }
-  const metrics = createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost, checkIdentity);
+  const metrics = createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost, checkIdentity, admit);
   const logs = createRuntimeLogs({
     baseUrl, socket: options.webSocket ?? ((url) => new WebSocket(url)), capability: getCapability,
-    authenticated: () => authenticated,
+    authenticated: () => authenticated, admit,
     checkIdentity: async (signal) => {
       const version = identityGeneration;
       const response = await client.fetch(`${baseUrl}/auth/me`, { signal, credentials: "same-origin" });
@@ -378,17 +438,21 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
+  const shells = createShellSockets({ baseUrl, socket: options.shellWebSocket ?? ((url) => new WebSocket(url)), fetch: fetcher, authenticated: () => authenticated, admit, capability: (id) => getCapability("openContainerShell", { kind: "container", id }) });
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
-  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
+  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); stackTerminals([run], true); if (detailed) targets.accept(run); } });
+  const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
+  const stackTerminals = createStackTerminals((target) => { sharedReads.clear(); stackListeners.forEach((listener) => listener(target)); });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
-    retained: runtime.retained,
+    retained: () => [...runtime.retained(), ...restarts.retained()],
     mergeSummary: runtime.mergeSummary,
     changed: (previous, current, recovered) => {
       targets.changed(previous, current, recovered);
       if (current.some((run) => run.kind === "scan" && !["running", "queued"].includes(run.status) && previous.some((old) => old.id === run.id && old.hostId === run.hostId && ["running", "queued"].includes(old.status)))) securityChanged();
     },
     detailRun: async (host, id, signal, expanded) => {
+      if (restarts.has(host, id)) return restarts.detail(host, id, signal);
       if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
       const backupOwner = backups.guard(host);
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
@@ -421,7 +485,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           } catch (error) { if (isCancelledError(error)) throw error; }
         }
         // Invalidate before publishing terminal status: progress consumers may unmount immediately.
-        if (run.kind === "scan" && !["running", "queued"].includes(run.status)) securityChanged();
+        if ((run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan") && !["running", "queued"].includes(run.status)) securityChanged();
         return run;
       } catch (error) { if (isCancelledError(error)) throw error; throw classifiedError({ code: "activity.invalid-data" }); }
     },
@@ -440,11 +504,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     detail: async (hostId, id, signal) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!,
     publish: (runs, health) => {
       healthListeners.forEach((listener) => listener(health));
-      if (runs) actionListeners.forEach((listener) => listener(runs));
+      if (runs) { stackTerminals(runs); actionListeners.forEach((listener) => listener(runs)); }
     },
   });
 
-  const targets = createActivityTargets({ terminal: (host) => refreshHost(host), hasConsumer: () => actionListeners.size > 0, read: (host, id, signal, expanded) => actions.readDetail(id, host, signal, expanded) });
+  const selfUpdates = createSelfUpdates({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, readRun: async (host, id, signal) => { const run = await actions.readDetail(id, host, signal, true); actions.upsert(run); return run; } });
+  const targets = createActivityTargets({ terminal: (host, run) => { stackTerminals([run], true); refreshHost(host); }, hasConsumer: () => actionListeners.size > 0 || stackListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
 
   const events = createEventReader(async () => {
     await requireCapability("listEvents");
@@ -452,20 +517,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     try { return rows.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
   }, () => identityGeneration, () => hasReadConsumer(adapter.subscribeChanges, "events"));
   const loadEvents = events.load;
+  const dashboardEvents = createDashboardEvents(async (signal) => {
+    await requireCapability("listEvents");
+    const body = await read("listEvents", "/events", { since: new Date(Date.now() - DASHBOARD_EVENT_WINDOW_MS).toISOString(), limit: DASHBOARD_EVENT_LIMIT, sort: "timestamp", order: "desc" }, undefined, signal);
+    if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: "listEvents.invalid-page" });
+    try { return { events: body.data.map(mapEvent), totalItems: body.pagination.totalItems }; } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+  }, () => identityGeneration, { hasConsumer: () => hasReadConsumer(adapter.subscribeChanges, "dashboardEvents"), changed: () => changeListeners.forEach((listener) => listener(["dashboardEvents"])) });
 
   function refreshRuns(recovery = false): void {
-    if (actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || actionListeners.size === 0) return;
     void actions.refresh(recovery).catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshHost(host: string): void {
-    if (actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || actionListeners.size === 0) return;
     if (!actions.hasHost(host)) invalidateEnvironments();
     void actions.refreshHost(host).catch(() => undefined);
   }
 
   function refreshRun(activityId: string, environmentId?: string, terminal?: string, discoverOnTerminal = false): void {
-    if (actionListeners.size === 0) return;
+    if (principal?.isAdmin === false || !actionListeners.size && !stackListeners.size) return;
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { if (environmentId) refreshHost(environmentId); else refreshRuns(); return; }
     targets.notify(environmentId, activityId, terminal, discoverOnTerminal);
@@ -476,6 +547,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function refreshSubscribed(reopen = false): void {
     invalidateEnvironments();
     events.changed();
+    // A new connection's initial event frame, not its open, refreshes the Dashboard's recent events.
+    if (!reopen) dashboardEvents.missed();
     refreshRuns(reopen);
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security"]));
   }
@@ -494,11 +567,16 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sharedReads.clear();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const notification = envelope.activity;
-      if (notification.type !== "message" && notification.activity?.type === "vulnerability_scan") securityChanged();
+      if (notification.type !== "message" && ["vulnerability_scan", "vulnerability.candidate-scan"].includes(notification.activity?.type ?? "")) securityChanged();
       if (notification.type !== "message"
         && notification.activity?.metadata?.action
         && /backup|restore/.test(String(notification.activity.metadata.action))) backupChanged();
       const host = notification.environmentId ?? notification.activity?.environmentId;
+      const activity = notification.activity;
+      if (host && activity?.id && activity.resourceId && (activity.resourceType === "project" || activity.resourceType === "stack")
+        && activity.status && ["success", "failed", "cancelled"].includes(activity.status)) {
+        stackTerminals([{ id: activity.id, hostId: host, stackId: inventoryId(host, activity.resourceId), status: mapStatus(activity.status), finishedAt: activity.endedAt }], true);
+      }
       if (notification.type === "snapshot" || notification.type === "error") {
         if (host) {
           if (notification.type === "error") actions.hostError(host);
@@ -516,13 +594,16 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
       events.changed();
+      dashboardEvents.frame();
       changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
     if (envelope.channel === "environments") {
+      const rows = envelope.environment?.environments;
+      // The read policy sees the new catalogue before any invalidation dispatches a read.
+      if (Array.isArray(rows)) hostPolicy.applyStream(rows);
       invalidateCapabilities();
       invalidateEnvironments();
-      const rows = envelope.environment?.environments;
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
@@ -534,11 +615,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function connect(): void {
-    if (!authenticated || source || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || closing || signedOut || source || (!actionListeners.size && !changeListeners.size)) return;
+    // The native stream bypasses fetch: it starts only after a hub maintenance hold ends.
+    if (maintenance.holding()) { if (!streamHeld) { streamHeld = true; void maintenance.released().then(() => { streamHeld = false; connect(); }); } return; }
     sourceOpen = false;
     let opened: Source;
     try {
-      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents%2Cenvironments`);
+      opened = sourceFactory(`${baseUrl}/stream?channels=${principal?.isAdmin === false ? "environments" : "activities%2Cevents%2Cenvironments"}`);
+      dashboardEvents.streamStarted(principal?.isAdmin !== false);
     } catch (error) {
       window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
       scheduleReconnect();
@@ -559,18 +643,42 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       actions.markError();
       // A reconnecting EventSource keeps its native retry cadence. Only CLOSED
       // sources need a replacement after the authoritative identity check.
-      const closed = opened.readyState === 2;
+      const held = maintenance.holding();
+      const closed = opened.readyState === 2 || held;
       if (closed) { opened.close(); source = undefined; sourceOpen = false; }
+      if (held) { connect(); return; }
       void checkIdentity().then((valid) => { if (closed && valid && version === identityGeneration) scheduleReconnect(); }, () => { if (closed && version === identityGeneration) scheduleReconnect(); });
     };
   }
 
+  let streamHeld = false;
+  // After hub maintenance every read may be outdated (a restore replaces the database): refresh all topics once.
+  let maintenanceSeen = false;
+  maintenance.subscribe((state) => {
+    if (state.active) { maintenanceSeen = true; return; }
+    if (!maintenanceSeen) return;
+    maintenanceSeen = false;
+    invalidateCapabilities(); invalidateEnvironments(); backups.invalidate();
+    // The event owner queues a fresh snapshot behind any read that started before the restore.
+    dashboardEvents.missed();
+    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "schedule", "volumes", "settings", "images", "registries"]));
+  });
+
   function scheduleReconnect(): void {
-    if (!authenticated || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || closing || signedOut || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       connect();
     }, RECONNECT_MS);
+  }
+
+  /** Closes the event stream for a running logout; a failed logout connects again. */
+  function pauseStream(): void {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+    source?.close();
+    source = undefined;
+    sourceOpen = false;
   }
 
   function disconnectIfUnused(): void {
@@ -587,14 +695,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   const observations = new Map<string, InventoryObservation>();
-  async function listHosts() {
+  /** `attempt` names a refresh-owner fetch whose catalogue read starts here (`freshFrom`); it never aborts. */
+  async function listHosts(attempt?: AbortSignal) {
     const version = identityGeneration;
     await requireCapability("listHosts");
+    freshFrom(attempt);
+    const catalogue = catalogueVersion;
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();
     try {
-      const hosts = rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) }));
-      environmentState = environmentKey(rows);
+      const hosts = rows.map((row) => ({ ...mapHost(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row), inventory: observations.get(row.id) }));
+      // A catalogue from before a later stream frame does not replace the state that frame compared against.
+      if (catalogue === catalogueVersion) environmentState = environmentKey(rows);
       return hosts;
     }
     catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
@@ -604,19 +716,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     observations.set(hostId, state);
     if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
   }
-  function scopedObservations<T extends object>(make: (observe: typeof observeHost) => T): T {
-    return new Proxy(make(() => {}), { get(_target, key) {
-      return (...args: unknown[]) => {
-        const version = identityGeneration;
-        const reader = make((hostId, state) => { if (version === identityGeneration) observeHost(hostId, state); });
-        const method = Reflect.get(reader, key) as (...values: unknown[]) => unknown;
-        return method(...args);
-      };
-    } });
-  }
-  const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
-  const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
-  function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
+  const inventoryOwner = createInventoryOwner(() => identityGeneration, listHosts, requireCapability, fetcher, observeHost);
+  const conditions = createConditionReader(baseUrl, fetcher);
+  const inventory = inventoryOwner.wrap((observe, fetch, hosts, require) => createInventoryReader(baseUrl, fetch, hosts, require, observe, (id, signal) => conditions.read(id, signal, fetch)));
+  const userInventory = inventoryOwner.wrap((observe, fetch, hosts) => createUserInventory(baseUrl, fetch, hosts, () => principal, observe, (id, signal) => conditions.read(id, signal, fetch)));
+  const resourceReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createResourceReader(baseUrl, fetch, hosts, require, observe));
+  // A backup change ends shared overview reads before consumers refresh (AUTO-10).
+  function backupChanged() { sharedReads.clear(); backups.invalidate(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
   const backups = createBackups({
     baseUrl,
     client,
@@ -624,75 +730,127 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     generation: () => identityGeneration,
     hosts: listHosts,
     changed: backupChanged,
+    admit,
     accepted: (host, id) => {
       refreshHost(host);
       targets.notify(host, id, undefined, true);
     },
   });
-  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration);
+  const volumeReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createVolumeReads(baseUrl, fetch, hosts, require, observe, () => identityGeneration, backups.decorate, inventoryOwner.volumeRows));
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
-    labels: async (stackId) => (await inventory.getStack(stackId)).labels,
+    isUser: () => principal?.isAdmin === false,
+    labels: async (stackId) => (await (principal?.isAdmin === false ? userInventory : inventory).getStack(stackId)).labels,
     changed: () => changeListeners.forEach((listener) => listener(["stacks"])),
     unauthorized: () => { suspendIdentity(); actions.reset(true); },
   });
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
+  const auth = createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; });
   const adapter: DockletAdapter = {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
+    ...auth,
+    async logout() {
+      // Taken before admission closes: a read still bootstrapping the token may need its retry to finish it.
+      await client.token();
+      let settle!: (out: boolean) => void;
+      closing = new Promise((resolve) => { settle = resolve; });
+      pauseStream();
+      // The hub answers reads still in flight with 401 once the session is gone, so they land first (bounded).
+      let drained: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([Promise.all([...answering]), new Promise((resolve) => { drained = setTimeout(resolve, LOGOUT_DRAIN_MS); })]);
+      clearTimeout(drained);
+      try {
+        await auth.logout();
+      } catch (error) {
+        // A session already lost meanwhile counts as signed out; only a live session reopens its reads.
+        if (authenticated) { closing = undefined; settle(false); connect(); throw error; }
+      }
+      signedOut = true;
+      closing = undefined;
+      settle(true);
+    },
+    ...createHttpUsers(baseUrl, client),
     ...createHostCommands(baseUrl, client, requireCapability, () => {
       backups.invalidate();
       invalidateCapabilities();
       invalidateEnvironments();
       changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics]));
-    }),
+    }, getCapability, () => identityGeneration),
+    ...createHostChecks({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { invalidateCapabilities(); invalidateEnvironments(); actions.invalidate(true); changeListeners.forEach((listener) => listener(["hosts"])); } }),
     ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
+    listSystemComponents: createSystemComponents({ baseUrl, client, hosts: listHosts, capability: getCapability, generation: () => identityGeneration }),
+    restartAgent: restarts.restartAgent,
+    selfUpdate: selfUpdates.selfUpdate,
+    getSelfUpdate: selfUpdates.getSelfUpdate,
     installStackUpdates: runtime.installStackUpdates,
+    installContainerUpdate: runtime.installContainerUpdate,
+    restoreContainerImage: runtime.restoreContainerImage,
     restoreRestorePoint: runtime.restoreRestorePoint,
+    admitRuntimeCommand: runtime.admitRuntimeCommand,
     runStackCommand: runtime.runStackCommand,
     runContainerCommand: runtime.runContainerCommand,
-    getRuntimeRun: runtime.getRuntimeRun,
+    recreateContainer: runtime.recreateContainer,
+    restartService: runtime.restartService,
+    getRuntimeRun: runtime.getRuntimeRun, confirmRun: runtime.confirmRun,
     cancelRuntimeRun: runtime.cancelRuntimeRun,
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,
+    ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
     ...createSettingsCore(baseUrl, client),
+    ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
-    ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
+    ...hubBackups,
+    // The page's detailed status read is also the browser-wide maintenance observation of this identity.
+    async getHubBackupMaintenance() {
+      const version = identityGeneration;
+      const status = await hubBackups.getHubBackupMaintenance();
+      if (version === identityGeneration) maintenance.observe(status);
+      return status;
+    },
+    ...createHttpHistory(baseUrl, client),
+    ...createHttpUiPreferences(baseUrl, client, () => ownedWrites.signal),
+    ...createHttpServiceWidgets(baseUrl, client),
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,
     listHosts,
     ...inventory,
+    listStacks: (...args) => principal?.isAdmin === false ? userInventory.listStacks(...args) : inventory.listStacks(...args),
+    getStack: (id) => principal?.isAdmin === false ? userInventory.getStack(id) : inventory.getStack(id),
     ...resourceReads,
-    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilityCandidates({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, writeSignal: () => ownedWrites.signal, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...backups.api,
-    async listVolumes(onPartial) {
-      const rows = await volumeReads.listVolumes(onPartial);
-      const hosts = [...new Set(rows.filter((v) => v.kind === "volume").map((v) => v.hostId))];
-      const mapped = await Promise.all(hosts.map((host) => backups.decorate(host, rows.filter((v) => v.hostId === host))));
-      const covered = new Set(hosts);
-      return [...mapped.flat(), ...rows.filter((v) => !covered.has(v.hostId))];
+    async getVolume(id, parent) {
+      return inventoryReadBudget(parent)(async (signal) => {
+        let volume;
+        try { volume = await volumeReads.getVolume(id, signal); }
+        catch (error) {
+          const missing = error instanceof AdapterOutcomeError
+            && error.outcome.kind === "error" && error.outcome.status === 404
+            || error instanceof Error && error.message === "not-found";
+          if (!missing) throw error;
+          const host = id.split("~")[0]!;
+          // A stored bind key stays reachable without a current mount (K3); a volume only once it is gone.
+          const observed = (await backups.readOverview(host, signal)).volumes.find((v) => v.id === id && (v.kind === "bind" || v.volumeExists === false));
+          if (!observed) throw error;
+          volume = { ...observed, backups: [] };
+        }
+        const known = volume.kind === "volume" || !!volume.bind?.eligible;
+        const [decorated, early] = await Promise.all([backups.decorate(volume.hostId, [volume], signal), known ? backups.history(id, signal).catch(() => null) : undefined]);
+        const entry = { ...volume, ...decorated[0] };
+        // Other binds read history only when the overview shows a stored plan or backup (K3/K4).
+        if (!known && backupAccess(entry) === "none") return entry;
+        const history = known ? early : await backups.history(id, signal).catch(() => null);
+        signal.throwIfAborted();
+        return { ...entry, backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
+      });
     },
-    async getVolume(id) {
-      let volume;
-      try { volume = await volumeReads.getVolume(id); }
-      catch (error) {
-        const missing = error instanceof AdapterOutcomeError
-          && error.outcome.kind === "error" && error.outcome.status === 404
-          || error instanceof Error && error.message === "not-found";
-        if (!missing) throw error;
-        const host = id.split("~")[0]!;
-        const observed = (await backups.api.getBackupOverview(host)).volumes.find((v) => v.id === id && v.volumeExists === false);
-        if (!observed) throw error;
-        volume = { ...observed, backups: [] };
-      }
-      if (volume.kind === "bind") return volume;
-      const [decorated, history] = await Promise.all([backups.decorate(volume.hostId, [volume]), backups.history(id).catch(() => null)]);
-      return { ...volume, ...decorated[0], backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
-    },
+    ...createImageMetadata(baseUrl, fetcher), ...createStackImport(baseUrl, client, () => lifetimeGeneration, getCapability),
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),
     ...createProjectWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
@@ -700,36 +858,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
     ...createNetworkCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["topology", "containers"])); } }),
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
-    async listSchedule(hostIds) {
-      const selected = hostIds ?? (await listHosts()).map((h) => h.id);
-      const backupRows = (await Promise.all(selected.map(async (host) => {
-        try {
-          return (await backups.api.getBackupOverview(host)).volumes
-            .filter((v) => v.backup?.enabled && v.backup.nextRunAt)
-            .map((v) => ({
-              id: `${host}~backup-${v.name}`,
-              hostId: host,
-              kind: "backup" as const,
-              title: v.name,
-              volumeId: v.id,
-              cadence: v.backup!.schedule.mode,
-              nextRunAt: v.backup!.nextRunAt,
-              enabled: true,
-            }));
-        }
-        catch { return []; }
-      }))).flat();
-      return [...backupRows, ...(await Promise.all(selected.map(async (hostId) => {
-        try {
-          const config = await adapter.getUpdateSchedules!(hostId);
-          return config.jobs.filter((j) => j.kind === "auto-update" || j.kind === "update-check").map((j) => ({ id: `${hostId}~${j.id}`, hostId, kind: j.kind as "auto-update" | "update-check", title: "", cadence: j.schedule, nextRunAt: j.nextRun, enabled: j.enabled, code: j.code }));
-        } catch (error) {
-          if (isCancelledError(error)) throw error;
-          return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
-        }
-      }))).flat()];
-    },
-    listActions: actions.load,
+    listSchedule: createScheduleReader(baseUrl, client, listHosts, getCapability, () => identityGeneration, backups.api.getBackupOverview, () => adapter.getUpdateSettings!()),
+    listActions: () => principal?.isAdmin === false ? Promise.resolve(runtime.retained()) : actions.load(),
     observeActionDetail(host, id, listener) {
       const offActions = adapter.subscribeActions(() => {});
       const owner = lifetimeGeneration;
@@ -738,7 +868,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       let scanTimer: ReturnType<typeof setInterval> | undefined;
       const stopPolling = () => { clearInterval(scanTimer); scanTimer = undefined; };
       const pollScan = (run?: CodedActionRun) => {
-        if (!run || !["scan", "backup", "volume-restore"].includes(run.kind)
+        if (!run || (!["scan", "backup", "volume-restore"].includes(run.kind) && run.sourceOperation !== "vulnerability.candidate-scan")
           || !["running", "queued"].includes(run.status)) {
           stopPolling();
           return;
@@ -765,6 +895,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return () => { healthListeners.delete(listener); };
     },
     listEvents: loadEvents,
+    listDashboardEvents: dashboardEvents.load,
     subscribeActions(listener) {
       actionListeners.add(listener);
       runtime.observe(true);
@@ -773,27 +904,43 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       else if (actions.hasSnapshot()) listener(actions.runs());
       return () => { if (!actionListeners.delete(listener)) return; if (!actionListeners.size) { targets.dropIdle(); runtime.observe(false); } disconnectIfUnused(); };
     },
+    subscribeStackTerminals(listener) { stackListeners.add(listener); return () => { stackListeners.delete(listener); }; },
+    maintenance: { state: maintenance.state, subscribe: maintenance.subscribe },
     subscribeChanges(listener) {
       changeListeners.add(listener);
       connect();
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
-    subscribeMetrics: metrics,
+    subscribeMetrics: (listener) => principal?.isAdmin === false ? (() => {}) : metrics(listener),
     subscribeLogs: logs.subscribeLogs,
     subscribeContainerLogs: logs.subscribeContainerLogs,
+    openContainerShell: (...args) => { invalidateCapabilities(); return shells.open(...args); },
   };
   registerIdentityLifetime(adapter.subscribeChanges, {
     version: () => lifetimeGeneration,
     active: () => authenticated,
     listen: (notify) => { identityListeners.add(notify); return () => { identityListeners.delete(notify); }; },
   });
+  // Concurrent `listActions` callers share one flight; they also share its converted outcome.
+  const outcomes = new WeakMap<Promise<unknown>, Promise<unknown>>();
+  function sharedOutcome(flight: Promise<unknown>, convert: (error: unknown) => never): Promise<unknown> {
+    let outcome = outcomes.get(flight);
+    if (!outcome) { outcome = flight.catch(convert); outcomes.set(flight, outcome); }
+    return outcome;
+  }
   // Guard public reads and partial publishers in addition to transport bodies.
   return new Proxy(adapter, { get(target, key, receiver) {
     const method: unknown = Reflect.get(target, key, receiver);
-    if (typeof method !== "function" || !/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
+    if (typeof method !== "function") return method;
+    // After a sign-out, a refused non-auth read ends as cancellation whatever error its reader mapped the refusal to.
+    const signedOutCancels = (error: unknown) => { throw signedOut && !AUTH_READS.has(String(key)) ? new CancelledError() : error; };
+    // File and archive reads keep their own lifetimes; only their sign-out outcome is aligned.
+    if (/^(read|browse|download)/.test(String(key))) return (...args: unknown[]) => (method(...args) as Promise<unknown>).catch(signedOutCancels);
+    if (!/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
     return (...args: unknown[]) => {
       // Auth and activities already implement their specialized renewal re-read.
-      if (key === "getCurrentUser" || key === "getAuthMode" || key === "listActions") return method(...args);
+      if (key === "getCurrentUser" || key === "getAuthMode") return method(...args);
+      if (key === "listActions") return sharedOutcome(method(...args) as Promise<unknown>, signedOutCancels);
       const owner = lifetimeGeneration;
       const invoke = async (retryRenewal = true): Promise<unknown> => {
         const version = identityGeneration;
@@ -809,7 +956,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           throw error;
         }
       };
-      return invoke();
+      return invoke().catch(signedOutCancels);
     };
   } });
 }

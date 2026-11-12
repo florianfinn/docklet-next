@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/shared/components/form-field.tsx
+// Revision: f36dbc66306b9720d9f01a67efc455798b2229328478b21d7b29c986cfdee58e
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. Simple-user management, assigned-stack access and mode-aware self-service.
+
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/utils";
@@ -18,7 +24,7 @@ interface TextFieldProps {
   error?: string;
   placeholder?: string;
   mono?: boolean;
-  type?: "text" | "password" | "email" | "url" | "number";
+  type?: "text" | "password" | "email" | "url" | "number" | "date";
   autoComplete?: string;
   disabled?: boolean;
   className?: string;

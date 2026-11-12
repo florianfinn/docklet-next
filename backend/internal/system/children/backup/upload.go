@@ -138,11 +138,11 @@ func (s *Service) receiveArchiveWithLimit(ctx context.Context, id string, reader
 	if err := file.Sync(); err != nil {
 		return "", info, ErrSystemBackupUnavailable
 	}
-	newest, err := newestMigration()
+	newest, err := s.db.LatestMigrationVersion()
 	if err != nil {
 		return "", info, ErrSystemBackupUnavailable
 	}
-	info, err = validateArchive(ctx, file.Name(), newest)
+	info, err = validateArchive(ctx, file.Name(), newest, s.db.MigrationOptions())
 	if err != nil {
 		return "", info, err
 	}

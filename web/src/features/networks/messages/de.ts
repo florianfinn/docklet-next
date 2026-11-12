@@ -65,6 +65,7 @@ export const deNetworks: typeof enNetworks = {
     problems: "Nur Probleme",
   },
   zone: "{name} · {status}",
+  standby: "Standby – verbindet bei Bedarf",
   online: "online",
   offline: "getrennt",
   offlineNote: "{name} ist nicht verbunden. Die Topologie zeigt den letzten Stand; Änderungen sind erst nach der Verbindung möglich.",

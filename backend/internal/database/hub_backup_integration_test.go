@@ -24,7 +24,7 @@ func TestHubBackupArchiveMigration(t *testing.T) {
 			require.NoError(t, err)
 			if start == 1 {
 				require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), pool, dbProviderSQLite, MigrationOptions{}, 1))
-				require.NoError(t, db.Exec("INSERT INTO system_backup_runs(id,status,trigger,destination) VALUES('legacy','succeeded','manual','local')").Error)
+				require.NoError(t, db.Exec("INSERT INTO system_backup_runs(id,status,trigger,copy_state) VALUES('retained','succeeded','manual','none')").Error)
 				require.NoError(t, db.Exec("INSERT INTO system_backup_policies(id,schedule,retention_count,enabled) VALUES('policy','0 0 3 * * *',7,true)").Error)
 			}
 			require.NoError(t, db.Migrate(t.Context()))
@@ -49,10 +49,10 @@ func TestHubBackupArchiveMigration(t *testing.T) {
 			if start == 1 {
 				var count int64
 				require.NoError(t, db.Table("system_backup_runs").Count(&count).Error)
-				require.Zero(t, count)
+				require.EqualValues(t, 1, count)
 				var enabled bool
 				require.NoError(t, db.Raw("SELECT enabled FROM system_backup_policies WHERE id='policy'").Scan(&enabled).Error)
-				require.False(t, enabled)
+				require.True(t, enabled)
 			}
 			rows, err := pool.QueryContext(t.Context(), "PRAGMA foreign_key_check")
 			require.NoError(t, err)

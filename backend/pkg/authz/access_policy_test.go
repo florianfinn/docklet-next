@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package authz_test
 
@@ -11,20 +11,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/florianfinn/docklet-next/backend/internal/search"
-	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 )
 
 func TestAccessSurfaceRegistryDefinesSettingsCustomizeAndLandingSemantics(t *testing.T) {
-	webhooks := requireAccessSurfaceInternal(t, "settings.category.webhooks")
-	require.Equal(t, authz.AccessSurfaceKindSettingsCategory, webhooks.Kind)
-	require.Equal(t, "/settings/webhooks", webhooks.URL)
-	require.Equal(t, authz.AccessModePermissions, webhooks.AccessMode)
-	require.Equal(t, authz.AccessMatchModeAnyOf, webhooks.MatchMode)
-	require.Equal(t, authz.AccessScopeModeSelectedEnvPlusGlobal, webhooks.ScopeMode)
-	require.ElementsMatch(t, []string{authz.PermWebhooksList}, webhooks.Permissions)
-
 	apiKeys := requireAccessSurfaceInternal(t, "settings.category.apikeys")
 	require.Equal(t, authz.AccessScopeModeGlobalOnly, apiKeys.ScopeMode)
 	require.ElementsMatch(t, []string{authz.PermApiKeysList, authz.PermApiKeysRead}, apiKeys.Permissions)
@@ -48,7 +38,6 @@ func TestAccessSurfaceRegistryDefinesSettingsCustomizeAndLandingSemantics(t *tes
 	require.Equal(t, authz.AccessSurfaceKindLanding, settingsLanding.Kind)
 	require.Equal(t, "/settings", settingsLanding.URL)
 	require.Equal(t, authz.AccessModeAnyChild, settingsLanding.AccessMode)
-	require.Contains(t, settingsLanding.Children, "settings.category.webhooks")
 	require.Contains(t, settingsLanding.Children, "settings.category.apikeys")
 	require.Contains(t, settingsLanding.Children, "settings.category.jobschedule")
 
@@ -60,11 +49,11 @@ func TestAccessSurfaceRegistryDefinesSettingsCustomizeAndLandingSemantics(t *tes
 
 func TestCanAccessSurfaceEvaluatesScopeModesAndLandingChildren(t *testing.T) {
 	ps := authz.NewPermissionSet()
-	ps.AddEnv("env-a", authz.PermWebhooksList)
+	ps.AddEnv("env-a", authz.PermJobsManage)
 
-	require.True(t, authz.CanAccessSurface(ps, "settings.category.webhooks", "env-a"))
+	require.True(t, authz.CanAccessSurface(ps, "settings.category.jobschedule", "env-a"))
 	require.True(t, authz.CanAccessSurface(ps, "landing.settings", "env-a"))
-	require.False(t, authz.CanAccessSurface(ps, "settings.category.webhooks", "env-b"))
+	require.False(t, authz.CanAccessSurface(ps, "settings.category.jobschedule", "env-b"))
 	require.False(t, authz.CanAccessSurface(ps, "landing.settings", "env-b"))
 
 	ps.AddGlobal(authz.PermApiKeysRead)
@@ -127,24 +116,7 @@ func TestAccessSurfaceRegistryIsDefensiveAndInternallyConsistent(t *testing.T) {
 	}
 }
 
-func TestAccessSurfaceCategoryRegistryCoversBackendCategories(t *testing.T) {
-	hiddenSettingsCategories := map[string]struct{}{
-		"security": {},
-	}
-
-	for _, category := range settings.NewSettingsSearchService().GetSettingsCategories() {
-		if _, hidden := hiddenSettingsCategories[category.ID]; hidden {
-			continue
-		}
-		_, ok := findAccessSurfaceInternal("settings.category." + category.ID)
-		require.True(t, ok, "settings category %s must have an access surface", category.ID)
-	}
-
-	for _, category := range search.NewCustomizeSearchService().GetCustomizeCategories() {
-		_, ok := findAccessSurfaceInternal("customize.category." + category.ID)
-		require.True(t, ok, "customize category %s must have an access surface", category.ID)
-	}
-}
+// Search category endpoints were retired in M19; access-surface self-consistency remains covered above.
 
 func requireAccessSurfaceInternal(t *testing.T, id string) authz.AccessSurface {
 	t.Helper()

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only local persistence; retried admission starts from the new run and startup repairs duplicated run IDs.
+// Deviations: Local module namespace; SQLite-only local persistence; retried admission starts from the new run and startup repairs duplicated run IDs; M18 live scheduling, policy and contract foundation.
 
 // Package runs coordinates durable scheduler execution and recovery.
 package runs
@@ -46,12 +46,12 @@ type Coordinator struct {
 	reconcile    func(context.Context, st.Run) (st.Outcome, error)
 	observer     st.RunObserver
 	observerMu   sync.Mutex
-	location     *time.Location
 	paused       bool
 	background   sync.Mutex
 	work         map[uint64]context.CancelFunc
 	workNext     uint64
 	workers      sync.WaitGroup
+	now          func() time.Time
 }
 
 // Submit persists acceptance before waking the dispatcher. Run IDs deduplicate
@@ -171,7 +171,7 @@ func separateTriggerInternal(trigger string) bool {
 }
 
 // Checkpoint records the next due occurrence atomically with overdue recovery.
-func (q *Coordinator) Checkpoint(ctx context.Context, jobID, schedule string, next time.Time) error {
+func (q *Coordinator) Checkpoint(ctx context.Context, jobID, schedule, zone string, next time.Time) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	first := !q.checkpointed[jobID]
@@ -180,8 +180,8 @@ func (q *Coordinator) Checkpoint(ctx context.Context, jobID, schedule string, ne
 	err := q.mutateInternal(ctx, "0", jobID, func(record *st.QueueRecord) error {
 		recovered = false
 		recoveredRun = st.Run{}
-		now := time.Now().UTC()
-		if first && record.Schedule == schedule && !record.NextRun.IsZero() && !record.NextRun.After(now) && record.LastEnqueuedAt.Before(record.NextRun) {
+		now := q.clock().UTC()
+		if first && record.Schedule == schedule && record.Zone == zone && !record.NextRun.IsZero() && !record.NextRun.After(now) && record.LastEnqueuedAt.Before(record.NextRun) {
 			pending := false
 			for _, run := range record.Runs {
 				if !run.Status.Terminal() && run.Status != st.NeedsAttention {
@@ -196,10 +196,11 @@ func (q *Coordinator) Checkpoint(ctx context.Context, jobID, schedule string, ne
 				record.Runs = append(record.Runs, recoveredRun)
 			}
 		}
-		if record.Schedule != schedule || record.NextRun.IsZero() || (first && !record.NextRun.After(now)) {
+		if record.Schedule != schedule || record.Zone != zone || record.NextRun.IsZero() || (first && !record.NextRun.After(now)) {
 			record.Generation++
 			record.Sequence++
 			record.Schedule = schedule
+			record.Zone = zone
 			record.NextRun = next
 		}
 		return nil
@@ -653,4 +654,24 @@ func (q *Coordinator) ResetAfterRestore() {
 	defer q.mu.Unlock()
 	q.owner = uuid.New().String()
 	q.checkpointed = make(map[string]bool)
+}
+
+// Progress persists one target under the current execution ownership fence.
+func (q *Coordinator) Progress(ctx context.Context, run st.Run, target st.TargetOutcome) error {
+	return q.UpdateRun(ctx, run, func(current *st.Run) error {
+		if current.Status != st.Running || current.Owner != run.Owner {
+			return ErrRunConflict
+		}
+		for index := range current.Outcome.Targets {
+			if current.Outcome.Targets[index].ID == target.ID {
+				if len(target.RecoveryData) == 0 {
+					target.RecoveryData = current.Outcome.Targets[index].RecoveryData
+				}
+				current.Outcome.Targets[index] = target
+				return nil
+			}
+		}
+		current.Outcome.Targets = append(current.Outcome.Targets, target)
+		return nil
+	})
 }

@@ -1,5 +1,8 @@
 import { createTranslator } from "use-intl";
 
+import { wireKey } from "./wire-catalogue";
+import { MESSAGE_CODE_KEYS } from "./wire-catalogue-messages";
+
 import { catalogs } from "@/app/i18n/catalog";
 import type { AppLocale } from "@/domain/locale";
 import type { ActionRun, ActionStep, OpsEvent, RunOutputLine, StackDetail } from "@/domain/model";
@@ -29,28 +32,22 @@ const translators = {
   "en-US": createTranslator({ locale: "en-US", messages: catalogs["en-US"] }),
 };
 
+const GUARDED_MESSAGE_KEYS = new Set<string>(Object.values(MESSAGE_CODE_KEYS));
+
 /** The adapter sends codes; display text is resolved at the UI boundary. */
 export function renderMessage(message: MessageCode, locale: AppLocale): string {
-  const runtimeReasons: Record<string, string> = { "runtime.failed": "failedBody", "runtime.interrupted": "interruptedBody", "runtime.cancelled": "cancelledBody" };
-  if (runtimeReasons[message.code]) {
-    const translateReason = translators[locale] as unknown as (key: string) => string;
-    return translateReason(`activity.runtime.${runtimeReasons[message.code]}`);
-  }
-  const wireStatus: Record<string, string> = { "activity.queued": "queued", "activity.running": "running", "activity.success": "succeeded", "activity.failed": "failed", "activity.cancelled": "cancelled" };
-  if (wireStatus[message.code]) {
-    const translateStatus = translators[locale] as unknown as (key: string) => string;
-    return translateStatus(`activity.status.${wireStatus[message.code]}`);
-  }
+  const guardedKey = wireKey(MESSAGE_CODE_KEYS, message.code) ?? (GUARDED_MESSAGE_KEYS.has(message.code) ? message.code : undefined);
   const values: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(message.params)) {
     values[key] = typeof value === "object" ? renderMessage(value, locale) : value;
   }
   const translate = translators[locale] as unknown as (key: string, values: Record<string, string | number>) => string;
-  if (!translators[locale].has(message.code as never)) return message.sourceText ?? message.code;
+  const key = guardedKey ?? message.code;
+  if (!guardedKey && !translators[locale].has(key as never)) return message.sourceText ?? message.code;
   try {
-    return translate(message.code, values);
+    return translate(key, values);
   } catch (error) {
-    if (message.sourceText !== undefined) return message.sourceText;
+    if (!guardedKey && message.sourceText !== undefined) return message.sourceText;
     throw error;
   }
 }

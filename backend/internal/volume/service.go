@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package volume
 
@@ -33,10 +33,10 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 )
 
 type VolumeService struct {
+	binds            *bindInventory
 	db               *database.DB
 	dockerService    *dockerInternal.DockerClientService
 	eventService     *event.EventService
@@ -110,18 +110,14 @@ func NewVolumeService(
 		Exec:             service.execInContainerInternal,
 		BackupVolumeName: backupVolumeName,
 		EncryptionKey:    encryptionKey,
-		Location: func() *time.Location {
-			if cfg != nil {
-				return cfg.GetLocation()
-			}
-			return time.UTC
-		}(),
+		ZoneProvider:     cfg,
 	}
 	if containerService != nil {
 		backupDeps.StopContainer, backupDeps.StartContainer = containerService.StopContainer, containerService.StartContainer
 	}
 	service.backup = volumebackup.NewService(backupDeps)
 	service.workspace = workspace.NewService(workspace.Dependencies{
+		DB: db, BindKind: service.bindKind,
 		Docker:           dockerService,
 		Events:           eventService,
 		Locks:            &service.workspaceLocks,
@@ -175,6 +171,9 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 }
 
 func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	if err := volumetypes.RefuseBind(options.Name); err != nil {
+		return nil, err
+	}
 	unlock, ok := s.workspaceLocks.TryLock(options.Name)
 	if !ok {
 		return nil, &volumeWorkspaceBusyError{name: options.Name}
@@ -185,6 +184,9 @@ func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeC
 
 // The API path already owns the destination mutex while checking name absence.
 func (s *VolumeService) createVolumeOwned(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	if err := volumetypes.RefuseBind(options.Name); err != nil {
+		return nil, err
+	}
 	if isBackupTargetVolume(options.Labels) {
 		return nil, hiddenTargetVolumeError()
 	}
@@ -242,6 +244,9 @@ func (s *VolumeService) createVolumeOwned(ctx context.Context, options client.Vo
 }
 
 func (s *VolumeService) DeleteVolume(ctx context.Context, name string, force bool, user usertypes.Actor) error {
+	if err := volumetypes.RefuseBind(name); err != nil {
+		return err
+	}
 	slog.DebugContext(ctx, "volume service: delete volume", "volume", name, "force", force, "user", user.ID)
 	unlock, acquired := s.workspaceLocks.TryLock(name)
 	if !acquired {
@@ -311,72 +316,4 @@ func buildVolumePruneMetadataInternal(all bool, volumesDeleted int, spaceReclaim
 		"spaceReclaimed":            spaceReclaimed,
 		"internalVolumeFilterLabel": internalVolumePruneFilterValue,
 	}
-}
-
-func (s *VolumeService) GetVolumeUsage(ctx context.Context, name string) (bool, []string, error) {
-	slog.DebugContext(ctx, "volume service: get volume usage", "volume", name)
-	dockerClient, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to connect to Docker: %w", err)
-	}
-
-	vol, err := dockerClient.VolumeInspect(ctx, name, client.VolumeInspectOptions{})
-	if err != nil {
-		return false, nil, fmt.Errorf("volume not found: %w", err)
-	}
-
-	if isBackupTargetVolume(vol.Volume.Labels) {
-		return false, nil, hiddenTargetVolumeError()
-	}
-	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to get containers using volume: %w", err)
-	}
-
-	containerIDs := consumers[vol.Volume.Name]
-	return len(containerIDs) > 0, containerIDs, nil
-}
-
-// VolumeSizeData holds size information for a volume.
-type VolumeSizeData struct {
-	Size     int64
-	RefCount int64
-}
-
-// GetVolumeSizes returns disk usage data for all volumes.
-// This is a slow operation as it calls Docker's DiskUsage API.
-func (s *VolumeService) GetVolumeSizes(ctx context.Context) (map[string]VolumeSizeData, error) {
-	slog.DebugContext(ctx, "volume service: get volume sizes")
-	localSettings := s.settingsService.GetSettingsConfig()
-	apiCtx, cancel := context.WithTimeout(ctx, timeouts.GetDuration(localSettings.DockerAPITimeout.AsInt(), timeouts.DefaultDockerAPI))
-	defer cancel()
-
-	dockerClient, err := s.dockerService.GetClient(apiCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
-	}
-
-	usageVolumes, err := docker.GetVolumeUsageData(apiCtx, dockerClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get volume usage data: %w", err)
-	}
-
-	consumers, err := listVolumeConsumersInternal(apiCtx, dockerClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get containers using volumes: %w", err)
-	}
-	result := make(map[string]VolumeSizeData, len(usageVolumes))
-	for _, v := range usageVolumes {
-		if isBackupTargetVolume(v.Labels) {
-			continue
-		}
-		if v.UsageData != nil {
-			result[v.Name] = VolumeSizeData{
-				Size:     v.UsageData.Size,
-				RefCount: int64(len(consumers[v.Name])),
-			}
-		}
-	}
-
-	return result, nil
 }

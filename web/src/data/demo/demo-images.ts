@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { sameImageReference } from "@/domain/docker-reference";
 import { imageIdFor, imageReference, parseImageReference, pruneCandidates, type DockerImage, type ImageConsumer } from "@/domain/images";
 import type { ContainerInfo, Host } from "@/domain/model";
@@ -96,7 +97,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
   const requireConnected = (hostId: string): Host => {
     const host = db.host(hostId);
     if (!host) throw new DemoError("not-found");
-    if (host.status !== "online") throw new DemoError("host-offline");
+    if (!isHostAvailable(host)) throw new DemoError("host-offline");
     return host;
   };
 
@@ -163,7 +164,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
     },
 
     async pruneImages({ hostIds, mode }) {
-      const hosts = hostIds.filter((id) => db.host(id)?.status === "online").map((hostId) => {
+      const hosts = hostIds.filter((id) => isHostAvailable(db.host(id))).map((hostId) => {
         const candidates = pruneCandidates(list().filter((i) => i.hostId === hostId), mode);
         for (const image of candidates) store.delete(image.id);
         return { hostId, removed: candidates.map((i) => i.id), skipped: [], failed: [], spaceReclaimed: candidates.reduce((sum, i) => sum + i.sizeMb * 1024 ** 2, 0) };

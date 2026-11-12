@@ -2,8 +2,9 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original per-host local repository status with read-only engine image.
+// Deviations: Original per-host local repository status with read-only engine image. M14 host maintenance and availability. M23 #398: no repository read while the host is unavailable.
 
+import { isHostAvailable } from "@/domain/hosts";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { useBackupRepository } from "@/data/backup-queries";
@@ -14,8 +15,10 @@ import { BackupOperation } from "@/features/volumes/backups/BackupOperation";
 import { Button } from "@/shared/ui/button";
 
 export function RepositoryCard({ host, recovery }: { host: Host; recovery: () => void }) {
+  // An unavailable host is not read; its card shows the catalogue state until the host is back (#398).
+  const available = isHostAvailable(host);
   const adapter = useAdapter(),
-    repository = useBackupRepository(host.id),
+    repository = useBackupRepository(host.id, available),
     t = useTranslations("settings.backups"),
     all = useTranslations();
   const [activity, setActivity] = useState<string>(),
@@ -27,7 +30,8 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
       <h3 className="font-medium">
         {t("builtInLocal")} · {host.name}
       </h3>
-      {repository.isError ? (
+      {!available && value && <p role="status">{t("unavailable")}</p>}
+      {repository.isError || (!available && !value) ? (
         <p role="status">{t("unavailable")}</p>
       ) : !value ? (
         <p role="status">{t("loading")}</p>
@@ -51,7 +55,7 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
-          disabled={busy || host.status !== "online" || !!value?.running}
+          disabled={busy || !isHostAvailable(host) || !!value?.running}
           onClick={async () => {
             setBusy(true);
             try {
@@ -70,7 +74,7 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
         </Button>
       </div>
       {(value?.running?.activityId || activity) && (
-        <BackupOperation hostId={host.id} activityId={(value?.running?.activityId ?? activity)!} />
+        <BackupOperation hostId={host.id} activityId={(value?.running?.activityId || activity)!} />
       )}
       {error && <p role="alert">{error}</p>}
     </article>

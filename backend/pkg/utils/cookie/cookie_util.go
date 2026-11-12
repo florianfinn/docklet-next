@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed OIDC and passkeys.
+// Deviations: functional cut: removed OIDC and passkeys; pair session presence hints with every token write and clear.
 
 package cookie
 
@@ -129,7 +129,7 @@ func BuildTokenCookieStringFor(maxAgeInSeconds int, token string, secure bool) [
 	for i := len(chunks); i < tokenCookieMaxChunks; i++ {
 		headers = append(headers, buildClearTokenCookieStringInternal(tokenCookieChunkNameInternal(base, i), secure))
 	}
-	return headers
+	return appendSessionHint(headers, base, false)
 }
 
 // BuildClearTokenCookieStringsFor builds Set-Cookie header strings to clear
@@ -143,6 +143,10 @@ func BuildClearTokenCookieStringsFor(secure bool) []string {
 		if secure {
 			headers = append(headers, buildClearTokenCookieStringInternal(tokenCookieChunkNameInternal(TokenCookieName, i), true))
 		}
+	}
+	headers = appendSessionHint(headers, InsecureTokenCookieName, true)
+	if secure {
+		headers = appendSessionHint(headers, TokenCookieName, true)
 	}
 	return headers
 }

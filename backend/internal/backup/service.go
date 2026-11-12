@@ -2,8 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed S3 destinations; M12 scoped output, observed availability and strict volume parsing.
-
+// Deviations: Local module namespace; injectable host-operation admission before acquiring a backup lease; removed S3 destinations; M12 scoped output, observed availability and strict volume parsing.
 // Package backup owns the shared Rustic backup engine used by volume and
 // system backups: typed repository operations, per-repository serialization
 // and durable run admission.
@@ -48,12 +47,10 @@ type Repository struct {
 	Environment      []string
 	Mounts           []mount.Mount
 }
-
 type Snapshot struct {
 	ID   string `json:"id"`
 	Size int64  `json:"-"`
 }
-
 type rusticSnapshotOutputInternal struct {
 	ID      string `json:"id"`
 	Summary struct {
@@ -89,7 +86,6 @@ type CreateSnapshotInput struct {
 func RootSnapshotInput(source mount.Mount, tags ...string) CreateSnapshotInput {
 	return CreateSnapshotInput{Mounts: []mount.Mount{source}, Sources: []string{source.Target}, AsPath: "/", Tags: tags}
 }
-
 func snapshotCommandInternal(label string, input CreateSnapshotInput) ([]string, error) {
 	if len(input.Sources) == 0 {
 		return nil, errors.New("at least one snapshot source is required")
@@ -113,6 +109,7 @@ func snapshotCommandInternal(label string, input CreateSnapshotInput) ([]string,
 
 // Engine owns repository serialization and application-owned backup workers.
 type Engine struct {
+	hostAdmission  func(context.Context) error
 	imageReference func() string
 	imageService   *image.ImageService
 	admission      *runs.Admission
@@ -138,33 +135,23 @@ func NewEngine(ctx context.Context, admission *runs.Admission, imageService *ima
 		imageService: imageService,
 		admission:    admission,
 		lifecycleCtx: runCtx,
-		repositories: make(
-			map[string]*sync.Mutex,
-		),
-		handlers: make(
-			map[string]func(
-				context.Context,
-				string,
-				[]byte,
-				bool,
-			) error,
-		),
-		failures: make(
-			map[string]func(
-				context.Context,
-				string,
-				[]byte,
-				error,
-			) error,
-		),
-		leases: make(
-			map[string]*runs.Lease,
-		),
-		unresolved: make(map[string]backup.DurableRunCommand),
+		repositories: make(map[string]*sync.Mutex),
+		handlers:     make(map[string]func(context.Context, string, []byte, bool) error),
+		failures:     make(map[string]func(context.Context, string, []byte, error) error),
+		leases:       make(map[string]*runs.Lease),
+		unresolved:   make(map[string]backup.DurableRunCommand),
 	}
 }
 
+// SetHostAdmission connects the host-operation exclusion before backup effects.
+func (e *Engine) SetHostAdmission(check func(context.Context) error) { e.hostAdmission = check }
+
 func (e *Engine) TryAcquireRun(ctx context.Context, scope, id string) (*runs.Lease, bool, error) {
+	if e != nil && e.hostAdmission != nil {
+		if err := e.hostAdmission(ctx); err != nil {
+			return nil, false, err
+		}
+	}
 	if e == nil || e.admission == nil {
 		return nil, false, errors.New("backup engine is unavailable")
 	}

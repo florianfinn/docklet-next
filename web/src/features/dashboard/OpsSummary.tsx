@@ -14,10 +14,13 @@ import { Card } from "@/shared/ui/card";
 import { DotField } from "@/shared/visual/DotField";
 
 import type { AttentionItem } from "./attention";
-import { fleetBreakdown, fleetUnits, problemCounts, problemItems, type FleetBreakdown, type FleetUnit } from "./fleet-status";
+import { fleetBreakdown, fleetUnits, problemCounts, problemItems, type FleetBreakdown, type FleetFilter, type FleetUnit } from "./fleet-status";
+import { FleetChips } from "./FleetChips";
 import { orderHosts, useFleetView, type HostAreaSize } from "./fleet-view-store";
 import { FleetLine } from "./FleetLine";
-import { FleetRing } from "./FleetRing";
+import { ConditionFeed } from "./ConditionFeed";
+import { FleetRing, UnraidRingToggle } from "./FleetRing";
+import { usePreference } from "@/shared/preferences/preferences-store";
 import { HostCards } from "./HostCards";
 
 function PulseChip({ tone, icon, children, to, onClick }: { tone: Tone; icon: ReactNode; children: ReactNode; to?: string; onClick?: () => void }) {
@@ -46,12 +49,11 @@ function RingLegend({ b }: { b: FleetBreakdown }) {
   const t = useTranslations("dashboard.summary.legend");
   const rows: [keyof FleetBreakdown, Tone, boolean][] = [
     ["running", "ok", true],
-    ["partial", "warn", b.partial > 0],
-    ["problem", "err", b.problem > 0],
+    ["unhealthy", "warn", b.unhealthy > 0],
+    ["down", "err", b.down > 0],
     ["unreachable", "err", b.unreachable > 0],
-    ["starting", "info", b.starting > 0],
-    ["stopped", "gray", b.stopped > 0],
-    ["unknown", "orange", b.unknown > 0],
+    ["stopped", "gray", b.stopped + b.unknown > 0],
+    ["updates", "orange", b.updates > 0],
   ];
   return (
     <ul aria-label={t("label")} className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-slot="ring-legend">
@@ -64,7 +66,7 @@ function RingLegend({ b }: { b: FleetBreakdown }) {
             ) : (
               <ToneDot tone={tone} />
             )}
-            {t(key as "running", { count: b[key] })}
+            {t(key as "running", { count: key === "stopped" ? b.stopped + b.unknown : b[key] })}
           </li>
         ))}
     </ul>
@@ -153,20 +155,35 @@ interface OpsSummaryProps {
 function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: FleetUnit[]; label: string; center: { value: string; caption: string } }) {
   const t = useTranslations("dashboard.ring");
   const view = useFleetView();
+  const [pinned, setPinned] = useState<FleetFilter | null>(null);
+  const [hovered, setHovered] = useState<FleetFilter | null>(null);
+  const highlight = hovered ?? pinned;
   if (view.mode === "line") return <FleetLine hosts={hosts} units={units} label={label} />;
+  const chips = <FleetChips units={units} pinned={pinned} onPin={setPinned} onHover={setHovered} />;
   if (view.mode === "perHost") {
     const size = Math.round(Math.max(130, view.ringSize * 0.66));
     return (
-      <div className="flex flex-wrap justify-center gap-4" data-slot="fleet-rings">
-        {hosts.map((h) => {
-          const own = units.filter((u) => u.hostId === h.id);
-          const running = own.filter((u) => u.state === "running").length;
-          return <FleetRing key={h.id} hosts={[h]} units={own} size={size} fan={view.fan} label={t("hostRingLabel", { host: h.name, running, total: own.length })} center={{ value: `${running}/${own.length}`, caption: h.name }} />;
-        })}
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-wrap justify-center gap-4" data-slot="fleet-rings">
+          {hosts.map((h) => {
+            const own = units.filter((u) => u.hostId === h.id);
+            const running = own.filter((u) => u.state === "running" || u.state === "starting").length;
+            return <FleetRing key={h.id} hosts={[h]} units={own} size={size} fan={view.fan} unraidToggle={false} highlight={highlight} label={t("hostRingLabel", { host: h.name, running, total: own.length })} center={{ value: `${running}/${own.length}`, caption: h.name }} />;
+          })}
+          <div className="basis-full"><UnraidRingToggle /></div>
+        </div>
+        {chips}
+        <ConditionFeed />
       </div>
     );
   }
-  return <FleetRing hosts={hosts} units={units} label={label} center={center} size={view.ringSize} fan={view.fan} />;
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <FleetRing hosts={hosts} units={units} label={label} center={center} size={view.ringSize} fan={view.fan} highlight={highlight} />
+      {chips}
+      <ConditionFeed />
+    </div>
+  );
 }
 
 /** Shared all-host situation: fleet visual, verdict, pulse chips and per-host live cards. */
@@ -180,7 +197,12 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
   const hosts = orderHosts(byName, view.hostOrder);
   const units = fleetUnits(hosts, stacks, containers);
   const breakdown = fleetBreakdown(hosts, units);
-  const running = breakdown.running + breakdown.starting;
+  // The ring and its centre count only what the ring shows; the verdict keeps every unit.
+  const showUnraid = usePreference("showUnraidRing");
+  const ringUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
+  const ringBreakdown = fleetBreakdown(hosts, ringUnits);
+  const ringRunning = ringBreakdown.running;
+  const running = breakdown.running;
   const problems = problemItems(attention).length;
   const online = hosts.filter((h) => h.status === "online").length;
   const calm = attention.length === 0;
@@ -188,7 +210,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
   const top = attention[0];
   const verdictTone: Tone = calm ? "ok" : problems || attention.some((a) => a.tone === "err") ? "err" : "warn";
 
-  const counts = { running, partial: breakdown.partial, problems: breakdown.problem, unreachable: breakdown.unreachable, stopped: breakdown.stopped };
+  const counts = { running, unhealthy: breakdown.unhealthy, down: breakdown.down, unreachable: breakdown.unreachable, stopped: breakdown.stopped + breakdown.unknown };
   const verdict = (
     // The column grows with the row; the calm, nearly opaque plate inside only wraps the text, in both themes.
     <div className="flex min-w-[min(100%,20rem)] flex-[1_1_20rem]" data-slot="ops-verdict">
@@ -236,7 +258,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
     </div>
   );
   const visual = (
-    <FleetVisual hosts={hosts} units={units} label={view.mode === "line" ? tr("lineLabel", counts) : t("ringLabel", counts)} center={{ value: `${running}/${units.length}`, caption: t("ringCaption") }} />
+    <FleetVisual hosts={hosts} units={view.mode === "line" ? units : ringUnits} label={view.mode === "line" ? tr("lineLabel", counts) : t("ringLabel", { running: ringRunning, unhealthy: ringBreakdown.unhealthy, down: ringBreakdown.down, unreachable: ringBreakdown.unreachable, stopped: ringBreakdown.stopped + ringBreakdown.unknown })} center={{ value: `${ringRunning}/${ringUnits.length}`, caption: t("ringCaption") }} />
   );
   const right = view.placement === "right";
 

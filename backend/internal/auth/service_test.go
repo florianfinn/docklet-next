@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M15 simple-user rights and identity contracts; cross-version acceptance is covered by restart tests.
 
 package auth
 
@@ -12,6 +12,7 @@ import (
 	"crypto/mldsa"
 	"encoding/base64"
 	"encoding/json/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"testing"
 	"time"
 
@@ -49,6 +50,7 @@ func setupAuthServiceTestDB(t *testing.T) *database.DB {
 		&user.User{},
 		&session.UserSession{},
 		&environment.Environment{},
+		&access.Assignment{},
 		&role.Role{},
 		&role.UserRoleAssignment{},
 		&apikey.ApiKey{},
@@ -296,23 +298,6 @@ func TestVerifyToken_MissingUserID(t *testing.T) {
 
 	_, _, err := s.VerifyToken(t.Context(), token)
 	require.ErrorIs(t, err, common.ErrTokenValidation)
-}
-
-func TestVerifyToken_VersionMismatch(t *testing.T) {
-	s := newTestAuthService()
-	exp := time.Now().Add(5 * time.Minute)
-
-	oldVersion := config.Version
-	config.Version = "1.0.0"
-	token := makeAccessToken(t, s.signingKey, "access", "u1", "bob", []string{"user"}, "", "", exp, "session-version-mismatch")
-	config.Version = "2.0.0"
-
-	_, _, err := s.VerifyToken(t.Context(), token)
-
-	assert.ErrorIs(t, err, common.ErrTokenVersionMismatch,
-		"want ErrTokenVersionMismatch, got %v", err)
-
-	config.Version = oldVersion
 }
 
 func TestRefreshToken_Valid(t *testing.T) {

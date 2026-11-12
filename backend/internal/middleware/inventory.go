@@ -2,13 +2,16 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host inventory read implementation.
+// Deviations: Original host inventory read implementation; ordinary reads are time-bounded.
 
 package middleware
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +20,33 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/labstack/echo/v5"
 )
+
+// inventoryReadTimeout bounds an ordinary inventory read, including agent access. A frozen
+// agent would otherwise hold the browser's connection; the read then answers from its
+// snapshot or with agent.unavailable, well inside the web's 40 s management budget.
+var inventoryReadTimeout = 20 * time.Second
+
+// boundInventoryRead applies inventoryReadTimeout to an ordinary inventory read until the
+// returned restore runs; other proxied operations keep their own budgets.
+func boundInventoryRead(c *echo.Context, inventory bool) func() {
+	if !inventory {
+		return func() {}
+	}
+	ctx, cancel := context.WithTimeout(c.Request().Context(), inventoryReadTimeout)
+	return forwardOnContext(c, ctx, cancel)
+}
+
+// forwardOnContext runs the proxied request on the fenced agent-access context until the
+// returned restore runs; wrappers acting after forwarding (inventory origin overlay) then
+// get the caller's request back instead of a cancelled one.
+func forwardOnContext(c *echo.Context, ctx context.Context, cancel context.CancelFunc) func() {
+	caller := c.Request()
+	c.SetRequest(caller.WithContext(ctx))
+	return func() {
+		c.SetRequest(caller)
+		cancel()
+	}
+}
 
 // A cold inventory read waits at most one second for an Edge agent to reconnect.
 func (m *EnvironmentMiddleware) recoverInventoryTunnel(c *echo.Context, hostID, suffix string) bool {
@@ -51,9 +81,25 @@ func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, fo
 		Code    string `json:"code"`
 	}
 	valid := json.Unmarshal(capture.body.Bytes(), &envelope) == nil
+	if capture.status == http.StatusOK && (!valid || capture.failed) {
+		// A body cut short after its headers (the read bound or a dropped agent) is the
+		// host being unavailable, never a success, even when its bytes parse.
+		capture.status, capture.header = http.StatusBadGateway, make(http.Header)
+		capture.body.Reset()
+		capture.body.WriteString(`{"success":false,"code":"agent.unavailable"}`)
+		envelope.Code, valid = "agent.unavailable", true
+	}
 	observed := ""
 	reason := ""
 	if capture.status == http.StatusOK && valid && envelope.Success {
+		if m.originOverlay != nil && len(parts) > 0 && parts[0] == "containers" {
+			body, err := m.originOverlay(c.Request().Context(), hostID, capture.body.Bytes())
+			if err != nil {
+				return err
+			}
+			capture.body.Reset()
+			capture.body.Write(body)
+		}
 		value := m.snapshots.Put(key, capture.body.Bytes())
 		observed = value.ObservedAt.Format(time.RFC3339Nano)
 	} else if valid && (envelope.Code == "agent.unavailable" || envelope.Code == "agent.invalid-token" || envelope.Code == "agent.update-required") {
@@ -85,6 +131,30 @@ type inventoryResponse struct {
 	header http.Header
 	status int
 	body   bytes.Buffer
+	failed bool
+}
+
+// inventoryBody records a failed upstream body read on the capture; the shared body
+// copy stops on a read error without reporting it.
+type inventoryBody struct {
+	io.ReadCloser
+	capture *inventoryResponse
+}
+
+func (b inventoryBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		b.capture.failed = true
+	}
+	return n, err
+}
+
+// watchInventoryBody lets an inventory capture see an upstream body that ends in error.
+func watchInventoryBody(w http.ResponseWriter, body io.ReadCloser) io.ReadCloser {
+	if capture, ok := w.(*inventoryResponse); ok {
+		return inventoryBody{ReadCloser: body, capture: capture}
+	}
+	return body
 }
 
 func (w *inventoryResponse) Header() http.Header { return w.header }
@@ -105,5 +175,5 @@ func inventorySuffix(suffix string, parts []string) bool {
 	case "/containers", "/projects", "/images", "/volumes", "/networks", "/ports", "/networks/topology", "/dashboard":
 		return true
 	}
-	return len(parts) == 2 && (parts[0] == "projects" || parts[0] == "networks" || parts[0] == "volumes")
+	return len(parts) == 2 && (parts[0] == "containers" || parts[0] == "projects" || parts[0] == "networks" || parts[0] == "volumes")
 }

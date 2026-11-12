@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M14 container and host operation contracts.
 
 package project
 
@@ -105,10 +105,10 @@ func TestCountProjectsWithPendingTagUpdatesUsesRuntimeContainers(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 
-	// A digest check stored under another local tag of the running image marks
-	// the project once, however many replicas share the image.
+	// A digest check of the running image marks the project once, however many
+	// replicas share the image.
 	require.NoError(t, db.Create(&Project{Name: "third", Path: "third", ImageRefsJSON: `["app:latest"]`}).Error)
-	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), CheckTime: time.Now().UTC(), ID: "moving-image", Repository: "docker.io/library/app", Tag: "stable", HasUpdate: true, UpdateType: "digest"}).Error)
+	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), CheckTime: time.Now().UTC(), ID: "moving-image", Repository: "docker.io/library/app", Tag: "latest", HasUpdate: true, UpdateType: "digest"}).Error)
 	containers = append(containers,
 		container.Summary{ID: "third-one", Image: "app:latest", ImageID: "moving-image", Labels: map[string]string{"com.docker.compose.project": "third", "com.docker.compose.service": "web"}},
 		container.Summary{
@@ -413,6 +413,7 @@ func TestConfiguredProjectUsesScheduledRuntimeChecks(t *testing.T) {
 			service.enrichProjectsWithUpdateInfo(ctx, []Project{proj}, list, true, nil)
 			require.Equal(t, tt.wantUpdate, list[0].UpdateInfo.HasUpdate)
 			for _, info := range []*projecttypes.UpdateInfo{detail.UpdateInfo, list[0].UpdateInfo} {
+				require.Contains(t, info.ServiceUpdates, "web", "configured update evidence must retain its per-service projection")
 				if tt.wantUpdate {
 					require.Equal(t, target, info.ServiceUpdates["web"].UpdateInfo.LatestVersion)
 				} else {
@@ -439,7 +440,7 @@ func TestConfiguredProjectAggregatesReplicaAndPreviewChecks(t *testing.T) {
 	runtimeUpdates := projectdetails.ConfiguredRuntimeServiceUpdateInfo(configs, runtimeServices, scoped)
 	require.Len(t, runtimeUpdates, 1)
 	require.True(t, runtimeUpdates["web"].HasUpdate)
-	require.Empty(t, runtimeUpdates["web"].LatestVersion, "conflicting replica targets must not choose an arbitrary version")
+	require.Equal(t, "3.2.0", runtimeUpdates["web"].LatestVersion, "the replica that still needs its update supplies the whole observation")
 	previewTarget := "3.3.0"
 	records := []imageupdate.ImageUpdateRecord{
 		{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), CheckTime: time.Now().UTC(),

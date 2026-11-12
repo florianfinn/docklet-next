@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: cd9f5a79c78df3883ffdcddf5032e3810e7a18de03dd67a08f08b9480809b89a
+// Revision: 8428b88495c56209719c251687574c9bfa8b6ebc912359632bff6b5c2845e787
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -329,6 +329,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/me/ui-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read personal UI preferences */
+        get: operations["get-my-ui-preferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me/ui-preferences/{section}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a personal UI preference section */
+        put: operations["put-my-ui-preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/mode": {
         parameters: {
             query?: never;
@@ -338,7 +372,7 @@ export interface paths {
         };
         /**
          * Get active sign-in mode
-         * @description Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests, and cookie-less login/refresh POSTs without Origin, use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
+         * @description Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
          */
         get: operations["get-sign-in-mode"];
         put?: never;
@@ -419,6 +453,22 @@ export interface paths {
         get: operations["list-backup-targets"];
         put?: never;
         post: operations["create-backup-target"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backup-targets/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test-backup-target-draft"];
         delete?: never;
         options?: never;
         head?: never;
@@ -807,46 +857,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/customize/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get customization categories
-         * @description Get all available customization categories with metadata
-         */
-        get: operations["get-customize-categories"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/customize/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Search customization options
-         * @description Search customization categories and options by query
-         */
-        post: operations["search-customize"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/edge-mtls/ca": {
         parameters: {
             query?: never;
@@ -1119,6 +1129,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/agent/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restart a remote agent once */
+        post: operations["restartEnvironmentAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/agent/restarts/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a durable agent restart run */
+        get: operations["getEnvironmentAgentRestart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/auto-heal": {
         parameters: {
             query?: never;
@@ -1262,6 +1306,7 @@ export interface paths {
         put?: never;
         /**
          * Edit container
+         * @deprecated
          * @description Apply configuration changes and recreate the container
          */
         post: operations["edit-container"];
@@ -1283,6 +1328,23 @@ export interface paths {
          * @description Editable configuration snapshot backing the container edit form
          */
         get: operations["get-container-edit-config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/containers/{containerId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read container history by name */
+        get: operations["get-container-history"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1331,6 +1393,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/containers/{containerId}/origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["assign-container-origin"];
+        post?: never;
+        delete: operations["reset-container-origin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/containers/{containerId}/pause": {
         parameters: {
             query?: never;
@@ -1342,6 +1420,23 @@ export interface paths {
         put?: never;
         /** Pause container */
         post: operations["pause-container"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/containers/{containerId}/previous-image/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
+        post: operations["restore-container-image"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1368,6 +1463,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/containers/{containerId}/recreate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
+        post: operations["recreate-container"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/containers/{containerId}/redeploy": {
         parameters: {
             query?: never;
@@ -1377,10 +1489,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Redeploy container
-         * @description Pull latest image and recreate container
-         */
+        /** @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run. */
         post: operations["redeploy-container"];
         delete?: never;
         options?: never;
@@ -1475,7 +1584,6 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Update a single container
          * @deprecated
          * @description Retired update entry point; requests refuse update.path-retired before workload effects.
          */
@@ -1498,26 +1606,6 @@ export interface paths {
          * @description Returns the dashboard first-paint snapshot in a single response
          */
         get: operations["get-dashboard"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/deployment": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get deployment snippets
-         * @description Get Docker run and compose snippets for environment deployment
-         */
-        get: operations["getDeploymentSnippets"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1600,6 +1688,40 @@ export interface paths {
          * @description Update the heartbeat timestamp for an environment
          */
         post: operations["updateHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/history/host": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read host resource history */
+        get: operations["get-host-history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/history/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Collect an owning-host runtime history sample */
+        get: operations["get-history-sample"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1863,6 +1985,26 @@ export interface paths {
          * @description Load a Docker image tar archive from a complete chunked upload session. multipart/form-data bodies are still accepted for backward compatibility; that form is deprecated and will be removed in a future release.
          */
         post: operations["upload-image"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/images/vulnerabilities/active-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get active vulnerability counts for local images
+         * @description Discovers local images and container usage on the owning host; counts exclude ignored findings and retain the last completed scan after a failed attempt. No image list is required.
+         */
+        post: operations["get-active-image-vulnerability-summaries"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2411,7 +2553,7 @@ export interface paths {
         /** Get all notification settings */
         get: operations["get-all-notification-settings"];
         put?: never;
-        /** Create or update notification settings */
+        /** Create notification target */
         post: operations["create-or-update-notification-settings"];
         delete?: never;
         options?: never;
@@ -2419,16 +2561,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/environments/{id}/notifications/settings/{provider}": {
+    "/environments/{id}/notifications/settings/{targetId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get notification settings by provider */
+        /** Get notification settings by target ID */
         get: operations["get-notification-settings"];
-        put?: never;
+        /** Update notification target */
+        put: operations["update-notification-settings"];
         post?: never;
         /** Delete notification settings */
         delete: operations["delete-notification-settings"];
@@ -2437,7 +2580,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/environments/{id}/notifications/test/{provider}": {
+    "/environments/{id}/notifications/test/{targetId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2651,7 +2794,7 @@ export interface paths {
         post?: never;
         /**
          * Destroy a project
-         * @description Destroy a Docker Compose project and optionally remove files/volumes
+         * @description Destroy a Docker Compose project. Files and volumes are removed only when the body sets removeFiles or removeVolumes to true; Edge hosts refuse bodies over 64 KiB with 413 request.too-large.
          */
         delete: operations["destroy-project"];
         options?: never;
@@ -2673,6 +2816,23 @@ export interface paths {
          * @description Bring down a Docker Compose project (docker-compose down) Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
          */
         post: operations["down-project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/projects/{projectId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read project runtime history */
+        get: operations["get-project-history"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2753,6 +2913,26 @@ export interface paths {
         get: operations["get-project-runtime"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/projects/{projectId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop project containers
+         * @description Stop every service from the resolved Compose model without removing containers Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
+         */
+        post: operations["stop-project"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2904,6 +3084,23 @@ export interface paths {
         };
         /** Download project workspace file */
         get: operations["download-project-workspace-file"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/runtime-conditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read current assigned runtime conditions */
+        get: operations["get-runtime-conditions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3187,46 +3384,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/environments/{id}/system/upgrade/all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Update all environments
-         * @description Upgrade every Arcane environment, starting with the manager
-         */
-        post: operations["trigger-update-all"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/system/upgrade/all/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get update-all status
-         * @description Get the status of the latest update-all-environments job
-         */
-        get: operations["update-all-status"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/environments/{id}/system/upgrade/check": {
         parameters: {
             query?: never;
@@ -3279,6 +3436,23 @@ export interface paths {
          * @description Get the history of update operations
          */
         get: operations["get-updater-history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/updater/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List every stack and eligible standalone container policy */
+        get: operations["list-update-policies"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3405,24 +3579,6 @@ export interface paths {
          * @description Retired update entry point; requests refuse update.path-retired before workload effects.
          */
         post: operations["run-updater"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/updater/schedules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read the two hub-owned host schedules without agent I/O */
-        get: operations["get-update-schedules"];
-        /** Set hub-zone host schedules and recorded actor with expected revision */
-        put: operations["set-update-schedules"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3806,6 +3962,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/volumes/binds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list-volume-binds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/binds/size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["measure-volume-bind"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/volumes/counts": {
         parameters: {
             query?: never;
@@ -4076,6 +4264,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/vulnerabilities/advisories/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read all occurrences of an advisory */
+        get: operations["get-vulnerability-advisory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/vulnerabilities/all": {
         parameters: {
             query?: never;
@@ -4090,6 +4295,40 @@ export interface paths {
         get: operations["list-environment-vulnerabilities"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/vulnerabilities/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read current candidate proofs */
+        get: operations["get-vulnerability-candidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/vulnerabilities/candidates/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check update candidates */
+        post: operations["scan-vulnerability-candidates"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4347,54 +4586,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/environments/{id}/webhooks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List webhooks
-         * @description List all webhooks configured for this environment
-         */
-        get: operations["list-webhooks"];
-        put?: never;
-        /**
-         * Create webhook
-         * @description Create a webhook that triggers a container or stack update. The token is only returned once.
-         */
-        post: operations["create-webhook"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/webhooks/{webhookId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete webhook
-         * @description Delete a webhook by ID
-         */
-        delete: operations["delete-webhook"];
-        options?: never;
-        head?: never;
-        /**
-         * Update webhook
-         * @description Update a webhook's enabled state
-         */
-        patch: operations["update-webhook"];
-        trace?: never;
-    };
     "/events": {
         parameters: {
             query?: never;
@@ -4496,6 +4687,23 @@ export interface paths {
          * @description Check if the API is healthy (HEAD request)
          */
         head: operations["health-check-head"];
+        patch?: never;
+        trace?: never;
+    };
+    "/history/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read host capacity trends in bytes per day */
+        get: operations["get-history-capacity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -4602,18 +4810,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settings/categories": {
+    "/service-widgets": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get settings categories
-         * @description Get all available settings categories with metadata
-         */
-        get: operations["get-settings-categories"];
+        get: operations["list-service-widgets"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4622,7 +4826,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settings/search": {
+    "/service-widgets/overseerr/requests/{requestId}/approve": {
         parameters: {
             query?: never;
             header?: never;
@@ -4631,11 +4835,88 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Search settings
-         * @description Search settings categories and individual settings by query
-         */
-        post: operations["search-settings"];
+        post: operations["approve-service-widget-request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/overseerr/requests/{requestId}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decline-service-widget-request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-service-widget"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/{kind}/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-service-widget-config"];
+        put: operations["put-service-widget-config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-widgets/{kind}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test-service-widget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stack-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import an unsaved stack proposal */
+        post: operations["import-stack-source"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4656,6 +4937,23 @@ export interface paths {
         get: operations["streamClient"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/updater/check-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check every enabled host now */
+        post: operations["check-all-updates"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4714,6 +5012,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{userId}/administrator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set-user-admin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/app-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set-user-app-assignments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{userId}/avatar": {
         parameters: {
             query?: never;
@@ -4728,6 +5058,54 @@ export interface paths {
         get: operations["getUserAvatar"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disable-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enable-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reset-user-password"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4795,6 +5173,14 @@ export interface components {
             /** Format: int64 */
             statusCode: number;
         };
+        ActiveSummariesInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActiveSummariesInputBody.json
+             */
+            readonly $schema?: string;
+        };
         ActivityActivity: {
             affectedServices?: string[] | null;
             batchId?: string;
@@ -4811,7 +5197,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4849,7 +5235,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4891,7 +5277,7 @@ export interface components {
         ActivityMessage: {
             activityId: string;
             /** @enum {string} */
-            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            code?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             /** Format: date-time */
             createdAt: string;
             id: string;
@@ -4913,7 +5299,8 @@ export interface components {
         ActivityRuntimeAdmission: {
             activity: components["schemas"]["ActivityRuntimeSnapshot"];
             activityId: string;
-            code: string;
+            /** @enum {string} */
+            code: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
         };
         ActivityRuntimeAttribution: {
             displayName?: string;
@@ -4932,7 +5319,8 @@ export interface components {
         };
         ActivityRuntimeConflict: {
             activeRunId?: string;
-            code: string;
+            /** @enum {string} */
+            code: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
         };
         ActivityRuntimeConflictResponse: {
             data: components["schemas"]["ActivityRuntimeConflict"];
@@ -4957,7 +5345,7 @@ export interface components {
             attribution: components["schemas"]["ActivityRuntimeAttribution"];
             identity: components["schemas"]["ActivityRuntimeRunIdentity"];
             /** @enum {string} */
-            operation: "deploy-project" | "down-project" | "restart-project" | "redeploy-project" | "start-container" | "stop-container" | "restart-container" | "update-project" | "restore-project";
+            operation: "deploy-project" | "down-project" | "restart-project" | "redeploy-project" | "start-container" | "stop-container" | "restart-container" | "update-project" | "restore-project" | "stop-project" | "recreate-container" | "redeploy-container" | "update-container" | "restore-container-image";
             options: components["schemas"]["ActivityRuntimeOptions"];
             target: components["schemas"]["ActivityRuntimeTarget"];
         };
@@ -4983,7 +5371,8 @@ export interface components {
             timestamp: string;
         };
         ActivityRuntimeExecutionRefusal: {
-            code: string;
+            /** @enum {string} */
+            code: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
         };
         ActivityRuntimeExecutorIdentity: {
             /**
@@ -5002,7 +5391,8 @@ export interface components {
             success: boolean;
         };
         ActivityRuntimeHTTPError: {
-            code: string;
+            /** @enum {string} */
+            code: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             message: string;
         };
         ActivityRuntimeHubDetail: {
@@ -5019,8 +5409,10 @@ export interface components {
             activityId: string;
         };
         ActivityRuntimeOptions: {
+            containerImage?: components["schemas"]["UpdaterContainerImageRequest"];
             deploy: components["schemas"]["ProjectDeployOptions"];
             lifecycle?: components["schemas"]["UpdaterLifecycleIntent"];
+            recreate?: components["schemas"]["ContainerEdit"];
             restartServices: string[] | null;
         };
         ActivityRuntimeRecoveryEvidence: {
@@ -5030,7 +5422,8 @@ export interface components {
             dispositionBy?: string;
             dispositionReason?: string;
             executorError?: string;
-            executorResultCode?: string;
+            /** @enum {string} */
+            executorResultCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             /** Format: date-time */
             executorSettledAt?: string;
             executorState: string;
@@ -5070,7 +5463,7 @@ export interface components {
             imageLifecycle?: components["schemas"]["UpdaterLifecycleResult"];
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -5081,6 +5474,7 @@ export interface components {
             resourceId?: string;
             resourceName?: string;
             resourceType?: string;
+            result?: components["schemas"]["ContainerRecreateResult"];
             sourceEnvironmentId?: string;
             sourceEnvironmentName?: string;
             /** Format: date-time */
@@ -5106,7 +5500,10 @@ export interface components {
              */
             readonly $schema?: string;
             composeManaged: boolean;
+            composeProjectLabel?: boolean;
             lifecycle?: components["schemas"]["UpdaterLifecycleIntent"];
+            origin?: components["schemas"]["ContainerOriginFields"];
+            protected?: boolean;
             target: components["schemas"]["ActivityRuntimeTarget"];
         };
         ActivityRuntimeTargetRequest: {
@@ -5127,7 +5524,7 @@ export interface components {
         };
         ActivityStepTraceEntry: {
             /** @enum {string} */
-            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            code?: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             /** Format: date-time */
             endedAt?: string;
             id: string;
@@ -5147,6 +5544,10 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             type: string;
+        };
+        AgentAccessError: {
+            code: string;
+            success: boolean;
         };
         "ApiResponseStruct {}DataStruct": Record<string, never>;
         ApikeyApiKey: {
@@ -5356,6 +5757,7 @@ export interface components {
             refreshToken: string;
         };
         AuthSignInConfiguration: {
+            readonly logoutUrl?: string;
             /**
              * @description Active startup sign-in mode; changes require operator configuration and restart
              * @enum {string}
@@ -5414,9 +5816,12 @@ export interface components {
              * @example /api/schemas/AutohealSettings.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            cooldownMinutes: number;
             enabled: boolean;
             excludedContainers: string[] | null;
             excludedStacks: string[] | null;
+            readonly invalidFields: ("maxRestarts" | "windowMinutes" | "cooldownMinutes" | "excludedStacks" | "excludedContainers")[];
             readonly managedByEnvironment: boolean;
             /** Format: int64 */
             maxRestarts: number;
@@ -5430,6 +5835,8 @@ export interface components {
              * @example /api/schemas/AutohealUpdate.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            cooldownMinutes?: number;
             enabled: boolean;
             excludedContainers: string[] | null;
             excludedStacks: string[] | null;
@@ -5476,11 +5883,11 @@ export interface components {
         BackupProblem: {
             activityId?: string;
             /** @enum {string} */
-            code: "volume.exists" | "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable";
+            code: "volume.exists" | "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable" | "volume.bind.invalid-key" | "volume.bind.path-denied" | "volume.bind.not-mounted" | "volume.bind.source-missing" | "volume.bind.unsupported-type" | "volume.bind.unsupported" | "volume.bind.file-operation-unsupported" | "volume.bind.recovery-failed" | "volume.bind.snapshot-kind-mismatch" | "volume.bind.size-timeout" | "volume.helper-unavailable" | "volume.operation-failed" | "volume.workspace-busy" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "backup.copy.insufficient-space" | "runtime.interrupted" | "backup.target.probe-host-mismatch" | "backup.target.location-conflict";
             detail: string;
             hosts?: string[] | null;
             /** @enum {string} */
-            reason?: "format" | "path" | "duplicate" | "entry-type" | "link" | "too-many-entries" | "expanded-too-large" | "insufficient-space";
+            reason?: "format" | "path" | "duplicate" | "entry-type" | "link" | "too-many-entries" | "expanded-too-large" | "insufficient-space" | "system" | "docker" | "docklet";
             /** Format: int64 */
             status: number;
             title: string;
@@ -5580,7 +5987,8 @@ export interface components {
             archiveVersion?: number;
             /** Format: date-time */
             completedAt?: string;
-            copyErrorCode?: string;
+            /** @enum {string} */
+            copyErrorCode?: "backup.copy.mount-failed" | "backup.copy.write-failed" | "backup.copy.insufficient-space" | "runtime.interrupted";
             /** @enum {string} */
             copyState: "none" | "pending" | "succeeded" | "failed";
             copyTargetId?: string;
@@ -5624,6 +6032,7 @@ export interface components {
             configVersion: number;
             /** Format: date-time */
             createdAt: string;
+            delivery: components["schemas"]["BackupTargetHostDelivery"][] | null;
             hasSecret: boolean;
             hostId?: string;
             id: string;
@@ -5659,6 +6068,25 @@ export interface components {
             /** Format: int64 */
             totalBytes?: number;
         };
+        BackupTargetDraftTest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BackupTargetDraftTest.json
+             */
+            readonly $schema?: string;
+            probeHostId: string;
+            target: components["schemas"]["BackupTargetInput"];
+            targetId?: string;
+        };
+        BackupTargetHostDelivery: {
+            /** Format: date-time */
+            at?: string;
+            code?: string;
+            hostId: string;
+            /** @enum {string} */
+            state: "conflict" | "current" | "pending";
+        };
         BackupTargetInput: {
             /**
              * Format: uri
@@ -5677,6 +6105,14 @@ export interface components {
             server?: string;
             share?: string;
             username?: string;
+        };
+        BackupTargetProbeRequest: {
+            probeHostId: string;
+            target: components["schemas"]["BackupTargetInput"];
+        };
+        BackupTargetProbeResult: {
+            code?: string;
+            ok: boolean;
         };
         BackupTargetRecoveryKey: {
             /**
@@ -5902,6 +6338,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseBackupTargetProbeResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseBackupTargetProbeResult.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["BackupTargetProbeResult"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseBackupTargetRecoveryKey: {
             /**
              * Format: uri
@@ -6094,18 +6542,6 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        BaseApiResponseDeploymentSnippet: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseDeploymentSnippet.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["DeploymentSnippet"];
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
         BaseApiResponseEnvironmentAgentPairResponse: {
             /**
              * Format: uri
@@ -6115,6 +6551,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["EnvironmentAgentPairResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseEnvironmentAgentRestartRun: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseEnvironmentAgentRestartRun.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["EnvironmentAgentRestartRun"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6154,18 +6602,6 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        BaseApiResponseEnvironmentUpdateJob: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseEnvironmentUpdateJob.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["EnvironmentUpdateJob"];
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
         BaseApiResponseEnvironmentWithApiKey: {
             /**
              * Format: uri
@@ -6187,6 +6623,42 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["EventSeverityCounts"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseHistoryConditions: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseHistoryConditions.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["HistoryConditions"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseHistoryResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseHistoryResponse.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["HistoryResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseHistorySample: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseHistorySample.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["HistorySample"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6300,18 +6772,6 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        "BaseApiResponseInterface {}": {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseInterface {}.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: unknown;
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
         BaseApiResponseJobscheduleConfig: {
             /**
              * Format: uri
@@ -6369,6 +6829,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["CapabilityDescriptor"][] | null;
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseListHistoryCapacity: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseListHistoryCapacity.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["HistoryCapacity"][] | null;
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6456,6 +6928,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseListUpdaterAutoUpdatePolicy: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseListUpdaterAutoUpdatePolicy.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["UpdaterAutoUpdatePolicy"][] | null;
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseListUpdaterRestorePoint: {
             /**
              * Format: uri
@@ -6465,6 +6949,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["UpdaterRestorePoint"][] | null;
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseListVolumeBind: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseListVolumeBind.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VolumeBind"][] | null;
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6489,18 +6985,6 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["VulnerabilityScanRun"][] | null;
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
-        BaseApiResponseListWebhookSummary: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseListWebhookSummary.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["WebhookSummary"][] | null;
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6611,6 +7095,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["NotificationTestResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponsePreferencesDocument: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponsePreferencesDocument.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["PreferencesDocument"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6734,18 +7230,6 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        BaseApiResponseTriggerUpgradeData: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseTriggerUpgradeData.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["TriggerUpgradeData"];
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
         BaseApiResponseUpdaterAutoUpdatePolicy: {
             /**
              * Format: uri
@@ -6803,18 +7287,6 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["UpdaterSystemImageHints"];
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
-        BaseApiResponseUpdaterUpdateScheduleConfig: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseUpdaterUpdateScheduleConfig.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["UpdaterUpdateScheduleConfig"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6902,6 +7374,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseVolumeBindMeasurement: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVolumeBindMeasurement.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VolumeBindMeasurement"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseVolumePrunePlan: {
             /**
              * Format: uri
@@ -6986,6 +7470,30 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseVulnerabilityActiveSummaries: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityActiveSummaries.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityActiveSummaries"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVulnerabilityAdvisoryDetail: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityAdvisoryDetail.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityAdvisoryDetail"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseVulnerabilityBulkIgnoreResponse: {
             /**
              * Format: uri
@@ -6995,6 +7503,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["VulnerabilityBulkIgnoreResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVulnerabilityCandidateResults: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityCandidateResults.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityCandidateResults"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -7079,18 +7599,6 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["VulnerabilityScanSummary"];
-            /** @description Whether the request was successful */
-            success: boolean;
-        };
-        BaseApiResponseWebhookCreated: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseWebhookCreated.json
-             */
-            readonly $schema?: string;
-            /** @description Response data */
-            data: components["schemas"]["WebhookCreated"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -7522,18 +8030,6 @@ export interface components {
             id: string;
             kind: string;
         };
-        CategoryCategory: {
-            description: string;
-            icon: string;
-            id: string;
-            keywords: string[] | null;
-            matchingSettings?: components["schemas"]["MetaMetadata"][] | null;
-            /** Format: int64 */
-            relevanceScore?: number;
-            settings: components["schemas"]["MetaMetadata"][] | null;
-            title: string;
-            url: string;
-        };
         ContainerActionResult: {
             activityId?: string;
             errors?: string[] | null;
@@ -7646,13 +8142,21 @@ export interface components {
             id: string;
             image: string;
             imageId: string;
+            /** @description Image manifest platform or unknown when the daemon does not provide it */
+            imagePlatform: string;
             labels?: {
                 [key: string]: string;
             };
             mounts: components["schemas"]["ContainerMount"][] | null;
             name: string;
             networkSettings: components["schemas"]["ContainerNetworkSettings"];
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
+            /** @description Previous image offered for restore; absent when no restore is offered */
+            previousImage?: components["schemas"]["ContainerPreviousImage"];
             redeployDisabled?: boolean;
             state: components["schemas"]["ContainerState"];
             updateInfo?: components["schemas"]["ImageUpdateInfo"];
@@ -7888,6 +8392,29 @@ export interface components {
                 [key: string]: components["schemas"]["ContainerEndpointSettingsCreate"];
             };
         };
+        ContainerOriginAssignment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerOriginAssignment.json
+             */
+            readonly $schema?: string;
+            dockerId: string;
+            /** @enum {string} */
+            origin: "unraid" | "standalone";
+        };
+        ContainerOriginFields: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerOriginFields.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
+        };
         ContainerPort: {
             ip?: string;
             /** Format: int64 */
@@ -7900,9 +8427,37 @@ export interface components {
             hostIp?: string;
             hostPort?: string;
         };
+        ContainerPreviousImage: {
+            /**
+             * Format: date-time
+             * @description When the slot was written
+             */
+            createdAt: string;
+            /** @description Local image ID kept for the restore */
+            imageId: string;
+            /** @description Image reference the container ran before the update */
+            imageRef: string;
+        };
+        ContainerProblem: {
+            /** @enum {string} */
+            code: "container.origin-locked" | "container.recreate-recovered" | "container.recreate-ambiguous" | "runtime.idempotency-mismatch" | "update.path-retired" | "container.shell-invalid" | "container.shell-protocol" | "container.shell-unavailable" | "container.shell-orphaned" | "container.shell-not-running";
+            /** @enum {string} */
+            origin?: "compose" | "unraid" | "unknown" | "standalone";
+            /** Format: int64 */
+            status: number;
+        };
         ContainerProcesses: {
             processes: (string[] | null)[] | null;
             titles: string[] | null;
+        };
+        ContainerRecreateRequest: {
+            edit: components["schemas"]["ContainerEdit"];
+        };
+        ContainerRecreateResult: {
+            newId: string;
+            newName: string;
+            oldId: string;
+            oldName: string;
         };
         ContainerResourceSample: {
             /** Format: double */
@@ -7918,6 +8473,36 @@ export interface components {
             /** Format: int64 */
             maximumRetryCount?: number;
             name?: string;
+        };
+        ContainerShellClose: {
+            /** @enum {string} */
+            type: "close";
+        };
+        ContainerShellExit: {
+            /** Format: int64 */
+            code: number | null;
+            reason: string;
+            /** @enum {string} */
+            type: "exit";
+        };
+        ContainerShellQuery: {
+            /** Format: int64 */
+            cols?: number;
+            /** Format: int64 */
+            rows?: number;
+            /**
+             * @default auto
+             * @enum {string}
+             */
+            shell: "auto" | "sh" | "bash";
+        };
+        ContainerShellResize: {
+            /** Format: int64 */
+            cols: number;
+            /** Format: int64 */
+            rows: number;
+            /** @enum {string} */
+            type: "resize";
         };
         ContainerState: {
             /** Format: int64 */
@@ -7948,12 +8533,18 @@ export interface components {
             id: string;
             image: string;
             imageId: string;
+            /** @description Image manifest platform or unknown when the daemon does not provide it */
+            imagePlatform: string;
             labels: {
                 [key: string]: string;
             };
             mounts: components["schemas"]["ContainerMount"][] | null;
             names: string[] | null;
             networkSettings: components["schemas"]["ContainerNetworkSettings"];
+            /** @enum {string} */
+            origin: "compose" | "unraid" | "unknown" | "standalone";
+            /** @enum {string} */
+            originSource: "detected" | "manual" | "unconfirmed";
             ports: components["schemas"]["ContainerPort"][] | null;
             redeployDisabled?: boolean;
             resourceSample?: components["schemas"]["ContainerResourceSample"];
@@ -8165,38 +8756,6 @@ export interface components {
             restart_policy?: components["schemas"]["RestartPolicy"];
             rollback_config?: components["schemas"]["UpdateConfig"];
             update_config?: components["schemas"]["UpdateConfig"];
-        };
-        DeploymentSnippet: {
-            /** @description Docker compose YAML snippet */
-            dockerCompose: string;
-            /** @description Docker run command snippet */
-            dockerRun: string;
-            /** @description Optional Arcane-generated mTLS deployment assets for edge agents */
-            mtls?: components["schemas"]["DeploymentSnippetMTLS"];
-        };
-        DeploymentSnippetFile: {
-            /** @description Container mount path expected by the mTLS snippet */
-            containerPath: string;
-            /** @description PEM file contents. Omitted for sensitive files such as private keys; use downloadUrl instead. */
-            content?: string;
-            /** @description Pairing-permission endpoint to download this file when content is withheld */
-            downloadUrl?: string;
-            /** @description Suggested filename */
-            name: string;
-            /** @description Suggested file mode */
-            permissions: string;
-            /** @description True when this file is sensitive and must be fetched via downloadUrl */
-            sensitive?: boolean;
-        };
-        DeploymentSnippetMTLS: {
-            /** @description Docker compose snippet using Arcane-generated mTLS assets */
-            dockerCompose: string;
-            /** @description Docker run snippet using Arcane-generated mTLS assets */
-            dockerRun: string;
-            /** @description Generated PEM files to place on the edge host */
-            files: components["schemas"]["DeploymentSnippetFile"][] | null;
-            /** @description Suggested host directory containing the generated PEM files */
-            hostDirHint: string;
         };
         DetailSummaryConfigStruct: {
             argsEscaped?: boolean;
@@ -8975,6 +9534,22 @@ export interface components {
             reportedAt: string;
             version: components["schemas"]["VersionInfo"];
         };
+        EnvironmentAgentRestartResponse: {
+            instanceId: string;
+        };
+        EnvironmentAgentRestartRun: {
+            /** @enum {string} */
+            code?: "agent.restart-superseded" | "agent.restart-timeout" | "agent.restart-unsupported" | "agent.restart-interrupted" | "agent.restart-unconfirmed" | "host.unreachable" | "host.busy";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            deadline: string;
+            runId: string;
+            /** Format: date-time */
+            settledAt?: string;
+            /** @enum {string} */
+            state: "reserved" | "sent" | "awaiting" | "connected" | "failed" | "unknown";
+        };
         EnvironmentCreate: {
             /**
              * Format: uri
@@ -9001,7 +9576,8 @@ export interface components {
         EnvironmentEnvironment: {
             agentReport?: components["schemas"]["EnvironmentAgentReport"];
             apiKey?: string;
-            apiUrl: string;
+            apiUrl?: string;
+            color: string | null;
             connected?: boolean;
             /** Format: date-time */
             connectedAt?: string;
@@ -9011,9 +9587,9 @@ export interface components {
             edgeSecurityMode?: string;
             edgeSessionId?: string;
             edgeTransport?: string;
-            enabled: boolean;
+            enabled?: boolean;
             id: string;
-            isEdge: boolean;
+            isEdge?: boolean;
             lastEdgeTransport?: string;
             /** Format: date-time */
             lastHeartbeat?: string;
@@ -9022,7 +9598,15 @@ export interface components {
             /** Format: date-time */
             lastSeen?: string;
             name?: string;
+            /** Format: int64 */
+            registrationRevision: number;
             status: string;
+        };
+        EnvironmentHostProblem: {
+            /** @enum {string} */
+            code: "agent.restart-unsupported" | "agent.restart-superseded" | "agent.restart-timeout" | "agent.restart-unconfirmed" | "agent.restart-interrupted" | "host.busy" | "host.restarting" | "host.name-invalid" | "host.name-taken" | "host.unreachable" | "edge.heartbeat-stale" | "agent.ui-configuration-disabled" | "settings.ui-configuration-disabled";
+            /** Format: int64 */
+            status: number;
         };
         EnvironmentHubAddressCandidate: {
             id: string;
@@ -9066,43 +9650,17 @@ export interface components {
             readonly $schema?: string;
             accessToken?: string | null;
             apiUrl?: string | null;
+            color?: string | null;
             enabled?: boolean | null;
             name?: string | null;
             regenerateApiKey?: boolean | null;
-        };
-        EnvironmentUpdateJob: {
-            /** Format: date-time */
-            completedAt?: string;
-            /** Format: date-time */
-            createdAt: string;
-            error?: string;
-            id: string;
-            managerDigestAtStart: string;
-            managerTargetVersion: string;
-            managerVersionAtStart: string;
-            results?: components["schemas"]["EnvironmentUpdateResult"][] | null;
-            status: string;
-            /** Format: date-time */
-            updatedAt?: string;
-            userId: string;
-            username: string;
-        };
-        EnvironmentUpdateResult: {
-            environmentId: string;
-            environmentName: string;
-            error?: string;
-            fromVersion?: string;
-            stage?: string;
-            /** Format: date-time */
-            stageStartedAt?: string;
-            status: string;
-            toVersion?: string;
         };
         EnvironmentWithApiKey: {
             agentReport?: components["schemas"]["EnvironmentAgentReport"];
             /** @description API key for pairing (only shown once during creation) */
             apiKey?: string;
-            apiUrl: string;
+            apiUrl?: string;
+            color: string | null;
             connected?: boolean;
             /** Format: date-time */
             connectedAt?: string;
@@ -9112,9 +9670,9 @@ export interface components {
             edgeSecurityMode?: string;
             edgeSessionId?: string;
             edgeTransport?: string;
-            enabled: boolean;
+            enabled?: boolean;
             id: string;
-            isEdge: boolean;
+            isEdge?: boolean;
             lastEdgeTransport?: string;
             /** Format: date-time */
             lastHeartbeat?: string;
@@ -9123,6 +9681,8 @@ export interface components {
             /** Format: date-time */
             lastSeen?: string;
             name?: string;
+            /** Format: int64 */
+            registrationRevision: number;
             status: string;
         };
         ErrorDetail: {
@@ -9179,7 +9739,7 @@ export interface components {
             environmentId?: string;
             id: string;
             /** @enum {string} */
-            messageCode: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed";
+            messageCode: "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked" | "runtime.idempotency-mismatch" | "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "volume.backup.target.key_viewed" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "notification.send" | "autoheal.restarted" | "autoheal.restart-failed" | "autoheal.limit-reached" | "autoheal.interrupted" | "notification.delivery-failed" | "load.sustained" | "container.condition.down" | "container.condition.unhealthy" | "container.condition.restart-loop" | "container.condition.running-again" | "update.self-failed" | "update.outcome-unknown";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -9230,6 +9790,191 @@ export interface components {
             test?: string[] | null;
             /** Format: int64 */
             timeout?: number;
+        };
+        HistoryBucket: {
+            /** Format: double */
+            blockRead: number;
+            /** Format: double */
+            blockWrite: number;
+            /** Format: double */
+            cpuAverage: number | null;
+            /** Format: double */
+            cpuMax: number | null;
+            diskSource: string;
+            /** Format: double */
+            diskTotal: number;
+            /** Format: double */
+            diskUsed: number;
+            /** Format: int64 */
+            exitCode: number;
+            /** Format: double */
+            memoryAverage: number | null;
+            /** Format: double */
+            memoryLimit: number;
+            /** Format: double */
+            memoryMax: number | null;
+            minutes: components["schemas"]["HistoryMinutes"];
+            /** Format: double */
+            networkRx: number;
+            /** Format: double */
+            networkTx: number;
+            partial: boolean;
+            /** Format: date-time */
+            start: string;
+            /** @enum {string} */
+            state: "running" | "unhealthy" | "down" | "stopped" | "nodata";
+        };
+        HistoryCapacity: {
+            /** Format: double */
+            daysUntilFull: number | null;
+            diskSource: string;
+            /** Format: double */
+            growthBytesPerDay: number | null;
+            growthUnavailable: boolean;
+            history: components["schemas"]["HistoryResponse"];
+            hostId: string;
+            /** Format: double */
+            totalBytes: number;
+            /** Format: double */
+            usedBytes: number;
+        };
+        HistoryCondition: {
+            /** @enum {string} */
+            condition: "running" | "unhealthy" | "down" | "stopped" | "nodata";
+            containerId: string;
+            /** Format: int64 */
+            exitCode: number;
+            /** @enum {string} */
+            kind: "container" | "stack";
+            name: string;
+            projectId: string;
+            /** @enum {string} */
+            reason: "" | "restart-loop" | "health" | "paused" | "intent" | "never-started" | "oom" | "exit" | "operator-stop";
+            /** Format: int64 */
+            restarts10m: number;
+            /** Format: date-time */
+            sampledAt: string;
+            /** Format: date-time */
+            since: string;
+        };
+        HistoryConditionEventMetadata: {
+            containerName: string;
+            /** Format: int64 */
+            exitCode: number;
+            hostId: string;
+            /** Format: int64 */
+            restarts: number;
+        };
+        HistoryConditions: {
+            hostId: string;
+            items: components["schemas"]["HistoryCondition"][] | null;
+            /** Format: date-time */
+            sampledAt: string;
+        };
+        HistoryContainerSample: {
+            /** Format: int64 */
+            exitCode: number;
+            finishedAt: string;
+            /** @enum {string} */
+            health: "" | "none" | "starting" | "healthy" | "unhealthy";
+            id: string;
+            name: string;
+            oomKilled: boolean;
+            projectId: string;
+            projectName: string;
+            /** Format: int64 */
+            restartCount: number;
+            service: string;
+            startedAt: string;
+            /** @enum {string} */
+            state: "running" | "restarting" | "paused" | "exited" | "created" | "dead" | "removing";
+            stats?: components["schemas"]["HistoryCounters"];
+            statsMissing: boolean;
+            stopIntent: boolean;
+        };
+        HistoryCounters: {
+            /** Format: double */
+            blockRead: number;
+            /** Format: double */
+            blockWrite: number;
+            /** Format: double */
+            cpuSystem: number;
+            /** Format: double */
+            cpuTotal: number;
+            /** Format: double */
+            memoryLimit: number;
+            /** Format: double */
+            memoryUsage: number;
+            /** Format: double */
+            networkRx: number;
+            /** Format: double */
+            networkTx: number;
+        };
+        HistoryHostSample: {
+            /** Format: double */
+            cpuBusy: number;
+            /** Format: double */
+            cpuTotal: number;
+            diskSource: string;
+            /** Format: double */
+            diskTotal: number;
+            /** Format: double */
+            diskUsed: number;
+            /** Format: double */
+            memoryTotal: number;
+            /** Format: double */
+            memoryUsed: number;
+            /** Format: double */
+            networkRx: number;
+            /** Format: double */
+            networkTx: number;
+        };
+        HistoryLoadAlertMetadata: {
+            container: string;
+            host: string;
+            /** @enum {string} */
+            metric: "cpu" | "memory";
+            /** Format: int64 */
+            minutes: number;
+            /** Format: double */
+            percent: number;
+            /** Format: double */
+            threshold: number;
+        };
+        HistoryMinutes: {
+            /** Format: int64 */
+            down: number;
+            /** Format: int64 */
+            running: number;
+            /** Format: int64 */
+            stopped: number;
+            /** Format: int64 */
+            unhealthy: number;
+        };
+        HistoryProblem: {
+            /** @enum {string} */
+            code: "history.sample-too-large" | "history.sample-invalid" | "history.unavailable" | "history.invalid-range";
+            /** Format: int64 */
+            status: number;
+        };
+        HistoryProjectSample: {
+            id: string;
+            name: string;
+            status: string;
+        };
+        HistoryResponse: {
+            buckets: components["schemas"]["HistoryBucket"][] | null;
+            /** @enum {string} */
+            range: "24h" | "7d" | "30d";
+            totals: components["schemas"]["HistoryMinutes"];
+            /** Format: double */
+            uptimePercent: number | null;
+        };
+        HistorySample: {
+            containers: components["schemas"]["HistoryContainerSample"][] | null;
+            host: components["schemas"]["HistoryHostSample"];
+            projects: components["schemas"]["HistoryProjectSample"][] | null;
+            uninspected?: string[] | null;
         };
         ImageAttestation: {
             artifactType?: string;
@@ -9314,7 +10059,7 @@ export interface components {
         };
         ImageProblem: {
             /** @enum {string} */
-            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.permission-denied" | "update.schedule-owner-unset" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.invalid-policy" | "update.policy-changed" | "update.schedule-hub-owned" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "deploy.point-unavailable" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found";
             message: string;
         };
         ImageProtection: {
@@ -9323,7 +10068,7 @@ export interface components {
         };
         ImagePruneItem: {
             /** @enum {string} */
-            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.permission-denied" | "update.schedule-owner-unset" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.invalid-policy" | "update.policy-changed" | "update.schedule-hub-owned" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.permission-denied" | "update.schedule-owner-unset" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.invalid-policy" | "update.policy-changed" | "update.schedule-hub-owned" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found";
             id: string;
         };
         ImagePruneReport: {
@@ -9404,7 +10149,6 @@ export interface components {
             usedBy?: components["schemas"]["ImageUsedBy"][] | null;
             /** Format: int64 */
             virtualSize: number;
-            vulnerabilityScan?: components["schemas"]["VulnerabilityScanSummary"];
         };
         ImageTagRequest: {
             /**
@@ -9635,7 +10379,7 @@ export interface components {
             category: string;
             children?: components["schemas"]["JobscheduleJobStatus"][] | null;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             currentRun?: components["schemas"]["SchedulerRun"];
             description: string;
             enabled: boolean;
@@ -9688,12 +10432,14 @@ export interface components {
                 [key: string]: string;
             };
         };
-        MetaMetadata: {
-            description?: string;
+        MeasureBindInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/MeasureBindInputBody.json
+             */
+            readonly $schema?: string;
             key: string;
-            keywords?: string[] | null;
-            label: string;
-            type: string;
         };
         NetworkConnectContainerRequest: {
             /**
@@ -10084,16 +10830,18 @@ export interface components {
         NotificationEventMap: {
             auto_heal?: boolean;
             backup_failed?: boolean;
+            container_unhealthy?: boolean;
             container_update?: boolean;
             deploy_failed?: boolean;
             host_offline?: boolean;
             image_update?: boolean;
             prune_report?: boolean;
+            sustained_load?: boolean;
             vulnerability_found?: boolean;
         };
         NotificationProblem: {
             /** @enum {string} */
-            code: "notification.config-invalid" | "notification.hub-only" | "notification.dispatch-invalid" | "notification.dispatch-unsupported" | "notification.dispatch-stale" | "notification.test-busy";
+            code: "notification.config-invalid" | "notification.hub-only" | "notification.dispatch-invalid" | "notification.dispatch-unsupported" | "notification.dispatch-stale" | "notification.test-busy" | "notification.name-taken" | "notification.name-invalid" | "notification.target-not-found";
             field?: string;
             /** Format: int64 */
             status: number;
@@ -10112,6 +10860,7 @@ export interface components {
             enabled: boolean;
             /** Format: int64 */
             id: number;
+            name: string;
             provider: string;
         };
         NotificationTestResponse: {
@@ -10133,6 +10882,7 @@ export interface components {
                 [key: string]: unknown;
             } | components["schemas"]["NotificationConfigDiscord"] | components["schemas"]["NotificationConfigEmail"] | components["schemas"]["NotificationConfigTelegram"] | components["schemas"]["NotificationConfigSignal"] | components["schemas"]["NotificationConfigSlack"] | components["schemas"]["NotificationConfigNtfy"] | components["schemas"]["NotificationConfigPushover"] | components["schemas"]["NotificationConfigGotify"] | components["schemas"]["NotificationConfigMatrix"] | components["schemas"]["NotificationConfigGoogleChat"] | components["schemas"]["NotificationConfigGeneric"];
             enabled: boolean;
+            name: string;
             provider: string;
         };
         PortPortMapping: {
@@ -10146,6 +10896,30 @@ export interface components {
             id: string;
             isPublished: boolean;
             protocol: string;
+        };
+        PreferencesDocument: {
+            /** Format: int64 */
+            revision: number;
+            sections: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        PreferencesProblem: {
+            /** @enum {string} */
+            code: "preferences.no-user" | "preferences.unknown-section" | "preferences.invalid" | "preferences.too-large";
+            /** Format: int64 */
+            status: number;
+        };
+        PreferencesUpdate: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/PreferencesUpdate.json
+             */
+            readonly $schema?: string;
+            value: unknown;
         };
         ProjectConfigurationError: {
             blocksOperations: boolean;
@@ -10202,6 +10976,8 @@ export interface components {
             composeProjectName?: string;
             configurationError?: components["schemas"]["ProjectConfigurationError"];
             createdAt: string;
+            /** @enum {string} */
+            definitionHint?: "definition-invalid";
             dirName?: string;
             envContent?: string;
             hasBuildDirective?: boolean;
@@ -10250,7 +11026,8 @@ export interface components {
             ports?: string[] | null;
             redeployDisabled?: boolean;
             serviceConfig?: components["schemas"]["ServiceConfig"];
-            status: string;
+            /** @enum {string} */
+            status: "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead" | "stopped" | "unknown" | "not-created";
         };
         ProjectServiceUpdateInfo: {
             imageRef: string;
@@ -10293,7 +11070,7 @@ export interface components {
             lastCheckedAt?: string;
             notPulledImageRefs?: string[] | null;
             /** @enum {string} */
-            policyCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            policyCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             serviceUpdates?: {
                 [key: string]: components["schemas"]["ProjectServiceUpdateInfo"];
             };
@@ -10344,6 +11121,24 @@ export interface components {
             mode?: string;
             until?: string;
         };
+        RequestProblem: {
+            /** @enum {string} */
+            code: "request.path-encoded";
+            /**
+             * Format: int64
+             * @enum {integer}
+             */
+            status: 400;
+        };
+        ResetPasswordInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ResetPasswordInputBody.json
+             */
+            readonly $schema?: string;
+            password: string;
+        };
         ResolveRunInputBody: {
             /**
              * Format: uri
@@ -10387,7 +11182,7 @@ export interface components {
             fallbackOrder?: number;
             /**
              * @description Stable surface identifier
-             * @example settings.category.webhooks
+             * @example settings.category.jobschedule
              */
             id: string;
             /**
@@ -10397,7 +11192,7 @@ export interface components {
             kind: "route" | "settings-category" | "customize-category" | "landing";
             /**
              * @description Human-readable surface label
-             * @example Webhooks
+             * @example Job schedules
              */
             label: string;
             /**
@@ -10414,7 +11209,7 @@ export interface components {
             scopeMode: "global-only" | "selected-env-plus-global" | "any-effective-scope";
             /**
              * @description Route URL or prefix represented by this surface
-             * @example /settings/webhooks
+             * @example /settings/jobs
              */
             url?: string;
         };
@@ -10614,7 +11409,7 @@ export interface components {
         SchedulerOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             message?: string;
             status: string;
             targets?: components["schemas"]["SchedulerTargetOutcome"][] | null;
@@ -10686,11 +11481,15 @@ export interface components {
         SchedulerTargetOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            environmentId?: string;
             id: string;
             message?: string;
             resourceType?: string;
             status: string;
+            targetId?: string;
+            /** @enum {string} */
+            targetKind?: "stack" | "container";
         };
         SchedulerWorkerHealth: {
             lastError?: string;
@@ -10699,27 +11498,6 @@ export interface components {
             status: string;
             /** Format: date-time */
             updatedAt: string;
-        };
-        SearchRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/SearchRequest.json
-             */
-            readonly $schema?: string;
-            query: string;
-        };
-        SearchResponse: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/SearchResponse.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            count: number;
-            query: string;
-            results: components["schemas"]["CategoryCategory"][] | null;
         };
         ServiceConfig: {
             annotations?: {
@@ -10907,6 +11685,24 @@ export interface components {
             nocopy?: boolean;
             subpath?: string;
         };
+        SetAdminInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SetAdminInputBody.json
+             */
+            readonly $schema?: string;
+            isAdmin: boolean;
+        };
+        SetAssignmentsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SetAssignmentsInputBody.json
+             */
+            readonly $schema?: string;
+            assignments: components["schemas"]["UserAppAssignment"][] | null;
+        };
         SetAutoUpdateInputBody: {
             /**
              * Format: uri
@@ -10916,6 +11712,13 @@ export interface components {
             readonly $schema?: string;
             /** @description Whether auto-update is enabled for this container */
             enabled: boolean;
+        };
+        SettingsProblem: {
+            /** @enum {string} */
+            code: "settings.activity-limit-invalid";
+            field: string;
+            /** Format: int64 */
+            status: number;
         };
         SettingsPublicSetting: {
             key: string;
@@ -10936,6 +11739,8 @@ export interface components {
              */
             readonly $schema?: string;
             actionPresentation?: string | null;
+            activityEventLimit?: string | null;
+            activityRunLimit?: string | null;
             agentInstallDirectory?: string | null;
             agentProjectsDirectory?: string | null;
             /**
@@ -10945,6 +11750,7 @@ export interface components {
             authLocalEnabled?: string | null;
             authPasswordPolicy?: string | null;
             authSessionTimeout?: string | null;
+            autoHealCooldownMinutes?: string | null;
             autoHealEnabled?: string | null;
             autoHealExcludedContainers?: string | null;
             autoHealExcludedStacks?: string | null;
@@ -10952,10 +11758,9 @@ export interface components {
             autoHealMaxRestarts?: string | null;
             autoHealRestartWindow?: string | null;
             autoInjectEnv?: string | null;
-            autoUpdate?: string | null;
             autoUpdateExcludedContainers?: string | null;
-            autoUpdateInterval?: string | null;
             avatarMaxUploadSizeMb?: string | null;
+            backupDefaultRetentionCount?: string | null;
             baseServerUrl?: string | null;
             buildProvider?: string | null;
             buildTimeout?: string | null;
@@ -10992,10 +11797,12 @@ export interface components {
             keepActionOutput?: string | null;
             lifecycleMaxTimeoutSec?: string | null;
             linkBase?: string | null;
+            loadAlertCpuPercent?: string | null;
+            loadAlertMemoryPercent?: string | null;
+            loadAlertMinutes?: string | null;
+            loadAlertsEnabled?: string | null;
             maxConcurrentActivities?: string | null;
             maxImageUploadSize?: string | null;
-            pollingEnabled?: string | null;
-            pollingInterval?: string | null;
             projectsDirectory?: string | null;
             proxyRequestTimeout?: string | null;
             pruneBuildCacheMode?: string | null;
@@ -11012,6 +11819,10 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
+            /** @enum {string|null} */
+            stackStopMode?: "down" | "stop" | null;
+            /** @description Hub IANA schedule zone; empty uses TZ */
+            timeZone?: string | null;
             /** @description Docker image reference; empty uses this environment's release default */
             toolsImage?: string | null;
             trivyConcurrentScanContainers?: string | null;
@@ -11029,8 +11840,10 @@ export interface components {
             trivyServerEnabled?: string | null;
             trivyServerToken?: string | null;
             trivyServerUrl?: string | null;
-            updateCheckRegistry?: string | null;
-            upgradeLogRetentionDays?: string | null;
+            /** @enum {string|null} */
+            updateCheckInterval?: "6h" | "12h" | "24h" | null;
+            /** @enum {string|null} */
+            updateNotify?: "true" | "false" | null;
             volumeHelperIdleTimeout?: string | null;
             /** @enum {string|null} */
             vulnerabilityNotifyCritical?: "true" | "false" | null;
@@ -11038,11 +11851,54 @@ export interface components {
             vulnerabilityNotifyFailed?: "true" | "false" | null;
             /** @enum {string|null} */
             vulnerabilityNotifyHigh?: "true" | "false" | null;
-            vulnerabilityScanEnabled?: string | null;
             vulnerabilityScanInterval?: string | null;
-            /** @description JSON daily/weekly wall-clock schedule in the hub time zone */
+            /** @description JSON manual/daily/weekly wall-clock schedule in the hub time zone */
             vulnerabilityScanSchedule?: string | null;
             vulnerabilityThreatIntelEnabled?: string | null;
+        };
+        StackimportPlatform: {
+            architecture: string;
+            os: string;
+        };
+        StackimportProblem: {
+            /** @enum {string} */
+            code: "import.invalid-reference" | "import.registry-not-configured" | "import.not-found" | "import.too-large" | "import.timeout" | "import.redirect-refused" | "import.source-unavailable" | "import.invalid-compose" | "import.unauthorized" | "import.busy";
+            /** Format: int64 */
+            line?: number;
+            /** Format: int64 */
+            status: number;
+        };
+        StackimportRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/StackimportRequest.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            kind: "github" | "registry";
+            platform?: components["schemas"]["StackimportPlatform"];
+            ref: string;
+        };
+        StackimportResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/StackimportResult.json
+             */
+            readonly $schema?: string;
+            composeContent: string;
+            envNames: string[];
+            found: ("import.found.compose" | "import.found.env-example" | "import.found.image-config" | "import.found.ports" | "import.found.volumes" | "import.found.environment")[];
+            missing: ("import.missing.env-file" | "import.missing.label-file" | "import.missing.include" | "import.missing.extends" | "import.missing.build-context" | "import.missing.variables" | "import.missing.compose")[];
+            source: components["schemas"]["StackimportSource"];
+            title: string;
+        };
+        StackimportSource: {
+            canonicalRef: string;
+            /** @enum {string} */
+            kind: "github" | "registry";
+            resolvedDigest?: string;
         };
         StreamEvent: {
             activity?: components["schemas"]["ActivityStreamEvent"];
@@ -11149,6 +12005,7 @@ export interface components {
              * @example /api/schemas/SystemHealthResponse.json
              */
             readonly $schema?: string;
+            instanceId: string;
             status: string;
         };
         SystemPruneAllRequest: {
@@ -11204,21 +12061,66 @@ export interface components {
         SystemPruneVolumesOptions: {
             mode: string;
         };
-        TriggerUpgradeBody: {
+        SystemSelfUpdateCandidate: {
+            reference?: string;
+            version: string;
+        };
+        SystemSelfUpdateCheck: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/TriggerUpgradeBody.json
+             * @example /api/schemas/SystemSelfUpdateCheck.json
              */
             readonly $schema?: string;
-            /** @description Release version to upgrade to; overrides this instance's own version check */
+            eligibility: components["schemas"]["SystemSelfUpdateEligibility"];
+            operation?: components["schemas"]["SystemSelfUpdateOperation"];
+            version: string;
+        };
+        SystemSelfUpdateEligibility: {
+            candidate?: components["schemas"]["SystemSelfUpdateCandidate"];
+            /** @enum {string} */
+            code?: "feature-disabled" | "update.check-unavailable" | "host.busy" | "update.self-not-compose" | "update.self-unsupported-layout" | "update.self-custom-image" | "update.requires-hub-update" | "update.self-failed" | "update.outcome-unknown" | "update.invalid-target" | "update.system-version-unknown" | "agent.unavailable";
+            manual: string[] | null;
+            /** @enum {string} */
+            state: "available" | "current" | "checking" | "not-eligible" | "unavailable";
+        };
+        SystemSelfUpdateEnvelope: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SystemSelfUpdateEnvelope.json
+             */
+            readonly $schema?: string;
+            hubVersion?: string;
+            opId?: string;
+            targetReference?: string;
             targetVersion?: string;
         };
-        TriggerUpgradeData: {
-            /** @description Response message */
-            message: string;
-            /** @description Environment already runs the newest image, so no restart is expected */
-            upToDate: boolean;
+        SystemSelfUpdateOperation: {
+            code?: string;
+            helperRunning: boolean;
+            opId: string;
+            /** @enum {string} */
+            outcome?: "healthy" | "failed-health" | "failed-pre-effect" | "unknown";
+            /** @enum {string} */
+            phase: "reserved" | "helper-started" | "settled";
+            runId?: string;
+            targetVersion: string;
+        };
+        SystemSelfUpdateResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SystemSelfUpdateResponse.json
+             */
+            readonly $schema?: string;
+            accepted: boolean;
+            /** @enum {string} */
+            code?: "feature-disabled" | "update.check-unavailable" | "host.busy" | "update.self-not-compose" | "update.self-unsupported-layout" | "update.self-custom-image" | "update.requires-hub-update" | "update.self-failed" | "update.outcome-unknown" | "update.invalid-target" | "update.system-version-unknown" | "agent.unavailable";
+            opId: string;
+            /** @enum {string} */
+            phase: "reserved" | "helper-started" | "settled";
+            runId?: string;
         };
         UlimitsConfig: {
             /** Format: int64 */
@@ -11270,20 +12172,20 @@ export interface components {
             /** Format: date-time */
             applyCheckedAt?: string;
             /** @enum {string} */
-            applyCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            applyCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             /** Format: date-time */
             bookkeepingAt?: string;
             /** @enum {string} */
-            bookkeepingCode?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            bookkeepingCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             candidates: components["schemas"]["UpdaterUpdateCandidate"][] | null;
             /** Format: date-time */
             checkedAt?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             environmentId: string;
             jobId: string;
             /** @enum {string} */
-            mode: "off" | "notify" | "apply";
+            mode: "check" | "scheduled";
             registrationId: string;
             /** Format: int64 */
             revision: number;
@@ -11291,16 +12193,24 @@ export interface components {
             targetId: string;
             targetIdentity: string;
             /** @enum {string} */
-            targetKind: "project";
+            targetKind: "stack" | "container";
+            targetMissing: boolean;
+            targetName: string;
+            window?: components["schemas"]["UpdaterUpdateWindow"];
         };
         UpdaterBaselineStatus: {
             autoExcluded: boolean;
             available: boolean;
-            code?: string;
+            /** @enum {string} */
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             observedRevision: string;
             savedRevision: string;
             sourceRunId?: string;
             targetIdentity: string;
+        };
+        UpdaterContainerImageRequest: {
+            expectedManifest?: string;
+            policy?: components["schemas"]["UpdaterPolicyBinding"];
         };
         UpdaterImageSelection: {
             digest: string;
@@ -11329,15 +12239,22 @@ export interface components {
              * @example /api/schemas/UpdaterLifecycleRequest.json
              */
             readonly $schema?: string;
+            expectedManifest?: string;
             expectedRevision: string;
             pointId?: string;
             replaceConfiguration?: boolean;
+            service?: string;
+            services?: string[] | null;
         };
         UpdaterLifecycleResult: {
-            baselineCode?: string;
-            code?: string;
+            /** @enum {string} */
+            baselineCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            /** @enum {string} */
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             /** Format: int64 */
             httpStatus?: number;
+            /** @enum {string} */
+            pointCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             restorePointId?: string;
             runId: string;
             verified: boolean;
@@ -11390,7 +12307,8 @@ export interface components {
         };
         UpdaterRestorePoint: {
             available: boolean;
-            code?: string;
+            /** @enum {string} */
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             /** Format: date-time */
             createdAt: string;
             failedAttempt: boolean;
@@ -11438,7 +12356,7 @@ export interface components {
         UpdaterSystemImageHint: {
             candidateVersion?: string;
             /** @enum {string} */
-            code?: "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
             compatibleReference?: string;
             currentVersion?: string;
             /** @enum {string} */
@@ -11473,46 +12391,18 @@ export interface components {
             /** Format: int64 */
             expectedRevision: number;
             /** @enum {string} */
-            mode: "off" | "notify" | "apply";
+            mode: "check" | "scheduled";
+            window?: components["schemas"]["UpdaterUpdateWindow"];
         };
-        UpdaterUpdateScheduleConfig: {
-            autoUpdateEnabled: boolean;
-            autoUpdateInterval: string;
-            environmentId: string;
-            jobs: components["schemas"]["JobscheduleJobStatus"][] | null;
-            masterAutoUpdateEnabled: boolean;
-            masterPollingEnabled: boolean;
-            pollingEnabled: boolean;
-            pollingInterval: string;
-            registrationId: string;
+        UpdaterUpdateWindow: {
             /** Format: int64 */
-            revision: number;
-            timeZone: string;
+            day?: number;
+            /** @enum {string} */
+            kind: "daily" | "weekly";
+            time: string;
         };
-        UpdaterUpdateScheduleInput: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/UpdaterUpdateScheduleInput.json
-             */
-            readonly $schema?: string;
-            autoUpdateEnabled: boolean;
-            autoUpdateInterval: string;
-            /** Format: int64 */
-            expectedRevision: number;
-            pollingEnabled: boolean;
-            pollingInterval: string;
-        };
-        UpgradeCheckResultData: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/UpgradeCheckResultData.json
-             */
-            readonly $schema?: string;
-            canUpgrade: boolean;
-            error: boolean;
-            message: string;
+        UpdaterVerifiedImageRequest: {
+            expectedManifest: string;
         };
         UploadConsumeRequest: {
             /**
@@ -11559,6 +12449,19 @@ export interface components {
             /** Format: int64 */
             totalChunks: number;
         };
+        UserAccessProblem: {
+            /** @enum {string} */
+            code: "access.not-found" | "access.admin-required" | "access.full-required" | "access.disabled" | "access.not-registered" | "access.unavailable";
+            detail?: string;
+            /** Format: int64 */
+            status: number;
+        };
+        UserAppAssignment: {
+            environmentId: string;
+            /** @enum {string} */
+            level: "restricted" | "full";
+            projectId: string;
+        };
         UserCreateUser: {
             /**
              * Format: uri
@@ -11582,7 +12485,7 @@ export interface components {
              */
             locale?: string;
             /** @description Password of the user */
-            password: string;
+            password?: string;
             /**
              * @description Preferred time display format
              * @example auto
@@ -11590,7 +12493,7 @@ export interface components {
              */
             timeFormat?: "auto" | "12h" | "24h";
             /**
-             * @description Username; cannot contain @
+             * @description Username; proxy identities are matched exactly
              * @example johndoe
              */
             username: string;
@@ -11669,16 +12572,19 @@ export interface components {
              * @enum {string|null}
              */
             timeFormat?: "auto" | "12h" | "24h" | null;
-            /** @description Username; cannot contain @ */
+            /** @description Username; proxy identities are matched exactly */
             username?: string | null;
         };
         UserUser: {
+            assignments: components["schemas"]["UserAppAssignment"][] | null;
             /** @description URL to the user's custom avatar image; omitted when using the default profile picture */
             avatarUrl?: string;
             /** @description Whether the user can currently be deleted */
             canDelete: boolean;
             /** @description Date and time when the user was created */
             createdAt?: string;
+            /** Format: date-time */
+            disabledAt?: string;
             /**
              * @description Display name of the user
              * @example John Doe
@@ -11700,6 +12606,7 @@ export interface components {
              * @example 550e8400-e29b-41d4-a716-446655440000
              */
             id: string;
+            isAdmin: boolean;
             /** @description Whether the user effectively holds global administrator access */
             isGlobalAdmin: boolean;
             /** @description Date and time of the user's most recent sign-in; omitted when the user has never signed in */
@@ -11911,6 +12818,7 @@ export interface components {
         VolumeBackupVolumeOverview: {
             /** Format: int64 */
             count: number;
+            displayName?: string;
             lastBackup?: components["schemas"]["VolumeBackupEntry"];
             lastRestore?: components["schemas"]["VolumeRestoreRun"];
             /** Format: date-time */
@@ -11920,6 +12828,39 @@ export interface components {
             policy?: components["schemas"]["VolumeBackupPolicy"];
             running?: components["schemas"]["VolumeBackupRunning"];
             volumeExists: boolean;
+        };
+        VolumeBind: {
+            consumers: components["schemas"]["VolumeBindConsumer"][] | null;
+            eligible: boolean;
+            key: string;
+            /** @enum {string} */
+            kind: "directory" | "file" | "unknown";
+            /** Format: date-time */
+            lastSnapshotAt?: string;
+            /** Format: int64 */
+            lastSnapshotSize?: number;
+            /** Format: date-time */
+            measuredAt?: string;
+            measuredPartial?: boolean;
+            /** Format: int64 */
+            measuredSize?: number;
+            reason?: string;
+            source: string;
+        };
+        VolumeBindConsumer: {
+            containerId: string;
+            destination: string;
+            name: string;
+            readOnly: boolean;
+            running: boolean;
+        };
+        VolumeBindMeasurement: {
+            key: string;
+            /** Format: date-time */
+            measuredAt: string;
+            measuredPartial: boolean;
+            /** Format: int64 */
+            measuredSize: number;
         };
         VolumeCreate: {
             /**
@@ -12146,6 +13087,116 @@ export interface components {
         VulnerabilityAcceptedScan: {
             activityId: string;
         };
+        VulnerabilityActiveImageSummary: {
+            imageId: string;
+            inUse: boolean;
+            /** Format: date-time */
+            lastCompletedScanAt: string | null;
+            latestAttemptErrorCode?: string;
+            latestAttemptStatus: string;
+            summary: components["schemas"]["VulnerabilitySeveritySummary"];
+        };
+        VulnerabilityActiveSummaries: {
+            images: components["schemas"]["VulnerabilityActiveImageSummary"][] | null;
+        };
+        VulnerabilityAdvisoryContainer: {
+            id: string;
+            name: string;
+            project?: string;
+            projectId?: string;
+            service?: string;
+            state: string;
+        };
+        VulnerabilityAdvisoryDetail: {
+            advisory?: components["schemas"]["VulnerabilityAdvisoryMetadata"];
+            nextCursor?: string;
+            occurrences: components["schemas"]["VulnerabilityAdvisoryOccurrence"][];
+            usage: components["schemas"]["VulnerabilityAdvisoryUsage"];
+        };
+        VulnerabilityAdvisoryMetadata: {
+            class?: string;
+            cvss?: components["schemas"]["VulnerabilityCVSSInfo"];
+            description?: string;
+            /** Format: double */
+            epss?: number;
+            fixedVersion?: string;
+            installedVersion: string;
+            kev?: boolean;
+            /** Format: date-time */
+            lastModifiedDate?: string;
+            pkgName: string;
+            /** Format: date-time */
+            publishedDate?: string;
+            references?: string[] | null;
+            /** Format: double */
+            risk?: number;
+            /** @enum {string} */
+            riskBand?: "none" | "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            sourceOccurrence: components["schemas"]["VulnerabilityAdvisoryOccurrenceKey"];
+            title?: string;
+            type?: string;
+            vulnerabilityId: string;
+        };
+        VulnerabilityAdvisoryOccurrence: {
+            class?: string;
+            containers: components["schemas"]["VulnerabilityAdvisoryContainer"][];
+            cvss?: components["schemas"]["VulnerabilityCVSSInfo"];
+            description?: string;
+            /** Format: double */
+            epss?: number;
+            fixedVersion?: string;
+            ignoreId?: string;
+            ignored: boolean;
+            imageId: string;
+            imageRefs: string[];
+            installedVersion: string;
+            kev?: boolean;
+            /** Format: date-time */
+            lastCompletedScanAt: string;
+            /** Format: date-time */
+            lastModifiedDate?: string;
+            /** @enum {string} */
+            latestAttemptStatus: "pending" | "scanning" | "completed" | "failed";
+            pkgName: string;
+            /** Format: date-time */
+            publishedDate?: string;
+            references?: string[] | null;
+            /** Format: double */
+            risk?: number;
+            /** @enum {string} */
+            riskBand?: "none" | "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            title?: string;
+            type?: string;
+            updates: components["schemas"]["VulnerabilityAdvisoryUpdate"][];
+            vulnerabilityId: string;
+        };
+        VulnerabilityAdvisoryOccurrenceKey: {
+            class: string;
+            imageId: string;
+            installed: string;
+            package: string;
+            type: string;
+        };
+        VulnerabilityAdvisoryUpdate: {
+            /** Format: date-time */
+            checkedAt?: string;
+            containerId: string;
+            projectId?: string;
+            service?: string;
+            /** @enum {string} */
+            state: "none" | "available" | "unknown";
+            version?: string;
+        };
+        VulnerabilityAdvisoryUsage: {
+            /** @enum {string} */
+            code?: "image.usage-unavailable";
+            /** @enum {string} */
+            state: "ok" | "unavailable";
+        };
         VulnerabilityBulkIgnoreResponse: {
             /** Format: int64 */
             affectedCount: number;
@@ -12171,6 +13222,99 @@ export interface components {
             /** Format: double */
             v3Score?: number;
             v3Vector?: string;
+        };
+        VulnerabilityCandidateConsumer: {
+            containerId: string;
+            imageId: string;
+            projectId?: string;
+            reference: string;
+            service?: string;
+        };
+        VulnerabilityCandidateIdentity: {
+            configDigest?: string;
+            manifestDigest: string;
+            /** @enum {string} */
+            platform: "linux/amd64";
+            repository: string;
+        };
+        VulnerabilityCandidateItem: {
+            advisory: string;
+            class: string;
+            fixed: string;
+            installed: string;
+            package: string;
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            type: string;
+        };
+        VulnerabilityCandidateProof: {
+            /** Format: date-time */
+            completedAt: string;
+            /** Format: date-time */
+            dbUpdatedAt: string;
+            /** Format: int64 */
+            dbVersion: number;
+            id: string;
+            policy: string;
+            scannerVersion: string;
+        };
+        VulnerabilityCandidateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/VulnerabilityCandidateRequest.json
+             */
+            readonly $schema?: string;
+            advisory?: string;
+            images?: string[] | null;
+        };
+        VulnerabilityCandidateResult: {
+            code?: string;
+            consumer: components["schemas"]["VulnerabilityCandidateConsumer"];
+            identity?: components["schemas"]["VulnerabilityCandidateIdentity"];
+            introduces: components["schemas"]["VulnerabilityCandidateItem"][];
+            proof?: components["schemas"]["VulnerabilityCandidateProof"];
+            reason?: string;
+            /** @enum {string} */
+            state: "unchecked" | "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted" | "deferred";
+            verdicts: components["schemas"]["VulnerabilityCandidateVerdict"][];
+        };
+        VulnerabilityCandidateResults: {
+            results: components["schemas"]["VulnerabilityCandidateResult"][];
+            runs: components["schemas"]["VulnerabilityCandidateRun"][];
+        };
+        VulnerabilityCandidateRun: {
+            activityId: string;
+            /** Format: int64 */
+            cached: number;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: int64 */
+            deferred: number;
+            /** Format: int64 */
+            failed: number;
+            id: string;
+            /** @enum {string} */
+            intelligence: "available" | "unavailable";
+            /** Format: int64 */
+            scanned: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** @enum {string} */
+            status: "running" | "completed" | "partial" | "failed" | "cancelled" | "interrupted";
+            /** Format: int64 */
+            targets: number;
+            /** @enum {string} */
+            trigger: "manual" | "automatic";
+        };
+        VulnerabilityCandidateVerdict: {
+            advisory: string;
+            class: string;
+            installed: string;
+            package: string;
+            type: string;
+            /** @enum {string} */
+            verdict: "closes" | "does-not-close" | "unknown";
         };
         VulnerabilityEnvironmentVulnerabilitySummary: {
             /** Format: int64 */
@@ -12239,7 +13383,7 @@ export interface components {
         VulnerabilityProblem: {
             activityId?: string;
             /** @enum {string} */
-            code: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts" | "feature-disabled" | "agent.invalid-token" | "agent.unavailable";
+            code: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "registry.rate-limited" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts" | "feature-disabled" | "agent.invalid-token" | "agent.unavailable";
             /** Format: int64 */
             status: number;
         };
@@ -12389,7 +13533,7 @@ export interface components {
             duration?: number;
             error?: string;
             /** @enum {string} */
-            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
+            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "registry.rate-limited" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
             hasReport?: boolean;
             imageId: string;
             imageName: string;
@@ -12412,7 +13556,7 @@ export interface components {
             critical: number;
             environmentId: string;
             /** @enum {string} */
-            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
+            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "registry.rate-limited" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
             /** Format: int64 */
             failed: number;
             /** Format: date-time */
@@ -12465,7 +13609,7 @@ export interface components {
             completedAt?: string;
             error?: string;
             /** @enum {string} */
-            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
+            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "registry.rate-limited" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.request-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
             imageId: string;
             platform?: string;
             scanPhase?: string;
@@ -12550,86 +13694,143 @@ export interface components {
             type?: string;
             vulnerabilityId: string;
         };
-        WebhookCreateInput: {
+        WidgetActionResult: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/WebhookCreateInput.json
+             * @example /api/schemas/WidgetActionResult.json
              */
             readonly $schema?: string;
-            /**
-             * @description Action to run for the selected target type. Supported values depend on targetType.
-             * @enum {string}
-             */
-            actionType: "update" | "start" | "stop" | "restart" | "redeploy" | "up" | "down" | "run";
-            /** @description Human-readable name for this webhook */
-            name: string;
-            /** @description Container ID, project ID,  to target. Leave empty for 'updater' webhooks. */
-            targetId: string;
-            /**
-             * @description Resource type this webhook targets: 'container', 'project', or 'updater'
-             * @enum {string}
-             */
-            targetType: "container" | "project" | "updater";
+            activityId: string;
         };
-        WebhookCreated: {
-            /** @description Action type */
-            actionType: string;
-            /**
-             * Format: date-time
-             * @description Creation timestamp
-             */
-            createdAt: string;
-            /** @description Webhook ID */
-            id: string;
-            /** @description Webhook name */
-            name: string;
-            /** @description Target resource ID */
-            targetId: string;
-            /** @description Target type */
-            targetType: string;
-            /** @description Full webhook token — store this securely, it will not be shown again */
-            token: string;
+        WidgetCertificatePin: {
+            hostPort: string;
+            sha256: string;
         };
-        WebhookSummary: {
-            /** @description Action type resolved for this webhook */
-            actionType: string;
+        WidgetConfig: {
             /**
-             * Format: date-time
-             * @description Creation timestamp
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetConfig.json
              */
-            createdAt: string;
-            /** @description Whether the webhook is active */
+            readonly $schema?: string;
+            address: string;
             enabled: boolean;
-            /** @description Environment ID */
+            hasCredential: boolean;
+            /** @enum {string} */
+            kind: "plex" | "overseerr" | "minecraft";
+            openUrl: string;
+            /** Format: int64 */
+            revision: number;
+            stack?: components["schemas"]["WidgetStackReference"];
+            tlsPin?: components["schemas"]["WidgetCertificatePin"];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        WidgetConfigUpdate: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetConfigUpdate.json
+             */
+            readonly $schema?: string;
+            address: string;
+            credential?: string;
+            /**
+             * @default keep
+             * @enum {string}
+             */
+            credentialAction: "keep" | "replace" | "clear";
+            enabled: boolean;
+            openUrl: string;
+            stack?: components["schemas"]["WidgetStackReference"];
+            tlsPin?: components["schemas"]["WidgetCertificatePin"];
+        };
+        WidgetMediaRequest: {
+            createdAt: string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            mediaType: "movie" | "tv";
+            requestedBy: string;
+            title: string;
+        };
+        WidgetMinecraftData: {
+            /** Format: int64 */
+            max: number;
+            motd: string;
+            /** Format: int64 */
+            online: number;
+            players: string[] | null;
+            version: string;
+        };
+        WidgetOverseerrData: {
+            /** Format: int64 */
+            approved: number;
+            /** Format: int64 */
+            available: number;
+            /** Format: int64 */
+            pending: number;
+            requests: components["schemas"]["WidgetMediaRequest"][] | null;
+        };
+        WidgetPlexData: {
+            sessions: components["schemas"]["WidgetPlexSession"][] | null;
+            /** Format: int64 */
+            streams: number;
+            /** Format: int64 */
+            transcodes: number;
+        };
+        WidgetPlexSession: {
+            device: string;
+            /** Format: double */
+            progress: number;
+            quality: string;
+            subtitle: string;
+            title: string;
+            transcode: boolean;
+            user: string;
+        };
+        WidgetProblem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetProblem.json
+             */
+            readonly $schema?: string;
+            certificate?: components["schemas"]["WidgetCertificatePin"];
+            /** @enum {string} */
+            code: "widget.not-configured" | "widget.disabled" | "widget.unreachable" | "widget.timeout" | "widget.auth-failed" | "widget.bad-response" | "widget.redirect-refused" | "widget.tls-failed" | "widget.credential-unavailable" | "widget.invalid-config" | "widget.persistence-failed";
+        };
+        WidgetResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/WidgetResult.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            ageSeconds: number;
+            error?: components["schemas"]["WidgetProblem"];
+            /** Format: date-time */
+            fetchedAt?: string;
+            /** @enum {string} */
+            kind: "plex" | "overseerr" | "minecraft";
+            minecraft?: components["schemas"]["WidgetMinecraftData"];
+            overseerr?: components["schemas"]["WidgetOverseerrData"];
+            plex?: components["schemas"]["WidgetPlexData"];
+            stale: boolean;
+        };
+        WidgetStackReference: {
             environmentId: string;
-            /** @description Webhook ID */
-            id: string;
-            /**
-             * Format: date-time
-             * @description Timestamp of last successful trigger
-             */
-            lastTriggeredAt?: string;
-            /** @description Webhook name */
-            name: string;
-            /** @description Target resource ID */
-            targetId: string;
-            /** @description Resolved target resource name when available */
-            targetName?: string;
-            /** @description Target type: 'container', 'project', or 'updater' */
-            targetType: string;
-            /** @description Masked token prefix for identification */
-            tokenPrefix: string;
+            projectId: string;
         };
-        WebhookUpdateInput: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/WebhookUpdateInput.json
-             */
-            readonly $schema?: string;
-            /** @description Whether the webhook is active */
+        WidgetSummary: {
+            configured: boolean;
             enabled: boolean;
+            /** @enum {string} */
+            kind: "plex" | "overseerr" | "minecraft";
+            openUrl: string;
+            stack?: components["schemas"]["WidgetStackReference"];
         };
         WorkspaceFileContent: {
             content?: string;
@@ -13349,6 +14550,118 @@ export interface operations {
             };
         };
     };
+    "get-my-ui-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponsePreferencesDocument"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-my-ui-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferencesUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponsePreferencesDocument"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-sign-in-mode": {
         parameters: {
             query?: never;
@@ -13607,6 +14920,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseBackupTarget"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "test-backup-target-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupTargetDraftTest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseBackupTargetProbeResult"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -15763,68 +17190,6 @@ export interface operations {
             };
         };
     };
-    "get-customize-categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CategoryCategory"][] | null;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "search-customize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SearchRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchResponse"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
     downloadEdgeMTLSCA: {
         parameters: {
             query?: never;
@@ -15914,6 +17279,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentWithApiKey"];
+                };
+            };
+            /** @description Host or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -16415,6 +17798,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16445,6 +17837,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentEnvironment"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -16483,6 +17884,25 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentEnvironment"];
                 };
             };
+            /** @description Host or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16513,6 +17933,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -16567,6 +17996,15 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedActivityActivitySummary"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16597,6 +18035,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseActivityClearHistoryResult"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -16636,6 +18083,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityDetail"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16673,6 +18129,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityActivity"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16707,6 +18172,114 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentAgentPairResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    restartEnvironmentAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentAgentRestartRun"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getEnvironmentAgentRestart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentAgentRestartRun"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -16746,7 +18319,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16755,7 +18329,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16764,7 +18338,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16773,7 +18347,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -16818,7 +18392,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16827,7 +18402,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16836,7 +18411,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Auto Heal or framework refusal */
@@ -16845,7 +18420,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["AutohealProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -16903,6 +18478,15 @@ export interface operations {
                     "application/json": components["schemas"]["DockerContainerContainerPaginatedResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16937,6 +18521,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerCreated"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -16976,6 +18569,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerStatusCounts"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17012,6 +18614,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerGenerateComposeResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17044,6 +18655,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerDetails"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -17085,6 +18705,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17121,6 +18750,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -17161,6 +18799,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerCommitResult"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17199,6 +18846,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerDetails"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17231,6 +18887,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerEditConfig"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-container-history": {
+        parameters: {
+            query?: {
+                range?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                /** @description Container name, preserved across recreation */
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseHistoryResponse"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"] | components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
                 };
             };
             /** @description Error */
@@ -17270,6 +18988,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17301,6 +19028,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "assign-container-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerOriginAssignment"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerOriginFields"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-container-origin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerOriginFields"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
             };
             /** @description Error */
             default: {
@@ -17336,6 +19158,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17343,6 +19174,111 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "restore-container-image": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -17370,6 +19306,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerProcesses"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17381,36 +19326,212 @@ export interface operations {
             };
         };
     };
-    "redeploy-container": {
+    "recreate-container": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerRecreateRequest"];
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseContainerDetails"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    "redeploy-container": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ContainerProblem"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -17454,6 +19575,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -17470,6 +19600,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -17549,6 +19680,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -17565,6 +19705,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -17644,6 +19785,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -17660,6 +19810,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -17723,6 +19874,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17736,47 +19896,41 @@ export interface operations {
     };
     "update-container": {
         parameters: {
-            query?: {
-                /** @description Return an accepted activity immediately instead of waiting for the update */
-                async?: boolean;
+            query?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
             };
-            header?: never;
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID to update */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdaterVerifiedImageRequest"];
+            };
+        };
         responses: {
-            /** @description Container update completed */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Response data */
-                        data: components["schemas"]["UpdaterResult"];
-                        /** @description Whether the request was successful */
-                        success: boolean;
-                    };
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Container update accepted */
+            /** @description New admission only; activityId equals activity.id */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Response data */
-                        data: components["schemas"]["ActivityActivity"];
-                        /** @description Whether the request was successful */
-                        success: boolean;
-                    };
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -17785,7 +19939,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -17797,6 +19951,15 @@ export interface operations {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
             /** @description Typed neutral image or registry failure */
             409: {
                 headers: {
@@ -17804,6 +19967,16 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -17842,6 +20015,15 @@ export interface operations {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
         };
     };
     "get-dashboard": {
@@ -17870,36 +20052,13 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseDashboardSnapshot"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description Invalid request path */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    getDeploymentSnippets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseDeploymentSnippet"];
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -17931,6 +20090,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
             };
             /** @description Error */
             default: {
@@ -17964,6 +20132,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -17996,6 +20173,15 @@ export interface operations {
                     "application/json": components["schemas"]["SystemActorDiagnostics"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -18026,6 +20212,124 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-host-history": {
+        parameters: {
+            query?: {
+                range?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseHistoryResponse"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"] | components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-history-sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseHistorySample"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
                 };
             };
             /** @description Error */
@@ -18069,7 +20373,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18167,7 +20471,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18266,7 +20570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18365,7 +20669,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18462,7 +20766,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18559,7 +20863,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18654,7 +20958,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18764,7 +21068,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18859,7 +21163,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -18965,7 +21269,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19073,7 +21377,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19175,7 +21479,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19276,7 +21580,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19374,7 +21678,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19473,7 +21777,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19541,6 +21845,123 @@ export interface operations {
             };
         };
     };
+    "get-active-image-vulnerability-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActiveSummariesInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityActiveSummaries"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-image-vulnerability-summaries": {
         parameters: {
             query?: never;
@@ -19572,6 +21993,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -19687,7 +22109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19787,7 +22209,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19888,7 +22310,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -19985,6 +22407,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -20113,6 +22536,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -20230,6 +22654,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -20345,6 +22770,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -20467,7 +22893,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -20562,7 +22988,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -20659,7 +23085,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -20760,7 +23186,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"];
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -20855,7 +23281,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -20954,7 +23380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21043,6 +23469,15 @@ export interface operations {
                     "application/json": components["schemas"]["JobscheduleJobListResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -21081,7 +23516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21184,7 +23619,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21282,7 +23717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21378,7 +23813,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21474,7 +23909,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21570,7 +24005,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21670,7 +24105,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21766,7 +24201,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -21868,6 +24303,15 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedWithCountsNetworkSummaryNetworkUsageCounts"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -21910,6 +24354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["NetworkError"];
                 };
             };
@@ -21963,6 +24408,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseNetworkUsageCounts"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -21995,6 +24449,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseNetworkPruneReport"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22025,6 +24488,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseNetworkTopology"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -22062,6 +24534,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseNetworkInspect"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -22104,6 +24585,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["NetworkError"];
                 };
             };
@@ -22169,6 +24651,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["NetworkError"];
                 };
             };
@@ -22234,6 +24717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["NetworkError"];
                 };
             };
@@ -22293,6 +24777,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -22347,6 +24841,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -22377,8 +24881,8 @@ export interface operations {
             path: {
                 /** @description Environment ID */
                 id: string;
-                /** @description Provider */
-                provider: string;
+                /** @description Notification target ID */
+                targetId: number;
             };
             cookie?: never;
         };
@@ -22395,6 +24899,80 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                targetId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -22429,8 +25007,8 @@ export interface operations {
             path: {
                 /** @description Environment ID */
                 id: string;
-                /** @description Provider */
-                provider: string;
+                /** @description Notification target ID */
+                targetId: number;
             };
             cookie?: never;
         };
@@ -22447,6 +25025,16 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -22483,8 +25071,8 @@ export interface operations {
             path: {
                 /** @description Environment ID */
                 id: string;
-                /** @description Provider */
-                provider: string;
+                /** @description Notification target ID */
+                targetId: number;
             };
             cookie?: never;
         };
@@ -22501,6 +25089,16 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -22560,6 +25158,15 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedPortPortMapping"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22613,6 +25220,15 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedProjectDetails"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22655,6 +25271,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseProjectCreateReponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22685,6 +25310,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseProjectStatusCounts"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -22719,6 +25353,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListProjectReference"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22749,6 +25392,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseListProjectTagOption"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -22783,6 +25435,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseProjectDetails"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -22821,6 +25482,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseProjectDetails"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Volume name exists, volume is in use, or project workspace conflicts */
@@ -22866,6 +25536,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22902,6 +25581,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -22934,6 +25622,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseProjectDetails"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -22972,6 +25669,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -23027,6 +25733,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -23043,6 +25758,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23083,6 +25799,58 @@ export interface operations {
             };
         };
     };
+    "get-project-history": {
+        parameters: {
+            query?: {
+                range?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseHistoryResponse"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"] | components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "pull-project-images": {
         parameters: {
             query?: never;
@@ -23103,6 +25871,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
             };
             /** @description Error */
             default: {
@@ -23158,6 +25935,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -23174,6 +25960,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23256,6 +26043,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -23272,6 +26068,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23335,6 +26132,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseProjectDetails"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23342,6 +26148,114 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "stop-project": {
+        parameters: {
+            query?: {
+                /** @description Legacy restart service selection */
+                services?: string[] | null;
+            };
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
+            path: {
+                id: string;
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description New admission only; activityId equals activity.id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -23371,6 +26285,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseProjectUpdateTagResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -23405,6 +26328,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -23461,6 +26393,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             408: {
                 headers: {
@@ -23477,6 +26418,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -23550,7 +26492,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -23641,6 +26583,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseProjectDetails"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23673,6 +26624,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -23717,6 +26677,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23754,6 +26723,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceFileContent"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23789,6 +26767,64 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-runtime-conditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseHistoryConditions"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23823,6 +26859,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeHubDetail"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23855,6 +26900,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeSnapshot"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -23893,6 +26947,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseActivityRuntimeSnapshot"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23923,6 +26986,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsPublicSetting"][] | null;
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -23961,6 +27033,34 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListSettingsSettingDto"];
                 };
             };
+            /** @description Invalid setting */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["SettingsProblem"];
+                };
+            };
+            /** @description Host or framework refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -23991,6 +27091,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsPublicSetting"][] | null;
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -24025,6 +27134,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -24055,6 +27173,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerActionResult"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -24089,6 +27216,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerActionResult"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -24119,6 +27255,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerActionResult"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -24157,6 +27302,15 @@ export interface operations {
                     "application/json": components["schemas"]["SystemConvertDockerRunResponse"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -24189,6 +27343,15 @@ export interface operations {
                     "application/json": components["schemas"]["DockerinfoInfo"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -24218,6 +27381,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
             };
             /** @description Error */
             default: {
@@ -24255,6 +27427,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseSystemPruneAllResult"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -24271,14 +27452,13 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Environment ID */
                 id: string;
             };
             cookie?: never;
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["TriggerUpgradeBody"];
+                "application/json": components["schemas"]["SystemSelfUpdateEnvelope"];
             };
         };
         responses: {
@@ -24288,7 +27468,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseTriggerUpgradeData"];
+                    "application/json": components["schemas"]["SystemSelfUpdateResponse"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24297,7 +27477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24329,76 +27509,11 @@ export interface operations {
             };
         };
     };
-    "trigger-update-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Accepted */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseEnvironmentUpdateJob"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "update-all-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseEnvironmentUpdateJob"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
     "check-upgrade": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Environment ID */
                 id: string;
             };
             cookie?: never;
@@ -24411,7 +27526,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpgradeCheckResultData"];
+                    "application/json": components["schemas"]["SystemSelfUpdateCheck"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -24448,6 +27572,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentTest"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Host or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Host or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -24491,7 +27642,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-update-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListUpdaterAutoUpdatePolicy"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24587,7 +27832,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24687,7 +27932,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24782,7 +28027,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24879,7 +28124,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -24990,7 +28235,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed refusal or admitted failure with durable action identity */
@@ -25027,6 +28272,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -25111,7 +28357,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25206,7 +28452,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25305,199 +28551,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-update-schedules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseUpdaterUpdateScheduleConfig"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "set-update-schedules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdaterUpdateScheduleInput"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseUpdaterUpdateScheduleConfig"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25592,7 +28646,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25686,7 +28740,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25782,7 +28836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25879,7 +28933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed neutral image or registry failure */
@@ -25992,7 +29046,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Typed refusal or admitted failure with durable action identity */
@@ -26029,6 +29083,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Removed registration; runtime.target-removed never dispatches */
@@ -26112,6 +29167,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseUploadSession"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -26145,6 +29209,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseUploadSession"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -26176,6 +29249,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -26216,6 +29298,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseUploadSession"];
                 };
             };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -26246,6 +29337,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseVersionInfo"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
@@ -26295,6 +29395,88 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedWithCountsVolumeVolumeVolumeUsageCountsData"];
                 };
             };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -26331,13 +29513,86 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVolumeVolume"];
                 };
             };
-            /** @description Volume name already exists */
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -26377,6 +29632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -26489,6 +29745,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -26601,6 +29858,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -26714,6 +29972,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -26830,6 +30089,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -26943,6 +30203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27056,6 +30317,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27171,6 +30433,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27284,6 +30547,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27399,6 +30663,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27523,6 +30788,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27641,6 +30907,237 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-volume-binds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListVolumeBind"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "measure-volume-bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeasureBindInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumeBindMeasurement"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -27751,6 +31248,88 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVolumeUsageCountsData"];
                 };
             };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -27784,6 +31363,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -27822,6 +31483,88 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
                 };
             };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -27852,6 +31595,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseListVolumeSizeInfo"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -27886,6 +31711,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseVolumeVolume"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -27923,6 +31830,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -27965,6 +31954,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28084,6 +32074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28212,6 +32203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28331,6 +32323,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28450,6 +32443,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28571,6 +32565,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28692,6 +32687,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
@@ -28805,13 +32801,86 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVolumeVolume"];
                 };
             };
-            /** @description Volume name exists or volume is in use */
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"];
+                    "application/problem+json": (components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -28848,6 +32917,88 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVolumeUsageResponse"];
                 };
             };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -28882,13 +33033,86 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
-            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -28933,13 +33157,86 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
-            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -28979,13 +33276,86 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceFileContent"];
                 };
             };
-            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Error */
@@ -29023,13 +33393,203 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-vulnerability-advisory": {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityAdvisoryDetail"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -29089,6 +33649,240 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-vulnerability-candidates": {
+        parameters: {
+            query?: {
+                imageId?: string;
+                advisory?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityCandidateResults"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "scan-vulnerability-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VulnerabilityCandidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityAcceptedScan"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29215,6 +34009,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29332,6 +34127,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29449,6 +34245,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29564,6 +34361,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29688,6 +34486,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29804,6 +34603,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -29917,6 +34717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30029,6 +34830,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30142,6 +34944,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30258,6 +35061,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30371,6 +35175,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30484,6 +35289,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30601,6 +35407,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
@@ -30687,146 +35494,6 @@ export interface operations {
             };
         };
     };
-    "list-webhooks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseListWebhookSummary"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "create-webhook": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WebhookCreateInput"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseWebhookCreated"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "delete-webhook": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-                /** @description Webhook ID */
-                webhookId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseInterface {}"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "update-webhook": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-                /** @description Webhook ID */
-                webhookId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WebhookUpdateInput"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseInterface {}"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
     listEvents: {
         parameters: {
             query?: {
@@ -30838,8 +35505,10 @@ export interface operations {
                 order?: string;
                 /** @description Start index */
                 start?: number;
-                /** @description Limit */
+                /** @description Limit (default 20, or 500 with since) */
                 limit?: number;
+                /** @description Inclusive RFC 3339 event timestamp lower bound */
+                since?: string;
                 /** @description Filter by severity */
                 severity?: string;
                 /** @description Filter by event type (exact type or category prefix, comma-separated) */
@@ -30882,8 +35551,10 @@ export interface operations {
                 order?: string;
                 /** @description Start index */
                 start?: number;
-                /** @description Limit */
+                /** @description Limit (default 20, or 500 with since) */
                 limit?: number;
+                /** @description Inclusive RFC 3339 event timestamp lower bound */
+                since?: string;
                 /** @description Filter by severity */
                 severity?: string;
                 /** @description Filter by event type (exact type or category prefix, comma-separated) */
@@ -31035,6 +35706,44 @@ export interface operations {
             };
         };
     };
+    "get-history-capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListHistoryCapacity"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     discoverHub: {
         parameters: {
             query?: never;
@@ -31092,6 +35801,15 @@ export interface operations {
             };
             /** @description Notification or framework refusal */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NotificationProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Notification or framework refusal */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -31321,7 +36039,7 @@ export interface operations {
             };
         };
     };
-    "get-settings-categories": {
+    "list-service-widgets": {
         parameters: {
             query?: never;
             header?: never;
@@ -31336,30 +36054,201 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CategoryCategory"][] | null;
+                    "application/json": components["schemas"]["WidgetSummary"][] | null;
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description Neutral widget failure */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
                 };
             };
         };
     };
-    "search-settings": {
+    "approve-service-widget-request": {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                requestId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetActionResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "decline-service-widget-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetActionResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "get-service-widget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "get-service-widget-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetConfig"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "put-service-widget-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SearchRequest"];
+                "application/json": components["schemas"]["WidgetConfigUpdate"];
             };
         };
         responses: {
@@ -31369,7 +36258,156 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchResponse"];
+                    "application/json": components["schemas"]["WidgetConfig"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "test-service-widget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "plex" | "overseerr" | "minecraft";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WidgetConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetResult"];
+                };
+            };
+            /** @description Neutral widget failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+            /** @description Neutral widget failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "import-stack-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StackimportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackimportResult"];
+                };
+            };
+            /** @description Import refusal */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
+                };
+            };
+            /** @description Import refusal */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StackimportProblem"];
                 };
             };
             /** @description Error */
@@ -31417,6 +36455,104 @@ export interface operations {
                         /** @description The retry time in milliseconds. */
                         retry?: number;
                     }[];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-all-updates": {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Request-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["JobscheduleSubmitRunInput"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobscheduleJobRunResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -31603,6 +36739,76 @@ export interface operations {
             };
         };
     };
+    "set-user-admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAdminInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-user-app-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAssignmentsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getUserAvatar: {
         parameters: {
             query?: never;
@@ -31625,6 +36831,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "disable-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description User ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "enable-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description User ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-user-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
             /** @description Error */

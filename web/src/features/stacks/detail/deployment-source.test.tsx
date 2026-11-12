@@ -70,7 +70,7 @@ const progressCases = [
 ];
 for (const edge of [false, true]) it.each(progressCases)(`preserves $name progress in RunCard and RunFocus (Edge=${edge})`, async ({ type, lifecycle, failed }) => {
   const f = activityFixture(edge); f.state.hosts = ["good"];
-  const row = { ...activity("good", "progress-run"), type, resourceType: "stack", resourceId: "project", status: failed ? "failed" : "running", latestMessage: "Deploying project", ...(failed ? { error: "private raw diagnostic" } : {}), ...(lifecycle ? { imageLifecycle: { runId: "progress-run", verified: !failed, volumeDataIncluded: false as const, ...(failed ? { code: "unknown.error-code" } : {}) } } : {}) };
+  const row = { ...activity("good", "progress-run"), type, resourceType: "stack", resourceId: "project", status: failed ? "failed" : "running", latestMessage: "Deploying project", ...(failed ? { error: "private raw diagnostic" } : {}), ...(lifecycle ? { imageLifecycle: { runId: "progress-run", verified: !failed, volumeDataIncluded: false as const, ...(failed ? { code: "unknown.error-code" as never } : {}) } } : {}) };
   const detail: Detail = { activity: row, stepTrace: [{ id: "progress-step", name: "Deploying project", status: failed ? "failed" : "running", startedAt: row.startedAt }], messages: [{ id: "progress-message", activityId: row.id, level: "info", message: "Pulled image", createdAt: row.startedAt }], output: [], outputTruncated: false };
   const mapped = mapActivityDetail(detail), rendered = renderRun(mapped, "de");
   expect(rendered.steps[0]!.label).toBe("Deploying project"); expect(rendered.log).toEqual(["Pulled image"]);

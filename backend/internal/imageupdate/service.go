@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package imageupdate
 
@@ -48,10 +48,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 )
 
 type ImageUpdateService struct {
+	hubProxy            func(context.Context, string, string, string, []byte, any) error
+	hubObserve          func(context.Context, string) (func(imageupdate.BatchResponse) error, error)
 	db                  *database.DB
 	settingsService     *settings.SettingsService
 	registryService     *registry.ContainerRegistryService
@@ -328,8 +329,6 @@ func (s *ImageUpdateService) CheckImageUpdate(ctx context.Context, imageRef stri
 		tags.AttachContainerUpdates(map[string]*imageupdate.Response{imageRef: result}, containerUpdates)
 		s.completeImageUpdateActivityInternal(ctx, activityID, false, result.Error)
 		if result.HasUpdate {
-			// A failed flush is already logged; the records stay pending for the next one.
-			_ = s.SendBatchUpdateNotifications(ctx)
 			return result, nil
 		}
 		return result, err
@@ -356,45 +355,11 @@ func (s *ImageUpdateService) CheckImageUpdate(ctx context.Context, imageRef stri
 		slog.WarnContext(ctx, "Failed to save update result", "imageRef", imageRef, "error", saveErr.Error())
 	}
 
-	s.notifyImageUpdateInternal(ctx, imageRef, digestResult, snapshot)
 	tags.AttachContainerUpdates(map[string]*imageupdate.Response{imageRef: digestResult}, containerUpdates)
-	if len(containerUpdates) > 0 {
-		// A failed flush is already logged; the records stay pending for the next one.
-		_ = s.SendBatchUpdateNotifications(ctx)
-	}
 
 	finalMessage := kit.Ternary(digestResult.HasUpdate, "Image update available", "Image update check completed")
 	s.completeImageUpdateActivityInternal(ctx, activityID, true, finalMessage)
 	return digestResult, nil
-}
-
-// notifyImageUpdateInternal sends the single-image update notification and marks the
-// record notified once it was delivered to at least one provider. A partial provider
-// failure still counts as notified — the user saw the update, and re-sending on every
-// poll would duplicate it forever; the failure stays visible in the delivery history.
-// Only a total failure (delivered == 0) leaves the record unnotified for retry.
-// Prefer the snapshot's image ID: it is the same key
-// saveUpdateResultWithSnapshotInternal stored the record under.
-func (s *ImageUpdateService) notifyImageUpdateInternal(ctx context.Context, imageRef string, digestResult *imageupdate.Response, snapshot *localImageSnapshot) {
-	if !digestResult.HasUpdate || s.notificationService == nil {
-		return
-	}
-
-	delivered, notifErr := s.notificationService.SendImageUpdateNotification(ctx, imageRef, digestResult, notifications.NotificationEventImageUpdate)
-	if notifErr != nil {
-		slog.WarnContext(ctx, "Failed to send update notification", "imageRef", imageRef, "error", notifErr.Error())
-	}
-	if delivered == 0 {
-		return
-	}
-
-	imageID := s.resolveNotifiedImageIDInternal(ctx, imageRef, snapshot)
-	if imageID == "" {
-		return
-	}
-	if markErr := s.MarkUpdatesAsNotified(ctx, []string{imageID}); markErr != nil {
-		slog.WarnContext(ctx, "Failed to mark update as notified", "imageRef", imageRef, "error", markErr.Error())
-	}
 }
 
 // resolveNotifiedImageIDInternal returns the image ID used to mark an update

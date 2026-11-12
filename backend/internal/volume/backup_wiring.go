@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split retained backup scheduler and repository wiring from volume service.
+// Deviations: Split retained backup scheduler and repository wiring from volume service; M16 bind mounts and backup completion.
 
 package volume
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/moby/moby/api/types/mount"
@@ -41,3 +42,5 @@ func (s *VolumeService) MigrateRepositoryPasswords(ctx context.Context) error {
 func (s *VolumeService) SetBackupInputCleaner(clean func(context.Context, []string) error) {
 	s.backup.SetInputCleaner(clean)
 }
+
+func (s *VolumeService) BackupTargets() *backuptarget.Service { return s.backup.TargetService() }

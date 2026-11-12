@@ -1,0 +1,14 @@
+{
+  "package": "ca-certificates-bundle",
+  "version": "20260909-r0",
+  "platform": "linux/amd64",
+  "path": "/etc/ssl/certs/ca-certificates.crt",
+  "sha256": "028fca5150ee1915c4474489985d55c54fceaa680c754cc8d1301734f01b2232",
+  "notices": ["LICENSES/MPL-2.0-Mozilla.txt", "LICENSES/NOTICE-Mozilla-CA.txt"],
+  "source": {
+    "file": "third_party/mozilla-ca/ca-certificates-20260909.tar.bz2",
+    "sha512": "d235529da679f14e2e8df4175bc8189507add1382fe0ef8493824b07a49763a2a3af8201f43d30a0260eb8357a10bb0d7054d9b012abf3b74ecf889551cf0dd7",
+    "upstream": "https://distfiles.alpinelinux.org/distfiles/v3.22/ca-certificates-20260909.tar.bz2",
+    "licenses": ["LICENSES/MIT-ca-certificates-c_rehash.txt", "LICENSES/curl-ca-certificates-mk-ca-bundle.txt"]
+  }
+}

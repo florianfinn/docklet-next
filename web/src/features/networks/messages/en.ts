@@ -64,6 +64,7 @@ export const enNetworks = {
     problems: "Problems only",
   },
   zone: "{name} · {status}",
+  standby: "Standby – connects on demand",
   online: "online",
   offline: "disconnected",
   offlineNote: "{name} is not connected. The topology shows the last known state; changes are only possible once connected.",

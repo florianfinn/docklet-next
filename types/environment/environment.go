@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Added process-local agent reports to host read responses.
+// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
 
 package environment
 
@@ -45,6 +45,7 @@ type Create struct {
 }
 
 type Update struct {
+	Color **string `json:"color,omitzero" pattern:"^#[0-9a-f]{6}$"`
 	// ApiUrl is the URL of the environment API.
 	//
 	// Required: false
@@ -125,7 +126,10 @@ type AgentReport struct {
 }
 
 type Environment struct {
-	AgentReport *AgentReport `json:"agentReport,omitempty"`
+	CredentialRevision int64        `json:"registrationRevision"`
+	DisplayOnly        bool         `json:"-"`
+	Color              *string      `json:"color"`
+	AgentReport        *AgentReport `json:"agentReport,omitempty"`
 	// ID of the environment.
 	//
 	// Required: true
@@ -139,7 +143,7 @@ type Environment struct {
 	// ApiUrl is the URL of the environment API.
 	//
 	// Required: true
-	ApiUrl string `json:"apiUrl"`
+	ApiUrl string `json:"apiUrl" required:"false"`
 
 	// Status of the environment.
 	//
@@ -149,12 +153,12 @@ type Environment struct {
 	// Enabled indicates if the environment is enabled.
 	//
 	// Required: true
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" required:"false"`
 
 	// IsEdge indicates if this is an edge agent that connects outbound.
 	//
 	// Required: false
-	IsEdge bool `json:"isEdge"`
+	IsEdge bool `json:"isEdge" required:"false"`
 
 	// LastSeen is the last successful manager-side health/contact timestamp.
 	//

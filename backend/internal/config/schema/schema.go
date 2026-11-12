@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed Swarm; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
 
 package schema
 
@@ -102,9 +102,6 @@ type overrideDocRule struct {
 }
 
 var overrideDocRules = map[string]overrideDocRule{
-	"autoUpdateInterval": {
-		requires: "AUTO_UPDATE=true to have effect at runtime.",
-	},
 	"scheduledPruneInterval": {
 		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
 	},
@@ -139,8 +136,8 @@ var overrideDocRules = map[string]overrideDocRule{
 		note: "Disabling retains existing reports and scanner settings, allows active work to finish, and leaves standalone image patching available.",
 	},
 	"vulnerabilityScanSchedule": {
-		requires: "Hub only; FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true and VULNERABILITY_SCAN_ENABLED=true to schedule dispatches.",
-		note:     "JSON daily or weekly wall-clock schedule. Invalid or empty values leave scans unscheduled. Spring-gap time is skipped; autumn-fold time runs twice.",
+		requires: "Hub only; FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true to schedule dispatches.",
+		note:     "JSON manual, daily or weekly wall-clock schedule. Manual, invalid or empty values leave scans unscheduled. Spring-gap times move forward; autumn-fold times run once.",
 	},
 	"vulnerabilityNotifyCritical": {note: "Hub only. Notify about new critical findings in scheduled scans; default off. Uses the vulnerability_found channel subscription."},
 	"vulnerabilityNotifyHigh":     {note: "Hub only. Notify about new high findings in scheduled scans; default off. Uses the vulnerability_found channel subscription."},
@@ -158,6 +155,7 @@ var overrideDocRules = map[string]overrideDocRule{
 	"autoHealMaxRestarts": {
 		requires: "AUTO_HEAL_ENABLED=true to have effect at runtime.",
 	},
+	"autoHealCooldownMinutes": {requires: "AUTO_HEAL_ENABLED=true to have effect at runtime."},
 	"autoHealRestartWindow": {
 		requires: "AUTO_HEAL_ENABLED=true to have effect at runtime.",
 	},
@@ -313,7 +311,7 @@ func collectSettingEnvOverridesInternal() ([]SettingOverrideEntry, error) {
 
 		key := tagParts[0]
 		switch key {
-		case "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+		case "timeZone", "updateCheckInterval", "updateNotify", "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
 			continue
 		}
 		attrs := tagParts[1:]

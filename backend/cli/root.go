@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only local persistence; fatal bootstrap errors map to exit code 1 through exitCode.
+// Deviations: Local module namespace; SQLite-only local persistence; fatal bootstrap errors map to exit code 1 through exitCode; register the self-update helper without bootstrap.
 
 package cli
 
@@ -15,6 +15,7 @@ import (
 	"go.getarcane.app/kit/pkg/signals"
 
 	"github.com/florianfinn/docklet-next/backend/cli/generate"
+	"github.com/florianfinn/docklet-next/backend/cli/selfupdate"
 	"github.com/florianfinn/docklet-next/backend/cli/upgrade"
 	"github.com/florianfinn/docklet-next/backend/internal/bootstrap"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -54,5 +55,6 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(upgrade.UpgradeCmd)
+	rootCmd.AddCommand(selfupdate.Command())
 	rootCmd.AddCommand(generate.GenerateCmd)
 }

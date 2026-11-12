@@ -2,31 +2,26 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; mutation and rollback helpers extracted to mutations.go; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; mutation and rollback helpers extracted to mutations.go; M12 persisted volume lifecycle and legacy restore cut; M16 bind mounts and backup completion.
 
 package workspace
 
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
-	"io"
-	"log/slog"
-	"net/http"
-	"path"
-	"slices"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/containerd/errdefs"
+	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	acfsutils "github.com/florianfinn/docklet-next/backend/pkg/utils/acfs"
+	workspacepkg "github.com/florianfinn/docklet-next/backend/pkg/workspace"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/florianfinn/docklet-next/types/workspace"
@@ -35,18 +30,19 @@ import (
 	"go.getarcane.app/acfs/types"
 	"go.getarcane.app/docker"
 	"go.getarcane.app/kit/pkg"
-
-	"github.com/florianfinn/docklet-next/backend/internal/common"
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
-	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	acfsutils "github.com/florianfinn/docklet-next/backend/pkg/utils/acfs"
-	workspacepkg "github.com/florianfinn/docklet-next/backend/pkg/workspace"
+	"io"
+	"log/slog"
+	"path"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 // Dependencies are the helper-container, lock, and backup operations the workspace runs through.
 type Dependencies struct {
+	DB               *database.DB
+	BindKind         func(string) string
 	Docker           *dockerInternal.DockerClientService
 	Events           *event.EventService
 	Locks            *utils.KeyedMutex
@@ -400,6 +396,10 @@ func (s *Service) validateVolumeHelperSupportInternal(ctx context.Context, volum
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
+	if volume.IsBindKey(volumeName) {
+		_, err := bindpath.Check(ctx, dockerClient, s.deps.DB, volumeName)
+		return err
+	}
 	result, err := dockerClient.VolumeInspect(ctx, volumeName, client.VolumeInspectOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to inspect volume: %w", err)
@@ -433,15 +433,15 @@ while :; do
   esac
   cur="$cur/$segment"
   if mode=$(stat -c '%A' -- "$cur" 2>/dev/null); then
-    case "$mode" in l*) echo ARCANE_SYMLINK >&2; exit 42 ;; esac
+    case "$mode" in l*) printf 'ARCANE_SYMLINK\n' >&2; exit 42 ;; esac
   else
     case "$allow_missing" in 1) exit 0 ;; esac
-    echo ARCANE_NOT_FOUND >&2
+    printf 'ARCANE_NOT_FOUND\n' >&2
     exit 44
   fi
   case "$remaining" in
     '') ;;
-    *) case "$mode" in d*) ;; *) echo ARCANE_NOT_DIRECTORY >&2; exit 47 ;; esac ;;
+    *) case "$mode" in d*) ;; *) printf 'ARCANE_NOT_DIRECTORY\n' >&2; exit 47 ;; esac ;;
   esac
 done`
 
@@ -460,14 +460,14 @@ while :; do
   case "$current" in '') current=$segment ;; *) current="$current/$segment" ;; esac
   cur="$cur/$segment"
   if mode=$(stat -c '%A' -- "$cur" 2>/dev/null); then
-    case "$mode" in l*) echo ARCANE_SYMLINK >&2; exit 42 ;; esac
+    case "$mode" in l*) printf 'ARCANE_SYMLINK\n' >&2; exit 42 ;; esac
   else
     printf 'absent\0%s\0' "$current"
     exit 0
   fi
   case "$remaining" in
     '') ;;
-    *) case "$mode" in d*) ;; *) echo ARCANE_NOT_DIRECTORY >&2; exit 47 ;; esac ;;
+    *) case "$mode" in d*) ;; *) printf 'ARCANE_NOT_DIRECTORY\n' >&2; exit 47 ;; esac ;;
   esac
 done
 case "$rel" in
@@ -560,6 +560,13 @@ func (
 		return nil, validateVolumeWorkspaceRevisionErr
 	}
 
+	if s.deps.BindKind != nil && s.deps.BindKind(volumeName) == "file" {
+		tree, err := s.updateBindFile(ctx, containerID, volumeName, manifest, uploads)
+		if err == nil {
+			s.logWorkspaceUpdate(ctx, volumeName, len(manifest.FileChanges), user)
+		}
+		return tree, err
+	}
 	stagingStartedAt := time.Now()
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
@@ -625,12 +632,7 @@ func (
 		),
 	)
 
-	if s.deps.Events != nil {
-		metadata := database.JSON{"action": "workspace_update", "fileChangeCount": len(manifest.FileChanges)}
-		if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeWorkspaceUpdate, volumeName, volumeName, user.ID, user.Username, "0", metadata); logErr != nil {
-			slog.WarnContext(ctx, "could not log volume workspace update event", "volume", volumeName, "error", logErr.Error())
-		}
-	}
+	s.logWorkspaceUpdate(ctx, volumeName, len(manifest.FileChanges), user)
 	return tree, nil
 }
 
@@ -678,6 +680,10 @@ func validateVolumeWorkspaceRevisionInternal(expected, current string) error {
 }
 
 func classifyVolumeWorkspaceHelperSupportErrorInternal(err error) error {
+	var typed interface{ GetStatus() int }
+	if errors.As(err, &typed) {
+		return err
+	}
 	switch {
 	case errdefs.IsNotFound(err):
 		return common.Classify(common.ErrVolumeWorkspaceNotFound, err)
@@ -732,120 +738,4 @@ func classifyVolumeWorkspaceExecErrorInternal(err error, stderr, fallbackContext
 	default:
 		return fmt.Errorf("%s: %w", fallbackContext, err)
 	}
-}
-
-func volumeWorkspaceFileContentResponseInternal(relativePath, kind string, size int64, content []byte, maxFileSizeBytes int64) (*workspace.FileContent, error) {
-	response := &workspace.FileContent{
-		Path:         "/" + relativePath,
-		RelativePath: relativePath,
-		Name:         path.Base(relativePath),
-		MimeType:     http.DetectContentType(content),
-		Size:         size,
-	}
-	if kind == "special" {
-		response.ReadOnlyReason = workspace.FileReadOnlySpecial
-		return response, nil
-	}
-	if kind != "regular" {
-		return nil, errors.New("invalid volume workspace file kind")
-	}
-	if size > maxFileSizeBytes {
-		response.ReadOnlyReason = workspace.FileReadOnlyTooLarge
-		return response, nil
-	}
-	if !workspacepkg.IsTextContent(content) {
-		response.ReadOnlyReason = workspace.FileReadOnlyBinary
-		return response, nil
-	}
-	response.Editable = true
-	response.Content = string(content)
-	return response, nil
-}
-
-func volumeWorkspaceEntryFromACFSInternal(entry types.Entry, maxFileSizeBytes int64) (workspace.FileEntry, string) {
-	fileEntry := acfsutils.FileEntry(entry)
-	fileEntry.RelativePath = strings.TrimPrefix(entry.Path, "/")
-	switch {
-	case entry.IsDirectory:
-		fileEntry.Size = 0
-		fileEntry.Editable = true
-		return fileEntry, "dir"
-	case entry.IsSymlink:
-		fileEntry.ReadOnlyReason = workspace.FileReadOnlySymlink
-		return fileEntry, "symlink"
-	case acfsutils.IsRegular(entry):
-		if entry.Size > maxFileSizeBytes {
-			fileEntry.ReadOnlyReason = workspace.FileReadOnlyTooLarge
-		} else {
-			fileEntry.Editable = true
-		}
-		return fileEntry, "file"
-	default:
-		fileEntry.ReadOnlyReason = workspace.FileReadOnlySpecial
-		return fileEntry, "special"
-	}
-}
-
-func decodeVolumeWorkspaceWalkInternal(source io.Reader, maxEntries int, maxFileSizeBytes int64) (*workspace.Workspace, error) {
-	decoder := jsontext.NewDecoder(source)
-	files := make([]workspace.FileEntry, 0, min(maxEntries, 256))
-	classifications := make(map[string]string, min(maxEntries, 256))
-	trailerSeen := false
-	truncated := false
-	for {
-		var record types.WalkRecord
-		err := json.UnmarshalDecode(decoder, &record)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if record.Version != types.ProtocolVersion {
-			return nil, fmt.Errorf("unsupported acfs protocol %d", record.Version)
-		}
-		if trailerSeen {
-			return nil, errors.New("acfs walk emitted a record after its trailer")
-		}
-		if record.End {
-			trailerSeen = true
-			truncated = record.Truncated
-			if record.Count != len(files) {
-				return nil, errors.New("acfs walk trailer count does not match emitted entries")
-			}
-			continue
-		}
-		if record.Entry == nil {
-			return nil, errors.New("acfs walk emitted an empty record")
-		}
-		if len(files) >= maxEntries {
-			return nil, errors.New("acfs walk exceeded the requested entry limit")
-		}
-		fileEntry, classification := volumeWorkspaceEntryFromACFSInternal(*record.Entry, maxFileSizeBytes)
-		classifications[fileEntry.RelativePath] = classification
-		files = append(files, fileEntry)
-	}
-	if !trailerSeen {
-		return nil, errors.New("acfs walk ended without a trailer")
-	}
-
-	revisionEntries := slices.Clone(files)
-	slices.SortFunc(revisionEntries, func(a, b workspace.FileEntry) int {
-		return strings.Compare(a.RelativePath, b.RelativePath)
-	})
-	h := sha256.New()
-	for _, entry := range revisionEntries {
-		kit.WriteRecord(h, entry.RelativePath, classifications[entry.RelativePath], entry.Size, entry.ModTime.UnixNano(), entry.Mode)
-	}
-	slices.SortFunc(files, func(a, b workspace.FileEntry) int {
-		if a.IsDirectory != b.IsDirectory {
-			return kit.Ternary(a.IsDirectory, -1, 1)
-		}
-		return strings.Compare(a.RelativePath, b.RelativePath)
-	})
-	return &workspace.Workspace{
-		Files:             files,
-		FileTreeRevision:  hex.EncodeToString(h.Sum(nil)),
-		FileTreeTruncated: truncated,
-	}, nil
 }

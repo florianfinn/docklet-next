@@ -2,9 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed OIDC and passkeys.
+// Deviations: functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts.
 
 package user
+
+import "time"
 
 // TimeFormat controls how absolute times are displayed for a user.
 type TimeFormat string
@@ -39,8 +41,8 @@ type Preferences struct {
 // Role assignments are managed separately via PUT /users/{userId}/role-assignments.
 // Fields tagged with unorm and trim are trimmed and normalized to Unicode NFC.
 type CreateUser struct {
-	Username    string      `json:"username" minLength:"1" maxLength:"255" pattern:"^[^@]+$" patternDescription:"No @ character" doc:"Username; cannot contain @" example:"johndoe"`
-	Password    string      `json:"password" minLength:"8" doc:"Password of the user"`
+	Username    string      `json:"username" minLength:"1" maxLength:"255" doc:"Username; proxy identities are matched exactly" example:"johndoe"`
+	Password    string      `json:"password,omitempty" doc:"Password of the user"`
 	DisplayName *string     `json:"displayName,omitempty" maxLength:"255" doc:"Display name of the user" example:"John Doe" unorm:"nfc" trim:"true"`
 	Email       *string     `json:"email,omitempty" doc:"Email address of the user" example:"john@example.com"`
 	Locale      *string     `json:"locale,omitempty" doc:"Locale preference of the user" example:"en-US"`
@@ -50,7 +52,7 @@ type CreateUser struct {
 // UpdateUser represents the request body for updating a user.
 // Role assignments are managed separately via PUT /users/{userId}/role-assignments.
 type UpdateUser struct {
-	Username    *string     `json:"username,omitzero" minLength:"1" maxLength:"255" pattern:"^[^@]+$" patternDescription:"No @ character" doc:"Username; cannot contain @"`
+	Username    *string     `json:"username,omitzero" minLength:"1" maxLength:"255" doc:"Username; proxy identities are matched exactly"`
 	DisplayName *string     `json:"displayName,omitzero" maxLength:"255" doc:"Display name of the user" unorm:"nfc" trim:"true"`
 	Email       *string     `json:"email,omitzero" doc:"Email address of the user"`
 	Locale      *string     `json:"locale,omitzero" doc:"Locale preference of the user"`
@@ -69,6 +71,9 @@ type RoleAssignmentSummary struct {
 
 // User represents a user in API responses.
 type User struct {
+	IsAdmin                bool                    `json:"isAdmin"`
+	DisabledAt             *time.Time              `json:"disabledAt,omitempty"`
+	Assignments            []AppAssignment         `json:"assignments"`
 	FontSize               *int                    `json:"fontSize,omitempty" minimum:"12" maximum:"20" doc:"Preferred root UI font size in px" example:"14"`
 	DisplayName            *string                 `json:"displayName,omitempty" doc:"Display name of the user" example:"John Doe"`
 	Email                  *string                 `json:"email,omitempty" doc:"Email address of the user" example:"john@example.com"`

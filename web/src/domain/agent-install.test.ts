@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original installer security and shell regression tests.
+// Deviations: Original installer security and shell regression tests. #245 restart policy moved here with the backend snippet removal (#362).
 
 // @vitest-environment node
 import { execFileSync, spawnSync } from "node:child_process";
@@ -156,10 +156,23 @@ describe("agent installer security contract", () => {
     expect(installDirProblem(plan.projectDir, installDir as string)).toBe(problem);
   });
 
-  it("rejects dot aliases and unsafe or unpinned plans", () => {
+  it("rejects dot aliases and unsafe plans", () => {
     expect(absolutePath("/srv/projects/.")).toBe("pathChars");
-    for (const patch of [{ image: "registry.example.com/agent:latest" }, { token: "<invalid>" }, { projectDir: "/srv/projects/." }, { hubUrl: "https://example:example@hub.example.com" }]) {
+    for (const patch of [{ image: "registry.example.com/agent:1.0.0 extra" }, { image: "agent:$(id)" }, { image: "agent:1.0.0\nservices:" }, { token: "<invalid>" }, { projectDir: "/srv/projects/." }, { hubUrl: "https://example:example@hub.example.com" }]) {
       expect(() => buildInstallArtifacts({ ...plan, ...patch })).toThrow();
+    }
+  });
+
+  it("accepts any operator image reference (K-P3)", () => {
+    for (const image of ["registry.example.com/agent:latest", "agent", "registry.example.com:5000/docklet/agent@sha256:" + "a".repeat(64), "[2001:db8::1]:5000/docklet/agent:latest"]) {
+      for (const connection of ["direct", "edge"] as const) {
+        const artifacts = buildInstallArtifacts({ ...plan, connection, image });
+        expect(artifacts.compose).toContain(`image: \${DOCKLET_AGENT_IMAGE:-${image}}`);
+        expect(artifacts.script).toContain(`image: \${DOCKLET_AGENT_IMAGE:-${image}}`);
+      }
+    }
+    for (const image of ["[2001:db8::1]:5000/agent:1.0.0 extra", "[2001:db8::1];id/agent", "agent:'x'", "agent:1.0.0}"]) {
+      expect(() => buildInstallArtifacts({ ...plan, image })).toThrow("agent-install.invalid-image");
     }
   });
 });
@@ -198,4 +211,10 @@ it("D5 generates BusyBox-compatible preflight for every installer entry point", 
   }
   expect(a.readme).toContain("BusyBox is supported");
   expect(a.readme).not.toContain("realpath");
+});
+
+// #245: a fatal actor-host loss exits the agent; only the shipped restart policy brings it back.
+it.each(["direct", "edge"] as const)("keeps the restart policy in the %s installation file", (connection) => {
+  const compose = buildInstallArtifacts({ ...plan, connection }).compose;
+  expect(compose).toMatch(/^ {4}restart: unless-stopped$/m);
 });

@@ -255,7 +255,8 @@ dispatch commit time/state, executor state, cancel intent, result/error and last
 reconciliation time. Key bindings contain caller, digest and hub first-seen time.
 Storage failure refuses admission before effects.
 
-Keep full activity/output retention at **100 finished activities per environment**;
+Keep full activity/output retention at **`activityRunLimit` finished activities per environment**
+(default 100, [activity retention](activity-retention.md));
 clearing history may remove terminal output immediately. Separate compact
 receipts/key bindings/refusal tombstones survive either operation without a
 cascading activity FK. Unresolved active and unknown receipts never expire or
@@ -460,6 +461,13 @@ failed host indefinitely or let it block healthy-host reads. An active answer
 can be refreshed while viewed; no age expires an unknown gate. A hub restart
 settles its own abandoned local work; it cannot settle a remote agent worker. Queries may retry; dispatch is never
 automatically replayed on startup or ambiguous transport failure.
+
+An explicit refresh never queries a receipt whose dispatch is still pending: it joins the in-flight dispatch or
+returns the stored snapshot, because a query that reached the executor before Execute would fence a run that is still
+being sent. Reader-independent following of an active remote run uses the same bounded refresh and ends after 30
+minutes. A follower that departs on a terminal or unknown answer rechecks the run once under the running lock, so an
+active answer handed to it in the meantime gets a new follower; a follower that departs on a refresh error or on its
+expiry does not recheck.
 
 Cancellation uses existing `activities:cancel` authorization at the hub and the
 new agent cancel receipt path. It records intent before signaling, including a

@@ -2,13 +2,14 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original hub-only target administration and agent metadata routes.
+// Deviations: Preserve typed local host.busy/409 admission refusals;  Original hub-only target administration and agent metadata routes; M16 bind mounts and backup completion.
 
 package backuptarget
 
 import (
 	"context"
 	"errors"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -21,6 +22,8 @@ import (
 )
 
 type Handler struct {
+	DraftTest      func(context.Context, dto.TargetDraftTest) (dto.TargetProbeResult, error)
+	Probe          func(context.Context, dto.TargetProbeRequest) (dto.TargetProbeResult, error)
 	Service        *Service
 	Apply          func(context.Context, dto.TargetSet, string) (dto.TargetSetReceipt, error)
 	Test           func(context.Context, string, string) (dto.TargetTestOperation, error)
@@ -68,6 +71,10 @@ func out[T any](data T) *handlerutil.Out[T] {
 	return &handlerutil.Out[T]{Body: base.ApiResponse[T]{Success: true, Data: data}}
 }
 func failure(err error) error {
+	var hostProblem *environmentDTO.HostProblem
+	if errors.As(err, &hostProblem) && hostProblem.Code == "host.busy" && hostProblem.Status == 409 {
+		return hostProblem
+	}
 	if access := AgentAccess(err); access != nil {
 		return access
 	}
@@ -183,6 +190,7 @@ func RegisterHubRoutes(api huma.API, h *Handler) {
 	op := func(id, method, path string) huma.Operation {
 		return huma.Operation{OperationID: id, Method: method, Path: path, Tags: []string{"Backup Targets"}, Middlewares: admin}
 	}
+	middleware.RegisterWithPermission(api, op("test-backup-target-draft", http.MethodPost, "/backup-targets/test"), authz.PermSystemBackupsManage, h.TestDraft)
 	middleware.RegisterWithPermission(api, op("list-backup-targets", http.MethodGet, "/backup-targets"), authz.PermSystemBackupsRead, h.List)
 	middleware.RegisterWithPermission(api, op("create-backup-target", http.MethodPost, "/backup-targets"), authz.PermSystemBackupsManage, h.Create)
 	middleware.RegisterWithPermission(api, op("get-backup-target", http.MethodGet, "/backup-targets/{id}"), authz.PermSystemBackupsRead, h.Get)
@@ -204,6 +212,9 @@ func RegisterHostRoutes(api huma.API, h *Handler, agent bool) {
 		return huma.Operation{OperationID: id, Method: method, Path: path, Tags: []string{"Volume Backup"}}
 	}
 	if agent {
+		probe := op("probe-volume-backup-target", http.MethodPost, prefix+"/probe")
+		probe.Middlewares = middleware.RequireSudo(api)
+		middleware.RegisterWithPermission(api, probe, authz.PermVolumesBackup, h.ProbeDraft)
 		middleware.RegisterWithPermission(api, op("sync-volume-backup-targets", http.MethodPut, prefix), authz.PermVolumesBackup, h.Sync)
 	}
 	test := op("test-host-backup-target", http.MethodPost, prefix+"/{targetId}/test")
@@ -216,4 +227,22 @@ func RegisterHostRoutes(api huma.API, h *Handler, agent bool) {
 	}
 	middleware.RegisterWithPermission(api, op("get-local-backup-recovery-key", http.MethodGet, prefix+"/local/recovery-key"), keyPerm, h.HostKey)
 	middleware.RegisterWithPermission(api, op("attach-local-backup-recovery-key", http.MethodPut, prefix+"/local/recovery-key"), attachPerm, h.HostAttach)
+}
+
+func (h *Handler) TestDraft(ctx context.Context, i *struct{ Body dto.TargetDraftTest }) (*handlerutil.Out[dto.TargetProbeResult], error) {
+	result, err := h.DraftTest(ctx, i.Body)
+	if err != nil {
+		return nil, failure(err)
+	}
+	return out(result), nil
+}
+func (h *Handler) ProbeDraft(ctx context.Context, i *struct {
+	EnvironmentID string `path:"id"`
+	Body          dto.TargetProbeRequest
+}) (*handlerutil.Out[dto.TargetProbeResult], error) {
+	result, err := h.Probe(ctx, i.Body)
+	if err != nil {
+		return nil, failure(err)
+	}
+	return out(result), nil
 }

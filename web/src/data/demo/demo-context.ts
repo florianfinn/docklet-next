@@ -8,6 +8,8 @@ export { AdapterError as DemoError };
 
 export interface DemoContext {
   db: DemoDb;
+  /** Fresh runtime admission follows retained idempotency receipts. */
+  guardRuntimeHost?: (hostId: string) => void;
   runner: ActionRunner;
   /** Forced failure from the design lab, if any, consumed by the next action. */
   forcedFailure: () => boolean;

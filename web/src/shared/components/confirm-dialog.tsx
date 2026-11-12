@@ -31,6 +31,7 @@ interface ConfirmDialogProps {
   onConfirm: () => unknown;
   /** Report long-running results after navigation or an external target change. */
   onDetached?: (result: unknown) => void;
+  formatError?: (error: unknown) => string;
   destructive?: boolean;
   children?: ReactNode;
 }
@@ -38,9 +39,9 @@ interface ConfirmDialogProps {
 const isPromise = (v: unknown): v is Promise<unknown> => !!v && typeof (v as Promise<unknown>).then === "function";
 
 /** Confirmation for destructive or draft-discarding actions; Escape and Cancel keep everything. */
-export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, onDetached, destructive, children }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, onDetached, formatError, destructive, children }: ConfirmDialogProps) {
   const t = useTranslations("common.actions");
-  const feedback = useDialogCommand(open, title);
+  const feedback = useDialogCommand(open, title, formatError);
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
 

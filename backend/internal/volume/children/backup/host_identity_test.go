@@ -2,13 +2,14 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original backup-route Direct/Edge session revocation and late-response proofs.
+// Deviations: Original backup-route Direct/Edge session revocation and late-response proofs; M15 assignment schema in the environment fixture; M17 empty history deletion fixture; M19 durable condition deletion fixture.
 
 package backup
 
 import (
 	"context"
 	"encoding/json"
+	policyModels "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
@@ -37,6 +39,15 @@ type backupIdentityConn struct {
 	closed bool
 	send   func(*edge.TunnelMessage)
 }
+
+// This empty fixture exercises host deletion; real history storage has separate goose coverage.
+type historyDeletionFixture struct{ HostID string }
+
+func (historyDeletionFixture) TableName() string { return "history_buckets" }
+
+type conditionDeletionFixture struct{ HostID string }
+
+func (conditionDeletionFixture) TableName() string { return "history_conditions" }
 
 func (c *backupIdentityConn) Send(m *edge.TunnelMessage) error {
 	c.mu.Lock()
@@ -70,7 +81,7 @@ func TestBackupRoutesDropHeldDirectAndEdgeResponsesOnHostRotation(t *testing.T) 
 					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 					defer cancel()
 					f := newRuntimePlan(t)
-					require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}))
+					require.NoError(t, f.service.deps.DB.AutoMigrate(&policyModels.Policy{}, &policyModels.Child{}, &policyModels.Candidate{}, &policyModels.Notice{}, &environment.Environment{}, &backuptarget.Target{}, &access.Assignment{}, &historyDeletionFixture{}, &conditionDeletionFixture{}))
 					entered := make(chan struct{}, 1)
 					release := make(chan struct{})
 					info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})

@@ -1,10 +1,10 @@
 import { CancelledError } from "@tanstack/react-query";
 import { identityLifetime } from "./identity-lifetime";
-import type { ActionRun } from "@/domain/model";
+import type { ActionKind, ActionRun } from "@/domain/model";
 import type { CodedActionRun, MessageCode } from "./message-code";
 
 import { AdapterOutcomeError } from "./capability";
-import type { DockletAdapter } from "./adapter";
+import type { CodedRuntimeActionRun, DockletAdapter, RuntimeCommandRequest, RuntimeAdmission } from "./adapter";
 
 /**
  * A repeat of a check that succeeded within this window returns that result.
@@ -48,6 +48,8 @@ export const isRunBusy = (e: unknown): e is RunBusyError => e instanceof RunBusy
 export interface GateRule {
   key: string;
   scope?: string;
+  /** Run kind this start produces; an observed run of that kind on the same target goes to durable admission. */
+  kind?: ActionKind;
   freshMs?: number;
   coveredBy?: string[];
 }
@@ -63,6 +65,10 @@ export function contentHash(text: string): string {
   return (h >>> 0).toString(36);
 }
 
+/** Run kinds of plain lifecycle commands as the hub reports them (stack start is a compose up, `project_deploy`). */
+const STACK_RUN_KINDS: Partial<Record<string, ActionKind>> = { start: "deploy", stop: "stop", restart: "restart", redeploy: "redeploy" };
+const CONTAINER_RUN_KINDS: Partial<Record<string, ActionKind>> = { start: "start", stop: "stop", restart: "restart", redeploy: "redeploy" };
+
 /** Gated adapter methods: every start of a run, from any page, passes here. */
 export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => GateRule>> = {
   checkUpdates: ([scope]) => {
@@ -70,9 +76,10 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
     const key = s.stackId ? `check:stack:${s.stackId}` : s.containerId ? `check:container:${s.containerId}` : "check:all";
     return { key, freshMs: CHECK_FRESH_MS, coveredBy: key === "check:all" ? [] : ["check:all"] };
   },
+  scanVulnerabilityCandidates: ([host, input]) => ({ key: `candidate-scan:${str(host)}:${contentHash(JSON.stringify(input))}` }),
   runScan: () => ({ key: "scan:all", freshMs: CHECK_FRESH_MS }),
   reconnectHost: ([hostId]) => ({ key: `reconnect:${str(hostId)}`, freshMs: CHECK_FRESH_MS }),
-  runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}` }),
+  runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}`, kind: STACK_RUN_KINDS[str(command)] }),
   installStackUpdates: ([stackId, input]) => ({ key: `stack:${str(stackId)}:update:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restoreRestorePoint: ([stackId, point, input]) => ({ key: `stack:${str(stackId)}:restore:${str(point)}:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restartService: ([stackId, service]) => ({ key: `stack:${str(stackId)}:restart:${str(service)}`, scope: `stack:${str(stackId)}` }),
@@ -81,9 +88,11 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
     const target = d.stackId ?? `new:${str(d.hostId)}:${str(d.name)}`;
     return { key: `deploy:${target}:${contentHash(JSON.stringify([d.compose, d.env, d.labels]))}`, scope: `stack:${target}` };
   },
-  runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}` }),
+  runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}`, kind: CONTAINER_RUN_KINDS[str(command)] }),
   recreateContainer: ([id, input]) => ({ key: `container:${str(id)}:recreate:${contentHash(JSON.stringify(input ?? null))}`, scope: `container:${str(id)}` }),
-  installContainerUpdate: ([id]) => ({ key: `container:${str(id)}:update`, scope: `container:${str(id)}` }),
+  restoreContainerImage: ([id]) => ({ key: `container:${str(id)}:restore-image`, scope: `container:${str(id)}` }),
+  installContainerUpdate: ([id, input]) => ({ key: `container:${str(id)}:update${input ? `:${contentHash(JSON.stringify(input))}` : ""}`, scope: `container:${str(id)}` }),
+  selfUpdate: ([hostId]) => ({ key: hostId === "0" ? "hub:self-update" : `host:${str(hostId)}:self-update`, scope: hostId === "0" ? "hub" : `host:${str(hostId)}` }),
   restartAgent: ([hostId]) => ({ key: `host:${str(hostId)}:agent-restart`, scope: `host:${str(hostId)}` }),
   connectHost: ([hostId]) => ({ key: `host:${str(hostId)}:connect`, scope: `host:${str(hostId)}` }),
   runBackup: ([volumeId]) => ({ key: `volume:${str(volumeId)}:backup`, scope: `volume:${str(volumeId)}` }),
@@ -129,8 +138,13 @@ const active = (s: Status) => s === "pending" || s === "queued" || s === "runnin
 /** Target scopes of a run, also for runs started outside the gate (schedules, other tabs). */
 function scopesOf(run: CodedActionRun): string[] {
   if (run.kind === "check-updates" || run.kind === "scan") return [];
+  if (run.sourceOperation === "hub.update") return ["hub"];
+  if (run.sourceOperation === "agent.update" && run.hostId) return [`host:${run.hostId}`];
   return [run.stackId && `stack:${run.stackId}`, run.containerId && `container:${run.containerId}`].filter((x): x is string => !!x);
 }
+
+/** The run's own target: its container when it has one, else its stack. */
+const targetOf = (run: CodedActionRun) => run.containerId ? `container:${run.containerId}` : run.stackId && `stack:${run.stackId}`;
 
 /** Resolves a container scope to its stack scope; the provider reads it from cached container data. */
 export type ParentResolver = (scope: string) => string | undefined;
@@ -146,6 +160,8 @@ export class RunGate {
   private readonly entries = new Map<string, Entry>();
   private readonly runs = new Map<string, CodedActionRun>();
   private readonly listeners = new Set<(notice: GateNotice) => void>();
+  /** One confirmation read per blocker id while it runs. */
+  private readonly confirming = new Map<string, Promise<CodedRuntimeActionRun>>();
   private unwatch: (() => void) | undefined;
   private parentOf: ParentResolver = () => undefined;
   private readonly inner: DockletAdapter;
@@ -159,7 +175,7 @@ export class RunGate {
 
   reset(): void {
     ++this.generation;
-    this.entries.clear(); this.runs.clear(); this.listeners.clear();
+    this.entries.clear(); this.runs.clear(); this.listeners.clear(); this.confirming.clear();
     const stop = this.unwatch; this.unwatch = undefined; stop?.();
   }
 
@@ -226,7 +242,7 @@ export class RunGate {
     this.listeners.forEach((l) => l(notice));
   }
 
-  private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>): Promise<unknown> {
+  private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>, quiet = false): Promise<unknown> {
     const run = entry.runId ? this.runs.get(entry.runId) : undefined;
     const generation = this.generation;
     const guardedRetry = retry ? () => generation === this.generation ? retry() : Promise.reject(new CancelledError()) : undefined;
@@ -234,7 +250,7 @@ export class RunGate {
       entry.refreshedAt = this.now();
       void this.inner.getRuntimeRun?.(entry.hostId, entry.runId).catch(() => undefined);
     }
-    this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry: guardedRetry });
+    if (!quiet) this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry: guardedRetry });
     if (entry.error) return Promise.reject(entry.error);
     return entry.settled ? Promise.resolve(entry.value) : entry.promise;
   }
@@ -244,26 +260,58 @@ export class RunGate {
     return a.scope === b.scope || a.parent === b.scope || b.parent === a.scope;
   }
 
-  private blockerOf(rule: GateRule, parent: string | undefined): string | undefined | false {
+  private blockerOf(rule: GateRule, parent: string | undefined, confirmed: ReadonlySet<string>): string | undefined | false {
     const me = { scope: rule.scope!, parent };
     for (const e of this.entries.values()) {
-      if (e.rule.key === rule.key || !e.rule.scope || !active(this.status(e))) continue;
+      if (e.rule.key === rule.key || !e.rule.scope || !active(this.status(e)) || (e.runId && confirmed.has(e.runId))) continue;
       if (this.conflicts(me, { scope: e.rule.scope, parent: e.parent })) return e.runId;
     }
     const ownRuns = new Set([...this.entries.values()].filter((e) => e.rule.key === rule.key).map((e) => e.runId));
     for (const r of this.runs.values()) {
-      if (!active(r.status) || ownRuns.has(r.id)) continue;
+      if (!active(r.status) || ownRuns.has(r.id) || confirmed.has(r.id)) continue;
+      // A same-kind run started elsewhere (API, other tab) on this target: the hub joins an identical command or answers busy.
+      if (this.inner.kind === "http" && rule.kind && r.kind === rule.kind && targetOf(r) === rule.scope) continue;
       if (scopesOf(r).some((scope) => this.conflicts(me, { scope, parent: this.parentOf(scope) }))) return r.id;
     }
     return false;
   }
 
+  /** Host of a blocking run, from the run list or a remembered start. */
+  private hostOf(runId: string): string | undefined {
+    return this.runs.get(runId)?.hostId ?? [...this.entries.values()].find((e) => e.runId === runId)?.hostId;
+  }
+
+  /** Reads the hub's record of a blocker once; concurrent attempts share the read. */
+  private confirm(hostId: string, runId: string): Promise<CodedRuntimeActionRun> {
+    let read = this.confirming.get(runId);
+    if (!read) {
+      read = this.inner.confirmRun!(hostId, runId);
+      const pending = read;
+      this.confirming.set(runId, pending);
+      void pending.finally(() => { if (this.confirming.get(runId) === pending) this.confirming.delete(runId); }).catch(() => undefined);
+    }
+    return read;
+  }
+
+  async admit(request: RuntimeCommandRequest, options: { quiet?: boolean } = {}): Promise<RuntimeAdmission> {
+    const method = request.kind === "container" ? "runContainerCommand" : request.command === "update" ? "installStackUpdates" : "runStackCommand";
+    const args = request.command === "update" ? [request.id, request.input] : [request.id, request.command];
+    let outcome: RuntimeAdmission["outcome"] = "started";
+    const send = this.inner.admitRuntimeCommand ? async () => {
+      const result = await this.inner.admitRuntimeCommand!(request, options); outcome = result.outcome; return result.runId;
+    } : undefined;
+    const runId = await this.run(method, args, { ...options, send, joined: () => { outcome = "joined"; } });
+    return { outcome, runId: runId as string };
+  }
+
   /** Starts through the gate; `fresh: false` skips the freshness answer (explicit recheck). */
-  run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean } = {}): Promise<unknown> {
+  run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean; quiet?: boolean; send?: () => Promise<string>; joined?: () => void } = {},
+    /** Blockers this attempt confirmed terminal with a known outcome. */
+    confirmed: ReadonlySet<string> = new Set()): Promise<unknown> {
     const generation = this.generation;
     const check = () => { if (generation !== this.generation) throw new CancelledError(); };
     const ruleOf = GATE_RULES[method];
-    const start = () => (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
+    const start = () => options.send ? options.send() : (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
     // Live scan admission belongs to the host; each request re-scans or returns its busy activity.
     if (this.inner.kind === "http" && method === "runScan") return start();
     if (this.inner.kind === "http" && !this.inner.mappedOperations?.has(method)) return start();
@@ -275,26 +323,37 @@ export class RunGate {
     const same = this.entries.get(rule.key);
     if (same) {
       const st = this.status(same);
-      if (active(st)) return this.answer(same, "inflight");
+      if (active(st)) { options.joined?.(); return this.answer(same, "inflight", undefined, options.quiet); }
       if (options.fresh !== false && st === "succeeded" && this.freshAt(same) !== undefined) {
-        return this.answer(same, "fresh", () => this.run(method, args, { fresh: false }));
+        options.joined?.(); return this.answer(same, "fresh", () => this.run(method, args, { fresh: false }), options.quiet);
       }
     }
     for (const cover of rule.coveredBy ?? []) {
       const other = this.entries.get(cover);
-      if (other && active(this.status(other))) return this.answer(other, "inflight");
+      if (other && active(this.status(other))) { options.joined?.(); return this.answer(other, "inflight", undefined, options.quiet); }
     }
     const parent = rule.scope ? this.parentOf(rule.scope) : undefined;
     if (rule.scope) {
-      const blocker = this.blockerOf(rule, parent);
+      const blocker = this.blockerOf(rule, parent, confirmed);
       if (blocker !== false) {
-        this.notify({ reason: "busy", key: rule.key, runId: blocker, title: blocker ? this.runs.get(blocker)?.title : undefined });
-        return Promise.reject(new RunBusyError(blocker));
+        const refuse = () => {
+          if (!options.quiet) this.notify({ reason: "busy", key: rule.key, runId: blocker, title: blocker ? this.runs.get(blocker)?.title : undefined });
+          return Promise.reject(new RunBusyError(blocker));
+        };
+        const host = blocker ? this.hostOf(blocker) : undefined;
+        // A local row may lag behind the hub: read the blocker's record once, then repeat the complete admission.
+        if (!blocker || !host || !this.inner.confirmRun) return refuse();
+        return this.confirm(host, blocker).then((run) => {
+          check();
+          // The read publishes its row, so the decision cannot wait for re-admission: only a terminal, known answer for this run admits.
+          if (run.id !== blocker || run.hostId !== host || active(run.status) || run.outcomeState === "unknown") return refuse();
+          return this.run(method, args, options, new Set([...confirmed, blocker]));
+        }, () => { check(); return refuse(); });
       }
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "restoreRestorePoint") };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "installContainerUpdate" || method === "restoreContainerImage" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService" || method === "selfUpdate") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {
@@ -331,6 +390,7 @@ export function withRunGate(inner: DockletAdapter, now?: () => number): DockletA
   const gate = new RunGate(inner, now);
   const proxy = new Proxy(inner, {
     get(target, prop, receiver) {
+      if (prop === "admitRuntimeCommand") return (request: RuntimeCommandRequest, options?: { quiet?: boolean }) => gate.admit(request, options);
       if (typeof prop === "string" && prop in GATE_RULES) return (...args: unknown[]) => gate.run(prop as keyof DockletAdapter, args);
       return Reflect.get(target, prop, receiver) as unknown;
     },

@@ -8,7 +8,7 @@ import { mapImageObservation } from "./image-mapping";
 import type { components } from "@/api/generated/schema";
 import type { DockerImage } from "@/domain/images";
 import type { InventoryObservation, Topology, TopologyNetwork } from "@/domain/model";
-import type { Volume, VolumeConsumer } from "@/domain/volumes";
+import { bindKey, type Volume, type VolumeConsumer } from "@/domain/volumes";
 import { inventoryId, mapContainer, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
 import { composeProjectOwner } from "./project-ownership";
@@ -51,7 +51,7 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
       const consumers = usage.get(key) ?? [];
       consumers.push({ containerId: c.id, containerName: c.name, stackId: c.stackId, stackName: c.stackName, service: c.serviceName, target: m.destination, readOnly: !m.rw, running: raw.state === "running" });
       usage.set(key, consumers);
-      if (m.type === "bind") binds.set(key, { id: inventoryId(hostId, `bind:${Array.from(new TextEncoder().encode(name), (byte) => byte.toString(16).padStart(2, "0")).join("")}`), name, hostId, kind: "bind", source: name, sizeBytes: 0, sizeUnavailable: true, createdAt: "", consumers, labels: {}, inventory });
+      if (m.type === "bind") binds.set(key, { id: inventoryId(hostId, bindKey(name)), name, hostId, kind: "bind", source: name, sizeBytes: 0, sizeUnavailable: true, createdAt: "", consumers, labels: {}, inventory });
     }
   }
   return [...rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r): Volume => {

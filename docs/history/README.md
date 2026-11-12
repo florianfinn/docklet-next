@@ -5,6 +5,7 @@ The [design index](../design/README.md) holds the current contracts.
 
 | Record | Historical scope |
 | --- | --- |
+| [Pre-release SQLite chain](prerelease-sqlite-chain.md) | Frozen migrations 001–020 and the release baseline reset |
 | [M1 PostgreSQL baseline](m1-postgresql-baseline.md) | Pre-SQLite schema generation and retained-integrity proof |
 | [M1 SQLite removal map](m1-sqlite-removal.md) | Pinned Arcane source, test, migration and build inventory for the original removal |
 | [M6 runtime acceptance](m6-runtime-acceptance.md) | Exact merged package, sandbox acceptance, coordination lessons and follow-up boundary on 2026-10-21 |
@@ -15,3 +16,13 @@ The [design index](../design/README.md) holds the current contracts.
 | [M11 vulnerability scanning acceptance](m11-vulnerability-scanning-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-28 |
 | [M12 backups and restore acceptance](m12-backups-restore-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-29 |
 | [M13 notifications and Auto Heal acceptance](m13-notifications-auto-heal-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-30 |
+| [M14 container and host operations acceptance](m14-container-host-operations-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-01 |
+| [M15 simple users acceptance](m15-simple-users-acceptance.md) | Merged package, sandbox-found defects, three acceptance fixes, method and limits on 2026-11-01 |
+| [M16 bind mounts and backup completion acceptance](m16-bind-mounts-backups-acceptance.md) | Merged package, sandbox-found defects, two acceptance fixes, method and limits on 2026-11-03 |
+| [M17 dashboard, history and service widgets acceptance](m17-dashboard-history-widgets-acceptance.md) | Merged package, sandbox-found defects, two acceptance fixes, method and limits on 2026-11-04 |
+| [M18 updates and schedules acceptance](m18-updates-schedules-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-05 |
+| [M19 import, bulk actions and settings parity acceptance](m19-import-bulk-settings-acceptance.md) | Merged package, sandbox-found defects, acceptance fix, method and limits on 2026-11-07 |
+| [M20 pre-release hardening acceptance](m20-pre-release-hardening-acceptance.md) | Merged package, sandbox-found defects, maintainer readings, method and limits on 2026-11-08 |
+| [M21 first release readiness acceptance](m21-first-release-readiness-acceptance.md) | Merged package, sandbox-found defects, two acceptance fix packages, method and limits on 2026-11-10 |
+| [M22 publication readiness acceptance](m22-publication-readiness-acceptance.md) | Merged package, review rounds, unchanged-artifact package acceptance, method and limits on 2026-11-10 |
+| [M23 dashboard performance and request hygiene acceptance](m23-dashboard-performance-acceptance.md) | Merged package, sandbox-found defects, maintainer counting decisions, method and limits on 2026-11-12 |

@@ -2,7 +2,7 @@
 // Revision: b3607be5144101152c8eb7738d389e8c73986fba
 // Retrieved: 2026-10-16
 // License: Apache-2.0 AND BSD-3-Clause
-// Deviations: Empty-model schema generation using the ported retained integrity inventory.
+// Deviations: Empty-model schema generation using the ported retained integrity inventory; M17 explicit WITHOUT ROWID table options.
 
 package schema
 
@@ -18,20 +18,27 @@ import (
 var integrityFS embed.FS
 
 type columnRule struct {
+	Check   string  `json:"check"`
 	Table   string  `json:"table"`
 	Column  string  `json:"column"`
 	NotNull bool    `json:"notNull"`
 	Default *string `json:"default"`
 }
 type integrityRules struct {
-	Columns     []columnRule
-	Constraints map[string][]string
-	Indexes     []string
+	Columns      []columnRule
+	Constraints  map[string][]string
+	Indexes      []string
+	WithoutRowID []string
 }
 
 // ApplyIntegrity is development-only: it refuses data and rebuilds empty model
 // tables with the independently retained constraints before producing a baseline.
-func ApplyIntegrity(db *gorm.DB) error {
+func ApplyIntegrity(db *gorm.DB) error { return applyIntegrity(db, Models()) }
+
+// ApplyBaselineIntegrity uses only the frozen baseline models for JSON constraints.
+func ApplyBaselineIntegrity(db *gorm.DB) error { return applyIntegrity(db, BaselineModels()) }
+
+func applyIntegrity(db *gorm.DB, models []any) error {
 	data, err := integrityFS.ReadFile("retained_integrity.json")
 	if err != nil {
 		return err
@@ -64,11 +71,25 @@ func ApplyIntegrity(db *gorm.DB) error {
 		if strings.HasPrefix(table, "sqlite_") {
 			continue
 		}
-		if err = rebuildEmpty(db, table, rules); err != nil {
+		if err = rebuildEmpty(db, table, rules, models); err != nil {
 			return err
 		}
 	}
 	for _, statement := range rules.Indexes {
+		// Future-model indexes must not change generation of the frozen baseline.
+		_, target, ok := strings.Cut(statement, " ON ")
+		if !ok {
+			return fmt.Errorf("invalid integrity index: missing target")
+		}
+		target, _, _ = strings.Cut(target, "(")
+		target = strings.Trim(strings.TrimSpace(target), "\"`")
+		present := false
+		for _, table := range tables {
+			present = present || table == target
+		}
+		if !present {
+			continue
+		}
 		statement = strings.Replace(statement, " INDEX ", " INDEX IF NOT EXISTS ", 1)
 		if err = db.Exec(statement).Error; err != nil {
 			return err
@@ -86,7 +107,7 @@ type column struct {
 	PK        int
 }
 
-func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
+func rebuildEmpty(db *gorm.DB, table string, rules integrityRules, models []any) error {
 	var columns []column
 	if err := db.Raw("PRAGMA table_info(" + quote(table) + ")").Scan(&columns).Error; err != nil {
 		return err
@@ -131,6 +152,9 @@ func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
 		if value != nil {
 			def += " DEFAULT " + *value
 		}
+		if rule.Check != "" {
+			def += " " + rule.Check
+		}
 		definitions = append(definitions, def)
 	}
 	if len(pk) > 0 && !(len(pk) == 1 && strings.Contains(strings.Join(definitions, ","), " PRIMARY KEY")) {
@@ -138,7 +162,7 @@ func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
 	}
 	definitions = append(definitions, rules.Constraints[table]...)
 	// JSON fields retain SQL NULL separately from valid JSON null, arrays and objects.
-	for _, model := range Models() {
+	for _, model := range models {
 		stmt := &gorm.Statement{DB: db}
 		if err := stmt.Parse(model); err != nil {
 			return err
@@ -156,7 +180,14 @@ func rebuildEmpty(db *gorm.DB, table string, rules integrityRules) error {
 	if err := db.Exec("DROP TABLE " + quote(table)).Error; err != nil {
 		return err
 	}
-	if err := db.Exec("CREATE TABLE " + quote(table) + " (" + strings.Join(definitions, ",") + ")").Error; err != nil {
+	suffix := ""
+	for _, name := range rules.WithoutRowID {
+		if name == table {
+			suffix = " WITHOUT ROWID"
+			break
+		}
+	}
+	if err := db.Exec("CREATE TABLE " + quote(table) + " (" + strings.Join(definitions, ",") + ")" + suffix).Error; err != nil {
 		return err
 	}
 	for _, index := range indexes {

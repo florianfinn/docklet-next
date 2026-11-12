@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; log-only structured source delivery.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; log-only structured source delivery; M18 scoped orphan preservation.
 
 package projects
 
@@ -76,6 +76,14 @@ func ComposeStop(ctx context.Context, proj *composetypes.Project, services []str
 	return c.svc.Stop(stopCtx, proj.Name, api.StopOptions{Services: services})
 }
 
+type preserveComposeOrphansKey struct{}
+
+// WithComposeOrphansPreserved prevents a scoped lifecycle deployment from
+// removing containers omitted from its model, including environment opt-ins.
+func WithComposeOrphansPreserved(ctx context.Context) context.Context {
+	return context.WithValue(ctx, preserveComposeOrphansKey{}, true)
+}
+
 func ComposeUp(ctx context.Context,
 	proj *composetypes.Project,
 	services []string,
@@ -126,7 +134,8 @@ func ComposeUp(ctx context.Context,
 	}
 	defer func() { _ = c.Close() }()
 
-	upOptions, startOptions := composeUpOptionsInternal(proj, services, removeOrphans, forceRecreate, waitTimeout, envOpts)
+	preserveOrphans, _ := composeCtx.Value(preserveComposeOrphansKey{}).(bool)
+	upOptions, startOptions := composeUpOptionsInternal(proj, services, removeOrphans, forceRecreate, waitTimeout, envOpts, preserveOrphans)
 
 	return c.svc.Up(composeCtx, proj, api.UpOptions{Create: upOptions, Start: startOptions})
 }
@@ -156,7 +165,7 @@ func composeUpOptionsInternal(proj *composetypes.Project,
 	removeOrphans,
 	forceRecreate bool,
 	waitTimeout time.Duration,
-	envOpts ComposeEnvOptions) (api.CreateOptions,
+	envOpts ComposeEnvOptions, preserveOrphans ...bool) (api.CreateOptions,
 	api.StartOptions,
 ) {
 	recreatePolicy := kit.Ternary(forceRecreate, api.RecreateForce, api.RecreateDiverged)
@@ -168,6 +177,11 @@ func composeUpOptionsInternal(proj *composetypes.Project,
 		// A caller opt-in still wins over COMPOSE_REMOVE_ORPHANS.
 		RemoveOrphans: removeOrphans || envOpts.RemoveOrphans,
 		IgnoreOrphans: envOpts.IgnoreOrphans,
+	}
+
+	if len(preserveOrphans) > 0 && preserveOrphans[0] {
+		upOptions.RemoveOrphans = false
+		upOptions.IgnoreOrphans = true
 	}
 
 	startOptions := api.StartOptions{

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; M15 simple-user rights and identity contracts.
 
 package apikey
 
@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/apikey"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -22,61 +21,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
-	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 )
-
-func setupAPIKeyServiceTestDB(t *testing.T) *database.DB {
-	t.Helper()
-
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&settings.SettingVariable{},
-		&user.User{},
-		&session.UserSession{},
-		&testEnvironmentRow{},
-		&role.Role{},
-		&role.UserRoleAssignment{},
-		&ApiKey{},
-		&role.ApiKeyPermission{},
-	))
-
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-
-	return &database.DB{DB: db}
-}
-
-func setupAPIKeyService(t *testing.T) (*ApiKeyService, *database.DB, *user.UserService) {
-	t.Helper()
-
-	db := setupAPIKeyServiceTestDB(t)
-	userService := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	return NewApiKeyService(db, userService, nil), db, userService
-}
-
-func createTestAPIKeyUser(t *testing.T, ctx context.Context, userService *user.UserService, id string, usernames ...string) *user.User {
-	t.Helper()
-	username := "user-" + id
-	if len(usernames) > 0 {
-		username = usernames[0]
-	}
-
-	localUser := &user.User{
-		ID:       id,
-		Username: username,
-	}
-
-	created, err := userService.CreateUser(ctx, localUser)
-	require.NoError(t, err)
-	return created
-}
 
 func fetchAPIKey(t *testing.T, db *database.DB, keyID string) ApiKey {
 	t.Helper()
@@ -118,6 +66,7 @@ func createDefaultAdminUser(t *testing.T, ctx context.Context, userService *user
 
 	created, err := userService.CreateUser(ctx, localUser)
 	require.NoError(t, err)
+	require.NoError(t, userService.SetAdministrator(ctx, "fixture-operator", created.ID, true))
 	return created
 }
 
@@ -328,10 +277,11 @@ func TestApiKeyGrantsAreCappedByOwnerRoles(t *testing.T) {
 	userSvc := user.NewUserService(db, roleSvc, session.RevokeAllUserSessionsExceptInDB)
 	service := NewApiKeyService(db, userSvc, roleSvc)
 	// Owner has no roles at all — their permission ceiling is empty.
-	owner := createTestAPIKeyUser(t, ctx, userSvc, "roleless-owner", "roleless-owner")
+	owner, err := userSvc.CreateUser(ctx, &user.User{ID: "roleless-owner", Username: "roleless-owner"})
+	require.NoError(t, err)
 
 	// Create path: even a sudo caller cannot mint a key above the owner's roles.
-	_, err := service.CreateApiKey(ctx, owner.ID, authz.SudoPermissionSet(), apikey.CreateApiKey{
+	_, err = service.CreateApiKey(ctx, owner.ID, authz.SudoPermissionSet(), apikey.CreateApiKey{
 		Name:        "above-owner",
 		Permissions: []apikey.PermissionGrant{{Permission: authz.PermContainersList}},
 	})
@@ -806,7 +756,7 @@ func TestBackfillPermsForKeyDeduplicatesGlobalAndEnvironmentPermissions(t *testi
 	}).Error)
 
 	require.NoError(t, roleSvc.SetUserAssignments(ctx, owner.ID, []role.UserRoleAssignment{
-		{RoleID: authz.BuiltInRoleViewer, EnvironmentID: nil},
+		{RoleID: authz.BuiltInRoleAdmin, EnvironmentID: nil},
 		{RoleID: authz.BuiltInRoleEditor, EnvironmentID: &envID},
 	}))
 

@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
@@ -25,6 +26,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import { VolumeBackupsTab } from "./backups/VolumeBackupsTab";
+import { BindNotice } from "./bind-notice";
+import { BindSize } from "./bind-size";
 import { FileWorkspace } from "./files/FileWorkspace";
 import { BackupBadge, KindBadge } from "./storage-visuals";
 import { useVolumeCapability } from "./use-volume-capability";
@@ -34,7 +37,7 @@ import { deleteBlock } from "./volume-menu";
 
 type Tab = "overview" | "files" | "backups";
 
-function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: string }; host: Host | undefined }) {
+function OverviewTab({ volume: v, host, onMeasured }: { volume: VolumeDetail & { scope?: string }; host: Host | undefined; onMeasured: () => void }) {
   const t = useTranslations("volumes.detail");
   const tv = useTranslations("volumes");
   const remove = useVolumeCapability("deleteVolume", v.id);
@@ -111,9 +114,11 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: str
           <CardTitle>{t("usage")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 px-4">
+          {v.kind === "bind" && v.bind ? <BindSize volume={v} online={isHostAvailable(host)} onMeasured={onMeasured} /> : <>
           <div className="text-2xl font-semibold tracking-tight tabular">{v.sizeUnavailable ? tv("unknown") : formatBytes(v.sizeBytes)}</div>
           {share !== undefined && <Meter label={t("usage")} value={share} color={host?.color} sub={t("usageOfHost", { percent: `${share < 0.1 ? "< " : ""}${formatPercentNumber(Math.max(share, 0.1), { maximumFractionDigits: 1 })}`, total: `${host?.diskTotalGb ?? "–"} GB` })} />}
           <p className="text-[11px] text-muted-foreground">{t("usageSub")}</p>
+          </>}
         </CardContent>
       </Card>
       <Card className="min-w-0 gap-3 py-4 lg:col-span-3">
@@ -143,6 +148,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: str
             </dd>
           </dl>
           {v.kind === "bind" && <p className="text-xs text-muted-foreground">{v.fileBind ? t("fileBindNote") : t("bindNote")}</p>}
+          <BindNotice volume={v} />
           <div className="flex border-t pt-3">
             <Button variant="outline" disabled={!rename.available || !!v.inventory?.stale || !!block} title={rename.reason} onClick={() => setRenaming(true)}>{t("rename")}</Button>
             <Tooltip>
@@ -189,7 +195,7 @@ export default function VolumePage() {
   const tab = (["overview", "files", "backups"].includes(params.get("tab") ?? "") ? params.get("tab") : "overview") as Tab;
   const v = volume.data;
   const host = v ? hosts.byId.get(v.hostId) : undefined;
-  const online = host?.status === "online";
+  const online = isHostAvailable(host);
   const images = (containers.data ?? []).filter((c) => v?.consumers.some((x) => x.containerId === c.id)).map((c) => c.image.repository);
   const runningNames = v?.consumers.filter((c) => c.running).map((c) => c.containerName) ?? [];
   const warning = v && holdsDatabase(images) ? t("dbWarning", { images: [...new Set(images)].join(", ") }) : runningNames.length ? tf("runningWarning", { names: runningNames.join(", ") }) : undefined;
@@ -254,7 +260,7 @@ export default function VolumePage() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="overview">
-                <OverviewTab key={v.id} volume={v} host={host} />
+                <OverviewTab key={v.id} volume={v} host={host} onMeasured={() => void volume.refetch()} />
               </TabsContent>
               <TabsContent value="files">
                 {online ? <FileWorkspace volume={v} warning={warning} /> : <EmptyState icon={<Unplug />} title={tf("offline")} />}

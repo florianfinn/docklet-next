@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts.
 
 package container
 
@@ -22,6 +22,7 @@ import (
 	"go.getarcane.app/updater/labels"
 	"go.getarcane.app/updater/pkg/utils/tagpolicy"
 
+	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
 	"github.com/florianfinn/docklet-next/backend/internal/container/children/stats"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
@@ -275,6 +276,7 @@ func (
 	}
 	for _, dc := range containers {
 		summary := containertypes.NewSummary(dc)
+		summary.OriginFields = origin.Detect(dc.Labels)
 		summary.Ports = mergePortBindings(summary.Ports)
 		policy := updater.DefaultLabelPolicy().TagPolicy(dc.Labels)
 		resolved, policyErr := tagpolicy.Resolve(dc.Image, policy)

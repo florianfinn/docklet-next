@@ -29,6 +29,10 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: Re
 export function QueryError({ onRetry, className, compact, error, message }: { onRetry?: () => void; className?: string; compact?: boolean; error?: unknown; message?: string }) {
   const t = useTranslations("common");
   const capability = useTranslations("activity.capability");
+  // A read refused by hub maintenance is not a failure of the source; the shell shows the maintenance status.
+  if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "backup.maintenance") {
+    return <div role="status" className={cn("text-sm text-muted-foreground", className)}><p>{t("query.maintenance")}</p></div>;
+  }
   if (error instanceof AdapterOutcomeError && error.outcome.kind === "not-available") {
     return <div role="status" className={cn("space-y-2 text-sm text-muted-foreground", className)}><p>{t("query.unavailableTitle")}</p><p>{capability(error.outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable")}</p></div>;
   }

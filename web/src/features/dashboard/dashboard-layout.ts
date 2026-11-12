@@ -1,26 +1,15 @@
 import { createStore, useStore } from "@/shared/lib/store";
+import { SERVICE_KINDS, type ServiceKind } from "@/domain/service-widgets";
 import { SHIPPED_DESIGN } from "@/shared/preferences/shipped-design";
 
 export const CORE_WIDGETS = ["attention", "updates", "timeline", "load", "capacity", "schedule", "security", "apps", "events"] as const;
-export const SERVICE_KINDS = ["plex", "minecraft", "overseerr"] as const;
 export type CoreWidgetId = (typeof CORE_WIDGETS)[number];
-export type ServiceKind = (typeof SERVICE_KINDS)[number];
+export { SERVICE_KINDS, type ServiceKind };
 export type WidgetId = CoreWidgetId | ServiceKind;
 export const WIDGET_IDS: readonly WidgetId[] = [...CORE_WIDGETS, ...SERVICE_KINDS];
 
 export function isServiceWidget(id: WidgetId): id is ServiceKind {
   return (SERVICE_KINDS as readonly string[]).includes(id);
-}
-
-/**
- * Demo connection of a service widget. Only the address and the outcome of
- * the simulated connect are kept; tokens or passwords are never part of it.
- */
-export interface ServiceConfig {
-  address: string;
-  status: "unconfigured" | "connected" | "error";
-  /** Lets the demo show the error state on the next connect. */
-  simulateError: boolean;
 }
 
 /** Widget size in grid cells: columns of the responsive grid and rows of WIDGET_ROW_REM. */
@@ -56,23 +45,18 @@ export const WIDGET_MIN: Record<WidgetId, WidgetSize> = {
 export interface DashboardLayout {
   order: WidgetId[];
   hidden: WidgetId[];
-  services: Record<ServiceKind, ServiceConfig>;
   /** Only widgets resized away from DEFAULT_WIDGET_SIZE are listed. */
   sizes: Partial<Record<WidgetId, WidgetSize>>;
 }
 
-const EMPTY_SERVICE: ServiceConfig = { address: "", status: "unconfigured", simulateError: false };
-
 /**
  * Default layout for browsers without a stored one: order, hidden widgets and
  * sizes of the shipped design (shared/preferences/shipped-design.ts). Service
- * widgets start unconfigured; they only show demo content after a connect.
- * Stored layouts are merged, never replaced (see mergeLayout).
+ * widgets start hidden; their configuration lives on the hub. Stored layouts are merged, never replaced (see mergeLayout).
  */
 export const DEFAULT_LAYOUT: DashboardLayout = {
   order: [...SHIPPED_DESIGN.dashboard.order],
   hidden: [...SHIPPED_DESIGN.dashboard.hidden],
-  services: { plex: EMPTY_SERVICE, minecraft: EMPTY_SERVICE, overseerr: EMPTY_SERVICE },
   sizes: Object.fromEntries(Object.entries(SHIPPED_DESIGN.dashboard.sizes).map(([id, size]) => [id, { ...size }])),
 };
 
@@ -99,24 +83,18 @@ export function resizeWidget(layout: DashboardLayout, id: WidgetId, size: Widget
   return { ...layout, sizes };
 }
 
-function sanitizeService(value: unknown): ServiceConfig {
-  const v = (value && typeof value === "object" ? value : {}) as Partial<ServiceConfig>;
-  const status = v.status === "connected" || v.status === "error" ? v.status : "unconfigured";
-  return { address: typeof v.address === "string" ? v.address : "", status, simulateError: v.simulateError === true };
-}
-
-/** Keeps known ids in stored order, appends widgets added later and drops anything secret-looking. */
+/** Keeps known ids in stored order, appends widgets added later and drops unknown fields. */
 export function mergeLayout(stored: unknown, defaults: DashboardLayout): DashboardLayout {
-  const s = stored as Partial<DashboardLayout> | null;
-  if (!s?.order) return defaults;
+  if (!stored || typeof stored !== "object" || !Array.isArray((stored as { order?: unknown }).order)) return defaults;
+  const s = stored as Partial<Record<keyof DashboardLayout, unknown>> & { order: unknown[] };
   const known = (id: unknown): id is WidgetId => WIDGET_IDS.includes(id as WidgetId);
   const order = [...new Set(s.order.filter(known))];
   const added = WIDGET_IDS.filter((id) => !order.includes(id));
-  const hidden = [...(s.hidden ?? []).filter(known), ...added.filter((id) => isServiceWidget(id) || defaults.hidden.includes(id))];
-  const services = Object.fromEntries(SERVICE_KINDS.map((k) => [k, sanitizeService(s.services?.[k])])) as Record<ServiceKind, ServiceConfig>;
+  const hidden = [...(Array.isArray(s.hidden) ? s.hidden : []).filter(known), ...added.filter((id) => isServiceWidget(id) || defaults.hidden.includes(id))];
   const sizes: Partial<Record<WidgetId, WidgetSize>> = {};
-  for (const [id, size] of Object.entries(s.sizes ?? {})) if (known(id)) sizes[id] = clampSize(id, size as Partial<WidgetSize>);
-  return { order: [...order, ...added], hidden: [...new Set(hidden)], services, sizes };
+  const storedSizes = s.sizes && typeof s.sizes === "object" && !Array.isArray(s.sizes) ? s.sizes : {};
+  for (const [id, size] of Object.entries(storedSizes)) if (known(id) && size && typeof size === "object") sizes[id] = clampSize(id, size as Partial<WidgetSize>);
+  return { order: [...order, ...added], hidden: [...new Set(hidden)], sizes };
 }
 
 export const layoutStore = createStore<DashboardLayout>(DEFAULT_LAYOUT, {
@@ -158,10 +136,6 @@ export function reorderVisible(layout: DashboardLayout, visibleOrder: WidgetId[]
 export function toggleWidget(layout: DashboardLayout, id: WidgetId): DashboardLayout {
   const hidden = layout.hidden.includes(id) ? layout.hidden.filter((w) => w !== id) : [...layout.hidden, id];
   return { ...layout, hidden };
-}
-
-export function setService(layout: DashboardLayout, kind: ServiceKind, patch: Partial<ServiceConfig>): DashboardLayout {
-  return { ...layout, services: { ...layout.services, [kind]: { ...layout.services[kind], ...patch } } };
 }
 
 /** Animates layout changes with the View Transitions API when available. */

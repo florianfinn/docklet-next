@@ -2,12 +2,14 @@
 // Revision: 5c1c4dd77cbeb7b5f702e50937bfc64de3c3f9d8
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original stored-observation and deployment-history consumer for issue #231.
+// Deviations: Original stored-observation and deployment-history consumer for issue #231; M21 reads the pattern-tag checker fixture.
 
 import { describe, expect, it } from "vitest";
 import { mapStack, type ProjectRow } from "./inventory-mapping";
 import { mapUpdateInfo } from "./update-mapping";
-import { summarizeUpdates } from "@/domain/updates";
+import { hasUpdate, summarizeUpdates } from "@/domain/updates";
+import type { components } from "@/api/generated/schema";
+import patternTags from "./testdata/pattern-tag-updates.json";
 
 import { observation } from "./update-observation.test-support";
 
@@ -30,7 +32,7 @@ describe("stored update observation", () => {
 });
 
 it("keeps per-service policy observations separate for a shared image reference", () => {
-  const services = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "db", image: "example:1.0.0", status: "running" }];
+  const services: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "db", image: "example:1.0.0", status: "running" }];
   const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 2, runningCount: 2, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices: services };
   const updateInfo: ProjectRow["updateInfo"] = { checkedImageCount: 2, errorCount: 0, hasUpdate: true, imageCount: 2, imagesNotPulled: 0, imagesWithUpdates: 1, status: "has_update", updateInfoByRef: { "example:1.0.0": observation("version") }, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, db: { imageRef: "example:1.0.0", updateInfo: observation("rebuild") } } };
   const mapped = mapStack({ ...row, updateInfo }, "host", [], { stale: false });
@@ -50,4 +52,14 @@ it("incomplete project counts cannot turn known service observations into all-cu
 it("version observations accept release build metadata without changing update level", () => {
   expect(mapUpdateInfo({ ...observation("version"), currentVersion: "v1.0.0+current.7", latestVersion: "1.1.0+candidate.9" }, image, "example:1.0.0")).toMatchObject({ state: "version", level: "minor", latest: { version: "1.1.0+candidate.9" } });
   for (const currentVersion of ["01.0.0+build", "1.0.0-rc.1+build", "9007199254740992.0.0+build"]) expect(mapUpdateInfo({ ...observation("version"), currentVersion }, image, "example:1.0.0").state).toBe("unknown");
+});
+
+// The backend checker test produces this fixture from real tag-policy selections.
+type PatternTagCase = { name: string; currentTag: string; update: Pick<components["schemas"]["ImageUpdateInfo"], "state" | "hasUpdate" | "updateType" | "currentVersion" | "latestVersion"> };
+it.each(patternTags as PatternTagCase[])("shows the $name tag-policy selection as a version update", ({ currentTag, update }) => {
+  const reference = `registry.example.com/app:${currentTag}`;
+  const mapped = mapUpdateInfo({ ...observation("version"), ...update, imageRef: reference }, { repository: "registry.example.com/app", tag: currentTag }, reference);
+  expect(mapped).toMatchObject({ state: "version", level: "minor", current: { version: "1.0.0" }, latest: { version: "1.1.0" } });
+  expect(hasUpdate(mapped)).toBe(true);
+  expect(summarizeUpdates([{ name: "app", update: mapped }]).pending).toBe(1);
 });

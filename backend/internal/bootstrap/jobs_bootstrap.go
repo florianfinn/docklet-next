@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; remove fleet-upgrade resume and obsolete log cleanup; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #269 scan receipt repair wiring.
 
 package bootstrap
 
@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -25,8 +26,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/history"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -47,7 +50,6 @@ func newJobScheduler(
 	cfg *config.Config,
 	runtime *runs.Coordinator,
 	_ *runs.Admission,
-	imageUpdateWatcher *scheduler.ImageUpdateWatcher,
 	systemService *system.SystemService,
 	jobService *job.JobService,
 	backupEngine *backup.Engine,
@@ -68,8 +70,10 @@ func newJobScheduler(
 		return nil, err
 	}
 	jobService.SetScheduler(schedulerCtx, jobScheduler)
+	jobScheduler.(interface {
+		SetZoneProvider(scheduleutil.ZoneProvider)
+	}).SetZoneProvider(cfg)
 	var repairDone chan struct{}
-	var resumeDone chan struct{}
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			started := false
@@ -99,10 +103,7 @@ func newJobScheduler(
 					repairBackupDispatchesInternal(schedulerCtx, backupEngine)
 				}()
 			}
-			if !cfg.AgentMode && systemService != nil {
-				resumeDone = make(chan struct{})
-				go func() { defer close(resumeDone); systemService.ResumeUpdateAllOnStartup(schedulerCtx) }()
-			}
+
 			if startupCancellationErr := ctx.Err(); startupCancellationErr != nil {
 				return fmt.Errorf("complete scheduler startup: %w", startupCancellationErr)
 			}
@@ -110,7 +111,7 @@ func newJobScheduler(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			return stopJobSchedulerInternal(ctx, cancelScheduler, []chan struct{}{repairDone, resumeDone}, jobService.Coordinator(), jobScheduler)
+			return stopJobSchedulerInternal(ctx, cancelScheduler, []chan struct{}{repairDone}, jobService.Coordinator(), jobScheduler)
 		},
 	})
 	return jobScheduler, nil
@@ -267,6 +268,7 @@ type registerJobsParams struct {
 	Scheduler schedulertypes.JobScheduler
 
 	DB            *database.DB
+	History       *history.Service
 	Notification  *notification.NotificationService
 	Vulnerability *vulnerability.VulnerabilityService
 	Activity      *activity.ActivityService
@@ -277,12 +279,10 @@ type registerJobsParams struct {
 	System        *system.SystemService
 	Admission     *runs.Admission
 	Updater       *updater.UpdaterService
+	Container     *container.ContainerService
 	Version       *version.VersionService
 
-	AutoUpdate             *scheduler.AutoUpdateJob
-	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
 	DockerClientRefresh    *scheduler.DockerClientRefreshJob
-	UpgradeLogCleanup      schedulertypes.Job `name:"upgrade-log-cleanup"`
 	EventCleanup           *scheduler.EventCleanupJob
 	PruningVolumeHelper    *scheduler.PruningVolumeHelperJob
 	ExpiredSessionsCleanup *scheduler.ExpiredSessionsCleanupJob
@@ -312,13 +312,17 @@ func registerJobs(params registerJobsParams) error {
 		params.AutoHeal,
 		params.ActivitySweep,
 		params.UploadSessionsCleanup,
-		params.UpgradeLogCleanup,
 	} {
 		if err := params.Scheduler.RegisterJob(job); err != nil {
 			return err
 		}
 	}
 	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		for _, job := range []schedulertypes.Job{&scheduler.HistoryJob{Service: params.History}, &scheduler.HistoryJob{Service: params.History, Retention: true}} {
+			if err := params.Scheduler.RegisterJob(job); err != nil {
+				return err
+			}
+		}
 		if err := params.Notification.ResetAvailability(params.AppCtx, time.Now().UTC()); err != nil {
 			return err
 		}
@@ -333,6 +337,7 @@ func registerJobs(params registerJobsParams) error {
 		}
 	}
 	hub := vulnerability.NewHubScans(params.DB, params.Settings, params.Environment, params.Vulnerability, params.Notification)
+	hub.UseRunRecords(params.JobSchedule.Coordinator().Records)
 	params.VulnerabilityScan.SetDispatcher(hub)
 	if err := registerVulnerabilityJobs(params.Scheduler, params.Config, params.VulnerabilityScan, params.VulnerabilityRisk, &scheduler.VulnerabilityNotifyJob{Hub: hub}); err != nil {
 		return err
@@ -364,21 +369,19 @@ func registerJobs(params registerJobsParams) error {
 	}
 
 	if err := setupSettingsSubscriptionsInternal(settingsSubscriptionsParams{
-		Lifecycle:          params.Lifecycle,
-		LifecycleCtx:       params.AppCtx,
-		Config:             params.Config,
-		Scheduler:          params.Scheduler,
-		Settings:           params.Settings,
-		Environment:        params.Environment,
-		AutoUpdate:         params.AutoUpdate,
-		ImageUpdateWatcher: params.ImageUpdateWatcher,
-		FilesystemWatcher:  params.FilesystemWatcher,
-		ScheduledPrune:     params.ScheduledPrune,
-		VulnerabilityScan:  params.VulnerabilityScan,
-		VulnerabilityRisk:  params.VulnerabilityRisk,
-		AutoPatch:          params.AutoPatch,
-		AutoHeal:           params.AutoHeal,
-		PolicyRefresh:      params.Updater.RefreshImagePolicySchedules,
+		Lifecycle:         params.Lifecycle,
+		LifecycleCtx:      params.AppCtx,
+		Config:            params.Config,
+		Scheduler:         params.Scheduler,
+		Settings:          params.Settings,
+		Environment:       params.Environment,
+		FilesystemWatcher: params.FilesystemWatcher,
+		ScheduledPrune:    params.ScheduledPrune,
+		VulnerabilityScan: params.VulnerabilityScan,
+		VulnerabilityRisk: params.VulnerabilityRisk,
+		AutoPatch:         params.AutoPatch,
+		AutoHeal:          params.AutoHeal,
+		PolicyRefresh:     params.Updater.RefreshUpdateWindows,
 	}); err != nil {
 		return err
 	}
@@ -442,14 +445,12 @@ type settingsSubscriptionsParams struct {
 	Settings      settingsChangeSubscriberInternal
 	Environment   timeoutSettingsEnvironmentInternal
 
-	AutoUpdate         *scheduler.AutoUpdateJob
-	ImageUpdateWatcher *scheduler.ImageUpdateWatcher
-	FilesystemWatcher  *scheduler.FilesystemWatcherJob
-	ScheduledPrune     *scheduler.ScheduledPruneJob
-	VulnerabilityScan  *scheduler.VulnerabilityScanJob
-	VulnerabilityRisk  *scheduler.VulnerabilityRiskJob
-	AutoPatch          *scheduler.AutoPatchJob
-	AutoHeal           *scheduler.AutoHealJob
+	FilesystemWatcher *scheduler.FilesystemWatcherJob
+	ScheduledPrune    *scheduler.ScheduledPruneJob
+	VulnerabilityScan *scheduler.VulnerabilityScanJob
+	VulnerabilityRisk *scheduler.VulnerabilityRiskJob
+	AutoPatch         *scheduler.AutoPatchJob
+	AutoHeal          *scheduler.AutoHealJob
 }
 
 type settingsChangeSubscriberInternal interface {
@@ -478,17 +479,18 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 		})
 	}
 	timeoutSyncExecutor, cancelTimeoutSync := setupTimeoutSettingsSubscriptionInternal(params, subscribe)
-
-	subscribe([]string{"pollingEnabled", "pollingInterval"}, func(_ []libarcane.SettingUpdate) {
-		if params.PolicyRefresh != nil && !params.Config.AgentMode {
-			if err := params.PolicyRefresh(params.LifecycleCtx); err != nil {
-				slog.WarnContext(params.LifecycleCtx, "Failed to refresh hub update schedules", "error", err)
+	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		subscribe([]string{"timeZone"}, func(_ []libarcane.SettingUpdate) {
+			if scheduler, ok := params.Scheduler.(interface{ Reinstall(context.Context) error }); ok {
+				if err := scheduler.Reinstall(params.LifecycleCtx); err != nil {
+					slog.ErrorContext(params.LifecycleCtx, "Failed to reinstall hub schedules", "error", err)
+				}
 			}
-		}
-	})
+		})
+	}
 
-	subscribe([]string{"autoUpdate", "autoUpdateInterval"}, func(_ []libarcane.SettingUpdate) {
-		if params.PolicyRefresh != nil && !params.Config.AgentMode {
+	subscribe([]string{"updateCheckInterval"}, func(_ []libarcane.SettingUpdate) {
+		if params.PolicyRefresh != nil && !params.Config.AgentMode && !params.Config.EdgeAgent {
 			_ = params.PolicyRefresh(params.LifecycleCtx)
 		}
 	})
@@ -503,11 +505,11 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 
 	rescheduleOn([]string{"scheduledPruneEnabled", "scheduledPruneInterval"}, params.ScheduledPrune)
 	if !params.Config.AgentMode && !params.Config.EdgeAgent {
-		rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "vulnerabilityScanEnabled", "vulnerabilityScanSchedule"}, params.VulnerabilityScan)
+		rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "vulnerabilityScanSchedule"}, params.VulnerabilityScan)
 	}
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey}, params.VulnerabilityRisk)
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "imageAutoPatchEnabled", "imageAutoPatchInterval"}, params.AutoPatch)
-	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow"}, params.AutoHeal)
+	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealExcludedStacks", "autoHealMaxRestarts", "autoHealRestartWindow", "autoHealCooldownMinutes"}, params.AutoHeal)
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
@@ -524,18 +526,22 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 }
 
 type timeoutSyncWorkerInternal struct {
-	mu      sync.Mutex
-	updates [][]libarcane.SettingUpdate
-	wake    chan struct{}
-	done    chan struct{}
-	ctx     context.Context
-	cancel  context.CancelFunc
-	closed  bool
+	onlineUnsubscribe func()
+	mu                sync.Mutex
+	updates           [][]libarcane.SettingUpdate
+	wake              chan struct{}
+	done              chan struct{}
+	ctx               context.Context
+	cancel            context.CancelFunc
+	closed            bool
 }
 
 func (w *timeoutSyncWorkerInternal) Stop(ctx context.Context) error {
 	if w == nil {
 		return nil
+	}
+	if w.onlineUnsubscribe != nil {
+		w.onlineUnsubscribe()
 	}
 	w.mu.Lock()
 	w.closed = true
@@ -550,7 +556,7 @@ func (w *timeoutSyncWorkerInternal) Stop(ctx context.Context) error {
 }
 
 func setupTimeoutSettingsSubscriptionInternal(params settingsSubscriptionsParams, subscribe func([]string, func([]libarcane.SettingUpdate))) (*timeoutSyncWorkerInternal, context.CancelFunc) {
-	if params.Config.AgentMode {
+	if params.Config.AgentMode || params.Config.EdgeAgent {
 		return nil, nil
 	}
 	ctx, cancel := context.WithCancel(params.LifecycleCtx)
@@ -576,26 +582,43 @@ func setupTimeoutSettingsSubscriptionInternal(params settingsSubscriptionsParams
 			}
 		}
 	}()
-	subscribe(libarcane.TimeoutSettingKeys(), func(updates []libarcane.SettingUpdate) {
-		worker.mu.Lock()
-		defer worker.mu.Unlock()
-		if worker.closed {
-			return
+	subscribe(libarcane.AgentSyncedSettingKeys(), worker.enqueue)
+	if online, ok := params.Environment.(interface {
+		SubscribeAgentOnline(func(context.Context, string)) func()
+	}); ok {
+		if values, ok := params.Settings.(interface {
+			GetStringSetting(context.Context, string, string) string
+		}); ok {
+			worker.onlineUnsubscribe = online.SubscribeAgentOnline(func(ctx context.Context, _ string) {
+				updates := []libarcane.SettingUpdate{}
+				for _, key := range libarcane.AgentSyncedSettingKeys() {
+					updates = append(updates, libarcane.SettingUpdate{Key: key, Value: values.GetStringSetting(ctx, key, "")})
+				}
+				worker.enqueue(updates)
+			})
 		}
-		worker.updates = append(worker.updates, slices.Clone(updates))
-		select {
-		case worker.wake <- struct{}{}:
-		default:
-		}
-	})
+	}
 	return worker, cancel
 }
 
-// syncTimeoutSettingsToAgentsInternal syncs timeout settings to all connected remote environments
+func (worker *timeoutSyncWorkerInternal) enqueue(updates []libarcane.SettingUpdate) {
+	worker.mu.Lock()
+	defer worker.mu.Unlock()
+	if worker.closed {
+		return
+	}
+	worker.updates = append(worker.updates, slices.Clone(updates))
+	select {
+	case worker.wake <- struct{}{}:
+	default:
+	}
+}
+
+// syncTimeoutSettingsToAgentsInternal syncs shared settings to all connected remote environments
 func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment timeoutSettingsEnvironmentInternal, timeoutSettings []libarcane.SettingUpdate) {
 	envs, err := localEnvironment.ListRemoteEnvironments(ctx)
 	if err != nil {
-		slog.WarnContext(ctx, "Failed to list remote environments for timeout sync", "error", err)
+		slog.WarnContext(ctx, "Failed to list remote environments for agent settings sync", "error", err)
 		return
 	}
 
@@ -621,14 +644,14 @@ func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment t
 	for _, env := range envs {
 		responseBody, statusCode, proxyRequestErr := localEnvironment.ProxyRequest(ctx, env.ID, http.MethodPut, "/api/environments/0/settings", body)
 		if proxyRequestErr != nil {
-			slog.WarnContext(ctx, "Failed to sync timeout settings to environment", "environmentId", env.ID, "environmentName", env.Name, "error", proxyRequestErr)
+			slog.WarnContext(ctx, "Failed to sync agent settings to environment", "environmentId", env.ID, "environmentName", env.Name, "error", proxyRequestErr)
 			continue
 		}
 		if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-			slog.WarnContext(ctx, "Environment returned non-OK status for timeout sync", "environmentId", env.ID, "environmentName", env.Name, "statusCode", statusCode, "response", string(responseBody))
+			slog.WarnContext(ctx, "Environment returned non-OK status for agent settings sync", "environmentId", env.ID, "environmentName", env.Name, "statusCode", statusCode, "response", string(responseBody))
 			continue
 		}
-		slog.DebugContext(ctx, "Successfully synced timeout settings to environment", "environmentId", env.ID, "environmentName", env.Name)
+		slog.DebugContext(ctx, "Successfully synced agent settings to environment", "environmentId", env.ID, "environmentName", env.Name)
 	}
 }
 

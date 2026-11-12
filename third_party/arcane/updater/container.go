@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Refuse self targets before image selection, pull or Engine mutation.
 
 package updater
 
@@ -56,6 +56,12 @@ func (s *Service) UpdateContainer(ctx context.Context, containerID string, opts 
 	}
 	inspect := inspectResult.Container
 	labels := labelsFromInspect(inspect)
+	if s.isSelfUpdateCandidate(target.ID, labels) {
+		out.Items = append(out.Items, failedContainerResult(target.ID, name, "image.system-protected: use the Docklet update action"))
+		out.Checked = 1
+		out.Failed = 1
+		return out, nil
+	}
 
 	endContainerStatus := s.BeginContainerUpdate(target.ID)
 	defer endContainerStatus()

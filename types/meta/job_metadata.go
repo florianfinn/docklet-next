@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; M18 live scheduling, policy and contract foundation.
 
 package meta
 
@@ -86,47 +86,7 @@ var jobMetadataRegistry = map[string]JobMetadata{
 		CanRunManually: true,
 		Prerequisites:  []JobPrerequisiteMetadata{},
 	},
-	"auto-update": {
-		ID:             "auto-update",
-		Name:           "Auto Update",
-		Description:    "Automatically updates containers when new images are available",
-		Category:       "updates",
-		SettingsKey:    "autoUpdateInterval",
-		EnabledKey:     "autoUpdate",
-		ManagerOnly:    false,
-		IsContinuous:   false,
-		CanRunManually: true,
-		Prerequisites: []JobPrerequisiteMetadata{
-			{
-				SettingKey:  "pollingEnabled",
-				Label:       "Image polling enabled",
-				SettingsURL: "/settings/updates",
-			},
-			{
-				SettingKey:  "autoUpdate",
-				Label:       "Auto update enabled",
-				SettingsURL: "/settings/updates",
-			},
-		},
-	},
-	"image-polling": {
-		ID:             "image-polling",
-		Name:           "Image Update Watcher",
-		Description:    "Checks container registries on a schedule and after Docker image changes",
-		Category:       "updates",
-		SettingsKey:    "pollingInterval",
-		EnabledKey:     "pollingEnabled",
-		ManagerOnly:    false,
-		IsContinuous:   true,
-		CanRunManually: true,
-		Prerequisites: []JobPrerequisiteMetadata{
-			{
-				SettingKey:  "pollingEnabled",
-				Label:       "Image polling enabled",
-				SettingsURL: "/settings/updates",
-			},
-		},
-	},
+	"update-check": {ID: "update-check", Name: "Update check", Description: "Checks every enabled host for stack and standalone container updates", Category: "updates", ManagerOnly: true, CanRunManually: true, Prerequisites: []JobPrerequisiteMetadata{}},
 	"scheduled-prune": {
 		ID:             "scheduled-prune",
 		Name:           "Scheduled Prune",
@@ -162,14 +122,13 @@ var jobMetadataRegistry = map[string]JobMetadata{
 		Description:    "Scans all Docker images for known vulnerabilities using Trivy",
 		Category:       "security",
 		SettingsKey:    "",
-		EnabledKey:     "vulnerabilityScanEnabled",
 		ManagerOnly:    true,
 		IsContinuous:   false,
 		CanRunManually: true,
 		Prerequisites: []JobPrerequisiteMetadata{
 			{
-				SettingKey:  "vulnerabilityScanEnabled",
-				Label:       "Scheduled vulnerability scan enabled",
+				SettingKey:  "featureVulnerabilityManagementEnabled",
+				Label:       "Vulnerability management enabled",
 				SettingsURL: "/settings/security",
 			},
 		},

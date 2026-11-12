@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { updateAgentContract } from "./agent-contract.mjs";
+import { agentFixturePath, updateAgentContract } from "./agent-contract.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const specPath = resolve(root, "api/openapi.json");
@@ -80,7 +80,7 @@ export function run(mode) {
       if (index < 0 || !/"sha256": "[a-f0-9]{64}"/.test(lines[index]))
         throw new Error("missing api/openapi.json provenance record");
       lines[index] = lines[index].replace(/("sha256": ")[a-f0-9]{64}"/, `$1${digest}"`);
-      for (const path of ["web/src/api/generated/schema.ts", "types/contract/testdata/agent-hub-v10.json"]) {
+      for (const path of ["web/src/api/generated/schema.ts", agentFixturePath()]) {
         const sidecar = lines.findIndex((line) => line.includes(`"${path}":`));
         if (sidecar < 0) throw new Error(`missing ${path} provenance record`);
         const hash = createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex");

@@ -5,5 +5,5 @@ export function filesHref(volume: { id: string; source: string; fileBind?: boole
   const target = file ?? (volume.fileBind ? `/${baseName(volume.source)}` : undefined);
   const params = new URLSearchParams({ tab: "files" });
   if (target) params.set("file", target);
-  return `/volumes/${volume.id}?${params.toString()}`;
+  return `/volumes/${encodeURIComponent(volume.id)}?${params.toString()}`;
 }

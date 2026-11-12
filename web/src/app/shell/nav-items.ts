@@ -35,8 +35,8 @@ export interface NavItem {
   key: NavKey;
   to: string;
   icon: LucideIcon;
-  /** Not part of phase one; leads to an honest preview page. */
-  preview?: boolean;
+  /** Planned area with no active feature controls. */
+  comingSoon?: boolean;
 }
 
 export interface NavGroup {
@@ -57,7 +57,6 @@ export const NAV: NavGroup[] = [
   {
     key: "resources",
     items: [
-      { key: "proxy", to: "/proxy", icon: Waypoints },
       { key: "networks", to: "/networks", icon: Network },
       { key: "volumes", to: "/volumes", icon: Database },
       { key: "images", to: "/images", icon: Package },
@@ -76,7 +75,8 @@ export const NAV: NavGroup[] = [
   {
     key: "later",
     items: [
-      { key: "games", to: "/preview/games", icon: Gamepad2, preview: true },
+      { key: "proxy", to: "/proxy", icon: Waypoints, comingSoon: true },
+      { key: "games", to: "/games", icon: Gamepad2, comingSoon: true },
     ],
   },
 ];
@@ -90,11 +90,6 @@ export function navigationForRoutes(routes: RouteObject[]): NavGroup[] {
     }),
   })).filter((group) => group.items.length > 0);
 }
-
-export const PREVIEW_ICONS: Record<string, LucideIcon> = {
-  proxy: Waypoints,
-  games: Gamepad2,
-};
 
 export function visibleNavItems(items: NavItem[], canReadHubBackups: boolean): NavItem[] {
   return items.filter((item) => item.key !== "hubBackups" || canReadHubBackups);

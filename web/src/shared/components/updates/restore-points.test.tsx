@@ -80,7 +80,7 @@ it.each(["listRestorePoints", "deleteRestorePoint"])("point UI intersects %s ins
 });
 it("cancel and close send zero deletes; deliberate confirmation sends exactly one", async () => {
   const f = await ready(); renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
-  let dialog = await openDelete(); await userEvent.click(dialog.getByRole("button", { name: t.close }));
+  let dialog = await openDelete(); await userEvent.click(dialog.getAllByRole("button", { name: t.close }).find((button) => button.dataset.slot !== "dialog-close")!);
   expect(f.writes()).toHaveLength(0); dialog = await openDelete();
   await userEvent.click(dialog.getByRole("button", { name: t.deletePoint })); await screen.findByText(t.deleted);
   expect(f.writes()).toHaveLength(1); expect(screen.queryByRole("dialog") !== null).toBe(true);
@@ -189,7 +189,8 @@ it("host administrator can explicitly delete an orphan without a replacement tar
 it.each(["listHostRestorePoints", "deleteHostRestorePoint"])("host orphan deletion requires %s", async (missing) => {
   const f = await ready(); f.state.denied.add(missing); f.state.points[0]!.orphaned = true;
   renderWithApp(<HostUpdateSettings hostId="direct" name="Example" />, f.adapter);
-  if (missing === "listHostRestorePoints") { await screen.findByText(catalogs.de.activity.capability.unavailable); expect(screen.queryByRole("button", { name: t.deletePoint }) === null).toBe(true); }
+  // The host card also holds the agent self-update card, which can show the same capability text.
+  if (missing === "listHostRestorePoints") { const selfUpdate = await screen.findByRole("region", { name: catalogs.de.settings.updates.selfUpdate.agentOn.replace("{name}", "Example") }); await waitFor(() => expect(screen.getAllByText(catalogs.de.activity.capability.unavailable).some((element) => !selfUpdate.contains(element))).toBe(true)); expect(screen.queryByRole("button", { name: t.deletePoint }) === null).toBe(true); }
   else { await screen.findByRole("button", { name: t.deletePoint }); expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(true); }
   expect(f.writes()).toHaveLength(0);
 });
@@ -198,7 +199,7 @@ it("late delete from a closed dialog cannot settle its replacement", async () =>
   f.state.hold = (_path, init) => { if (init.method === "DELETE") { started.resolve(); return held.promise; } };
   renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter); let dialog = await openDelete();
   await userEvent.click(dialog.getByRole("button", { name: t.deletePoint })); await started.promise;
-  await userEvent.click(dialog.getByRole("button", { name: t.close })); dialog = await openDelete();
+  await userEvent.click(dialog.getAllByRole("button", { name: t.close }).find((button) => button.dataset.slot !== "dialog-close")!); dialog = await openDelete();
   await act(async () => { held.resolve(response({ success: true, data: { message: "Deleted" } })); });
   expect(dialog.queryByText(t.deleted) === null).toBe(true); expect(f.writes()).toHaveLength(1);
 });

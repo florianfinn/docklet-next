@@ -2,8 +2,9 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps.
 
+import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
 import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
 import { DELIVERY_REASONS, isProvider } from "@/domain/notifications";
@@ -13,12 +14,19 @@ import type { RuntimeView } from "@/features/activity/runtime-presentation";
 import { reason, record, bool, id, date, optionalDate } from "./update-validation";
 import { inventoryId } from "./inventory-mapping";
 import { backupCodeKey } from "../backup-error";
-import { VULNERABILITY_CODES } from "./vulnerability-decoders";
+import { wireKey, scopedKey } from "../wire-catalogue";
+import { MESSAGE_CODE_KEYS, HUB_EVENT_TITLE_KEYS } from "../wire-catalogue-messages";
+import { DELIVERY_REASON_KEYS } from "../wire-catalogue-settings";
+import { IMAGE_ERROR_KEYS } from "../wire-catalogue-errors";
+import { UPDATE_REASON_KEYS } from "../wire-catalogue-update";
 
 type Activity = components["schemas"]["ActivityActivity"];
 type Detail = components["schemas"]["ActivityDetail"];
 type Event = components["schemas"]["EventEvent"];
 
+// Recreate run step names (backend recreate_journal.go) with catalogued EN/DE text, so the
+// generic action dialog, toasts and history show the same labels as the recreate view.
+const RECREATE_STEPS: Record<string, string> = { "Renaming container": "renaming", "Creating replacement": "creating", "Starting replacement": "starting", "Removing previous container": "removing", "Restoring previous container": "restoring" };
 const STEP_KEYS = new Set<DeployStepKey>(["validate", "pull", "build", "create", "stop", "start", "health", "scan", "collect", "save", "wait", "connect"]);
 const STREAMS = new Set<OutputStream>(["cmd", "stdout", "stderr", "note"]);
 const KINDS: Record<string, ActionKind> = {
@@ -29,7 +37,17 @@ const KINDS: Record<string, ActionKind> = {
   container_restart: "restart", container_redeploy: "redeploy", container_edit: "recreate",
   vulnerability_scan: "scan", system_prune: "prune", auto_update: "update",
   container_auto_heal: "auto-heal",
+  load_sustained: "load-alert",
 };
+
+// Hub-owned scheduler jobs carry an English job name and raw scheduler states as
+// step names; their runs show catalogued labels instead.
+const JOB_STEPS = new Set(["queued", "running", "waiting", "retrying", "succeeded", "failed", "partial", "needs_attention", "canceled", "skipped"]);
+function jobKind(run: Activity): ActionKind | undefined {
+  if (run.type !== "job_run" || run.resourceType !== "job") return undefined;
+  if (run.resourceId === "update-check") return "check-updates";
+  return run.resourceId?.startsWith("update-window:") ? "update" : undefined;
+}
 
 function required(value: unknown, field: string): asserts value {
   if (value === undefined || value === null || value === "") throw new Error(`dto.invalid-${field}`);
@@ -57,26 +75,106 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
-  // Auto Heal and notification delivery codes live under runMessages.codes, keyed by their wire path.
-  if (code && /^(autoheal|notification)\./.test(code)) return { code: `runMessages.codes.${code}`, params: {}, sourceText };
-  return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+  const key = wireKey(MESSAGE_CODE_KEYS, code);
+  // Activity status codes remain wire aliases in the adapter port; renderMessage resolves their keys.
+  if (key) return { code: code?.startsWith("activity.") ? code : key, params: code === "activity.message" ? { message: sourceText } : {}, sourceText };
+  return code ? { code, params: {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+}
+
+// Run messages with these codes carry producer detail (image, job outcome, event subject); their text stays as data.
+function carrierText(code: string | undefined, sourceText: string): MessageCode | undefined {
+  if (!code || !sourceText) return undefined;
+  if (code === "activity.message") return { code, params: { message: sourceText }, sourceText };
+  const key = wireKey(MESSAGE_CODE_KEYS, code);
+  const carrier = code === "deploy.pull" || code.startsWith("job.") || !!key?.startsWith("runMessages.events.labels.");
+  return key && carrier ? { code: "runMessages.value", params: { value: sourceText } } : undefined;
+}
+
+const CONDITION_CODES = ["down", "unhealthy", "restart-loop", "running-again"] as const;
+const count = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0);
+
+/** A runtime condition event names its container, the exit code and the restarts of the sampled window. */
+function conditionTitle(event: Event, meta: Record<string, unknown> | undefined): MessageCode | undefined {
+  const kind = event.messageCode?.startsWith("container.condition.") ? event.messageCode.slice("container.condition.".length) : undefined;
+  if (!kind || !(CONDITION_CODES as readonly string[]).includes(kind)) return undefined;
+  const name = typeof meta?.containerName === "string" && meta.containerName ? meta.containerName : event.resourceName ?? "";
+  return { code: MESSAGE_CODE_KEYS[event.messageCode], params: { name, exitCode: count(meta?.exitCode), restarts: count(meta?.restarts) }, sourceText: event.title };
+}
+
+export const HUB_EVENT_CODES: readonly string[] = Object.keys(HUB_EVENT_TITLE_KEYS);
+const EVENT_TITLES = new Set(HUB_EVENT_CODES);
+
+/** Catalogue key of an event title: the wire code with underscores for dots, renamed where it reads like a credential. */
+export const eventTitleKey = (code: string) => {
+  const key = wireKey(HUB_EVENT_TITLE_KEYS, code);
+  return key?.startsWith("runMessages.events.labels.") ? scopedKey(key, "runMessages.events.labels.") : code.replaceAll(".", "_");
+};
+
+// Bulk prunes record a marker instead of a resource: no resource id, a prune code or action, and one of these names.
+const PRUNE_MARKERS = new Set(["bulk_prune", "prune"]);
+// Phases of an automatic update run, which share one event code; each names its own target from the metadata.
+const AUTO_UPDATE_PHASES = new Map<string, { key: string; name: string[] }>([
+  ["start", { key: "start", name: [] }], ["complete", { key: "complete", name: [] }],
+  ["image", { key: "image_pull", name: ["imageNew", "imageOld"] }], ["image_pull", { key: "image_pull", name: ["imageNew", "imageOld"] }],
+  ["image_prune", { key: "image_prune", name: ["imageId"] }],
+  ["container", { key: "container", name: ["resourceName", "container", "containerId"] }], ["project", { key: "project", name: ["projectName", "projectId"] }],
+]);
+/** Variant keys of codes whose producers tell phase or outcome apart by metadata or severity. */
+export const EVENT_TITLE_VARIANTS = [...new Set([...AUTO_UPDATE_PHASES.values()].map(({ key }) => `system_auto_update_${key}`))].concat("system_upgrade_failed", "system_upgrade_partial");
+
+/** Catalogue key and named target of an event, keeping the phase and outcome its producer recorded. */
+function eventLabel(event: Event): { key: string; name: string } {
+  const meta = (event.metadata ?? {}) as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  if (event.messageCode === "system.auto_update") {
+    const phase = AUTO_UPDATE_PHASES.get(text(meta.phase));
+    return phase ? { key: `system_auto_update_${phase.key}`, name: phase.name.map((field) => text(meta[field])).find(Boolean) ?? "" } : { key: "system_auto_update", name: "" };
+  }
+  const key = eventTitleKey(event.messageCode);
+  const outcome = event.severity === "error" && event.messageCode === "system.upgrade" ? "_failed"
+    : event.severity === "warning" && event.messageCode === "system.upgrade" ? "_partial" : "";
+  const name = event.resourceName || (event.messageCode.startsWith("user.") ? event.username : "") || "";
+  const marker = !event.resourceId && PRUNE_MARKERS.has(name) && (event.messageCode.endsWith(".prune") || meta.action === "prune");
+  return { key: key + outcome, name: marker ? "" : name };
+}
+
+/** A hub event title from the catalogue, naming its resource or user as data. */
+function hubEventTitle(event: Event): MessageCode | undefined {
+  if (!EVENT_TITLES.has(event.messageCode)) return undefined;
+  const { key, name } = eventLabel(event);
+  const title = { code: `runMessages.events.labels.${key}`, params: {} };
+  return name ? { code: "runMessages.events.named", params: { title, name }, sourceText: event.title } : { ...title, sourceText: event.title };
 }
 
 /** A delivery failure names its channel and typed reason; sender diagnostics never reach the title. */
 function eventTitle(event: Event): MessageCode {
   const meta = event.metadata as Record<string, unknown> | undefined;
+  const condition = conditionTitle(event, meta);
+  if (condition) return condition;
   const provider = meta?.provider;
-  if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return message(event.messageCode, event.title);
-  const via = { code: `settings.notifications.kinds.${provider}`, params: {} };
+  const targetChannel = (channel: MessageCode | string): MessageCode | string => typeof meta?.targetName === "string" && meta.targetName.trim() ? { code: "runMessages.codes.notification.target", params: { provider: channel, name: meta.targetName } } : channel;
+  // A sent notification names its channel; the hub's English title is only the fallback.
+  if (event.messageCode === "notification.send") {
+    const channel = isProvider(provider) ? { code: `settings.notifications.kinds.${provider}`, params: {} } : String(provider ?? event.resourceName ?? "");
+    return { code: "runMessages.codes.notification.send", params: { provider: targetChannel(channel) }, sourceText: event.title };
+  }
+  if (event.messageCode !== "notification.delivery-failed" || !isProvider(provider)) return hubEventTitle(event) ?? message(event.messageCode, event.title);
+  const via = targetChannel({ code: `settings.notifications.kinds.${provider}`, params: {} });
   const reason = meta?.reason;
   return typeof reason === "string" && (DELIVERY_REASONS as readonly string[]).includes(reason)
-    ? { code: "runMessages.codes.notification.delivery-failed-reason", params: { provider: via, reason: { code: `settings.codes.${reason}`, params: {} } }, sourceText: event.title }
+    ? { code: "runMessages.codes.notification.delivery-failed-reason", params: { provider: via, reason: { code: DELIVERY_REASON_KEYS[reason as keyof typeof DELIVERY_REASON_KEYS], params: {} } }, sourceText: event.title }
     : { code: "runMessages.codes.notification.delivery-failed-via", params: { provider: via }, sourceText: event.title };
+}
+
+function knownBackupError(error: string): MessageCode | undefined {
+  const key = backupCodeKey(error);
+  return key ? { code: key, params: {} } : undefined;
 }
 
 /** Scan activities persist declared vulnerability codes as their error; render the catalogue text. */
 function vulnerabilityError(error: string): MessageCode | undefined {
-  return (VULNERABILITY_CODES as readonly string[]).includes(error) ? { code: `images.errors.${error.replaceAll(".", "_")}`, params: {} } : undefined;
+  const key = error.startsWith("vulnerability.") ? wireKey(IMAGE_ERROR_KEYS, error) : undefined;
+  return key ? { code: key, params: {} } : undefined;
 }
 
 function stepKey(name: string): DeployStepKey {
@@ -93,7 +191,13 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       ((run.outcomeState !== "known" && run.outcomeState !== "unknown") || typeof run.cancelRequested !== "boolean")) throw new Error("dto.invalid-runtime-knowledge");
   const action = typeof run.metadata?.action === "string" ? run.metadata.action : "";
   const backup = /volume_backup/.test(action) || run.resourceType === "backup_target" || run.resourceType === "volume_backup_download";
-  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? "activity";
+  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? jobKind(run) ?? "activity";
+  const job = run.type === "job_run";
+  // The hub's fallback job summary is "<job name>: <scheduler state>"; a real outcome message stays.
+  const jobSummary = (text: string | undefined, code = run.messageCode): MessageCode | undefined => {
+    const state = code?.slice("job.".length) ?? "";
+    return job && code?.startsWith("job.") && JOB_STEPS.has(state) && text === `${run.resourceName ?? run.resourceId}: ${state}` ? { code: `activity.jobStep.${state}`, params: {} } : undefined;
+  };
   const lifecycle = run.imageLifecycle;
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
   if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
@@ -103,11 +207,15 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       if (key) return { code: key, params: {} };
       return { code: field === "error" ? "common.commandErrors.failed" : `activity.runKind.${kind}`, params: {} };
     }
+    const operationReason = operationReasonKey(code ?? source);
+    if (operationReason) return { code: `containers.operationReasons.${operationReason}`, params: {} };
+    const carried = (field === "progress" || !m10) ? carrierText(code, source) : undefined;
+    if (carried) return carried;
     if (!m10) return message(code, source);
     const safe = reason(code);
-    if (safe && safe !== "http.error") return { code: `images.errors.${safe.replaceAll(".", "_")}`, params: {} };
-    const keys: Record<string, string> = { "run.started": "activity.status.running", "run.joined": "activity.status.running", "runtime.cancelled": "activity.runtime.cancelledBody", "runtime.failed": "activity.runtime.failedBody" };
-    const key = keys[code ?? ""];
+    const safeKey = wireKey(UPDATE_REASON_KEYS, safe);
+    if (safeKey) return { code: safeKey, params: {} };
+    const key = wireKey(MESSAGE_CODE_KEYS, code);
     if (key) return { code: key, params: {} };
     return field === "error" ? { code: "common.commandErrors.failed", params: {} } : message(code, source);
   };
@@ -126,10 +234,10 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   });
   return Object.assign({
     id: run.id,
-    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId } : {}),
-    kind,
+    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
+    kind, sourceOperation: run.type,
     title: { code: `activity.runKind.${kind}`, params: {} },
-    target: { code: "runMessages.value", params: { value: target } },
+    target: jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: target } },
     hostId: run.environmentId,
     ...((run.resourceType === "project" || run.resourceType === "stack") && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),
     ...(run.resourceType === "container" && run.resourceId ? { containerId: inventoryId(run.environmentId, run.resourceId) } : {}),
@@ -140,19 +248,22 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: kind === "auto-heal" && run.status !== "running" && run.status !== "queued" ? 100 : run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
+    // Known backup codes are translated even when older job rows carry no backup context.
     error: run.error
-      ? (backup ? coded(run.error, "", "error") : vulnerabilityError(run.error))
+      ? jobSummary(run.error) ?? (backup ? coded(run.error, "", "error") : knownBackupError(run.error) ?? vulnerabilityError(run.error))
         ?? coded(
-          lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined),
+          lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") || run.messageCode?.startsWith("container.recreate-") ? run.messageCode : undefined),
           run.error,
           "error",
         )
       : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
-      key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
+      key: stepKey(step.name), state: stepState(step.status),
+      label: Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name }
+        : job && JOB_STEPS.has(step.name) ? { code: `activity.jobStep.${step.name}`, params: {} } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
-    log: detail.messages?.length ? detail.messages.map((item) => coded(item.code, item.message)) : run.latestMessage ? [coded(run.messageCode, run.latestMessage)] : [],
+    log: detail.messages?.length ? detail.messages.map((item) => jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });
@@ -214,6 +325,7 @@ export function mapEvent(event: Event): CodedEvent {
     id: event.id, at: event.timestamp, kind: eventKind(event), level: eventLevel(event.severity),
     title: eventTitle(event),
     hostId: event.environmentId,
+    ...(event.messageCode?.startsWith("container.condition.") ? { condition: true } : {}),
     ...(event.resourceType === "project" && event.resourceId && event.environmentId ? { stackId: inventoryId(event.environmentId, event.resourceId) } : {}),
   };
 }

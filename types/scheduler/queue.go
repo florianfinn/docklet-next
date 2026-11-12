@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M18 live scheduling, policy and contract foundation.
 
 package scheduler
 
@@ -25,6 +25,7 @@ type QueueRecord struct {
 	JobID          string         `json:"jobId"`
 	EnvironmentID  string         `json:"environmentId"`
 	Schedule       string         `json:"schedule"`
+	Zone           string         `json:"zone"`
 	LastEnqueuedAt time.Time      `json:"lastEnqueuedAt"`
 	NextRun        time.Time      `json:"nextRun"`
 	Runs           []Run          `json:"runs"`

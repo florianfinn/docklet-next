@@ -8,6 +8,7 @@ package ws
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -32,7 +33,7 @@ func TestSessionAPICadenceOwners(t *testing.T) {
 		t.Run(owner, func(t *testing.T) {
 			db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"))
 			require.NoError(t, err)
-			require.NoError(t, db.AutoMigrate(&user.User{}, &session.UserSession{}))
+			require.NoError(t, db.AutoMigrate(&access.Assignment{}, &user.User{}, &session.UserSession{}))
 			u := &user.User{Username: "example-cadence"}
 			require.NoError(t, db.Create(u).Error)
 			service := session.NewSessionService(&database.DB{DB: db})

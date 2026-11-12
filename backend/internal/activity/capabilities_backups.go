@@ -11,6 +11,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/types/capability"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
 
 var backupOperationIDs = []string{
@@ -61,7 +62,7 @@ func backupCapabilityAllowed(operation string, ref capability.ResourceRef, ps *a
 		env, required = ref.ID, backupHostGrants[operation]
 	case ref.Kind == "volume" && backupVolumeGrants[operation] != nil:
 		scoped, raw, ok := strings.Cut(ref.ID, "~")
-		if !ok || scoped == "" || raw == "" || strings.Contains(raw, "~") || strings.HasPrefix(raw, "bind:") {
+		if !ok || scoped == "" || raw == "" || strings.Contains(raw, "~") || volumetypes.ValidateName(raw) != nil {
 			return false
 		}
 		env, required = scoped, backupVolumeGrants[operation]

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package middleware
 
@@ -159,51 +159,6 @@ func TestEnvironmentMiddleware_KeepsNotificationEndpointsLocal(t *testing.T) {
 	assert.True(t, localHandlerHit)
 }
 
-func TestEnvironmentMiddleware_KeepsWebhookEndpointsLocal(t *testing.T) {
-	tests := []struct {
-		name   string
-		method string
-		route  string
-		path   string
-	}{
-		{
-			name:   "list webhooks",
-			method: http.MethodGet,
-			route:  "/environments/:id/webhooks",
-			path:   "/api/environments/env-edge/webhooks",
-		},
-		{
-			name:   "delete webhook",
-			method: http.MethodDelete,
-			route:  "/environments/:id/webhooks/:webhookId",
-			path:   "/api/environments/env-edge/webhooks/wh-1",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			middleware := newTestEnvironmentMiddleware()
-			router := echo.New()
-			api := attachMiddleware(router, middleware)
-
-			localHandlerHit := false
-			api.Add(tt.method, tt.route, func(c *echo.Context) error {
-				localHandlerHit = true
-				return c.JSON(http.StatusOK, map[string]any{"success": true})
-			})
-
-			req := httptest.NewRequest(tt.method, tt.path, http.NoBody)
-			recorder := httptest.NewRecorder()
-
-			router.ServeHTTP(recorder, req)
-
-			assert.Equal(t, http.StatusOK, recorder.Code)
-			assert.Contains(t, recorder.Body.String(), "\"success\":true")
-			assert.True(t, localHandlerHit)
-		})
-	}
-}
-
 func TestEnvironmentMiddleware_KeepsActivityEndpointsLocal(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -331,7 +286,7 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 		userName       string
 		wantInitiator  string
 	}{
-		{name: "forwards the caller's preference", catalog: new("dashboard-icons"), wantHeader: "dashboard-icons", userID: "user-1", userName: "operator", wantInitiator: "user-1"},
+		{name: "forwards the caller's preference", catalog: new("dashboard-icons"), wantHeader: "dashboard-icons", userID: "user-1", userName: "operator", wantInitiator: ""},
 		{name: "strips a client-supplied header when the caller has no preference", clientSupplied: "dashboard-icons", wantHeader: ""},
 	}
 
@@ -369,11 +324,11 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 
 			router := echo.New()
 			api := attachMiddleware(router, mw)
-			api.POST("/environments/:id/containers/:containerId/update", func(c *echo.Context) error {
+			api.POST("/environments/:id/containers/:containerId/commit", func(c *echo.Context) error {
 				return c.JSON(http.StatusOK, map[string]any{"success": true})
 			})
 
-			req := httptest.NewRequest(http.MethodPost, "/api/environments/env-remote/containers/container-1/update", http.NoBody)
+			req := httptest.NewRequest(http.MethodPost, "/api/environments/env-remote/containers/container-1/commit", http.NoBody)
 			req.Header.Set(HeaderUpdateInitiatorID, "spoofed")
 			req.Header.Set(HeaderUpdateInitiatorName, "spoofed")
 			if tt.clientSupplied != "" {
@@ -385,7 +340,7 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 			require.Equal(t, http.StatusOK, recorder.Code)
 			assert.Equal(t, tt.wantHeader, forwarded)
 			assert.Equal(t, tt.wantInitiator, forwardedInitiator)
-			assert.Equal(t, tt.userName, forwardedName)
+			assert.Empty(t, forwardedName)
 		})
 	}
 }

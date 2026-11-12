@@ -2,12 +2,14 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Bounded remote runtime implementation, active in production since #125.
+// Deviations: Bounded remote runtime implementation, active in production since #125. M18 synchronized receiver replacement for reopened agent lifetimes.
 
 package activity_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -33,21 +35,25 @@ import (
 )
 
 type remoteIntegration struct {
-	endpoint      string
-	agent         *runtimeServicesFixture
-	db            *database.DB
-	hub           *activity.RuntimeService
-	hubActivity   *activity.ActivityService
-	control       *activity.RuntimeRemoteCoordinator
-	sender        *activity.RuntimeSender
-	store         activity.RuntimeStoreBinding
-	token         string
-	executeCalls  atomic.Int32
-	accessCalls   atomic.Int32
-	loseAck       atomic.Bool
-	accessMu      sync.Mutex
-	executeCancel context.CancelFunc
-	tunnels       *edge.TunnelRegistry
+	endpoint        string
+	handlerMu       sync.RWMutex
+	receiverHandler http.Handler
+	agent           *runtimeServicesFixture
+	db              *database.DB
+	hub             *activity.RuntimeService
+	hubActivity     *activity.ActivityService
+	control         *activity.RuntimeRemoteCoordinator
+	sender          *activity.RuntimeSender
+	store           activity.RuntimeStoreBinding
+	token           string
+	executeCalls    atomic.Int32
+	accessCalls     atomic.Int32
+	loseAck         atomic.Bool
+	dropTerminal    atomic.Bool
+	lostTerminal    atomic.Int32
+	accessMu        sync.Mutex
+	executeCancel   context.CancelFunc
+	tunnels         *edge.TunnelRegistry
 }
 type remoteDiscardResponse struct {
 	http.ResponseWriter
@@ -71,7 +77,11 @@ func newRemoteIntegration(t *testing.T, isEdge bool, customize ...func(*runtimeS
 	require.NoError(t, err)
 	receiverHandler, err := activity.NewRuntimeReceiverHTTP(receiver, &auth.AuthService{}, &config.Config{AgentMode: true, AgentToken: f.token}, time.Minute)
 	require.NoError(t, err)
+	f.receiverHandler = receiverHandler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.handlerMu.RLock()
+		receiverHandler := f.receiverHandler
+		f.handlerMu.RUnlock()
 		require.Empty(t, r.Header.Get("Idempotency-Key"))
 		require.Empty(t, r.Header.Get("Authorization"))
 		require.Empty(t, r.Header.Get("Cookie"))
@@ -88,6 +98,22 @@ func newRemoteIntegration(t *testing.T, isEdge bool, customize ...func(*runtimeS
 			if cancel != nil {
 				cancel()
 			}
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/runtime-runs/") && f.dropTerminal.Load() {
+			capture := &remoteCapturedResponse{ResponseWriter: w, header: make(http.Header)}
+			receiverHandler.ServeHTTP(capture, r)
+			var result activitytypes.RuntimeExecutionOutcome
+			if json.Unmarshal(capture.body.Bytes(), &result) == nil && result.State == activitytypes.RuntimeAnswerTerminal {
+				f.lostTerminal.Add(1)
+				w.WriteHeader(503)
+				return
+			}
+			for name, values := range capture.header {
+				w.Header()[name] = values
+			}
+			w.WriteHeader(capture.status)
+			_, _ = w.Write(capture.body.Bytes())
 			return
 		}
 		receiverHandler.ServeHTTP(w, r)
@@ -334,3 +360,24 @@ func TestRuntimeRemoteActualPrecommitCancellationFencesWithoutEffects(t *testing
 }
 
 func (f *remoteIntegration) senderEndpoint() string { return f.endpoint }
+
+type remoteCapturedResponse struct {
+	http.ResponseWriter
+	header http.Header
+	body   bytes.Buffer
+	status int
+}
+
+func (w *remoteCapturedResponse) Header() http.Header { return w.header }
+func (w *remoteCapturedResponse) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+}
+func (w *remoteCapturedResponse) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.status = 200
+	}
+	return w.body.Write(body)
+}
+func (w *remoteCapturedResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }

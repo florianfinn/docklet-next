@@ -15,7 +15,7 @@ import (
 
 func TestPolicyReasonWritesRejectUndeclaredValues(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "apply")
+	p := f.policy(t, "scheduled")
 	for _, field := range []string{"code", "apply_code", "bookkeeping_code", "Code", "ApplyCode", "BookkeepingCode"} {
 		for _, bad := range []any{"FORBIDDEN", "update.undeclared", nil, gorm.Expr("?", "FORBIDDEN")} {
 			err := f.db.Model(&Policy{}).Where("id = ?", p.ID).Updates(map[string]any{field: bad, "candidates": "[1]"}).Error
@@ -28,12 +28,12 @@ func TestPolicyReasonWritesRejectUndeclaredValues(t *testing.T) {
 			require.Empty(t, row.BookkeepingCode)
 		}
 	}
-	for _, field := range []string{"code", "apply", "bookkeeping"} {
+	for _, field := range []string{"code", "scheduled", "bookkeeping"} {
 		row := p
 		switch field {
 		case "code":
 			row.Code = "FORBIDDEN"
-		case "apply":
+		case "scheduled":
 			row.ApplyCode = "BOGUS"
 		case "bookkeeping":
 			row.BookkeepingCode = "BOGUS"
@@ -51,7 +51,7 @@ func TestPolicyReasonWritesRejectUndeclaredValues(t *testing.T) {
 
 func TestChildReasonWritesRejectUndeclaredValues(t *testing.T) {
 	f := newStoreFixture(t)
-	p := f.policy(t, "apply")
+	p := f.policy(t, "scheduled")
 	child, _, err := f.PrepareChild(t.Context(), p, "wrapper")
 	require.NoError(t, err)
 	require.ErrorIs(t, f.db.Model(&Child{}).Where("id = ?", child.ID).Updates(map[string]any{"code": "FORBIDDEN", "status": "refused"}).Error, image.ErrUndeclaredReason)

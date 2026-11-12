@@ -2,6 +2,7 @@
 import type { enSetup } from "./en";
 
 export const deSetup: typeof enSetup = {
+  forcedChange: { heading: "Neues Passwort festlegen", newLabel: "Neues Passwort", confirmationLabel: "Neues Passwort bestätigen" },
   activeMode: "Aktive Anmeldeart: {mode}",
   modeConfiguredAtStartup: "Der Betreiber legt diese Anmeldeart vor dem Start mit AUTH_MODE und den Proxy-Variablen fest.",
   currentPassword: "Bisheriges Administratorpasswort",

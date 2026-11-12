@@ -2,6 +2,14 @@ import type { enBackend } from "./en";
 
 export const deBackend: typeof enBackend = {
   errors: {
+    "candidate": {"unavailable": "Der Kandidat konnte nicht aus der Registry geprüft werden.", "deferred": "Dieser Kandidat wurde noch nicht geprüft."},
+    "agent": {"unavailable": "Der Host ist nicht erreichbar. Prüfe die Verbindung."},
+    "container": {"origin-locked": "Docklet verwaltet keine Updates für diesen Container.", "recreate-ambiguous": "Der Ersatz-Container konnte nicht eindeutig ermittelt werden.", "recreate-recovered": "Die Container-Neuerstellung wurde wiederhergestellt."},
+    "deploy": {"point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen."},
+    "settings": {"invalid-time-zone": "Wähle eine gültige Zeitzone."},
+    "history": {"sample-too-large": "Die Verlaufsstichprobe überschreitet die Größenbegrenzung.", "sample-invalid": "Der Host hat eine ungültige Verlaufsstichprobe geliefert.", "unavailable": "Der Verlauf ist nicht verfügbar.", "invalid-range": "Wähle einen Verlaufszeitraum von 24h, 7d oder 30d."},
+    "preferences": {"no-user": "Diese Identität hat keine persönlichen Einstellungen.", "unknown-section": "Unbekannter Einstellungsbereich.", "invalid": "Einstellungen müssen ein Objekt enthalten.", "too-large": "Die Einstellungen überschreiten die Größenbegrenzung."},
+
     "feature-disabled": "Diese Funktion ist deaktiviert.",
     "vulnerability": {
       "agent-job-retired": "Dieser lokale Schwachstellenauftrag des Agents wurde eingestellt.",
@@ -89,6 +97,8 @@ export const deBackend: typeof enBackend = {
       "deploy-failed": "Die Bereitstellung zur Wiederherstellung ist fehlgeschlagen. Das Teilergebnis vor einem weiteren Wiederherstellungsversuch prüfen."
     },
     "update": {
+      "candidate-changed": "Das Kandidaten-Image hat sich geändert. Prüfe es vor dem Update erneut.",
+      "service-coupled": "Dieser Dienst muss zusammen mit seinem Stack aktualisiert werden.",
       "permission-denied": "Die gespeicherte Identität hat nicht mehr die erforderlichen Berechtigungen.",
       "schedule-owner-unset": "Speichere den Host-Zeitplan mit einer berechtigten Identität, bevor du die Jobs aktivierst.",
 

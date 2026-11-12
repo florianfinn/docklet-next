@@ -12,6 +12,7 @@ import { enSettings } from "@/features/settings/messages/en";
 import { enSetup } from "@/features/setup/messages/en";
 import { enVolumes } from "@/features/volumes/messages/en";
 import { enLab } from "@/shared/preferences/messages/en";
+import { enProxy } from "@/shared/preferences/messages/proxy-lab-en";
 import { enVisual } from "@/shared/preferences/messages/visual-en";
 import { enNetworks } from "@/features/networks/messages/en";
 import { enPoolErrors } from "@/features/networks/messages/pool-en";
@@ -19,11 +20,12 @@ import { enSecurity } from "@/features/security/messages/en";
 import { enEditor } from "@/features/stacks/editor/messages/en";
 import { enStacks } from "@/features/stacks/messages/en";
 import { enHelp } from "@/shared/help/messages/en";
+import { enHistory } from "@/shared/history/messages/en";
 import { enCommon } from "@/shared/messages/en";
 import { enTheme } from "@/shared/theme/messages/en";
 import { enWorkspace } from "@/shared/workspace/messages/en";
 
-import { enPreview } from "../preview/messages/en";
+import { enComingSoon } from "../coming-soon/messages/en";
 import { enShell } from "../shell/messages/en";
 import { enLocale } from "./messages/en";
 
@@ -33,17 +35,19 @@ export const enMessages = {
   workspace: enWorkspace,
   theme: enTheme,
   shell: enShell,
-  preview: import.meta.env.DEV ? enPreview : ({} as typeof enPreview),
+  comingSoon: enComingSoon,
   activity: enActivity,
   environment: enEnvironmentEvents,
   user: enUserEvents,
   lab: import.meta.env.DEV ? enLab : ({} as typeof enLab),
+  proxyLab: import.meta.env.DEV ? enProxy : ({} as typeof enProxy),
   visual: enVisual,
   dashboard: enDashboard,
   runMessages: enRunMessages,
   stacks: enStacks,
   editor: enEditor,
   containers: enContainers,
+  history: enHistory,
   security: enSecurity,
   networks: {
     ...enNetworks,

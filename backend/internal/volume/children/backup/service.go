@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
 
 package backup
 
@@ -12,18 +12,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
-	"log/slog"
-	"sync"
-	"time"
-	"uuid"
-
-	backuptypes "github.com/florianfinn/docklet-next/types/backup"
-	"github.com/florianfinn/docklet-next/types/scheduler"
-	usertypes "github.com/florianfinn/docklet-next/types/user"
-	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/client"
-
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
@@ -31,13 +19,24 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/browser"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
+	"github.com/florianfinn/docklet-next/types/scheduler"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
+	"github.com/florianfinn/docklet-next/types/volume"
+	"github.com/moby/moby/client"
+	"log/slog"
+	"sync"
+	"time"
+	"uuid"
 )
 
 // Store persists volume backup records for this feature.
@@ -69,6 +68,7 @@ type Dependencies struct {
 	AcquireHelper    func(ctx context.Context, volumeName string) (string, func(), error)
 	Exec             func(ctx context.Context, containerID, execUser string, cmd []string) (string, string, error)
 	BackupVolumeName string
+	ZoneProvider     scheduleutil.ZoneProvider
 	Location         *time.Location
 	EncryptionKey    string
 }
@@ -112,16 +112,7 @@ func NewService(deps Dependencies) *Service {
 	s := &Service{deps: deps, writerFences: map[string]bool{}}
 	s.targetStore = &backuptarget.Store{DB: deps.DB}
 	s.targets = backuptarget.NewService(backuptarget.Dependencies{Store: s.targetStore})
-	s.policies = policies.NewService(policies.Dependencies{
-		DB:             deps.DB,
-		ValidateTarget: s.validatePolicyTarget,
-		Location:       deps.Location,
-		Activity:       deps.Activity,
-		AlreadyRunning: deps.AlreadyRunning,
-		LatestRun:      s.latestRunInternal,
-		CreateBackup:   s.scheduledBackupInternal,
-		Reconcile:      s.ReconcileBackup,
-	})
+	s.policies = s.newPolicies(deps)
 	s.browser = browser.NewService(browser.Dependencies{
 		Docker:       deps.Docker,
 		Engine:       deps.Engine,
@@ -130,10 +121,10 @@ func NewService(deps Dependencies) *Service {
 		Password:     s.volumeBackupPasswordInternal,
 		SanitizePath: sanitizeBackupPathInternal,
 	})
-	s.restore = restore.NewService(restore.Dependencies{
+	s.restore = restore.NewService(restore.Dependencies{DB: deps.DB,
 		Docker: deps.Docker, Engine: deps.Engine, Run: deps.Store.Run, Repository: s.rusticRepositoryForBackupInternal, Password: s.volumeBackupPasswordInternal, HelperImage: deps.HelperImage, Exec: deps.Exec,
 	})
-	s.notifier = backupnotify.Notifier{DB: deps.DB, Agent: config.Load().AgentMode || config.Load().EdgeAgent}
+	s.notifier = backupnotify.Notifier{DB: deps.DB, Agent: config.LoadRole().AgentMode}
 	s.configureRestoreLifecycle()
 	if deps.Engine != nil {
 		deps.Engine.RegisterRunKind("volume", s.executeDurableBackupInternal, s.failDurableBackupInternal)
@@ -295,59 +286,10 @@ func (s *Service) executeBackupInternal(ctx context.Context, entry *volume.Backu
 		}
 	}
 	metadata := database.JSON{"action": "backup_create", "backup_id": entry.ID, "size": entry.Size, "destination": entry.Destination}
-	if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupCreate, volumeName, volumeName, user.ID, user.Username, "0", metadata); logErr != nil {
+	if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupCreate, volumeName, volume.DisplayName(volumeName), user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log volume backup create event", "volume", volumeName, "error", logErr)
 	}
 	return errors.Join(err, ctx.Err())
-}
-
-func (s *Service) createLocalBackupSnapshotInternal(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) error {
-	repository, repoErr := s.repositoryFor(ctx, dockerClient, string(entry.Destination), false)
-	if repoErr != nil {
-		return repoErr
-	}
-	password, passwordErr := s.volumeBackupPasswordInternal(ctx, dockerClient, repository)
-	if passwordErr != nil {
-		return passwordErr
-	}
-	if err := jobcontext.Progress(ctx, scheduler.TargetOutcome{ResourceType: "backup_destination", ID: entry.ID + ":local", Status: scheduler.Running}); err != nil {
-		return err
-	}
-	localSnapshot, err := s.deps.Engine.CreateSnapshot(
-		ctx,
-		dockerClient,
-		repository,
-		password,
-		entry.VolumeName,
-		backup.RootSnapshotInput(
-			volumeSourceMountInternal(
-				entry.VolumeName,
-			),
-			backup.RunSnapshotTag(
-				entry.ID,
-			),
-		),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create local Rustic snapshot: %w", err)
-	}
-	entry.LocalSnapshotID = localSnapshot.ID
-	entry.Size = localSnapshot.Size
-	if saveLocalBackupErr := s.deps.Store.Save(ctx, entry); saveLocalBackupErr != nil {
-		return saveLocalBackupErr
-	}
-	if progressErr := jobcontext.Progress(
-		ctx,
-		scheduler.TargetOutcome{
-			ResourceType: "backup_destination",
-			ID:           entry.ID + ":local",
-			Status:       scheduler.Succeeded,
-			Message:      localSnapshot.ID,
-		},
-	); progressErr != nil {
-		return progressErr
-	}
-	return nil
 }
 
 func (s *Service) DeleteBackup(ctx context.Context, backupID string, user *usertypes.Actor) error {

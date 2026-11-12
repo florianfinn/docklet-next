@@ -3,7 +3,7 @@ Source: docklet-hub/docs/design/publication-policy.md
 Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 Retrieved: 2026-10-13
 License: Apache-2.0
-Deviations: English rewrite; no inherited operational networks; exact fixtures, IPv6 and local denylist.
+Deviations: English rewrite; no inherited operational networks; exact fixtures, canonical IPv6, current-tree stale entries and local denylist.
 -->
 
 # Publication policy
@@ -150,11 +150,15 @@ not record matched values in reports or the allowlist. Review each entry with
 its code and provenance, including licence and publication safety. Do not exempt
 actual secrets. Remove or adjust entries when the code stops producing the
 recorded count. The index uses the staged policy; each historical tree uses its
-own policy. A later exception cannot excuse earlier unsafe history. The initial
+own policy. A later exception cannot excuse earlier unsafe history. Unused
+entries fail only in the checked-out or staged policy and in the commit-message
+exceptions: a historical tree keeps suppressing its own reviewed findings even
+when a later scanner no longer reports them. The initial
 list is empty; imports add only independently reviewed entries.
 
 Wildcard listeners 0.0.0.0 and [::] are allowed, as are documented example and
-loopback addresses. Unbracketed all-letter forms such as a::b are treated as
+loopback addresses. IPv6 candidates compare in canonical form, so zero-padded
+spellings of the same addresses (such as the cgroup v2 root `0::/`) are allowed too. Unbracketed all-letter forms such as a::b are treated as
 ambiguous language scope names; bracket them when documenting IPv6 addresses.
 Leading punctuation does not hide private hostnames. The exact .env.local
 dotfile spelling is exempt from hostname detection but still rejected as a

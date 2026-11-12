@@ -136,7 +136,7 @@ func TestSettingsReadEffectiveTimeZoneFromProcessTZ(t *testing.T) {
 			}
 			require.Equal(t, expected, values["effectiveTimeZone"])
 			require.Equal(t, cfg.GetLocation().String(), values["effectiveTimeZone"])
-			require.NotContains(t, values, "timeZone")
+			require.Contains(t, values, "timeZone")
 		})
 	}
 }

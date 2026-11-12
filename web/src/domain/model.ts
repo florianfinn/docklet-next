@@ -25,7 +25,7 @@ export type Tone =
 
 export type HostConnection = "direct" | "edge";
 /** "pending": registered during onboarding, agent has not connected yet. */
-export type HostStatus = "online" | "offline" | "pending" | "update-required" | "token-rejected";
+export type HostStatus = "online" | "standby" | "offline" | "pending" | "update-required" | "token-rejected";
 
 /** File owner IDs used by the agent for project files (PUID/PGID). */
 export interface FileOwner {
@@ -51,6 +51,8 @@ export interface AgentReport {
 }
 
 export interface InventoryObservation {
+  recovery?: string;
+  scopeStale?: boolean;
   observedAt?: string;
   stale: boolean;
   reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required" | "inventory.read-error" | "inventory.mapping-error";
@@ -69,6 +71,8 @@ export interface Host {
   os: string;
   dockerVersion: string;
   agentVersion: string;
+  /** Historical display metadata; never evidence of current credentials or connectivity. */
+  componentVersion?: import("@/api/generated/schema").components["schemas"]["VersionInfo"];
   address: string;
   projectDir: string;
   /** Directory holding the agent's own compose.yaml and .env; never a stack directory. */
@@ -131,7 +135,24 @@ export interface PortMapping {
   protocol?: "tcp" | "udp";
 }
 
+/**
+ * Hub-side runtime condition of one container incarnation (see runtime history design).
+ * `containerId` is the inventory id; a condition for another id never applies.
+ */
+export interface RuntimeCondition {
+  containerId: string;
+  condition: "running" | "unhealthy" | "down" | "stopped";
+  reason: string;
+  exitCode?: number;
+  restarts10m?: number;
+  sampledAt: string;
+}
+
 export interface Service {
+  /** Hub condition of this service's container, merged from runtime conditions. */
+  condition?: RuntimeCondition;
+  containersRemoved?: boolean;
+  containerId?: string;
   name: string;
   image: ImageVersion;
   state: ContainerState;
@@ -151,6 +172,7 @@ export type AutoUpdateMode = "check" | "scheduled";
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
 export interface Stack {
+  definitionHint?: "definition-invalid";
   path?: string;
   reportedStatus?: string;
   serviceCount?: number;
@@ -203,7 +225,8 @@ export type ActionKind =
   | "pull"
   | "prune"
   | "agent-restart"
-  | "auto-heal";
+  | "auto-heal"
+  | "load-alert";
 
 export type ActionStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -230,6 +253,7 @@ export interface RunOutputLine {
 }
 
 export interface ActionRun {
+  recreateResult?: { oldId: string; newId: string; oldName: string; newName: string };
   baselineCode?: string;
   lifecycleCode?: string;
   effectVerified?: boolean;
@@ -259,6 +283,8 @@ export interface ActionRun {
   outputTruncated?: boolean;
   /** Restore point created before this run; offered manually after failures. */
   restorePointId?: string;
+  pointCode?: string;
+  sourceOperation?: string;
 }
 
 export type RuntimeActionRun = ActionRun & RuntimeKnowledge;
@@ -284,7 +310,13 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  /** Executor projection for the protected self container. */
+  redeployDisabled?: boolean;
+  /** Hub condition of this container, merged from runtime conditions. */
+  condition?: RuntimeCondition;
   imageId?: string;
+  /** Manifest platform the daemon reports for this container's image; "unknown" when it reports none. */
+  imagePlatform?: string;
   inventory?: InventoryObservation;
   restrictions?: { recreate: boolean; reason: string };
   id: string;
@@ -294,6 +326,7 @@ export interface ContainerInfo {
   stackName?: string;
   serviceName?: string;
   origin: ContainerOrigin;
+  originSource?: "detected" | "manual" | "unconfirmed";
   /** Why origin is unclear or how it was detected; shown in explanations. */
   originNote?: string;
   image: ImageVersion;
@@ -302,6 +335,8 @@ export interface ContainerInfo {
   ports: PortMapping[];
   networks: string[];
   mounts: string[];
+  /** Daemon-reported mounts with their structured target, aligned with `mounts`; display strings are never re-parsed for identity. */
+  mountPoints?: { spec: string; target: string }[];
   env: Record<string, string>;
   restartPolicy: string;
   memLimitMb: number;
@@ -338,6 +373,8 @@ export interface OpsEvent {
   hostId?: string;
   stackId?: string;
   actionId?: string;
+  /** A container runtime condition change from the hub's history (fleet ring feed). */
+  condition?: boolean;
 }
 
 export type JobKind = "backup" | "scan" | "update-check" | "auto-update";
@@ -359,7 +396,6 @@ export interface ScheduledJob {
 
 export interface HostMetrics {
   diskUnavailable?: boolean;
-  growthUnavailable?: boolean;
   inventory?: InventoryObservation;
   cpuCores?: number;
   memTotalGb?: number;
@@ -368,7 +404,6 @@ export interface HostMetrics {
   cpu: number;
   mem: number;
   disk: number;
-  diskGrowthGbPerDay: number;
   cpuHistory: number[];
   memHistory: number[];
 }
@@ -384,6 +419,8 @@ export interface MetricsSnapshot {
   hosts: Record<string, HostMetrics>;
   /** Keyed by container id. */
   containers: Record<string, ContainerMetrics>;
+  /** Online hosts whose stats socket failed, or sent nothing in time, before their first sample. */
+  unavailable?: readonly string[];
 }
 
 export type Severity = "critical" | "high" | "medium" | "low" | "unknown";
@@ -440,6 +477,27 @@ export interface SecurityOverview {
   images: ScannedImage[];
   findings: Finding[];
   history: ScanRun[];
+}
+
+/** Active finding counts of one scanned local image (Dashboard); names and usage come from the container inventory. */
+export interface ActiveScannedImage {
+  /** Docker image id on its host. */
+  id: string;
+  hostId: string;
+  /** Known only where the source names the image (demo); otherwise taken from containers using it. */
+  ref?: string;
+  inUse: boolean;
+  counts: SecurityCounts;
+  /** Last completed scan; empty when the image has no completed scan yet. */
+  scannedAt: string;
+  /** The host could not be read; the counts are the last ones shown. */
+  unavailable?: boolean;
+}
+
+export interface ActiveSecurity {
+  enabled: boolean;
+  images: ActiveScannedImage[];
+  unavailable: { hostId: string; code: string }[];
 }
 
 /** Built-in Docker drivers; plugins remain displayable as arbitrary strings. */

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.; inert Arcane tools sentinel removed (#362).
 
 package settings
 
@@ -26,26 +26,28 @@ import (
 // DefaultSettingsConfig returns the canonical default settings model used by Arcane.
 func DefaultSettingsConfig() *Settings {
 	return &Settings{
+		UpdateCheckInterval:                   SettingVariable{Value: "12h"},
+		UpdateNotify:                          SettingVariable{Value: "false"},
+		TimeZone:                              SettingVariable{Value: ""},
+		LoadAlertsEnabled:                     SettingVariable{Value: "true"},
+		LoadAlertCpuPercent:                   SettingVariable{Value: "90"},
+		LoadAlertMemoryPercent:                SettingVariable{Value: "90"},
+		LoadAlertMinutes:                      SettingVariable{Value: "10"},
 		ProjectsDirectory:                     SettingVariable{Value: "/app/data/projects"},
 		FollowProjectSymlinks:                 SettingVariable{Value: "false"},
 		DiskUsagePath:                         SettingVariable{Value: "/app/data/projects"},
-		AutoUpdate:                            SettingVariable{Value: "false"},
-		AutoUpdateInterval:                    SettingVariable{Value: "0 0 0 * * *"},
 		AutoUpdateExcludedContainers:          SettingVariable{Value: ""},
-		PollingEnabled:                        SettingVariable{Value: "true"},
-		PollingInterval:                       SettingVariable{Value: "0 0 * * * *"},
 		ImageEventWatcherEnabled:              SettingVariable{Value: "false"},
 		DockerClientRefreshInterval:           SettingVariable{Value: "0 */5 * * * *"},
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
-		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
+		BackupDefaultRetentionCount:           SettingVariable{Value: "7"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		KeepActionOutput:                      SettingVariable{Value: "true"},
 		ActionPresentation:                    SettingVariable{Value: "dialog"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
 		ToolsImage:                            SettingVariable{Value: ""},
-		UpdateCheckRegistry:                   SettingVariable{Value: "auto"},
 		ScheduledPruneEnabled:                 SettingVariable{Value: "false"},
 		ScheduledPruneInterval:                SettingVariable{Value: "0 0 0 * * *"},
 		PruneContainerMode:                    SettingVariable{Value: "stopped"},
@@ -62,10 +64,14 @@ func DefaultSettingsConfig() *Settings {
 		AutoHealInterval:                      SettingVariable{Value: "0 */5 * * * *"},
 		AutoHealExcludedContainers:            SettingVariable{Value: ""},
 		AutoHealMaxRestarts:                   SettingVariable{Value: "5"},
+		AutoHealCooldownMinutes:               SettingVariable{Value: "10"},
+		ActivityEventLimit:                    SettingVariable{Value: "500"},
+		ActivityRunLimit:                      SettingVariable{Value: "100"},
 		AutoHealRestartWindow:                 SettingVariable{Value: "30"},
 		VolumeHelperIdleTimeout:               SettingVariable{Value: "10"},
 		BaseServerURL:                         SettingVariable{Value: "http://localhost"},
 		SetupCompleted:                        SettingVariable{Value: "false"},
+		StackStopMode:                         SettingVariable{Value: "down"},
 		HubName:                               SettingVariable{Value: "Docklet"},
 		HubAddress:                            SettingVariable{Value: ""},
 		DomainURL:                             SettingVariable{Value: ""},
@@ -85,8 +91,7 @@ func DefaultSettingsConfig() *Settings {
 		AuthSessionTimeout:                    SettingVariable{Value: "1440"},
 		AuthPasswordPolicy:                    SettingVariable{Value: "strong"},
 		FeatureVulnerabilityManagementEnabled: SettingVariable{Value: "true"},
-		VulnerabilityScanEnabled:              SettingVariable{Value: "false"},
-		VulnerabilityScanSchedule:             SettingVariable{Value: ""},
+		VulnerabilityScanSchedule:             SettingVariable{Value: `{"mode":"manual"}`},
 		VulnerabilityNotifyCritical:           SettingVariable{Value: "false"},
 		VulnerabilityNotifyHigh:               SettingVariable{Value: "false"},
 		VulnerabilityNotifyFailed:             SettingVariable{Value: "false"},
@@ -135,7 +140,7 @@ func DefaultSettingsConfig() *Settings {
 var retiredSettingValuesInternal = map[string][]string{
 	// Closed list: only values persisted before override-only storage. Bump PRs
 	// must not extend it or include the current release default.
-	"toolsImage":                  {"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"},
+	"toolsImage":                  {"ghcr.io/florianfinn/docklet-tools:0.1.0"},
 	"dockerClientRefreshInterval": {"*/30 * * * * *"},
 	"autoHealInterval":            {"*/30 * * * * *"},
 }
@@ -189,7 +194,11 @@ func (s *SettingsService) PruneUnknownSettings(ctx context.Context) error {
 
 	keys := slices.Collect(maps.Keys(allowedKeys))
 
-	result := s.db.WithContext(ctx).Where("key NOT IN ?", keys).Delete(&SettingVariable{})
+	query := s.db.WithContext(ctx).Where("key NOT IN ?", keys)
+	for _, prefix := range internalSettingPrefixes {
+		query = query.Where("key NOT LIKE ?", prefix+"%")
+	}
+	result := query.Delete(&SettingVariable{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to prune unknown settings: %w", result.Error)
 	}
@@ -207,7 +216,7 @@ func (s *SettingsService) PersistEnvSettingsIfMissing(ctx context.Context) error
 	}
 
 	rt := reflect.TypeFor[Settings]()
-	appCfg := config.Load()
+	appCfg := config.LoadRole()
 	isEnvOnlyMode := appCfg.AgentMode || appCfg.UIConfigurationDisabled
 
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -236,9 +245,26 @@ func allowedSettingKeys() map[string]struct{} {
 	}
 
 	allowed["encryptionKey"] = struct{}{}
+	for _, key := range internalSettingKeys {
+		allowed[key] = struct{}{}
+	}
 
 	return allowed
 }
+
+// Rows other packages keep in the settings table outside Settings; startup pruning must not delete them.
+// backuptarget.Store writes the hub authority and set version, the agent's received set (agents compare owners
+// against hubHostId) and one delivery receipt per host; volume backup writes the last repository check.
+// TestPruneKeepsEveryInternalSettingWriter requires every backend file that touches the settings table to be
+// classified and checks the literal keys of its writes against these lists.
+var (
+	internalSettingKeys = []string{
+		"backup_target_authority", "backup_target_set_version",
+		"hubHostId", "backupTargetAuthority", "backupTargetSetVersion", "backupTargetContentHash",
+		"volumeBackupRepositoryCheck",
+	}
+	internalSettingPrefixes = []string{"backupTargetDelivery:"}
+)
 
 func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, field reflect.StructField, isEnvOnlyMode bool) error {
 	tag := field.Tag.Get("key")
@@ -250,7 +276,7 @@ func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, fiel
 
 	envVarName := strings.ToUpper(kit.SnakeCase(key))
 	envVal, ok, _ := utils.LookupEnvOrFile(envVarName)
-	if !ok {
+	if !ok || !validEnvSettingInternal(ctx, key, envVarName, envVal) {
 		return nil
 	}
 	envVal = kit.TrimQuotes(envVal)
@@ -259,7 +285,7 @@ func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, fiel
 }
 
 func (s *SettingsService) shouldProcessField(key, attrs string, isEnvOnlyMode bool) bool {
-	if key == "" || strings.Contains(attrs, "internal") {
+	if key == "" || strings.Contains(attrs, "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" {
 		return false
 	}
 

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; wire the Compose update owner and remove Arcane upgrade forwarding.
 
 package system
 
@@ -25,14 +25,11 @@ import (
 	"github.com/florianfinn/docklet-next/types/system"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	mobycontainer "github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"github.com/samber/hot"
 	"github.com/samber/mo"
-	"go.getarcane.app/docker"
 	"go.getarcane.app/docker/compat"
 	"go.getarcane.app/sys/cgroup"
-	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/labels"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -56,11 +53,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/upgrade"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/vuln"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
 
 // SystemService owns Docker system-wide operations and coordinates the prune
@@ -76,6 +73,8 @@ type SystemService struct {
 	prune   *prune.Service
 	upgrade *upgrade.Service
 	backup  *systembackup.Service
+	// agentWork reports local backup/restore work that refuses an agent restart.
+	agentWork func(context.Context) (bool, error)
 }
 
 func (s *SystemService) BackupMaintenanceGate() *systembackup.MaintenanceGate {
@@ -113,10 +112,6 @@ func NewSystemService(
 	actorRuntime *francis.Runtime,
 	apiKeys *apikey.ApiKeyService,
 ) *SystemService {
-	location := time.UTC
-	if cfg != nil {
-		location = cfg.GetLocation()
-	}
 	s := &SystemService{
 		db:               db,
 		dockerService:    dockerService,
@@ -126,9 +121,19 @@ func NewSystemService(
 		dockerHostMemoryCache: hot.NewHotCache[struct{}, dockerHostMemoryInfo](hot.LRU, 1).
 			WithTTL(dockerHostMemoryCacheTTL).
 			Build(),
-		prune:   prune.NewService(location, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
-		upgrade: upgrade.NewService(db, dockerService, versionService, eventService, settingsService, projectService, resolveUpgraderRuntimeOptionsInternal),
+		prune:   prune.NewService(nil, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
+		upgrade: upgrade.NewService(db, dockerService, versionService, cfg),
 	}
+	if volumeService != nil {
+		s.agentWork = func(ctx context.Context) (bool, error) {
+			if err := activity.CheckSelfUpdateHostTx(db.WithContext(ctx), "0"); err != nil {
+				return true, err
+			}
+			return volumeService.BackupWorkRunning(ctx)
+		}
+		s.upgrade.SetBackupBusy(volumeService.BackupWorkRunning)
+	}
+	s.prune.SetZoneProvider(cfg)
 	s.backup = systembackup.NewService(systembackup.Dependencies{
 		Store:        s.backupStoreInternal(),
 		DB:           db,
@@ -188,20 +193,8 @@ func (s *SystemService) ReconcileScheduledPrune(ctx context.Context, previous sc
 	return s.prune.ReconcileScheduledPrune(ctx, previous)
 }
 
-// TriggerUpgradeViaCLI starts the self-upgrade for the updater engine.
-func (s *SystemService) TriggerUpgradeViaCLI(ctx context.Context, user usertypes.Actor, target updater.SelfUpdateTarget) (string, error) {
-	return s.upgrade.TriggerUpgradeViaCLI(ctx, user, target)
-}
-
-// ResumeUpdateAllOnStartup finalizes an update-all job interrupted by the manager restart.
-func (s *SystemService) ResumeUpdateAllOnStartup(ctx context.Context) {
-	s.upgrade.ResumeUpdateAllOnStartup(ctx)
-}
-
-// PruneUpgradeLogs removes expired upgrade logs.
-func (s *SystemService) PruneUpgradeLogs(ctx context.Context, dataDir string, now time.Time) (int, error) {
-	return s.upgrade.PruneUpgradeLogs(ctx, dataDir, now)
-}
+// SelfUpdates exposes the application-owned update observer for lifecycle wiring.
+func (s *SystemService) SelfUpdates() *upgrade.Service { return s.upgrade }
 
 func (
 	s *SystemService,
@@ -453,51 +446,6 @@ func (s *SystemService) loadDockerHostMemoryInternal(ctx context.Context) (docke
 	return dockerHostMemoryInfo{root: root, total: uint64(info.Info.MemTotal)}, nil
 }
 
-// resolveUpgraderRuntimeOptionsInternal determines how a helper container reaches the Docker daemon.
-func resolveUpgraderRuntimeOptionsInternal(
-	ctx context.Context,
-	dockerHost string,
-	currentContainer *mobycontainer.InspectResponse,
-	discoverHostPath func(context.Context, string) (string, error),
-	isRunningInDocker func() bool,
-	selectReachableNetwork func(context.Context, *mobycontainer.InspectResponse, string) string,
-) ([]string, []mount.Mount, mobycontainer.NetworkMode, error) {
-	containerEnv := vuln.BuildDockerHostEnv(dockerHost)
-
-	scheme, socketPath, err := vuln.ParseDockerHost(dockerHost)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("resolve docker host %q: %w", dockerHost, err)
-	}
-
-	if scheme != "unix" {
-		// The upgrader must reach the tcp DOCKER_HOST, so prefer a network the
-		// daemon proxy is actually on over the plain auto heuristic (#3533).
-		networkMode := docker.SelectAutoNetworkMode(currentContainer)
-		if selectReachableNetwork != nil {
-			networkMode = selectReachableNetwork(ctx, currentContainer, dockerHost)
-		}
-		return containerEnv, nil, mobycontainer.NetworkMode(networkMode), nil
-	}
-
-	socketSource, err := vuln.ResolveUnixSocketSource(
-		ctx,
-		socketPath,
-		discoverHostPath,
-		isRunningInDocker,
-	)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("resolve unix socket source: %w", err)
-	}
-
-	mounts := []mount.Mount{{
-		Type:   mount.TypeBind,
-		Source: socketSource,
-		Target: socketPath,
-	}}
-
-	return containerEnv, mounts, "", nil
-}
-
 const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, 'local' AS destination, 'sqlite_pair_v1' AS format, '' AS local_snapshot_id, " +
 	"policy_id, error_code AS error, 'system' AS type, 'system' AS resource_type, 'Hub database' AS resource_name " +
 	"FROM system_backup_runs UNION ALL SELECT id, size, created_at, status, trigger, destination, format, " +
@@ -661,6 +609,9 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			}
 			var history []backuptypes.HistoryEntry
 			page, err := pagination.PaginateAndSortDB(params, query, &history)
+			for i := range history {
+				history[i].ResourceName = volumetypes.DisplayName(history[i].ResourceName)
+			}
 			return history, page, err
 		},
 	}

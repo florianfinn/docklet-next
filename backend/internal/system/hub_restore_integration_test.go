@@ -38,7 +38,7 @@ func TestHubRestoreSQLiteRoundTrip(t *testing.T) {
 	require.NoError(t, source.Exec(`INSERT INTO users (id,created_at,username,password_hash,time_format) VALUES ('seed-user',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'example','hash','auto')`).Error)
 	require.NoError(t, source.Exec(`INSERT INTO user_sessions (id,created_at,user_id,refresh_token_hash,last_used_at,expires_at) VALUES ('seed-session',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'seed-user','hash',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)+86400000000))`).Error)
 	require.NoError(t, source.Exec(`INSERT INTO settings (key,value) VALUES ('restore-example','before')`).Error)
-	require.NoError(t, source.Exec(`INSERT INTO environment_update_jobs (id,created_at,status) VALUES ('seed-job',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'success')`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO kv (key,value) VALUES ('restore-witness','before')`).Error)
 	require.NoError(t, source.Exec(`INSERT INTO activities (id,created_at,environment_id,type,status,started_at,ended_at,duration_ms,metadata) VALUES ('seed-activity',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'0','resource_action','success',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),0,'{}')`).Error)
 	dir := t.TempDir()
 	sourceSystem := &SystemService{db: source}
@@ -126,7 +126,7 @@ func assertRestoredSeedInternal(t *testing.T, db *database.DB) {
 	for _, query := range []string{
 		"SELECT COUNT(*) FROM users WHERE id='seed-user' AND username='example'",
 		"SELECT COUNT(*) FROM settings WHERE key='restore-example' AND value='before'",
-		"SELECT COUNT(*) FROM environment_update_jobs WHERE id='seed-job' AND status='success'",
+		"SELECT COUNT(*) FROM kv WHERE key='restore-witness' AND value='before'",
 		"SELECT COUNT(*) FROM activities WHERE id='seed-activity' AND status='success'",
 	} {
 		var count int

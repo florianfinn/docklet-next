@@ -8,31 +8,23 @@
   "lockfiles": [
     {
       "path": "backend/go.mod",
-      "sha256": "dd190a1c0831eba27b1ee6ad4f50b343e7644e977a5f314982b234ee9d50130f"
+      "sha256": "3228db65507e0d48506a521568b36e3960f8c5c5072c85822302bf863e5fac60"
     },
     {
       "path": "backend/go.sum",
       "sha256": "83aefe5788d8b14a0555abc9797a6ca6bf4927d0e6aefc72afa31866acc05afc"
     },
     {
-      "path": "cli/go.mod",
-      "sha256": "9eecc32de11e5975aa42e140041fc66ace5823d8f27f1466ed58545a8e3516f1"
-    },
-    {
-      "path": "cli/go.sum",
-      "sha256": "d9a356284b4300b1fc051ea39791ac0e0aa68cde7b5917d11d0dde5279bfcd9a"
-    },
-    {
       "path": "go.work",
-      "sha256": "93e284e222e311eec9d9a30bfa4128df5256e89ddc153e0e225f66e01f5332b4"
+      "sha256": "3817e82b00b244ab3b44f55d24316c70d94b8eee87d6db7da1eddf64d23c61d4"
     },
     {
       "path": "go.work.sum",
-      "sha256": "861c299ad21ac8b7fa73274d6c961dee928b1779cad9a022fbbd5b2bf3d6b20f"
+      "sha256": "d86c1149629c3787d346d72ad328be2752bf734e547375ae31a47238487bc3d7"
     },
     {
       "path": "third_party/arcane/acfs/go.mod",
-      "sha256": "0d19500a34164f024c155d0b48d36cf433bcf97022be700d6b09dccc667ffbc4"
+      "sha256": "3651ad146f799b8287208203f02235188779085fa007ec8758a2a5ef79b6cb3e"
     },
     {
       "path": "third_party/arcane/acfs/go.sum",
@@ -40,7 +32,7 @@
     },
     {
       "path": "third_party/arcane/builds/go.mod",
-      "sha256": "7a9e6f6162b225f939fc802d3c048dcfbdac801aa9ec96f3e22ee406f9fa0af3"
+      "sha256": "2e4c15be61f3ed6f6673acb5a121bcf8f06ec8f4cbcac3ee5cbe3b4bb6b2d5cc"
     },
     {
       "path": "third_party/arcane/builds/go.sum",
@@ -48,7 +40,7 @@
     },
     {
       "path": "third_party/arcane/docker/compat/go.mod",
-      "sha256": "0026f0162077367e8c8f4f6ef5221e7b7dca813171ed2658f29f2afcffd182f3"
+      "sha256": "1e1d068a9237d6302aefff87c27190df4e1fe5a9da6beb9fd5f05b4cffae4538"
     },
     {
       "path": "third_party/arcane/docker/compat/go.sum",
@@ -56,7 +48,7 @@
     },
     {
       "path": "third_party/arcane/docker/convert/go.mod",
-      "sha256": "9d487c64673a118d92122df25810ec2e9b2f0867e61764460ad70e6e742c22d5"
+      "sha256": "542e2808c6e4e1a19a44a98be163e2ef14d0c99a492b42f316151982a7b0c866"
     },
     {
       "path": "third_party/arcane/docker/convert/go.sum",
@@ -64,7 +56,7 @@
     },
     {
       "path": "third_party/arcane/docker/go.mod",
-      "sha256": "587deabd4e741353cf768674ca535bb1f8014a1669ae03bae38407fff49322e1"
+      "sha256": "7839dfc4968c8a381e0a41e5e1c61749bc5bd8b4fffbac8e46bddbf36f4f4450"
     },
     {
       "path": "third_party/arcane/docker/go.sum",
@@ -72,7 +64,7 @@
     },
     {
       "path": "third_party/arcane/kit/go.mod",
-      "sha256": "d206a5dee87888780a0c9499b8dc792f47f099d72759af40f3f8a63c83311a80"
+      "sha256": "e79c8b039bebdaac430f49fcfe833f288ec3ff00a0135486ea39d66298792f11"
     },
     {
       "path": "third_party/arcane/kit/go.sum",
@@ -80,19 +72,15 @@
     },
     {
       "path": "third_party/arcane/streams/go.mod",
-      "sha256": "454c8cdcc45d8bf2d4b66f7e13a345bfd152c8d945ae4525da9f9b81d772f2a7"
+      "sha256": "8908b3428aacd27157dd587fcf45bad06d9b4e60dd562d2bb9a752f4fb146dba"
     },
     {
       "path": "third_party/arcane/streams/go.sum",
       "sha256": "4d7f293a47d8c9947a1dc6ca8d6599e59bd4fe0663a19ea5860ee2c4792909c3"
     },
     {
-      "path": "third_party/arcane/sys/bytes/go.mod",
-      "sha256": "3af935abc43fa1a633679961f35bf300d941020fc1fd583b1b13441d14f7fc95"
-    },
-    {
       "path": "third_party/arcane/sys/cgroup/go.mod",
-      "sha256": "fcbc765ba53351e63e319d0d434fe48eab49d54c07c4ebdbf8e523f5c7619d28"
+      "sha256": "795ae3f4ac2590856c74b859ecbf5a285297f2edcc5f141938d525df023e6466"
     },
     {
       "path": "third_party/arcane/sys/cgroup/go.sum",
@@ -100,7 +88,7 @@
     },
     {
       "path": "third_party/arcane/sys/crypto/go.mod",
-      "sha256": "3fb7e3c47e96771615ad4d8da756673e9a0b7bdc479d6aa460a0bfd551ffe659"
+      "sha256": "7936ab69714b558611832a204b94245a57048e590370d3979b72e0553d7a9235"
     },
     {
       "path": "third_party/arcane/sys/crypto/go.sum",
@@ -108,7 +96,7 @@
     },
     {
       "path": "third_party/arcane/updater/go.mod",
-      "sha256": "d89edfa95ff6186280ecdab557254cf5477d31dae0cdb3c2d801c3f4dbbabffa"
+      "sha256": "e843f9af69531a9fcd9c8dd6e079a2372b0525a4f222e06d940abe67e425cf65"
     },
     {
       "path": "third_party/arcane/updater/go.sum",
@@ -124,7 +112,7 @@
     },
     {
       "path": "types/go.mod",
-      "sha256": "02633749b64455a4feb72136cd88b7a28170df97efa933697ccd445610360647"
+      "sha256": "a280ad6124f77785edb9acd2ade852fb9b756ba5d6cd44c92d17df47e11c32d4"
     },
     {
       "path": "types/go.sum",
@@ -137,8 +125,8 @@
       "entrypoint": "./backend/cmd",
       "cgo": "0",
       "tags": [],
-      "packages": 1502,
-      "packageGraphSha256": "31adc2067915e69edb8b7edcc7c2518268479b600ee4cc8602413a0fb56f9ab7"
+      "packages": 1514,
+      "packageGraphSha256": "8e7ecbae07f45171f04982734d8649cde0dc8a4f8208d72d8e777f62324cfbde"
     },
     {
       "target": "agent",
@@ -147,8 +135,8 @@
       "tags": [
         "-tags=exclude_frontend"
       ],
-      "packages": 1502,
-      "packageGraphSha256": "31adc2067915e69edb8b7edcc7c2518268479b600ee4cc8602413a0fb56f9ab7"
+      "packages": 1514,
+      "packageGraphSha256": "8e7ecbae07f45171f04982734d8649cde0dc8a4f8208d72d8e777f62324cfbde"
     }
   ],
   "limitations": "Post-cut hub and agent source graphs; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json.",
@@ -225,7 +213,6 @@
     {"name":"github.com/emirpasic/gods","version":"v1.18.1","localPath":null,"upstream":"github.com/emirpasic/gods","upstreamVersion":"v1.18.1","license":"BSD-2-Clause AND ISC","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://proxy.golang.org/github.com/emirpasic/gods/@v/v1.18.1.zip","legalFiles":[{"path":"LICENSE","sha256":"871b440e9b348d6b2485c72e15f1d18f4cf8ee7bb424cbcd854b6a4a772b61d8"}],"modifications":"None"},
     {"name":"github.com/felixge/httpsnoop","version":"v1.1.0","localPath":null,"upstream":"github.com/felixge/httpsnoop","upstreamVersion":"v1.1.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://github.com/felixge/httpsnoop/tree/0fc9006be0bfd68ee14bc3db0d58f7c7241892e0","legalFiles":[{"path":"LICENSE.txt","sha256":"8108e14b5cb2b6bcd51583d3849ef0c2b5c4de61758256c20308bc70d1775dbb"}],"modifications":"None"},
     {"name":"github.com/florianfinn/docklet-next/backend","version":"095cb778daba1034e2a39961199e712a75d4ba29","localPath":"backend","upstream":"github.com/getarcaneapp/arcane/backend/v2","upstreamVersion":"095cb778daba1034e2a39961199e712a75d4ba29","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://github.com/getarcaneapp/arcane/tree/095cb778daba1034e2a39961199e712a75d4ba29/backend","legalFiles":[{"path":"LICENSE","sha256":"9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"}],"modifications":"Provenance; local module wiring; exact file deviations in source headers or scripts/provenance.json."},
-    {"name":"github.com/florianfinn/docklet-next/cli","version":"095cb778daba1034e2a39961199e712a75d4ba29","localPath":"cli","upstream":"github.com/getarcaneapp/arcane/cli/v2","upstreamVersion":"095cb778daba1034e2a39961199e712a75d4ba29","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://github.com/getarcaneapp/arcane/tree/095cb778daba1034e2a39961199e712a75d4ba29/cli","legalFiles":[{"path":"LICENSE","sha256":"9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"}],"modifications":"Provenance; local module wiring; exact file deviations in source headers or scripts/provenance.json."},
     {"name":"github.com/florianfinn/docklet-next/types","version":"095cb778daba1034e2a39961199e712a75d4ba29","localPath":"types","upstream":"github.com/getarcaneapp/arcane/types/v2","upstreamVersion":"095cb778daba1034e2a39961199e712a75d4ba29","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://github.com/getarcaneapp/arcane/tree/095cb778daba1034e2a39961199e712a75d4ba29/types","legalFiles":[{"path":"LICENSE","sha256":"9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"}],"modifications":"Provenance; local module wiring; exact file deviations in source headers or scripts/provenance.json."},
     {"name":"github.com/fogleman/ease","version":"v0.0.0-20170301025033-8da417bf1776","localPath":null,"upstream":"github.com/fogleman/ease","upstreamVersion":"v0.0.0-20170301025033-8da417bf1776","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://proxy.golang.org/github.com/fogleman/ease/@v/v0.0.0-20170301025033-8da417bf1776.zip","legalFiles":[{"path":"LICENSE.md","sha256":"6104496a9e581b9a9ffac9fedd6ea82b6f73d285cd05d7f98737fd9714f326e3"}],"modifications":"None"},
     {"name":"github.com/fsnotify/fsnotify","version":"v1.10.1","localPath":null,"upstream":"github.com/fsnotify/fsnotify","upstreamVersion":"v1.10.1","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"correspondingSource":"https://github.com/fsnotify/fsnotify/tree/76b01a6e8f502187fecedea8b025e79e5a86085c","legalFiles":[{"path":"LICENSE","sha256":"2dfbe6d2b5eb18b55148f3805d88648a09e0d17e38428123259afb08c8996e37"}],"modifications":"None"},

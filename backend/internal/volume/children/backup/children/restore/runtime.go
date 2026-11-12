@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original daemon-host scratch bridge and owned restore effects.
+// Deviations: Original daemon-host scratch bridge and owned restore effects; M16 bind mounts and backup completion.
 
 package restore
 
@@ -38,10 +38,21 @@ type preparedRestore struct {
 	selection          selectionInternal
 	scratch, helper    string
 	writers            []string
+	bindKind           string
+	bindMount          mount.Mount
 }
 
 // ValidateAdmission performs bounded metadata checks, without repository effects.
 func (s *Service) ValidateAdmission(ctx context.Context, r StartRequest) error {
+	if err := volume.ValidateName(r.VolumeName); err != nil {
+		return err
+	}
+	if err := volume.RefuseBind(r.NewVolumeName); err != nil {
+		return err
+	}
+	if volume.IsBindKey(r.VolumeName) && r.Mode == "new" {
+		return dto.NewProblem(409, "volume.bind.unsupported", nil)
+	}
 	if r.Kind != "upload" {
 		entry, err := s.deps.Run(ctx, r.BackupID)
 		if err != nil || entry.VolumeName != r.VolumeName || entry.LocalSnapshotID == "" {
@@ -54,6 +65,16 @@ func (s *Service) ValidateAdmission(ctx context.Context, r StartRequest) error {
 	cli, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
 		return dto.NewProblem(503, "volume.backup.engine-unavailable", err)
+	}
+	if volume.IsBindKey(r.VolumeName) {
+		_, kind, err := s.bindSourceMount(ctx, cli, r.VolumeName)
+		if err != nil {
+			return err
+		}
+		if kind == "file" && (r.Kind == "upload" || r.Kind == "files") {
+			return dto.NewProblem(409, "volume.bind.file-operation-unsupported", nil)
+		}
+		return nil
 	}
 	target := restoreDestination(r)
 	_, err = cli.VolumeInspect(ctx, target, client.VolumeInspectOptions{})
@@ -82,6 +103,15 @@ func (s *Service) PrepareRestore(ctx context.Context, run *Run, r StartRequest) 
 	}
 	prepared := &preparedRestore{}
 	run.Prepared = prepared
+	if volume.IsBindKey(r.VolumeName) {
+		prepared.bindMount, prepared.bindKind, err = s.bindSourceMount(ctx, cli, r.VolumeName)
+		if err != nil {
+			return nil, err
+		}
+		if prepared.bindKind == "file" && (r.Kind == "upload" || r.Kind == "files") {
+			return nil, dto.NewProblem(409, "volume.bind.file-operation-unsupported", nil)
+		}
+	}
 	cleanup = func() error {
 		for _, writer := range prepared.writers {
 			if err := removeConfirmed(ctx, cli, writer); err != nil {
@@ -124,6 +154,9 @@ func (s *Service) PrepareRestore(ctx context.Context, run *Run, r StartRequest) 
 				return cleanup, err
 			}
 		}
+	}
+	if volume.IsBindKey(r.VolumeName) {
+		return cleanup, nil
 	}
 	target := restoreDestination(r)
 	_, err = cli.VolumeInspect(ctx, target, client.VolumeInspectOptions{})
@@ -212,7 +245,8 @@ func (s *Service) prepareUpload(ctx context.Context, cli *client.Client, run *Ru
 		_ = writer.CloseWithError(e)
 		encoded <- e
 	}()
-	_, copyErr := cli.CopyToContainer(ctx, p.helper, client.CopyToContainerOptions{DestinationPath: "/scratch/data", Content: reader, AllowOverwriteDirWithFile: false, CopyUIDGID: true})
+	// The normalized headers keep the archive's numeric owners; copyUIDGID would rewrite them to the helper user.
+	_, copyErr := cli.CopyToContainer(ctx, p.helper, client.CopyToContainerOptions{DestinationPath: "/scratch/data", Content: reader, AllowOverwriteDirWithFile: false})
 	_ = reader.CloseWithError(copyErr)
 	encodeErr := <-encoded
 	if encodeErr != nil {
@@ -241,6 +275,16 @@ func (s *Service) WriteRestore(ctx context.Context, run *Run, r StartRequest) er
 	}
 	p := run.Prepared
 	target := restoreDestination(r)
+	targetMount := mount.Mount{Type: mount.TypeVolume, Source: target, Target: "/volume"}
+	if volume.IsBindKey(target) {
+		targetMount, p.bindKind, err = s.bindSourceMount(ctx, cli, target)
+		if err != nil {
+			return err
+		}
+		if p.bindKind == "file" {
+			return s.writeBindFile(ctx, cli, run, targetMount)
+		}
+	}
 	if r.Kind == "upload" {
 		image, err := s.deps.HelperImage(ctx, cli)
 		if err != nil {
@@ -249,7 +293,7 @@ func (s *Service) WriteRestore(ctx context.Context, run *Run, r StartRequest) er
 		labels := volumehelper.Labels()
 		labels[RestoreLabel] = run.ID
 		labels[OperationVolumeLabel] = run.VolumeName
-		created, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{Config: &container.Config{Image: image, Cmd: []string{"sleep", "infinity"}, Labels: labels}, HostConfig: volumehelper.HostConfig(image, nil, []mount.Mount{{Type: mount.TypeVolume, Source: p.scratch, Target: "/scratch", ReadOnly: true}, {Type: mount.TypeVolume, Source: target, Target: "/volume"}})})
+		created, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{Config: &container.Config{Image: image, Cmd: []string{"sleep", "infinity"}, Labels: labels}, HostConfig: volumehelper.HostConfig(image, nil, []mount.Mount{{Type: mount.TypeVolume, Source: p.scratch, Target: "/scratch", ReadOnly: true}, targetMount})})
 		if err != nil {
 			return err
 		}
@@ -264,7 +308,7 @@ func (s *Service) WriteRestore(ctx context.Context, run *Run, r StartRequest) er
 	if r.Kind == "files" {
 		return s.restoreSelectionInternal(ctx, cli, target, r.BackupID, p.entry, p.repository, p.snapshot, p.selection)
 	}
-	return s.deps.Engine.RestoreSnapshot(ctx, cli, p.repository, p.password, p.snapshot, mount.Mount{Type: mount.TypeVolume, Source: target, Target: "/volume"}, backup.RestoreOptions{DeleteExtra: true})
+	return s.deps.Engine.RestoreSnapshot(ctx, cli, p.repository, p.password, p.snapshot, targetMount, backup.RestoreOptions{DeleteExtra: true})
 }
 func (s *Service) CleanupNew(ctx context.Context, run *Run) error {
 	if !run.CreatedVolume {

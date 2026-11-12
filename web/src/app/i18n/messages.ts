@@ -12,6 +12,7 @@ import { deSettings } from "@/features/settings/messages/de";
 import { deSetup } from "@/features/setup/messages/de";
 import { deVolumes } from "@/features/volumes/messages/de";
 import { deLab } from "@/shared/preferences/messages/de";
+import { deProxy } from "@/shared/preferences/messages/proxy-lab-de";
 import { deVisual } from "@/shared/preferences/messages/visual-de";
 import { deNetworks } from "@/features/networks/messages/de";
 import { dePoolErrors } from "@/features/networks/messages/pool-de";
@@ -19,11 +20,12 @@ import { deSecurity } from "@/features/security/messages/de";
 import { deEditor } from "@/features/stacks/editor/messages/de";
 import { deStacks } from "@/features/stacks/messages/de";
 import { deHelp } from "@/shared/help/messages/de";
+import { deHistory } from "@/shared/history/messages/de";
 import { deCommon } from "@/shared/messages/de";
 import { deTheme } from "@/shared/theme/messages/de";
 import { deWorkspace } from "@/shared/workspace/messages/de";
 
-import { dePreview } from "../preview/messages/de";
+import { deComingSoon } from "../coming-soon/messages/de";
 import { deShell } from "../shell/messages/de";
 import { deLocale } from "./messages/de";
 
@@ -35,17 +37,19 @@ export const messages: typeof enMessages = {
   workspace: deWorkspace,
   theme: deTheme,
   shell: deShell,
-  preview: import.meta.env.DEV ? dePreview : ({} as typeof dePreview),
+  comingSoon: deComingSoon,
   activity: deActivity,
   environment: deEnvironmentEvents,
   user: deUserEvents,
   lab: import.meta.env.DEV ? deLab : ({} as typeof deLab),
+  proxyLab: import.meta.env.DEV ? deProxy : ({} as typeof deProxy),
   visual: deVisual,
   dashboard: deDashboard,
   runMessages: deRunMessages,
   stacks: deStacks,
   editor: deEditor,
   containers: deContainers,
+  history: deHistory,
   security: deSecurity,
   networks: {
     ...deNetworks,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.; status-first one-shot restart acknowledgement; M17 runtime history and personal preferences; Direct requests follow the proxy deadline instead of the shared client timeout.
 
 // Package proxy owns the transport to remote environment agents: request
 // building, edge tunnel routing, JSON decoding and configuration pushes.
@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	historyDTO "github.com/florianfinn/docklet-next/types/history"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"log/slog"
@@ -40,6 +41,7 @@ import (
 // Service sends requests to remote environment agents over HTTP or edge
 // tunnels and pushes manager-owned configuration to them.
 type Service struct {
+	httpClient      *http.Client
 	accessCheck     remenv.AgentAccessCheck
 	db              *database.DB
 	client          *remenv.Client
@@ -51,14 +53,36 @@ type Service struct {
 // forget delivery state when an environment reconnects.
 func New(db *database.DB, httpClient *http.Client, settingsService *settings.SettingsService, syncGate *utils.SyncGate) *Service {
 	return &Service{
-		db: db,
-		client: remenv.NewClient(httpClient, remenv.TunnelTransportFuncs{
+		httpClient: httpClient,
+		db:         db,
+		client: remenv.NewClient(proxyHTTPClientInternal(httpClient), remenv.TunnelTransportFuncs{
 			EnsureAvailableFunc: ensureTunnelAvailableInternal,
 			DoFunc:              doTunnelRequestInternal,
 		}),
 		settingsService: settingsService,
 		syncGate:        syncGate,
 	}
+}
+
+// proxyHTTPClientInternal sends through the injected client's transport and
+// TLS policy but without its hard timeout: Execute bounds every agent request
+// by the configured proxy timeout, which may be longer than the shared client's.
+func proxyHTTPClientInternal(httpClient *http.Client) *http.Client {
+	if httpClient == nil {
+		return nil
+	}
+	return &http.Client{Transport: sharedTransportInternal{client: httpClient}}
+}
+
+// sharedTransportInternal reads the shared client's transport per request, so
+// a transport replaced after construction still applies.
+type sharedTransportInternal struct{ client *http.Client }
+
+func (t sharedTransportInternal) RoundTrip(r *http.Request) (*http.Response, error) {
+	if t.client.Transport == nil {
+		return http.DefaultTransport.RoundTrip(r)
+	}
+	return t.client.Transport.RoundTrip(r)
 }
 
 // Target is a validated remote environment endpoint; build it with NewTarget.
@@ -179,6 +203,11 @@ func (s *Service) Execute(
 	if vulnerability.IsRoute(method, path) {
 		request.ResponseLimit = vulnerability.ResponseLimit
 	}
+	if historyDTO.IsSampleRoute(method, path) {
+		request.ResponseLimit = historyDTO.SampleLimit
+	}
+	ctx, cancel := s.Context(ctx)
+	defer cancel()
 	resp, err := s.client.Do(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request to environment %s: %w", target.name, err)

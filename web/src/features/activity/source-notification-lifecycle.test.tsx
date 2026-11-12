@@ -6,7 +6,7 @@
 
 import { act } from "@testing-library/react";
 import { toast } from "sonner";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/data/query-keys";
 import { uiStyleStore } from "@/shared/preferences/ui-style-store";
 import { actionDialogStore } from "./action-dialog-store";
@@ -15,6 +15,9 @@ import { presentationStore } from "./run-presentation";
 import { sourceFixture, toastCount, waitFor } from "./source-notification.test-support";
 
 afterEach(() => act(() => { toast.dismiss(); actionDialogStore.reset(); presentationStore.reset(); uiStyleStore.reset(); activityStore.reset(); vi.restoreAllMocks(); }));
+// A dismissed toast removes itself 200 ms later (sonner TIME_BEFORE_UNMOUNT); let the last one finish before
+// the DOM environment is torn down, so no timer outlives it.
+afterAll(() => new Promise((resolve) => setTimeout(resolve, 300)));
 
 it.each([false, true])("already complete source (initially empty=%s) keeps genuine recovery outcomes and dismissed history", async (empty) => {
   const f = sourceFixture(); if (!empty) f.history("bad"); await f.discover();

@@ -34,17 +34,17 @@ export const enHelp = {
       },
       timeZone: {
         title: "Hub time zone",
-        short: "Schedules and date display use the hub process time zone.",
-        full: "The TZ variable sets the zone at startup. General shows the effective value read-only; change the deployment environment and restart the hub.",
-        impact: "Changing TZ changes schedule times and date display after restart.",
+        short: "Schedules and date display use the effective hub time zone.",
+        full: "Choose a zone under General. An empty choice uses TZ. Saved changes move future hub schedules without a restart; remote volume backups keep their host zone.",
+        impact: "Future runs use the new zone. Existing queued and running work continues; missed occurrences are not caught up.",
       },
     },
     settingsAppearance: {
       theme: {
         title: "Color scheme",
-        short: "Dark or light interface for this browser.",
+        short: "Dark or light interface for your account.",
         full: "Switches between the dark and light scheme. The color roles are adjusted for both schemes so text stays readable.",
-        impact: "Applies only in this browser, not to other users.",
+        impact: "Applies to your account in every browser, not to other users.",
       },
       palette: {
         title: "Color palette",
@@ -56,7 +56,7 @@ export const enHelp = {
         title: "Density",
         short: "Spacing and row heights of the interface.",
         full: "Compact shows more rows at once, Spacious more room between elements. Content and functions do not change.",
-        impact: "Applies only in this browser.",
+        impact: "Applies to your account in every browser.",
       },
       motion: {
         title: "Animations",
@@ -553,7 +553,7 @@ export const enHelp = {
       hide: {
         title: "Hide from overview",
         short: "Moves the entry to the “Hidden” category.",
-        full: "Affects only the display in this browser. The stack or container keeps running unchanged and can be shown again at any time.",
+        full: "Affects only your own display, in every browser you sign in with. The stack or container keeps running unchanged and can be shown again at any time.",
         impact: "Nothing is stopped or deleted.",
       },
       scan: {

@@ -27,6 +27,7 @@ import { LabelEditor } from "../editor/fields";
 import { allLabels } from "../overview/stack-filters";
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 import { ServicesCard } from "./ServicesCard";
+import { StackHistory } from "@/shared/history/HistorySection";
 
 export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | undefined }) {
   const t = useTranslations("stacks.overview");
@@ -46,6 +47,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
   return (
     <div className="flex flex-col gap-4">
       <ServicesCard stack={stack} host={host} />
+      <StackHistory stackId={stack.id} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="gap-3 py-4">
           <CardHeader className="px-4">
@@ -140,7 +142,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
                 labels={stack.labels}
                 onChange={(labels) => void cmd.setLabels(stack.id, labels)}
                 suggestions={allLabels(stacks.data ?? [])}
-                placeholder="produktiv"
+                placeholder="prod"
                 addLabel={t("labelsAdd")}
                 removeLabel={(label) => t("labelRemove", { label })}
                 emptyText={t("labelsNone")}

@@ -57,13 +57,17 @@ export function createDemoHubBackups(options: DemoAdapterOptions = {}): HubBacku
     },
     async getHubBackupMaintenance() { return { active: maintenance, ...(maintenance ? { operation: "restore" as const, phase, activityId: "activity-restore-1" } : {}) }; },
     async getHubBackupActivityStatus(id) { requireAccess(); return states.get(id) ?? "failed"; },
-    async createHubBackup() {
+    async createHubBackup(policyId) {
       requireAccess(); requireStorage();
       const id = `system-demo-${runs.length + 1}`;
       const activityId = `activity-demo-${runs.length + 1}`;
-      const run: HubBackupRun = { id, activityId, createdAt: new Date().toISOString(), size: 0, status: "running", trigger: "manual", copyState: "none" };
+      // Like the hub: an unknown policy is refused, and a policy with a target records it; the copy follows the archive.
+      const policy = policyId ? policies.find((entry) => entry.id === policyId) : undefined;
+      if (policyId && !policy) throw new AdapterOutcomeError({ kind: "error", code: "backup.not_found", status: 404 });
+      const copied = !!policy?.targetId;
+      const run: HubBackupRun = { id, activityId, createdAt: new Date().toISOString(), size: 0, status: "running", trigger: "manual", ...(policy ? { policyId: policy.id } : {}), ...(copied ? { copyTargetId: policy.targetId } : {}), copyState: "none" };
       runs.unshift(run); states.set(activityId, "running");
-      setTimeout(() => { run.status = "succeeded"; run.size = 18_432_000; run.completedAt = new Date().toISOString(); states.set(activityId, "success"); }, 1300);
+      setTimeout(() => { run.status = "succeeded"; run.size = 18_432_000; run.completedAt = new Date().toISOString(); if (copied) run.copyState = "succeeded"; states.set(activityId, "success"); }, 1300);
       return structuredClone(run);
     },
     async uploadHubBackup(file, onProgress): Promise<HubBackupOperation> {

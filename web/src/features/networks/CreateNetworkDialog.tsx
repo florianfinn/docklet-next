@@ -1,3 +1,4 @@
+import { isHostAvailable } from "@/domain/hosts";
 import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useCapability } from "@/data/use-capability";
@@ -72,15 +73,15 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, avail
   const t = useTranslations("networks.createDialog");
   const ts = useTranslations("networks.scope");
   const tc = useTranslations("activity.capability");
-  const online = hosts.filter((h) => h.status === "online");
+  const online = hosts.filter((h) => isHostAvailable(h));
   const initialHost = online.find((h) => h.id === defaultHostId)?.id ?? online[0]?.id ?? "";
   const [draft, setDraft] = useState<NetworkDraft>(() => blank(initialHost));
   const feedback = useDialogCommand(open, draft.hostId);
   const cmd = useNetworkCommands(draft.hostId, open);
   const capability = useCapability("createNetwork", { kind: "host", id: draft.hostId });
   const selectedHost = hosts.find((h) => h.id === draft.hostId);
-  const available = selectedHost?.status === "online" && capability.available && (!availableHostIds || availableHostIds.includes(draft.hostId));
-  const unavailableReason = available ? undefined : selectedHost && selectedHost.status !== "online" ? t("hostOffline", { name: selectedHost.name }) : capability.reason ?? tc("unavailable");
+  const available = isHostAvailable(selectedHost) && capability.available && (!availableHostIds || availableHostIds.includes(draft.hostId));
+  const unavailableReason = available ? undefined : selectedHost && !isHostAvailable(selectedHost) ? t("hostOffline", { name: selectedHost.name }) : capability.reason ?? tc("unavailable");
   const [labels, setLabels] = useState<NetworkEntry[]>([]);
   const [options, setOptions] = useState<NetworkEntry[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -196,9 +197,9 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, avail
                 <SelectContent>
                   <SelectGroup>
                     {hosts.filter((h) => h.id === draft.hostId || !availableHostIds || availableHostIds.includes(h.id)).map((h) => (
-                      <SelectItem key={h.id} value={h.id} disabled={h.status !== "online" || (!!availableHostIds && !availableHostIds.includes(h.id))}>
+                      <SelectItem key={h.id} value={h.id} disabled={!isHostAvailable(h) || (!!availableHostIds && !availableHostIds.includes(h.id))}>
                         <i className="size-2.5 rounded-[3px]" style={{ background: h.color }} aria-hidden />
-                        {h.status === "online" ? h.name : t("hostOffline", { name: h.name })}
+                        {isHostAvailable(h) ? h.name : t("hostOffline", { name: h.name })}
                       </SelectItem>
                     ))}
                   </SelectGroup>

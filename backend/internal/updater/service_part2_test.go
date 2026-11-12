@@ -66,7 +66,7 @@ func TestUpdaterService_AcceptSingleContainerUpdateFailureFinalizesInternal(t *t
 	db := setupProjectTestDBInternal(t)
 	require.NoError(t, db.AutoMigrate(activity.Models()...))
 	activityService := activity.NewActivityService(db, nil)
-	svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
+	svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
 	require.NoError(t, err)
 	runtime := francistest.New(t)
 	require.NoError(t, svc.RegisterActors(runtime))
@@ -149,7 +149,7 @@ func TestUpdaterService_SingleContainerActivityResultMessagesInternal(t *testing
 			db := setupProjectTestDBInternal(t)
 			require.NoError(t, db.AutoMigrate(activity.Models()...))
 			activityService := activity.NewActivityService(db, nil)
-			svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
+			svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
 			require.NoError(t, err)
 			started, err := activityService.StartActivity(
 				t.Context(),
@@ -278,7 +278,7 @@ func TestUpdaterService_ApplyPending_ProjectFailureDoesNotBlockOtherProjectsInte
 		},
 	}
 
-	svc, svcErr := NewUpdaterService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc, svcErr := NewUpdaterService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, svcErr)
 	engine, engineErr := updater.New(updater.Config{
 		DockerClientProvider: dockerProvider,
@@ -388,9 +388,8 @@ func TestUpdaterService_ApplyPending_RoutesLegacyArcaneServerThroughSelfUpgradeI
 			"arcane": {ID: "project-arcane", Name: "arcane"},
 		},
 	}
-	mockUpgrade := &mockSystemUpgradeServiceInternal{}
 
-	svc, svcErr := NewUpdaterService(nil, nil, nil, nil, nil, nil, nil, nil, nil, mockUpgrade, nil, nil, nil, nil, nil)
+	svc, svcErr := NewUpdaterService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, svcErr)
 	engine, engineErr := updater.New(updater.Config{
 		DockerClientProvider: dockerProvider,
@@ -430,7 +429,6 @@ func TestUpdaterService_ApplyPending_RoutesLegacyArcaneServerThroughSelfUpgradeI
 	result, err := svc.ApplyPending(ctx, arcaneupdater.Options{})
 	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	require.Nil(t, result)
-	require.False(t, mockUpgrade.triggerCalled)
 	require.Empty(t, projectUpdater.calls)
 }
 
@@ -623,7 +621,7 @@ func TestUpdaterService_ScopedPendingRecordsIsolationInternal(t *testing.T) {
 	}
 	server := newUpdaterApplyPendingDockerServerInternal(t, containers, nil, nil, nil)
 	dockerSvc := docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(newTestDockerClientInternal(t, server))
-	svc, err := NewUpdaterService(db, nil, dockerSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc, err := NewUpdaterService(db, nil, dockerSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	records, err := svc.PendingImageUpdates(t.Context())
 	require.NoError(t, err)
@@ -669,7 +667,7 @@ func TestUpdaterService_SharedDigestRecordClearingInternal(t *testing.T) {
 			}
 			server := newUpdaterApplyPendingDockerServerInternal(t, containers, nil, nil, map[string]dockertypesimage.InspectResponse{imageRef: {ID: "new-image"}})
 			dockerSvc := docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(newTestDockerClientInternal(t, server))
-			svc, err := NewUpdaterService(db, nil, dockerSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			svc, err := NewUpdaterService(db, nil, dockerSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			require.NoError(t, err)
 			converted := imageUpdateRecordToModuleInternal(record)
 			converted.ContainerID = "updated"
@@ -813,7 +811,6 @@ func TestSingleUpdatePersistsSuccessfulActivity(t *testing.T) {
 			t,
 			server,
 		)),
-		nil,
 		nil,
 		nil,
 		nil,

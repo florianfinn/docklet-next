@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 unreachable agent refusal before admission.
 
 import { afterEach, expect, it, vi } from "vitest";
 import { COMMAND_RETRY_MS } from "./runtime-commands";
@@ -16,7 +16,9 @@ const operations = [
 ] as const;
 it.each(["0", "direct", "edge"].flatMap((host) => operations.map(([kind, command, suffix]) => ({ host, kind, command, suffix }))))("$host $kind $command uses existing async route and stable canonical identity", async ({ host, kind, command, suffix }) => {
   const f = runtimeFixture(); f.state.run = snapshot(host, { resourceType: kind === "stack" ? "project" : "container", type: kind === "stack" ? "project_deploy" : "container_start" });
-  const id = kind === "stack" ? await f.adapter.runStackCommand(`${host}~target /?#%`, command) : await f.adapter.runContainerCommand(`${host}~target /?#%`, command as "start");
+  const admission = kind === "stack" ? f.adapter.runStackCommand(`${host}~target /?#%`, command) : f.adapter.runContainerCommand(`${host}~target /?#%`, command as "start");
+  await expect(admission).resolves.toBe(RUN_ID);
+  const id = await admission;
   expect(id).toBe(RUN_ID); expect(f.commands()).toHaveLength(1);
   const request = f.commands()[0]!;
   expect(request.url.pathname).toBe(`/api/environments/${host}/${kind === "stack" ? "projects" : "containers"}/target%20%2F%3F%23%25/${suffix}`);
@@ -128,4 +130,11 @@ it("unavailable cryptographic randomness refuses before sending any command or i
   const f = runtimeFixture();
   await expect(f.helper.runContainerCommand("0~target", "start")).rejects.toMatchObject({ outcome: { code: "runtime.key-unavailable" } });
   expect(f.commands()).toHaveLength(0); expect(f.published).toEqual([]);
+});
+
+it("an agent unreachable before admission refuses with its code and no ambiguous state", async () => {
+  const f = runtimeFixture(); f.state.command = () => response({ message: "Agent unavailable", code: "agent.unavailable", statusCode: 503 }, 503);
+  await expect(f.helper.runStackCommand("direct~target", "start")).rejects.toMatchObject({ outcome: { kind: "error", code: "agent.unavailable", status: 503 } });
+  await expect(f.helper.runStackCommand("direct~target", "start")).rejects.toMatchObject({ outcome: { code: "agent.unavailable" } });
+  expect(f.published).toEqual([]); expect(f.commands()).toHaveLength(2);
 });

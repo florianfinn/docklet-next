@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration.
 
 package config
 
@@ -21,6 +21,7 @@ import (
 
 	kit "go.getarcane.app/kit/pkg"
 
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 )
@@ -38,6 +39,8 @@ const (
 // Fields with `options:"file"` support Docker secrets via the _FILE suffix.
 // Available options: file, toLower, trimTrailingSlash, deprecated
 type Config struct {
+	StackImportGitHubRawURL string `env:"STACK_IMPORT_GITHUB_RAW_URL" default:"https://raw.githubusercontent.com" options:"file"`
+	ZoneProvider            schedule.ZoneProvider
 	BuildablesConfig
 
 	AgentImage             string         `env:"DOCKLET_AGENT_IMAGE" default:""`
@@ -55,6 +58,8 @@ type Config struct {
 	EncryptionKey          string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
 	AdminStaticAPIKey      string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
 	AuthMode               string         `env:"AUTH_MODE" default:"local" options:"file"`
+	AuthProxyAdminUsers    *string        `env:"AUTH_PROXY_ADMIN_USERS" options:"file"`
+	AuthProxyLogoutURL     string         `env:"AUTH_PROXY_LOGOUT_URL" default:"" options:"file"`
 	AuthProxyHeader        string         `env:"AUTH_PROXY_HEADER" default:"Remote-User" options:"file"`
 	AuthTrustedProxies     string         `env:"AUTH_TRUSTED_PROXIES" default:"" options:"file"`
 	AuthResetAdminPassword string         `env:"AUTH_RESET_ADMIN_PASSWORD" default:"" options:"file"`
@@ -78,6 +83,7 @@ type Config struct {
 	AgentToken                    string `env:"AGENT_TOKEN" default:"" options:"file"`
 	ManagerApiUrl                 string `env:"MANAGER_API_URL" default:""`
 	UpdateCheckDisabled           bool   `env:"UPDATE_CHECK_DISABLED" default:"false"`
+	ReleaseFeedURL                string `env:"DOCKLET_RELEASE_FEED_URL" default:""`
 	UIConfigurationDisabled       bool   `env:"UI_CONFIGURATION_DISABLED" default:"false"`
 	GPUMonitoringEnabled          bool   `env:"GPU_MONITORING_ENABLED" default:"false"`
 	GPUType                       string `env:"GPU_TYPE" default:"auto"`
@@ -205,6 +211,12 @@ func loadFromEnv(cfg *Config) {
 		}
 
 		envValue := os.Getenv(envTag)
+		if field.Kind() == reflect.Pointer {
+			_, present, _ := utils.LookupEnvOrFile(envTag)
+			if !present {
+				return
+			}
+		}
 		var fromFile bool
 		if hasOptionInternal(fieldType, "file") {
 			envValue, _, fromFile = utils.LookupEnvOrFile(envTag)
@@ -312,6 +324,11 @@ func setFieldValueInternal(field reflect.Value, fieldType reflect.StructField, v
 		return
 	}
 
+	if field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.String {
+		v := value
+		field.Set(reflect.ValueOf(&v))
+		return
+	}
 	if field.Kind() == reflect.String {
 		field.SetString(value)
 		return
@@ -400,6 +417,12 @@ func (c *Config) ListenAddr() string {
 // Returns the system's local timezone if Timezone is "Local".
 // Defaults to UTC if not set or if the timezone cannot be loaded.
 func (c *Config) GetLocation() *time.Location {
+	if c != nil && c.ZoneProvider != nil {
+		return c.ZoneProvider.Location()
+	}
+	if c == nil {
+		return time.UTC
+	}
 	tz := strings.TrimSpace(c.Timezone)
 	if tz == "" {
 		return time.UTC
@@ -412,6 +435,8 @@ func (c *Config) GetLocation() *time.Location {
 	}
 	return loc
 }
+
+func (c *Config) Location() *time.Location { return c.GetLocation() }
 
 // GetAppURL returns the effective application URL.
 // If in agent mode and APP_URL is not explicitly set, it returns the manager's URL.

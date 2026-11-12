@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered legacy/async lifecycle boundary with preflush admission.
+// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety. M19 #349 unreachable agent refused before admission. M21 #438: candidate scans and verified manifest binding.
 
 package activity
 
@@ -21,10 +21,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 )
 
 type runtimeProjectHTTPInput struct {
@@ -48,6 +51,9 @@ type runtimeContainerHTTPInput struct {
 // The original permission metadata remains the proxy/API authority source.
 func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation RuntimeOperation, op huma.Operation) {
 	op.MaxBodyBytes = activitytypes.RuntimeMaxBodyBytes
+	if runtimeRecreateRequestOperation(operation) {
+		op.MaxBodyBytes = 64 << 10
+	}
 	op.BodyReadTimeout = RuntimeAdmissionLimit
 	// Legacy commands permit an empty body; RawBody otherwise defaults to required.
 	op.RequestBody = &huma.RequestBody{Required: false}
@@ -76,10 +82,31 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 		})
 	} else {
 		middleware.RegisterWithPermission(api, op, runtimePermissionInternal(operation), func(ctx context.Context, input *runtimeContainerHTTPInput) (*huma.StreamResponse, error) {
-			if len(bytes.TrimSpace(input.RawBody)) != 0 {
+			options := RuntimeOptions{}
+			if runtimeRecreateRequestOperation(operation) || runtimeContainerImageOperation(operation) {
+				if input.Key == "" || !runtimeWantsAsync(input.Prefer) {
+					if operation == RuntimeRedeployContainer {
+						return nil, &containerDTO.Problem{Code: "update.path-retired", Status: 409}
+					}
+					return nil, huma.Error400BadRequest("Idempotency-Key and Prefer: respond-async required")
+				}
+			}
+			if operation == RuntimeRecreateContainer {
+				var request containerDTO.RecreateRequest
+				if len(input.RawBody) > 64<<10 || activitytypes.DecodeRuntimeJSON(input.RawBody, &request) != nil {
+					return nil, huma.Error400BadRequest("Invalid recreate request")
+				}
+				options.Recreate = &request.Edit
+			} else if operation == RuntimeUpdateContainer && len(bytes.TrimSpace(input.RawBody)) != 0 {
+				var request updaterDTO.VerifiedImageRequest
+				if activitytypes.DecodeRuntimeJSON(input.RawBody, &request) != nil || !updaterDTO.ValidManifest(request.ExpectedManifest) {
+					return nil, huma.Error400BadRequest("Invalid verified image update request")
+				}
+				options.ContainerImage = &updaterDTO.ContainerImageRequest{ExpectedManifest: request.ExpectedManifest}
+			} else if len(bytes.TrimSpace(input.RawBody)) != 0 {
 				return nil, huma.Error400BadRequest("Runtime command has no request body")
 			}
-			return runtimeLegacyResponse(ctx, service, input.EnvironmentID, input.Key, input.Prefer, operation, RuntimeTarget{Kind: "container", ID: input.ContainerID}, RuntimeOptions{})
+			return runtimeLegacyResponse(ctx, service, input.EnvironmentID, input.Key, input.Prefer, operation, RuntimeTarget{Kind: "container", ID: input.ContainerID}, options)
 		})
 	}
 	// Huma marks RawBody required during registration. Preserve the legacy optional body.
@@ -118,13 +145,23 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		var gate *GateConflict
 		var mismatch *runtimeConflictInternal
 		var targetErr *RuntimeTargetError
+		var containerErr *containerDTO.Problem
+		var access *handlerutil.AgentAccessError
 		switch {
 		case errors.As(err, &imageErr):
 			return runtimeJSONResponse(imageErr.Status, imageErr), nil
+		// Image routes answer the image error envelope, so a container refusal
+		// keeps its exact code instead of the route's generic fallback.
+		case runtimeContainerImageOperation(operation) && errors.As(err, &containerErr):
+			return runtimeJSONResponse(containerErr.Status, imageDTO.Failure(containerErr.Code, containerErr.Status)), nil
 		case errors.As(err, &gate):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(gate.Code), ActiveRunID: gate.RunID}}), nil
 		case errors.As(err, &mismatch):
-			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.CodeRunRequestMismatch}}), nil
+			code := activitytypes.CodeRunRequestMismatch
+			if runtimeRecreateRequestOperation(operation) {
+				code = "runtime.idempotency-mismatch"
+			}
+			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: code}}), nil
 		case errors.As(err, &targetErr):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(targetErr.Code)}}), nil
 		case errors.Is(err, remenv.ErrAgentInvalidToken):
@@ -133,6 +170,13 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 			return runtimeJSONResponse(503, common.NewAPIError("Remote runtime outcome unavailable", common.APIErrorCode(activitytypes.CodeRuntimeOutcomeUnknown), 503)), nil
 		case errors.Is(err, remenv.ErrAgentUpdateRequired):
 			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
+		case errors.As(err, &access) && access.Code == "agent.unavailable":
+			// Refused before admission; 503 keeps it apart from a 502 lost after an image operation was sent.
+			// The update and restore-point routes declare only the image error envelope.
+			if runtimeImageOperation(operation) || operation == RuntimeUpdateContainer {
+				return runtimeJSONResponse(503, imageDTO.Failure(access.Code, 503)), nil
+			}
+			return runtimeJSONResponse(503, common.NewAPIError("Agent unavailable", "agent.unavailable", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):
 			return runtimeJSONResponse(410, common.NewAPIError("Runtime target removed", common.APIErrorCode(activitytypes.CodeRuntimeTargetRemoved), 410)), nil
 		default:

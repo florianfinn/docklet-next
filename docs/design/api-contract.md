@@ -53,7 +53,7 @@ the mapping and its contract tests before that feature claims live data.
 | --- | --- | --- | --- |
 | `EnvironmentEnvironment`, `EnvironmentAgentPairResponse` | `Host`, `AgentReport`, `HostsApi` | Identity, connection state, last successful contact and nullable agent checks map through the host HTTP reader. Onboarding writes and installation metadata remain separate. | M5 #81 reads and state; #84 onboarding |
 | `SystemActorHostInfo`, `SystemActorInstance` | `SystemComponent`, `HostsApi` | Actor diagnostics need a host component projection and availability state. | Planned M5 Hosts, transport and read inventory |
-| `EnvironmentHubDiscovery` | `HubDiscovery`, `HubApi` | Admin-only inspection supplies a pinned agent image and configured-first URL candidates with unverified reachability hints. | M5 #84 onboarding |
+| `EnvironmentHubDiscovery` | `HubDiscovery`, `HubApi` | Admin-only inspection supplies the agent image (operator override, else the release pin) and configured-first URL candidates with unverified reachability hints. | M5 #84 onboarding |
 | `ProjectDetails`, `ProjectRuntimeService`, `ProjectTag` | `Stack`, `StackDetail`, `Service` | Host-scoped IDs, runtime service status/health/ports and project tags map into stack reads; retained observations accompany disconnected reads. | M5 #82 |
 | `ContainerDetails`, `ContainerSummary`, `ContainerComposeInfo` | `ContainerInfo`, `DockletAdapter` | Container summaries map host-scoped IDs, compose/run/unclear origin, protected recreation restrictions and display state. | M5 #82 |
 | `DashboardSnapshot`, `DashboardSnapshotContainers`, `DashboardSnapshotImages` | `HostMetrics`, `ContainerMetrics`, `MetricsSnapshot` | Aggregate dashboard payloads do not directly provide the per-host view and metric units. | Planned M5 Hosts, transport and read inventory |
@@ -84,7 +84,7 @@ the mapping and its contract tests before that feature claims live data.
 | `UserUser`, `UserRoleAssignmentSummary` | `HubUser` | User rights need the agreed simple access projection. | Planned M15 Simple users with resource rights |
 | `NotificationResponse`, `NotificationUpdate`, `NotificationTestResponse` | `NotificationChannel`, `SettingsApi` | Typed provider configurations, `credentialsSet` and classified test codes give the UI channel kinds and safe status. | Contract v10; [notifications](notifications.md) |
 | `AutoHealSettings` | `AutoHealSettings` | Restart limits, exceptions and the environment-managed flag are a distinct persisted contract per host. | Contract v10; [Auto Heal](auto-heal.md) |
-| No service-widget DTO | Dashboard widget view models | Service polling, credentials and failure states have no wire contract yet. | Planned M16 Service widgets with real data |
+| `WidgetSummary`, `WidgetResult`, `WidgetConfig`, `WidgetConfigUpdate` | Dashboard service widget cards and settings | Hub-fetched results carry stale age and typed `widget.*` codes; configurations report only whether a credential exists. | Contract v13; [service widgets](service-widgets.md) |
 
 The table records existing mismatches, not a promise that every listed API
 operation is ready for production use. Some schema types are nested Docker
@@ -93,8 +93,9 @@ resolves each mapping when its endpoint and UI slice are implemented.
 
 ## Runtime lifecycle contract
 
-[Runtime control](runtime-control.md) defines the seven lifecycle operations:
-project deploy/down/restart/redeploy and container start/stop/restart. They share
+[Runtime control](runtime-control.md) defines receipt-backed lifecycle admission.
+Contract v11 includes project deploy/down/stop/restart/redeploy/update/restore and
+container start/stop/restart/recreate/redeploy. These twelve operations share
 one application-owned runtime with receipt-backed admission, exclusion,
 cancellation and settlement. Existing operation and activity-read permissions
 apply before admission, joins or conflict details. Generic activity writers
@@ -141,13 +142,12 @@ The trusted agent receiver registers execute/query/cancel and registration/targe
 metadata routes with the existing manager credential. Ordinary bearer,
 administrator and bootstrap credentials cannot grant receiver authority. Direct
 and Edge requests recheck agent access and compatibility; Edge has no Direct
-fallback. Numeric agent contract version and minimum are both 9. The fingerprint
-hashes the exact `types/contract/testdata/agent-hub-v9.json` bytes, retaining the
+fallback. Numeric agent contract version and minimum are both 11. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v11.json` bytes, retaining the
 historical fixtures and the accepted runtime, image and vulnerability surfaces.
 It includes volume backup routes, schemas, codes, upload reasons and transport
 limits, plus agent-only target sync metadata.
-Runtime update/restore activation remains gated on PR2a; policy/schedule/notify
-activation remains gated on PR2b. See [images and updates](images-updates.md).
+See [images and updates](images-updates.md) for update, restore and policy execution.
 The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
 exception. Existing health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
 shipped migrations remain unchanged.
@@ -157,6 +157,9 @@ snapshots. Command, log and session mappings retain their own consumer boundarie
 UI capabilities stay unavailable until their complete mappings pass. Runtime JSON
 logs reuse Echo WS outside the Huma export. The CLI treats EOF before explicit
 `done` as interruption while preserving progress and terminal errors.
+
+Lifecycle result reasons include `deploy.point-unavailable`, `update.service-coupled` and
+`settings.invalid-time-zone`, declared by `types/image/reason.go`.
 
 ## Stable message codes
 
@@ -168,11 +171,11 @@ callers creating events must send a listed code. A run status transition uses
 | Family | Codes |
 | --- | --- |
 | `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling`, `run.request-mismatch` |
-| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable` |
+| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable`, `runtime.idempotency-mismatch` |
 | `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
 | `deploy` | `deploy.pull` |
 | `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
-| `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error` |
+| `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error`, `container.origin-locked`, `container.recreate-recovered`, `container.recreate-ambiguous` |
 | `image` | `image.untag`, `image.import`, `image.prune`, `image.pull`, `image.load`, `image.tag`, `image.commit`, `image.delete`, `image.scan`, `image.error`, `image.vulnerability_scan` |
 | `volume` | `volume.prune`, `volume.create`, `volume.rename`, `volume.delete`, `volume.error`, `volume.file.create`, `volume.file.delete`, `volume.file.upload`, `volume.file.update`, `volume.workspace.update`, `volume.backup.create`, `volume.backup.delete`, `volume.backup.restore`, `volume.backup.restore_files`, `volume.backup.download`, `volume.backup.target.key_viewed` |
 | `network` | `network.prune`, `network.create`, `network.delete`, `network.connect`, `network.disconnect`, `network.error` |
@@ -180,8 +183,9 @@ callers creating events must send a listed code. A run status transition uses
 | `system` | `system.prune`, `system.auto_update`, `system.upgrade` |
 | `user` | `user.login`, `user.logout` |
 | `environment` | `environment.create`, `environment.connect`, `environment.disconnect`, `environment.update`, `environment.delete`, `environment.api_key.regenerated`, `environment.mtls.ca_generated`, `environment.mtls.cert_issued`, `environment.mtls.enroll`, `environment.mtls.download` |
-| `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
 | `notification` | `notification.send` |
+| `load` | `load.sustained` |
+| `container.condition` | `container.condition.down`, `container.condition.unhealthy`, `container.condition.restart-loop`, `container.condition.running-again` |
 
 ## Run gate
 
@@ -195,8 +199,9 @@ last step is reported as `success` when the next step starts, even if that step
 logged warning or error messages; the last step inherits the run's terminal
 status. Clients should use message levels for per-step warnings and errors.
 
-Event history is capped at 500 entries. Completed activity history is capped
-at 100 entries per environment. Environment overrides follow Arcane settings
+Event history keeps the newest `activityEventLimit` entries hub-wide (default 500).
+Completed activity history keeps `activityRunLimit` entries per environment
+(default 100); active runs are never pruned ([activity retention](activity-retention.md)). Environment overrides follow Arcane settings
 initialization and do not fail startup on invalid values. Generic cancellation
 resolves runtime receipt ownership before falling back to a legacy worker signal.
 Receipt-backed cancellation and outcome knowledge do not introduce new terminal
@@ -241,3 +246,153 @@ environment management returns 409 `autoheal.settings-env-managed`. Generic
 settings reject Auto Heal keys before any partial write. Agent-access transport
 refusals retain their shared envelope. Notification settings/configuration
 failures and single-provider probe contention have typed problem responses.
+
+## Container and host operations contract v11
+
+Container summary and detail expose detected `origin` and `originSource`. The hub
+applies registration-bound manual assignments to local, Direct and Edge inventory
+responses. PUT/DELETE `…/containers/{containerId}/origin` use `containers:edit`;
+assignment checks a fresh Docker identity. External replacement or name reuse
+makes an assignment unconfirmed. Compose children, Unraid and protected-self
+containers remain locked at admission and at the Docker effect boundary.
+
+POST `…/containers/{containerId}/recreate` requires `{edit}`, an
+`Idempotency-Key` and `Prefer: respond-async`. Redeploy uses the same runtime
+contract without a body. Recreate edits are strictly decoded and bounded to
+64 KiB at both intake and receiver; absent pointer sections preserve inspected
+values, while supplied empty sections clear them. The semantic digest owns a deep
+copy, sorts maps and preserves array order. Changed edits under a retained key
+return `runtime.idempotency-mismatch`. The old synchronous edit route and
+headerless redeploy return 409 `update.path-retired`.
+
+Successful run snapshots and queries carry `result: {oldId,newId,oldName,newName}`.
+That result is owned by the compact receipt, survives activity-history clearing
+and process restart, and is returned when retrying the removed old ID with the
+original key. Terminal projection conditionally moves an existing manual origin
+assignment in the same transaction; a reset or removed registration cannot be
+recreated by a late result. Recreate and redeploy hold container scope and also
+exclude the parent stack and policy operations. Activity metadata carries changed
+field names only. Startup journal recovery precedes ordinary interruption
+settlement and never replays pull or create; uncertain Docker observations retain
+`container.recreate-ambiguous`, while restored originals use
+`container.recreate-recovered`.
+
+POST `…/projects/{projectId}/stop` accepts no options and stops the explicit full
+resolved service list. Down keeps removing containers. Both write stopped status
+only after success. Hub setting `stackStopMode` is `down` by default and accepts
+`down` or `stop`; it is read from environment 0 and never proxied to agents. Tracked
+stacks without containers expose resolved definition services as `not-created`;
+invalid definitions yield `definitionHint: definition-invalid` with no services.
+The dependency-aware cache follows includes, env inputs and standard overrides,
+with at most four concurrent Compose reads. Single-service restart remains
+`restart-project` with `restartServices: [service]`; its key includes the service
+selection and admission remains stack-scoped.
+
+The `x-docklet-container-host-v11` OpenAPI extension retains the shared shell,
+host-maintenance and availability DTOs. Shell protocol v1 includes binary
+stdin/stdout, strict resize and close client controls, and the authoritative
+server exit. D5 adds `ContainerShellClose` to the unreleased v11 fixture and
+fingerprint while keeping version/minimum 11. Browser-first closure drains the
+agent exit for at most five seconds; unknown ends carry no shell-specific code.
+The `openContainerShell` descriptor uses `containers:exec`, current running/host
+availability, standby eligibility and no origin lock (D4).
+See [container shell](container-shell.md) for the complete protocol.
+The extension also includes host name/colour,
+restart run states and typed problem codes. The agent-only POST `/api/system/agent/restart` now answers 202
+`{instanceId}` after resolving and inspecting self; unsupported receivers return
+409 `agent.restart-unsupported` before any restart effect. The hub-only POST
+`/environments/{id}/agent/restart` returns 202 with `AgentRestartRun`; GET
+`/environments/{id}/agent/restarts/{runId}` reads its durable state and code.
+Reservation excludes all runtime intake in the same SQLite write transaction.
+`sent` commits before the single POST; `awaiting` records an acknowledgement
+received before the deadline, independently of the optional Direct response
+body. Only 202 and 409 `agent.restart-unsupported` are definitive answers; any
+other response is kept like a lost answer. Late replies/proofs cannot replace the deadline
+result; timely joined evidence can be persisted later. Recovery never resends: an unsent reservation settles
+`agent.restart-interrupted`, while sent runs observe until the stored deadline.
+Terminal codes survive history pruning and process restart. `/health` includes a UUID generated once per process;
+`health.InstanceID()` exposes that same identity to host-maintenance wiring.
+
+Host edits validate trimmed names of 1–40 Unicode code points and
+case-insensitive uniqueness in the registration/rename write transaction.
+The optional colour is lowercase `#rrggbb` or null. Endpoint, API-key and
+access-token writes atomically increment `credential_revision`, including manual
+token replacement that retains the key ID. An unchanged value supplied again
+also advances the revision conservatively.
+
+The deliberate connection test uses `resource_action` activity history and
+returns `EnvironmentTest.status` `online` or `standby-opened`; offline returns
+502 `host.unreachable`. Typed agent refusals keep their host-access envelope.
+Periodic health checks use the service directly without creating user activities.
+
+For upstream 401/403, the shared bounded refusal classifier maps 403
+`settings.ui-configuration-disabled` to `agent.ui-configuration-disabled` and
+401/403 `agent.update-required` to the same code. Unknown, malformed or oversized
+bodies map to `agent.invalid-token`. These upstream refusals always return 502
+and cannot clear the browser's hub identity. Local compatibility-gate refusals
+retain the existing 409 `agent.update-required` response.
+
+Host refusal declarations include `EnvironmentHostProblem` on host mutation,
+check/reconnect, agent settings and runtime admission errors. The final image API
+pass preserves both this schema and the typed error body. A policy child refused
+by restart admission persists `host.restarting` in the shared reason vocabulary
+instead of a generic persistence error. Contract version 11 remains the boundary.
+
+## Bind mounts and backup completion (v12)
+
+Agent contract v12, minimum v12, adds bind list and size routes and the agent-only
+target probe. Bind keys reuse volume workspace and backup routes with literal
+host-path admission and per-operation type witnesses. The target probe is published
+in `x-agent-volume-target-probe`; hub client forwarding to it is refused.
+`volume.binds.list`, `volume.binds.size` and `volume.backup.target.probe` are explicit
+Edge commands. Hub and agents upgrade together; `tunnel/v1` is unchanged.
+
+Target delivery exposes identity-scoped per-host receipt/attempt projections.
+Environment DTOs include the non-secret `registrationRevision`. The
+`backupDefaultRetentionCount` setting initializes new plans only (default 7,
+0 keeps all, maximum 3650). Hub archives retain independent local and target-copy
+outcomes. No database migration or helper image change is required.
+
+## Runtime history, service widgets and preferences (v13)
+
+Agent contract v13, minimum v13, adds `GET /api/environments/0/history/sample` and the
+Edge command `history.sample` (`HistorySample`, 4 MiB on both transports). The hub
+alone serves the history, runtime-condition and capacity reads (`HistoryResponse`,
+`HistoryConditions`, `HistoryCapacity`); they are never forwarded to an agent. Service
+widget routes (`/api/service-widgets/...`) exist only in the hub. Profile preferences
+use `GET /auth/me/ui-preferences` and `PUT /auth/me/ui-preferences/{section}`
+(`PreferencesDocument`). New codes: `history.*`, `widget.*`, `preferences.*` and the
+notification event `sustained_load`. Migrations 016 and 017 run forward at hub and agent
+start. Hub and agents upgrade together; `tunnel/v1` is unchanged. Details:
+[runtime history](runtime-history.md), [service widgets](service-widgets.md),
+[preferences](preferences.md).
+
+## Pre-release hardening (v16)
+
+Agent contract v16, minimum v16, is a protocol break: hub and agents upgrade together and
+a v15 agent is shown as update-required. The webhook module is removed: its four routes
+and `POST /api/webhooks/trigger/{token}` answer 404, `webhooks:*` permissions and
+`webhook.*` event codes are gone, and migration 020 drops the table, its grants, role
+entries and events. Notification webhooks (generic, Discord, Google Chat, Matrix) are
+unchanged. The remote CLI is removed; hub commands (`generate`, `version`, `health`,
+`openapi`, `config-schema`, `restore-hub`, `upgrade`) stay in the hub binary.
+
+Paths under `/api/environments/` have one route identity before any check or forwarding,
+on hub-local, Direct and Edge hosts alike. An encoded unreserved byte (letters, digits,
+`- . _ ~`), an encoded `/ ? # % \`, a decoded whitespace or control character or malformed UTF-8 answers
+400 with the request problem `request.path-encoded` (`RequestProblem`, separate from
+activity codes). An empty segment, a trailing `/` or a literal `.` or `..` segment answers
+404 like an unmatched route. Other escapes (`%3A` in image IDs, non-ASCII names) and
+query strings are unchanged. On the hub's shared HTTP/gRPC listener these paths always
+reach the API router, never the Edge tunnel gRPC endpoint. Image routes are addressed by image ID; a reference
+containing `/` cannot be used as a path segment. Every literal segment of a registered
+environment route and of the Edge command table uses unreserved characters only.
+
+An agent restart refused by a busy agent (a running volume backup, bind snapshot or
+restore) ends as a failed restart run with code `host.busy`; migration 020 admits that
+code in `agent_restart_requests`. Details: [host maintenance](host-maintenance.md).
+
+The unreleased v17 self-update recovery envelope is described in [in-app updates](app-updates.md).
+Terminal health failures use `update.self-failed`; an unconfirmed interrupted
+operation uses `update.outcome-unknown`. Both retain the existing failed activity
+status and are separate from the immutable helper phase evidence.

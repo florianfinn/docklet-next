@@ -1,3 +1,7 @@
+import { Input } from "@/shared/ui/input";
+import { Button } from "@/shared/ui/button";
+import { useCapability } from "@/data/use-capability";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { useTranslations } from "use-intl";
 
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
@@ -15,7 +19,11 @@ import { useSaveSettings } from "../use-save-settings";
 import { useSectionDraft } from "../use-section-draft";
 
 /** Hub address, link policy, and time zone shared by settings and first-run setup. */
-export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", showLanguage = true }: { value: GeneralSettings; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string; showLanguage?: boolean }) {
+/** `saved` is the stored zone state; without it (setup) no override is stored yet. */
+export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "gen", showLanguage = true }: { value: GeneralSettings; saved?: Pick<GeneralSettings, "timeZone" | "configuredTimeZone">; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string; showLanguage?: boolean }) {
+  // The effective zone equals TZ only while no override is saved; the draft never decides it.
+  const savedZone = saved ?? { timeZone: value.timeZone };
+  const processZone = savedZone.configuredTimeZone ? undefined : savedZone.timeZone;
   const t = useTranslations("settings.general");
   const tl = useTranslations("locale.switcher");
   const e = useGeneralErrors(value);
@@ -66,7 +74,9 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", s
         <HelpLabel htmlFor={`${idPrefix}-tz`} topic="settingsGeneral.timeZone">
           {t("timeZone")}
         </HelpLabel>
-        <input id={`${idPrefix}-tz`} className="font-mono text-sm" readOnly value={value.timeZone} />
+        <Input id={`${idPrefix}-tz`} className="font-mono" list={`${idPrefix}-zones`} value={value.configuredTimeZone ?? value.timeZone} placeholder={processZone ?? t("systemTZ")} onChange={(e) => onChange({ configuredTimeZone: e.target.value })} />
+        <datalist id={`${idPrefix}-zones`}>{[...new Set(["UTC", value.timeZone, ...(value.configuredTimeZone ? [value.configuredTimeZone] : []), ...Intl.supportedValuesOf("timeZone")])].map((zone) => <option key={zone} value={zone} />)}</datalist>
+        <Button type="button" variant="link" className="self-start px-0" onClick={() => onChange({ configuredTimeZone: "" })}>{t("useTZ", { zone: processZone ?? t("systemTZ") })}</Button>
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
       {showLanguage && <Field>
@@ -79,6 +89,8 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", s
 }
 
 export function GeneralSection({ settings }: { settings: Pick<HubSettings, "general"> }) {
+  const stop = useTranslations("settings.stackStopMode");
+  const saveCapability = useCapability("saveSettings");
   const connected = useAdapter().kind === "http";
   const t = useTranslations("settings");
   const save = useSaveSettings();
@@ -97,7 +109,15 @@ export function GeneralSection({ settings }: { settings: Pick<HubSettings, "gene
         commit(draft);
       }}
     >
-      <GeneralFields value={draft} onChange={patch} showErrors={dirty} showLanguage={!connected} />
+      <GeneralFields value={draft} saved={settings.general} onChange={patch} showErrors={dirty} showLanguage={!connected} />
+      <FieldGroup><Field data-disabled={!saveCapability.available}>
+        <FieldLabel htmlFor="stack-stop-mode">{stop("title")}</FieldLabel>
+        <Select value={draft.stackStopMode ?? "down"} disabled={!saveCapability.available} onValueChange={(value) => patch({ stackStopMode: value as "down" | "stop" })}>
+          <SelectTrigger id="stack-stop-mode" title={saveCapability.reason}><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup><SelectItem value="down">{stop("down")}</SelectItem><SelectItem value="stop">{stop("stop")}</SelectItem></SelectGroup></SelectContent>
+        </Select>
+        <FieldDescription>{stop("hint")}</FieldDescription>
+      </Field></FieldGroup>
     </SettingsForm>
   );
 }

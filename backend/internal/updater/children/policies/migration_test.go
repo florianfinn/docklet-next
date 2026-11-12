@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Forward 008-to-009 keeps existing lifecycle data and enforces policy constraints.
+// Deviations: Release baseline keeps existing lifecycle data and enforces policy constraints across reopen.
 
 package policies
 
@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
+func TestPolicyBaselinePreservesLifecycleDataAndReopens(t *testing.T) {
 	raw := sqlitestore.URL(filepath.Join(t.TempDir(), "forward.db"))
 	path, err := sqlitestore.Path(raw)
 	require.NoError(t, err)
@@ -27,17 +27,17 @@ func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
 	require.NoError(t, err)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, files)
 	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 8)
+	_, err = provider.Up(t.Context())
 	require.NoError(t, err)
 	_, err = pool.ExecContext(t.Context(), `INSERT INTO restore_points (id,target_id,target_identity,registration_id,source_run_id,created_at,failed_attempt,source_state,revision,payload,available) VALUES ('preserved-point','example-stack','identity','registration','source',CURRENT_TIMESTAMP,0,'settled','revision','synthetic-encrypted-payload',1)`)
 	require.NoError(t, err)
 	require.NoError(t, pool.Close())
 	db, err := database.InitializeHub(t.Context(), raw, database.MigrationOptions{})
 	require.NoError(t, err)
-	p := Policy{ID: "policy", EnvironmentID: "0", RegistrationID: "registration", TargetID: "example-stack", TargetIdentity: "identity", Mode: "off", Revision: 1, Candidates: "[]"}
+	p := Policy{ID: "policy", EnvironmentID: "0", RegistrationID: "registration", TargetID: "example-stack", TargetIdentity: "identity", Mode: "check", Revision: 1, Candidates: "[]"}
 	require.NoError(t, db.Create(&p).Error)
 	for _, query := range []string{
-		"UPDATE stack_update_policies SET mode='container'", "UPDATE stack_update_policies SET revision=0",
+		"UPDATE update_policies SET mode='container'", "UPDATE update_policies SET revision=0",
 	} {
 		require.ErrorContains(t, db.Exec(query).Error, "CHECK constraint failed")
 	}
@@ -50,7 +50,7 @@ func TestPolicyForwardMigrationFrom008AndReopen(t *testing.T) {
 	require.Equal(t, "synthetic-encrypted-payload", payload)
 	var saved Policy
 	require.NoError(t, db.First(&saved, "id = ?", "policy").Error)
-	require.Equal(t, "off", saved.Mode)
+	require.Equal(t, "check", saved.Mode)
 	var integrity string
 	require.NoError(t, db.Raw("PRAGMA integrity_check").Scan(&integrity).Error)
 	require.Equal(t, "ok", integrity)

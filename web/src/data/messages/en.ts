@@ -1,5 +1,13 @@
 export const enBackend = {
   errors: {
+    "candidate": {"unavailable": "The candidate could not be checked remotely in the registry.", "deferred": "This candidate has not been checked yet."},
+    "agent": {"unavailable": "The host cannot be reached. Check the connection."},
+    "container": {"origin-locked": "Docklet does not manage updates for this container.", "recreate-ambiguous": "The container replacement could not be identified.", "recreate-recovered": "The container replacement was recovered."},
+    "deploy": {"point-unavailable": "The deployment completed without a restore point."},
+    "settings": {"invalid-time-zone": "Choose a valid time zone."},
+    "history": {"sample-too-large": "The history sample exceeds the size limit.", "sample-invalid": "The host returned an invalid history sample.", "unavailable": "History is unavailable.", "invalid-range": "Choose a history range of 24h, 7d or 30d."},
+    "preferences": {"no-user": "This identity has no personal preferences.", "unknown-section": "Unknown preference section.", "invalid": "Preferences must contain an object.", "too-large": "Preferences exceed the size limit."},
+
     "feature-disabled": "This feature is disabled.",
     "vulnerability": {
       "agent-job-retired": "This agent-local vulnerability job is retired.",
@@ -87,6 +95,8 @@ export const enBackend = {
       "deploy-failed": "The restore deployment failed. Inspect its partial result before another recovery attempt."
     },
     "update": {
+      "candidate-changed": "The candidate image changed. Check it again before updating.",
+      "service-coupled": "This service must be updated together with its stack.",
       "permission-denied": "The recorded actor no longer has the required permissions.",
       "schedule-owner-unset": "Save the host schedule with an authorised owner before enabling its jobs.",
 

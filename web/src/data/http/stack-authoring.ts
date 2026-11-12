@@ -24,12 +24,13 @@ interface Options {
   labels: (stackId: string) => Promise<string[]>;
   changed: () => void;
   unauthorized: () => void;
+  isUser?: () => boolean;
 }
 
 type Authoring = Pick<DockletAdapter, "deployStack" | "saveStackFiles" | "setStackLabels" | "convertDockerRun">;
 
 /** Writes go through existing project routes; deploy reuses the M6 runtime admission. */
-export function createStackAuthoring({ baseUrl, client, capability, up, labels, changed, unauthorized }: Options): Authoring {
+export function createStackAuthoring({ baseUrl, client, capability, up, labels, changed, unauthorized, isUser = () => false }: Options): Authoring {
   async function require(operation: string, ref: ResourceRef) {
     const descriptor = await capability(operation, ref);
     if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
@@ -74,7 +75,7 @@ export function createStackAuthoring({ baseUrl, client, capability, up, labels, 
       if (input.stackId) {
         const [host] = splitInventoryId(input.stackId);
         if (host !== input.hostId) throw failure("stack.host-immutable");
-        await require("deployStack", { kind: "stack", id: input.stackId });
+        await require(isUser() ? "saveStackFiles" : "deployStack", { kind: "stack", id: input.stackId });
         try {
           await save(input.stackId, input.compose, input.env);
           await relabel(input.stackId, input.labels);

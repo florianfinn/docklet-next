@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original session-bound viewer and browser identity lifecycle implementation; one safe GET transport retry within the abort lifetime (#211).
+// Deviations: Original session-bound viewer and browser identity lifecycle implementation; one safe GET transport retry within the abort lifetime (#211); release without cancellation for drained bodies.
 
 import { CancelledError } from "@tanstack/react-query";
 
@@ -19,10 +19,22 @@ async function safeRead(fetcher: typeof fetch, input: RequestInfo | URL, init?: 
   }
 }
 
-/** Status-only callers discard unread data and release request ownership immediately. */
-export function discardResponse(response: Response): void {
+/** A caller that drained the body itself releases request ownership without cancelling the finished read. */
+export function releaseResponse(response: Response): void {
   releases.get(response)?.();
   releases.delete(response);
+}
+
+/** Status-only callers of a successful response release ownership and read its body to the end in the background with
+ * the native reader, so Chromium records a finished request rather than an aborted one (a stream reader does not). */
+export function drainResponse(response: Response): void {
+  releaseResponse(response);
+  void response.arrayBuffer().catch(() => undefined);
+}
+
+/** Status-only failures discard unread data and release request ownership immediately. */
+export function discardResponse(response: Response): void {
+  releaseResponse(response);
   void response.body?.cancel().catch(() => undefined);
 }
 

@@ -2,11 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; M15 simple-user rights and identity contracts.
 
 package authz
 
-import "strings"
+import (
+	"github.com/florianfinn/docklet-next/types/user"
+	"strings"
+)
 
 // PermissionSet is the effective permission set for one caller in one request.
 // Built once by the auth bridge and stashed in the request context.
@@ -15,9 +18,12 @@ import "strings"
 // PerEnv permissions apply only when the caller is acting on that specific
 // environment. Sudo bypasses all checks (used for the agent token path).
 type PermissionSet struct {
-	Global map[string]struct{}
-	PerEnv map[string]map[string]struct{}
-	Sudo   bool
+	RightsRevision uint64
+	UserID         string
+	Assignments    []user.AppAssignment
+	Global         map[string]struct{}
+	PerEnv         map[string]map[string]struct{}
+	Sudo           bool
 }
 
 // Allows reports whether the caller may perform `perm`. For env-scoped

@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource inventory contract tests.
+// Deviations: Original resource inventory contract tests. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -60,7 +60,7 @@ it.each(["listImages", "listVolumes", "getTopology"] as const)("retains %s times
   f.state.reason = "agent.unavailable";
   const retained = await f.adapter[operation]();
   const rows = Array.isArray(retained) ? retained : retained.networks;
-  expect(rows[0]?.inventory).toEqual({ stale: true, reason: "agent.unavailable", observedAt: at });
+  expect(rows[0]?.inventory).toEqual({ stale: true, reason: "agent.unavailable", recovery: "agent.unavailable", observedAt: at });
   f.state.reason = ""; f.state.observedAt = "2026-10-17T12:05:00Z";
   const fresh = await f.adapter[operation]();
   expect((Array.isArray(fresh) ? fresh : fresh.networks)[0]?.inventory).toMatchObject({ stale: false, observedAt: f.state.observedAt });
@@ -113,9 +113,9 @@ it("maps measured host units, retains two hosts, then recovers from disconnect",
   stop(); expect([...f.sockets.values()].every((s) => vi.mocked(s.close).mock.calls.length > 0)).toBe(true);
   stopChanges();
 });
-it("rejects malformed metrics and keeps unknown disk/growth explicitly unavailable", () => {
+it("rejects malformed metrics and keeps unknown disk explicitly unavailable", () => {
   expect(() => mapHostMetrics({ cpuUsage: "bad" }, "first")).toThrow();
-  expect(mapHostMetrics({ cpuUsage: 20, memoryUsage: 100, memoryTotal: 200, cpuCount: 2 }, "first")).toMatchObject({ diskUnavailable: true, growthUnavailable: true });
+  expect(mapHostMetrics({ cpuUsage: 20, memoryUsage: 100, memoryTotal: 200, cpuCount: 2 }, "first")).toMatchObject({ diskUnavailable: true });
 });
 it("renders two dashboard host cards with distinct real measurements", async () => {
   const f = resourceFixture();
@@ -175,6 +175,15 @@ it("renders a bind detail route without fabricated size or non-finite host usage
   await waitFor(() => expect(screen.getByRole("heading", { name: "/srv/example~data" }).textContent).toBe("/srv/example~data"));
   expect(view.container.textContent?.includes("NaN")).toBe(false);
   expect(view.container.textContent?.includes("Unbekannt")).toBe(true);
+});
+
+it("reads a bind detail opened through an encoded link once, by its full identity", async () => {
+  const f = resourceFixture(); f.state.bind = true;
+  const bind = (await f.adapter.listVolumes()).find((v) => v.kind === "bind")!;
+  f.fetcher.mockClear();
+  renderRoutes([{ path: "/volumes/:volumeId", element: <VolumePage /> }], [`/volumes/${encodeURIComponent(bind.id)}`], f.adapter);
+  await waitFor(() => expect(screen.getByRole("heading", { name: "/srv/example~data" }).textContent).toBe("/srv/example~data"));
+  expect(f.fetcher.mock.calls.map((c) => String(c[0])).filter((u) => u.includes("%25") || /\/volumes\/bind%3A/i.test(u))).toEqual([]);
 });
 
 it("displays Docker built-in and plugin drivers without rejecting a healthy host", async () => {

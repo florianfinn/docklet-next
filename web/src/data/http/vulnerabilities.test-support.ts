@@ -58,6 +58,14 @@ export function securityFixture() {
     if (path.includes("/vulnerabilities")) {
       if (host === "second" && state.delay) await state.delay;
       if (host === state.failureHost) return json({ status: 503, code: "vulnerability.storage-unavailable" }, 503);
+      // Active counts agree with the findings below: one image, ignored findings excluded (S1b producer).
+      if (path.endsWith("/active-summaries")) {
+        if (state.neverScanned) return ok({ images: [] });
+        const severities = !state.completedAt ? [] : Array.from({ length: state.findingCount }, (_, index) => index % 6).filter((i) => !(state.ignoreCritical && [1, 2].includes(i))).map((i) => ["UNKNOWN", "CRITICAL", "CRITICAL", "HIGH", "UNKNOWN", "UNKNOWN"][i]!);
+        if (state.duplicateFinding && severities.length) severities.push("UNKNOWN");
+        const tally = (severity: string) => severities.filter((s) => s === severity).length;
+        return ok({ images: [{ imageId: "sha256:user", inUse: true, lastCompletedScanAt: state.completedAt ?? null, latestAttemptStatus: state.summaryStatus, summary: { critical: tally("CRITICAL"), high: tally("HIGH"), medium: tally("MEDIUM"), low: tally("LOW"), unknown: tally("UNKNOWN"), total: severities.length } }] });
+      }
       if (path.endsWith("/summaries")) return ok({ summaries: { "sha256:user": state.neverScanned ? null : { imageId: "sha256:user", scanTime: at, status: state.summaryStatus, completedAt: state.completedAt, platform: "linux/arm64", scannedPlatform: state.scannedPlatform, summary: state.completedAt ? { ...counts, unknown: counts.unknown + Number(state.duplicateFinding), total: counts.total + Number(state.duplicateFinding) } : undefined }, unused: null, dangling: null } });
       if (path.endsWith("/runs")) return ok(state.runs);
       if (path.endsWith("/overview")) return ok({ riskiestFindings: [{ vulnerabilityId: "CVE-2026-0001", knownExploited: true, epss: 0.23, risk: 9.4 }], prevalentFindings: [] });

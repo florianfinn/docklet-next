@@ -28,16 +28,21 @@ func TestUpdateCapabilitiesScopedGrants(t *testing.T) {
 	write := []string{"projects:deploy", "projects:update", "images:pull", "image-updates:check", "activities:read"}
 	notify := []string{"projects:read", "image-updates:read", "image-updates:check"}
 	apply := []string{"projects:read", "image-updates:read", "image-updates:check", "projects:deploy", "projects:update", "images:pull", "activities:read", "jobs:manage"}
-	cases := map[string][]string{"checkUpdates": {"image-updates:check"}, "installStackUpdates": write, "restoreRestorePoint": write, "getUpdateBaseline": read, "listRestorePoints": read, "deleteRestorePoint": write, "getAutoUpdatePolicy": read, "setAutoUpdate": notify, "setAutoUpdateApply": apply, "listSchedule": {"jobs:manage"}, "saveUpdateSchedule": {"jobs:manage"}, "listSystemComponents": {"image-updates:read"}}
+	cases := map[string][]string{"checkUpdates": {"image-updates:check"}, "installStackUpdates": write, "restoreRestorePoint": write, "getUpdateBaseline": read, "listRestorePoints": read, "deleteRestorePoint": write, "getAutoUpdatePolicy": read, "setAutoUpdate": notify, "setAutoUpdateApply": apply, "listSystemComponents": {"image-updates:read"}}
 	for op, grants := range cases {
 		t.Run(op, func(t *testing.T) {
 			ref := capability.ResourceRef{Kind: "stack", ID: "example~stack"}
-			if op == "listSchedule" || op == "saveUpdateSchedule" || op == "listSystemComponents" {
+			if op == "listSystemComponents" {
 				ref = capability.ResourceRef{Kind: "host", ID: "example"}
 			}
 			allowed := authz.NewPermissionSet()
 			for _, grant := range grants {
 				allowed.AddEnv("example", grant)
+			}
+			if op == "setAutoUpdateApply" {
+				for _, grant := range authz.AllPermissions() {
+					allowed.AddGlobal(grant)
+				}
 			}
 			require.True(t, networkDescriptor(t, allowed, ref, op).Available)
 			for _, missing := range grants {
@@ -52,9 +57,27 @@ func TestUpdateCapabilitiesScopedGrants(t *testing.T) {
 				require.False(t, networkDescriptor(t, ps, ref, op).Available, missing)
 			}
 			for _, bad := range []capability.ResourceRef{{Kind: "hub", ID: "0"}, {Kind: "container", ID: "example~stack"}, {Kind: ref.Kind, ID: ""}, {Kind: ref.Kind, ID: "~stack"}, {Kind: ref.Kind, ID: "example~"}, {Kind: ref.Kind, ID: "example~stack~extra"}, {Kind: ref.Kind, ID: "foreign"}, {Kind: ref.Kind, ID: "foreign~stack"}} {
+				if op == "setAutoUpdateApply" && bad.Kind == "stack" && bad.ID == "foreign~stack" {
+					require.True(t, networkDescriptor(t, allowed, bad, op).Available)
+					continue
+				}
+				if bad.Kind == "container" && (op == "getAutoUpdatePolicy" || op == "setAutoUpdate" || op == "setAutoUpdateApply") {
+					continue
+				}
 				require.False(t, networkDescriptor(t, allowed, bad, op).Available, "%+v", bad)
 			}
 		})
+	}
+	// Admin-only routes: a scoped grant alone never enables them, a global admin does,
+	// and only on their own resource kind.
+	for op, ref := range map[string]capability.ResourceRef{"listUpdatePolicies": {Kind: "host", ID: "example"}, "restoreContainerImage": {Kind: "container", ID: "example~app"}, "installContainerUpdate": {Kind: "container", ID: "example~app"}} {
+		scoped := authz.NewPermissionSet()
+		for _, grant := range authz.AllPermissions() {
+			scoped.AddEnv("example", grant)
+		}
+		require.False(t, networkDescriptor(t, scoped, ref, op).Available, op)
+		require.True(t, networkDescriptor(t, authz.SudoPermissionSet(), ref, op).Available, op)
+		require.False(t, networkDescriptor(t, authz.SudoPermissionSet(), capability.ResourceRef{Kind: "stack", ID: "example~app"}, op).Available, op)
 	}
 	for _, op := range []string{"listHostRestorePoints", "deleteHostRestorePoint"} {
 		ref := capability.ResourceRef{Kind: "host", ID: "example"}
@@ -112,7 +135,7 @@ func TestPointOverlayRegistrationChange(t *testing.T) {
 
 func TestUpdateCapabilitiesTransportParity(t *testing.T) {
 	stack := []string{"checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply"}
-	host := []string{"listHostRestorePoints", "deleteHostRestorePoint", "listSchedule", "saveUpdateSchedule", "listSystemComponents"}
+	host := []string{"listHostRestorePoints", "deleteHostRestorePoint", "listSystemComponents"}
 	for _, env := range []string{"0", "direct-example", "edge-example"} {
 		for _, op := range stack {
 			require.True(t, networkDescriptor(t, authz.SudoPermissionSet(), capability.ResourceRef{Kind: "stack", ID: env + "~stack"}, op).Available, env+"/"+op)

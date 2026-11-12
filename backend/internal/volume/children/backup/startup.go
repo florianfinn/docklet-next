@@ -43,7 +43,9 @@ func (s *Service) SweepWriters(ctx context.Context) error {
 	s.sweepMu.Lock()
 	defer s.sweepMu.Unlock()
 	s.fenceMu.Lock()
-	s.writerDiscoveryPending = true
+	// Only initial or restored discovery closes every volume; a routine retry
+	// keeps recovering names closed through their own writer fences.
+	s.writerDiscoveryPending = !s.sweepStarted || !s.settledInitial
 	s.fenceMu.Unlock()
 	cli, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {

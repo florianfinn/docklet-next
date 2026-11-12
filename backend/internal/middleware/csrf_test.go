@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Test explicit Origin, double-submit CSRF and validated transport exceptions.
+// Deviations: Test explicit Origin, double-submit CSRF and validated transport exceptions; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package middleware
 
@@ -77,7 +77,7 @@ func TestCSRFTransportBoundary(t *testing.T) {
 		}{
 			{"/api/test", "invalid", 403},
 			{"/api/test", "example-transport", 200},
-			{"/api/webhooks/trigger/example", "", 200},
+			{"/api/webhooks/trigger/example", "", 403},
 		} {
 			req := httptest.NewRequest(http.MethodPost, tc.path, http.NoBody)
 			req.Header.Set(HeaderAgentToken, tc.token)

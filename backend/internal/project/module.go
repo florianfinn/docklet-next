@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; typed volume name conflicts on project update.
+// Deviations: Local module namespace; typed volume name conflicts on project update; M14 container and host operation contracts; M21 destroy description states the keep-files default and Edge body bound.
 
 // Package project owns compose project persistence, lifecycle, discovery, and routes.
 package project
@@ -124,6 +124,9 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Security:    handlerutil.DefaultOperationSecurity(),
 	})
 
+	activity.RegisterRuntimeLifecycle(api, activityService, activity.RuntimeStopProject, huma.Operation{
+		OperationID: "stop-project", Method: http.MethodPost, Path: "/environments/{id}/projects/{projectId}/stop", Summary: "Stop project containers", Description: "Stop every service from the resolved Compose model without removing containers", Tags: []string{"Projects"}, Security: handlerutil.DefaultOperationSecurity(),
+	})
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "create-project",
 		Method:      http.MethodPost,
@@ -204,7 +207,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Method:      http.MethodDelete,
 		Path:        "/environments/{id}/projects/{projectId}/destroy",
 		Summary:     "Destroy a project",
-		Description: "Destroy a Docker Compose project and optionally remove files/volumes",
+		Description: "Destroy a Docker Compose project. Files and volumes are removed only when the body sets removeFiles or removeVolumes to true; Edge hosts refuse bodies over 64 KiB with 413 request.too-large.",
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermProjectsDelete, h.DestroyProject)

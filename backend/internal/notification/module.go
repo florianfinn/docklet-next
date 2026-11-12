@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; M19 backend contracts and target identity integration.
 
 // Package notification owns notification settings, dispatch, and HTTP routes.
 package notification
@@ -78,8 +78,8 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "get-notification-settings",
 		Method:      http.MethodGet,
-		Path:        "/environments/{id}/notifications/settings/{provider}",
-		Summary:     "Get notification settings by provider",
+		Path:        "/environments/{id}/notifications/settings/{targetId}",
+		Summary:     "Get notification settings by target ID",
 		Tags:        []string{"Notifications"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 		Middlewares: middleware.RequireGlobalAdmin(api),
@@ -90,7 +90,7 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 		SkipValidateBody: true,
 		Method:           http.MethodPost,
 		Path:             "/environments/{id}/notifications/settings",
-		Summary:          "Create or update notification settings",
+		Summary:          "Create notification target",
 		Tags:             []string{"Notifications"},
 		Security:         handlerutil.DefaultOperationSecurity(),
 		Middlewares:      middleware.RequireGlobalAdmin(api),
@@ -99,7 +99,7 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "delete-notification-settings",
 		Method:      http.MethodDelete,
-		Path:        "/environments/{id}/notifications/settings/{provider}",
+		Path:        "/environments/{id}/notifications/settings/{targetId}",
 		Summary:     "Delete notification settings",
 		Tags:        []string{"Notifications"},
 		Security:    handlerutil.DefaultOperationSecurity(),
@@ -109,7 +109,7 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "test-notification",
 		Method:      http.MethodPost,
-		Path:        "/environments/{id}/notifications/test/{provider}",
+		Path:        "/environments/{id}/notifications/test/{targetId}",
 		Summary:     "Test notification",
 		Tags:        []string{"Notifications"},
 		Security:    handlerutil.DefaultOperationSecurity(),
@@ -128,14 +128,18 @@ func RegisterNotifications(api huma.API, notificationSvc *NotificationService, c
 		Tags:             []string{"Notifications"},
 		Security:         []map[string][]string{{"ApiKeyAuth": {}}},
 	}, h.DispatchNotification)
+	middleware.RegisterWithPermission(api, huma.Operation{
+		OperationID: "update-notification-settings", Method: http.MethodPut, Path: "/environments/{id}/notifications/settings/{targetId}", Summary: "Update notification target", SkipValidateBody: true,
+		Tags: []string{"Notifications"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api),
+	}, authz.PermNotificationsManage, h.UpdateNotificationSettings)
 	typed := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Problem](), true, "")
 	generic := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
 	for _, item := range api.OpenAPI().Paths {
-		for _, op := range []*huma.Operation{item.Get, item.Post, item.Delete} {
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put, item.Delete} {
 			if op == nil || !slices.Contains(op.Tags, "Notifications") {
 				continue
 			}
-			for _, status := range []string{"400", "409"} {
+			for _, status := range []string{"400", "404", "409"} {
 				op.Responses[status] = &huma.Response{Description: "Notification or framework refusal", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{typed, generic}}}}}
 			}
 		}

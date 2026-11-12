@@ -2,7 +2,7 @@
 // Revision: 3d2d4f27b524b3422d010d6a69a22fe57225a78f
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original production boundary and regression coverage for issue #27.
+// Deviations: Original production boundary and regression coverage for issue #27. M14 host maintenance and availability.
 
 // Exact development-only keys whose empty values never render on product routes.
 // Removing a development key also requires removing its exception.
@@ -17,15 +17,6 @@ export const productionEmptyExceptions: Record<string, string> = Object.fromEntr
   ["shell.user.email", "The production runtime removes live/lab controls and reads authenticated user identity."],
   ["shell.user.lab", "The production runtime removes live/lab controls and reads authenticated user identity."],
   ["activity.presentation.overridden", "OverrideNote explicitly returns null outside development."],
-  ["dashboard.services.secretPlaceholder", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.simulateError", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.connect", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.connected", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.demoNote", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.missingBody", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.errorBody", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.overseerr.approvedToast", "Synthetic service widgets and configuration are DEV-only."],
-  ["dashboard.services.overseerr.declinedToast", "Synthetic service widgets and configuration are DEV-only."],
   ["dashboard.apps.demo", "Product apps use HTTP/HTTPS links; the legacy toast has no caller."],
   ["runMessages.exact.simulationNoNetworkRequest", "Only the excluded demo text encoder emits this simulation code."],
   ["runMessages.exact.simulationNoNetworkConnection", "Only the excluded demo text encoder emits this simulation code."],
@@ -50,10 +41,6 @@ export const productionEmptyExceptions: Record<string, string> = Object.fromEntr
   ["stacks.logs.simulated", "Only DEV failure controls or demo-adapter simulation labels use this key."],
   ["containers.recreate.failDemo", "Only DEV failure controls or demo-adapter simulation labels use this key."],
   ["hosts.card.report.reported", "The HTTP mapper never marks agent reports as simulated."],
-  ["hosts.card.connect", "The simulated connect controls are DEV-only."],
-  ["hosts.install.sheetDescription", "InstallSheet.dev is excluded; connected onboarding uses its own installer text."],
-  ["hosts.install.demoNote", "InstallSheet.dev is excluded; connected onboarding uses its own installer text."],
-  ["hosts.install.regenerateToken", "InstallSheet.dev is excluded; connected onboarding uses its own installer text."],
   ["hosts.onboarding.simulation", "The simulated connect controls are DEV-only."],
   ["hosts.onboarding.simulate", "The simulated connect controls are DEV-only."],
   ["hosts.onboarding.simulateFailure", "The simulated connect controls are DEV-only."],

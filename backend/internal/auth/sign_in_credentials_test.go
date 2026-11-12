@@ -2,20 +2,14 @@
 // Revision: af5fa9df01e730f7691d650985abd33d74f51ae5
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original local credential exceptions and shipped CLI integration regression tests.
+// Deviations: Original local machine-credential and browser CSRF tests; M20 removes the CLI-only missing-Origin exception.
 
 package auth
 
 import (
 	"bytes"
-	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -86,72 +80,6 @@ func TestSignInHeaderCredentialWrites(t *testing.T) {
 	}
 }
 
-func TestSignInCLIThroughRealMiddleware(t *testing.T) {
-	svc, _, db := modeTestFixture(t)
-	keys := apikey.NewApiKeyService(db, svc.userService, role.NewRoleService(db))
-	router := echo.New()
-	router.Use(middleware.NewCORSMiddleware(svc.config).Add())
-	router.Use(middleware.NewCSRFMiddleware(svc.config).WithLocalCredentialValidator(
-		NewAuthMiddleware(svc, svc.config).WithApiKeyValidator(keys).ValidateLocalHeaderCredential).Add())
-	api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
-	api.UseMiddleware(NewHumaMiddleware(api, svc, keys, svc.userServiceRoleResolver(), nil, svc.config))
-	RegisterAuth(api, svc.userService, svc, svc.settingsService)
-	var mu sync.Mutex
-	var seen []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		seen = append(seen, r.URL.Path)
-		mu.Unlock()
-		if r.Header.Get("Origin") != "" || r.Header.Get("Cookie") != "" || r.Header.Get(middleware.CSRFHeader) != "" {
-			t.Error("CLI unexpectedly supplied browser protection headers")
-		}
-		router.ServeHTTP(w, r)
-	}))
-	defer server.Close()
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "cli.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte("server_url: "+server.URL+"\n"), 0o600))
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancel()
-	binary := filepath.Join(dir, "cli")
-	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "../../../cli")
-	output, err := build.CombinedOutput()
-	require.NoError(t, err, "%s", output)
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.CommandContext(ctx, binary, append([]string{"--config", configPath, "--no-color"}, args...)...)
-		cmd.Stdin = strings.NewReader("example-password\n")
-		output, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%s", output)
-	}
-	run("auth", "login", "--username", "admin")
-	invalidateAccess := func() {
-		t.Helper()
-		configBytes, err := os.ReadFile(configPath)
-		require.NoError(t, err)
-		lines := strings.Split(string(configBytes), "\n")
-		for i, line := range lines {
-			if strings.HasPrefix(line, "jwt_token:") {
-				lines[i] = "jwt_token: example"
-			}
-		}
-		require.NoError(t, os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600))
-	}
-	invalidateAccess()
-	run("auth", "refresh")
-	invalidateAccess()
-	run("auth", "logout")
-	admin, err := svc.userService.GlobalAdministrator(t.Context())
-	require.NoError(t, err)
-	key, err := keys.CreatePersonalApiKey(t.Context(), admin.ID, apikeytypes.CreateUserApiKey{Name: "cli"})
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, []byte("server_url: "+server.URL+"\napi_key: "+key.Key+"\n"), 0o600))
-	run("auth", "logout")
-	mu.Lock()
-	defer mu.Unlock()
-	require.Equal(t, []string{"/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/refresh", "/api/auth/logout", "/api/auth/logout"}, seen)
-}
-
 func TestSignInBodyCredentialBoundary(t *testing.T) {
 	for _, mode := range []string{"local", "none", "proxy"} {
 		for _, path := range []string{"/api/auth/login", "/api/auth/refresh"} {
@@ -160,7 +88,7 @@ func TestSignInBodyCredentialBoundary(t *testing.T) {
 				method               string
 				localStatus          int
 			}{
-				{"explicit body", "", "", http.MethodPost, 200},
+				{"explicit body", "", "", http.MethodPost, 403},
 				{"ambient cookie", "", "example=value", http.MethodPost, 403},
 				{"browser origin", "https://hub.example.com", "", http.MethodPost, 403},
 				{"foreign origin", "https://other.example.com", "", http.MethodPost, 403},

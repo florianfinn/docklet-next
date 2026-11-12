@@ -19,7 +19,7 @@ func TestEveryPolicyAdmissionBindingIsRequired(t *testing.T) {
 	for _, boundary := range []string{"missing-policy", "missing-child", "environment", "registration", "target", "identity", "mode", "policy-revision", "actor", "child-policy", "child-revision", "child-job", "child-status"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newStoreFixture(t)
-			p := f.policy(t, "apply")
+			p := f.policy(t, "scheduled")
 			child, _, err := f.PrepareChild(t.Context(), p, "example-job")
 			require.NoError(t, err)
 			b := &dto.PolicyBinding{PolicyID: p.ID, Revision: p.Revision, JobRunID: child.JobRunID, ChildID: child.ID}
@@ -41,7 +41,7 @@ func TestEveryPolicyAdmissionBindingIsRequired(t *testing.T) {
 			case "identity":
 				require.NoError(t, f.DB.Model(&Policy{}).Where("id = ?", p.ID).Update("target_identity", "replacement").Error)
 			case "mode":
-				require.NoError(t, f.DB.Model(&Policy{}).Where("id = ?", p.ID).Update("mode", "off").Error)
+				require.NoError(t, f.DB.Model(&Policy{}).Where("id = ?", p.ID).Updates(map[string]any{"mode": "check", "window_kind": nil, "window_day": nil, "window_time": nil}).Error)
 			case "policy-revision":
 				b.Revision++
 			case "actor":
@@ -61,10 +61,10 @@ func TestEveryPolicyAdmissionBindingIsRequired(t *testing.T) {
 }
 
 func TestAdmissionRejectsLookupErrorsAfterRowsWereRead(t *testing.T) {
-	for _, table := range []string{"stack_update_policies", "image_policy_children"} {
+	for _, table := range []string{"update_policies", "image_policy_children"} {
 		t.Run(table, func(t *testing.T) {
 			f := newStoreFixture(t)
-			p := f.policy(t, "apply")
+			p := f.policy(t, "scheduled")
 			child, _, err := f.PrepareChild(t.Context(), p, "wrapper")
 			require.NoError(t, err)
 			binding := &dto.PolicyBinding{PolicyID: p.ID, Revision: p.Revision, JobRunID: child.JobRunID, ChildID: child.ID}

@@ -2,11 +2,41 @@
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230.
+// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys.
 
 import { enBackend } from "@/data/messages/en";
+import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "candidate_unavailable": enBackend.errors.candidate.unavailable,
+  "candidate_deferred": enBackend.errors.candidate.deferred,
+  "update_candidate-changed": enBackend.errors.update["candidate-changed"],
+  "update_self-not-compose": "This installation is not managed by Compose. Use the manual update commands.",
+  "update_self-unsupported-layout": "This Compose layout cannot be replayed safely. Use the manual update commands.",
+  "update_self-custom-image": "This installation uses a custom or floating image. Update it manually.",
+  "update_self-failed": "The update failed. Keep the previous configuration and recover manually.",
+  "update_outcome-unknown": "The update outcome could not be confirmed. Check the host before trying again.",
+  "agent_unavailable": enBackend.errors.agent.unavailable,
+  "container_origin-locked": "Docklet does not manage updates for this container.",
+  "container_recreate-ambiguous": "The container replacement could not be identified.",
+  "container_recreate-recovered": "The container replacement was recovered.",
+  "deploy_point-unavailable": "The deployment completed without a restore point.",
+  "settings_invalid-time-zone": "Choose a valid time zone.",
+  "update_service-coupled": "This service must be updated together with its stack.",
+  "history_invalid-range": enBackend.errors.history["invalid-range"],
+  "history_sample-invalid": enBackend.errors.history["sample-invalid"],
+  "history_sample-too-large": enBackend.errors.history["sample-too-large"],
+  "history_unavailable": enBackend.errors.history["unavailable"],
+  "preferences_invalid": enBackend.errors.preferences["invalid"],
+  "preferences_no-user": enBackend.errors.preferences["no-user"],
+  "preferences_too-large": enBackend.errors.preferences["too-large"],
+  "preferences_unknown-section": enBackend.errors.preferences["unknown-section"],
+  "volume_workspace-busy": "The volume is busy. Finish active operations and retry.",
+  "backup_copy_mount-failed": "The archive was saved locally, but the copy target could not be mounted.",
+  "backup_copy_write-failed": "The archive was saved locally, but its target copy failed.",
+  "backup_copy_insufficient-space": "The archive was saved locally. There is not enough space for the target copy.",
+
+  "host_restarting": enRunMessages.codes.host["restarting"],
   "update_permission-denied": enBackend.errors.update["permission-denied"],
   "update_schedule-owner-unset": enBackend.errors.update["schedule-owner-unset"],
   "autoheal_interrupted": enBackend.errors.autoheal["interrupted"],
@@ -54,7 +84,7 @@ export const enImageErrors = {
   "image_pull-failed": "The image could not be pulled. Check the reference and saved registry configuration.",
   "image_remove-failed": "The image could not be removed.",
   "image_reserved-reference": "This reference is reserved for internal image retention.",
-  "image_restore-point-protected": "A restore point protects this image.",
+  "image_restore-point-protected": "A saved recovery image protects this image.",
   "image_system-protected": "This image is protected because Docklet uses it.",
   "image_tag-failed": "The image tag could not be changed.",
   "image_usage-unavailable": "Image usage could not be verified. Nothing is assumed unused.",

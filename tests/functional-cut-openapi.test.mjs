@@ -5,6 +5,45 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["POST /environments/{id}/images/vulnerabilities/active-summaries", "get-active-image-vulnerability-summaries"],
+  ["GET /environments/{id}/vulnerabilities/candidates", "get-vulnerability-candidates"],
+  ["POST /environments/{id}/vulnerabilities/candidates/scan", "scan-vulnerability-candidates"],
+  ["GET /environments/{id}/vulnerabilities/advisories/{key}", "get-vulnerability-advisory"],
+  ["POST /stack-import", "import-stack-source"],
+  ["PUT /environments/{id}/notifications/settings/{targetId}", "update-notification-settings"],
+  ["GET /environments/{id}/notifications/settings/{targetId}", "get-notification-settings"],
+  ["DELETE /environments/{id}/notifications/settings/{targetId}", "delete-notification-settings"],
+  ["POST /environments/{id}/notifications/test/{targetId}", "test-notification"],
+
+  ["GET /auth/me/ui-preferences", "get-my-ui-preferences"],
+  ["PUT /auth/me/ui-preferences/{section}", "put-my-ui-preferences"],
+  ["GET /environments/{id}/history/sample", "get-history-sample"],
+  ["GET /environments/{id}/containers/{containerId}/history", "get-container-history"],
+  ["GET /environments/{id}/projects/{projectId}/history", "get-project-history"],
+  ["GET /environments/{id}/history/host", "get-host-history"],
+  ["GET /environments/{id}/runtime-conditions", "get-runtime-conditions"],
+  ["GET /history/capacity", "get-history-capacity"],
+  ["GET /service-widgets", "list-service-widgets"],
+  ["GET /service-widgets/{kind}", "get-service-widget"],
+  ["GET /service-widgets/{kind}/config", "get-service-widget-config"],
+  ["PUT /service-widgets/{kind}/config", "put-service-widget-config"],
+  ["POST /service-widgets/{kind}/test", "test-service-widget"],
+  ["POST /service-widgets/overseerr/requests/{requestId}/approve", "approve-service-widget-request"],
+  ["POST /service-widgets/overseerr/requests/{requestId}/decline", "decline-service-widget-request"],
+  ["POST /backup-targets/test", "test-backup-target-draft"],
+  ["GET /environments/{id}/volumes/binds", "list-volume-binds"],
+  ["POST /environments/{id}/volumes/binds/size", "measure-volume-bind"],
+  ["POST /users/{userId}/disable", "disable-user"],
+  ["POST /users/{userId}/enable", "enable-user"],
+  ["POST /users/{userId}/reset-password", "reset-user-password"],
+  ["PUT /users/{userId}/administrator", "set-user-admin"],
+  ["PUT /users/{userId}/app-assignments", "set-user-app-assignments"],
+  ["POST /environments/{id}/agent/restart", "restartEnvironmentAgent"],
+  ["GET /environments/{id}/agent/restarts/{runId}", "getEnvironmentAgentRestart"],
+  ["PUT /environments/{id}/containers/{containerId}/origin", "assign-container-origin"],
+  ["DELETE /environments/{id}/containers/{containerId}/origin", "reset-container-origin"],
+  ["POST /environments/{id}/containers/{containerId}/recreate", "recreate-container"],
+  ["POST /environments/{id}/projects/{projectId}/stop", "stop-project"],
   ["GET /environments/{id}/auto-heal", "get-auto-heal-settings"],
   ["PUT /environments/{id}/auto-heal", "update-auto-heal-settings"],
   ["GET /backup-targets", "list-backup-targets"],
@@ -27,8 +66,9 @@ const laterOperations = new Map([
   ["GET /environments/{id}/vulnerabilities/runs", "list-vulnerability-scan-runs"],
   ["GET /environments/{id}/updater/policies/{kind}/{targetId}", "get-auto-update-policy"],
   ["PUT /environments/{id}/updater/policies/{kind}/{targetId}", "set-auto-update-policy"],
-  ["GET /environments/{id}/updater/schedules", "get-update-schedules"],
-  ["PUT /environments/{id}/updater/schedules", "set-update-schedules"],
+  ["GET /environments/{id}/updater/policies", "list-update-policies"],
+  ["POST /updater/check-all", "check-all-updates"],
+  ["POST /environments/{id}/containers/{containerId}/previous-image/restore", "restore-container-image"],
   ["GET /environments/{id}/updater/system-image-hints", "get-system-image-hints"],
   ["POST /environments/{id}/updater/projects/{projectId}/update", "update-project-images"],
   ["POST /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore", "restore-update"],
@@ -54,6 +94,11 @@ const laterOperations = new Map([
   ["POST /environments/{id}/runtime-runs/{runId}/cancel", "cancel-hub-runtime-run"],
   ["POST /environments/{id}/runtime-runs/{runId}/release", "release-runtime-run"],
 ]);
+const replacedRoutes = new Map([
+  ["GET /environments/{id}/notifications/settings/{provider}", "GET /environments/{id}/notifications/settings/{targetId}"],
+  ["DELETE /environments/{id}/notifications/settings/{provider}", "DELETE /environments/{id}/notifications/settings/{targetId}"],
+  ["POST /environments/{id}/notifications/test/{provider}", "POST /environments/{id}/notifications/test/{targetId}"],
+]);
 const retiredSystemRecovery = new Map([
   ["GET /backups/volumes/config", "get-system-volume-backup-config"],
   ["PUT /backups/volumes/config", "update-system-volume-backup-config"],
@@ -64,6 +109,13 @@ const retiredSystemRecovery = new Map([
   ["POST /backups/recovery-key/generate", "generate-system-backup-recovery-key"],
   ["POST /backups/{id}/files/browse", "browse-system-backup-files"],
   ["POST /backups/{id}/restore-files", "restore-system-backup-files"],
+]);
+const retiredM20 = new Map([["GET /environments/{id}/webhooks", "list-webhooks"], ["POST /environments/{id}/webhooks", "create-webhook"], ["DELETE /environments/{id}/webhooks/{webhookId}", "delete-webhook"], ["PATCH /environments/{id}/webhooks/{webhookId}", "update-webhook"]]);
+// M21 removed the retired deployment snippet route with its generator (#362).
+const retiredM21 = new Map([
+  ["GET /environments/{id}/deployment", "getDeploymentSnippets"],
+  ["POST /environments/{id}/system/upgrade/all", "trigger-update-all"],
+  ["GET /environments/{id}/system/upgrade/all/status", "update-all-status"],
 ]);
 const operations = (document) => new Map(
   Object.entries(document.paths).flatMap(([path, entries]) =>
@@ -82,9 +134,9 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   ));
 
   assert.equal(baseline.size, manifest.baselineOperations);
-  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size);
+  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size - replacedRoutes.size - retiredM20.size - retiredM21.size);
   assert.equal(removed.size, manifest.removedOperations.length);
-  assert.equal(removed.size, 159);
+  assert.equal(removed.size, 163);
   for (const [key, id] of removed) {
     assert.equal(baseline.get(key), id, `removed operation must exist in the baseline: ${key}`);
     assert.equal(current.has(key), false, `removed route reappeared: ${key}`);
@@ -92,13 +144,14 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   }
   for (const [key, id] of baseline) {
     if (removed.has(key)) continue;
-    if (retiredSystemRecovery.has(key)) {
-      assert.equal(id, retiredSystemRecovery.get(key));
+    if (retiredSystemRecovery.has(key) || retiredM20.has(key) || retiredM21.has(key)) {
+      assert.equal(id, retiredSystemRecovery.get(key) ?? retiredM20.get(key) ?? retiredM21.get(key));
       assert.equal(current.has(key), false, `obsolete system recovery route remains: ${key}`);
       assert.equal([...current.values()].includes(id), false, `obsolete system recovery ID remains: ${id}`);
       continue;
     }
-    assert.equal(current.get(key), id, `retained operation changed: ${key}`);
+    assert.equal(current.get(replacedRoutes.get(key) ?? key), id, `retained operation changed: ${key}`);
+    if (replacedRoutes.has(key)) assert.equal(current.has(key), false, `provider route remains: ${key}`);
   }
   for (const [key, id] of current) {
     if (laterOperations.has(key)) {

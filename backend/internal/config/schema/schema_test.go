@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys; Complete helper image setting key; Auto Heal stack-exclusion setting inventory for #296.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys; Complete helper image setting key; Auto Heal stack-exclusion setting inventory for #296; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 sustained-load setting environment inventory; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #348 stack import mirror variable.
 
 package schema
 
@@ -90,6 +90,18 @@ func TestGenerate_SettingEnvOverridesMatchModelMetadata(t *testing.T) {
 	assert.NotContains(t, entries, "effectiveTimeZone")
 	_, hasRuntimeDerived := entries["uiConfigDisabled"]
 	assert.False(t, hasRuntimeDerived)
+	for key, expected := range map[string]struct{ env, value, kind string }{
+		"loadAlertsEnabled":      {"LOAD_ALERTS_ENABLED", "true", "boolean"},
+		"loadAlertCpuPercent":    {"LOAD_ALERT_CPU_PERCENT", "90", "number"},
+		"loadAlertMemoryPercent": {"LOAD_ALERT_MEMORY_PERCENT", "90", "number"},
+		"loadAlertMinutes":       {"LOAD_ALERT_MINUTES", "10", "number"},
+	} {
+		entry, ok := entries[key]
+		require.True(t, ok, key)
+		assert.Equal(t, expected.env, entry.Env)
+		assert.Equal(t, expected.value, entry.DefaultValue)
+		assert.Equal(t, expected.kind, entry.Type)
+	}
 }
 
 func TestGenerate_DocumentIncludesEnvOnlyModeNote(t *testing.T) {
@@ -188,7 +200,7 @@ func countDocumentedSettingOverrides() int {
 		}
 
 		switch tagParts[0] {
-		case "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+		case "timeZone", "updateCheckInterval", "updateNotify", "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
 			continue
 		}
 		attrs := tagParts[1:]
@@ -208,7 +220,9 @@ var expectedEnvConfigVars = []string{
 	"APP_URL",
 	"ARCANE_BACKUP_VOLUME_NAME",
 	"AUTH_MODE",
+	"AUTH_PROXY_ADMIN_USERS",
 	"AUTH_PROXY_HEADER",
+	"AUTH_PROXY_LOGOUT_URL",
 	"AUTH_RESET_ADMIN_PASSWORD",
 	"AUTH_TRUSTED_PROXIES",
 	"AUTO_LOGIN_PASSWORD",
@@ -220,6 +234,7 @@ var expectedEnvConfigVars = []string{
 	"DOCKLET_AGENT_IMAGE",
 	"DOCKLET_BACKUP_DIR",
 	"DOCKLET_BACKUP_ENGINE_IMAGE",
+	"DOCKLET_RELEASE_FEED_URL",
 	"EDGE_AGENT",
 	"EDGE_MTLS_ASSETS_DIR",
 	"EDGE_MTLS_CA_FILE",
@@ -253,6 +268,7 @@ var expectedEnvConfigVars = []string{
 	"PROJECT_WORKSPACE_MAX_ENTRIES",
 	"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB",
 	"PUID",
+	"STACK_IMPORT_GITHUB_RAW_URL",
 	"TLS_CERT_FILE",
 	"TLS_ENABLED",
 	"TLS_KEY_FILE",
@@ -267,11 +283,14 @@ var expectedEnvConfigVars = []string{
 
 var expectedSettingOverrideKeys = []string{
 	"actionPresentation",
+	"activityEventLimit",
+	"activityRunLimit",
 	"agentInstallDirectory",
 	"agentProjectsDirectory",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
+	"autoHealCooldownMinutes",
 	"autoHealEnabled",
 	"autoHealExcludedContainers",
 	"autoHealExcludedStacks",
@@ -279,10 +298,9 @@ var expectedSettingOverrideKeys = []string{
 	"autoHealMaxRestarts",
 	"autoHealRestartWindow",
 	"autoInjectEnv",
-	"autoUpdate",
 	"autoUpdateExcludedContainers",
-	"autoUpdateInterval",
 	"avatarMaxUploadSizeMb",
+	"backupDefaultRetentionCount",
 	"baseServerUrl",
 	"buildProvider",
 	"buildTimeout",
@@ -320,10 +338,12 @@ var expectedSettingOverrideKeys = []string{
 	"keepActionOutput",
 	"lifecycleMaxTimeoutSec",
 	"linkBase",
+	"loadAlertCpuPercent",
+	"loadAlertMemoryPercent",
+	"loadAlertMinutes",
+	"loadAlertsEnabled",
 	"maxConcurrentActivities",
 	"maxImageUploadSize",
-	"pollingEnabled",
-	"pollingInterval",
 	"projectsDirectory",
 	"proxyRequestTimeout",
 	"pruneBuildCacheMode",
@@ -340,6 +360,7 @@ var expectedSettingOverrideKeys = []string{
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
 	"setupCompleted",
+	"stackStopMode",
 	"toolsImage",
 	"trivyCpuLimit",
 	"trivyDbRegistry",
@@ -350,13 +371,10 @@ var expectedSettingOverrideKeys = []string{
 	"trivyResourceLimitsEnabled",
 	"trivyScanTimeout",
 	"trivySecurityOpts",
-	"updateCheckRegistry",
-	"upgradeLogRetentionDays",
 	"volumeHelperIdleTimeout",
 	"vulnerabilityNotifyCritical",
 	"vulnerabilityNotifyFailed",
 	"vulnerabilityNotifyHigh",
-	"vulnerabilityScanEnabled",
 	"vulnerabilityScanSchedule",
 	"vulnerabilityThreatIntelEnabled",
 }

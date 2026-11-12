@@ -1,5 +1,5 @@
 import type { DockletAdapter } from "../adapter";
-import type { ActionRun } from "@/domain/model";
+import type { Host, ActionRun } from "@/domain/model";
 
 export type FailAt = "none" | "pull" | "start" | "health";
 export type DemoFailureOperation = "runStackCommand" | "installStackUpdates" | "deployStack" | "recreateContainer" | "connectHost" | "pullImage";
@@ -9,6 +9,8 @@ export interface DemoFailure {
 }
 
 export interface DemoAdapterOptions {
+  hosts?: readonly Host[];
+  uiConfigurationDisabledHosts?: readonly string[];
   nextFailure?: DemoFailure;
   missingCapabilities?: readonly string[];
   seedRuns?: Omit<ActionRun, "output">[];

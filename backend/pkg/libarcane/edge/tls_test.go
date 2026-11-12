@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
 
 package edge
 
@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	certgen "github.com/florianfinn/docklet-next/cli/pkg/generate"
+	certgen "github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge/certgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	kit "go.getarcane.app/kit/pkg"

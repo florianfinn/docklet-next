@@ -23,6 +23,7 @@ it("loads the administrator language from the core and saves a change with CSRF"
   const writes: string[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
+    if (path === "/api/auth/me/api-keys") return new Response(JSON.stringify({ success: true, data: [] }));
     if (path === "/api/auth/mode") return new Response(JSON.stringify({ success: true, data: { mode: "local" } }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
     if (path === "/api/auth/me") return new Response(JSON.stringify({ success: true, data: current }));
     if (path === "/api/auth/me/profile") {

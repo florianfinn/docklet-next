@@ -1,11 +1,15 @@
+import { Checkbox } from "@/shared/ui/checkbox";
+import { Field, FieldLabel } from "@/shared/ui/field";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "use-intl";
 
+import { setPreference, usePreference } from "@/shared/preferences/preferences-store";
+
 import type { Host } from "@/domain/model";
 
 import { placeInfoCard, TONE_VAR, useSegmentPopup, type FleetSegment } from "./fleet-segments";
-import { FLEET_TONE, type FleetUnit } from "./fleet-status";
+import { FLEET_TONE, hostUnreachable, matchesFleetFilter, remainderStart, type FleetFilter, type FleetUnit } from "./fleet-status";
 import { arcPath, glowRegion, hitBand, hitCells, layoutRing, polar, ringGeometry, sectorPath, segmentFan } from "./ring-geometry";
 import { SegmentCard } from "./SegmentCard";
 import { SegmentMenu } from "./SegmentMenu";
@@ -23,6 +27,24 @@ interface FleetRingProps {
   size?: number;
   /** Hovered or focused segment moves outward; the info card opens on that side when there is room. */
   fan?: boolean;
+  /** Per-host rings share one toggle rendered by their parent. */
+  unraidToggle?: boolean;
+  /** Chip filter: other segments are dimmed. */
+  highlight?: FleetFilter | null;
+}
+
+
+/** Personal preference: Unraid units are hidden from the ring by default. */
+export function UnraidRingToggle() {
+  const t = useTranslations("dashboard.ring");
+  const showUnraid = usePreference("showUnraidRing");
+  const uid = useId().replace(/:/g, "");
+  return (
+    <Field orientation="horizontal" className="justify-center">
+      <Checkbox id={`${uid}-unraid`} checked={showUnraid} onCheckedChange={(value) => setPreference("showUnraidRing", value === true)} />
+      <FieldLabel htmlFor={`${uid}-unraid`}>{t("showUnraid")}</FieldLabel>
+    </Field>
+  );
 }
 
 /**
@@ -39,8 +61,10 @@ interface FleetRingProps {
  * Pointer input lands on a static hit cell per segment that covers both the
  * resting and the fanned position, so the target never slips away mid-move.
  */
-export function FleetRing({ hosts, units, label, center, size = 220, fan = true }: FleetRingProps) {
+export function FleetRing({ hosts, units, label, center, size = 220, fan = true, unraidToggle = true, highlight = null }: FleetRingProps) {
   const t = useTranslations("dashboard.ring");
+  const showUnraid = usePreference("showUnraidRing");
+  const visibleUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
   const ts = useTranslations("common.status");
   const unitName = useUnitName();
   const uid = useId().replace(/:/g, "");
@@ -48,7 +72,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
   const infoId = `ring-info-${uid}`;
   const g = ringGeometry(size);
   const c = size / 2;
-  const groups = layoutRing(hosts.map((h) => ({ group: h, items: units.filter((u) => u.hostId === h.id) })));
+  const groups = layoutRing(hosts.map((h) => ({ group: h, items: visibleUnits.filter((u) => u.hostId === h.id) })), (u) => u.containers.length);
   const glow = glowRegion(size, GLOW_BLUR);
   const flat = groups.flatMap((gr) => gr.segments.map((s) => ({ ...s, host: gr.group })));
   const cells = hitCells(flat, (g.hitPad / g.segR) * (180 / Math.PI));
@@ -62,6 +86,8 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
   const popup = useSegmentPopup(segments, { group: svgRef, content: infoRef });
 
   const currentSeg = flat[Math.min(popup.active, flat.length - 1)];
+  /** Centre swap: while a segment is active the centre shows its containers instead of the fleet total. */
+  const focusUnit = popup.open ? popup.current?.item : undefined;
   const mid = currentSeg ? (currentSeg.start + currentSeg.end) / 2 : 90;
   const fanned = fan && popup.open;
   const leftHalf = Math.sin((mid * Math.PI) / 180) < -1e-6;
@@ -115,6 +141,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
   };
 
   return (
+    <div className="flex shrink-0 flex-col items-center gap-2">
     <div ref={wrapRef} className="relative shrink-0" style={{ width: size, height: size }} data-slot="fleet-ring" data-fan={fan || undefined}>
       <svg
         ref={svgRef}
@@ -144,10 +171,10 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
             d={arcPath(c, c, g.hostR, start + 0.5, end - 0.5)}
             data-host-arc={host.status}
             fill="none"
-            stroke={host.status === "offline" ? "var(--destructive)" : host.color}
+            stroke={hostUnreachable(host) ? "var(--destructive)" : host.color}
             strokeWidth={g.hostW}
             strokeLinecap="round"
-            strokeDasharray={host.status === "offline" ? "5 4" : undefined}
+            strokeDasharray={hostUnreachable(host) ? "5 4" : undefined}
             opacity={0.95}
           />
         ))}
@@ -159,6 +186,9 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
           const active = popup.open && popup.active === index;
           const cell = cells[i]!;
           const edge = Math.max(1, 1.2 * (size / 220));
+          const rest = remainderStart(s, e, item);
+          const updW = Math.max(2, 3 * (size / 220));
+          const dimmed = !!highlight && !matchesFleetFilter(item, highlight);
           return (
             <SegmentMenu
               key={item.id}
@@ -177,7 +207,7 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
               {/* Menu trigger for the hit cell and the drawn segment together. */}
               <g data-segment-root={index} onClick={props.onClick}>
                 <path d={sectorPath(c, c, band.r0, band.r1, cell.start, cell.end)} data-hit={index} fill="none" fillRule="evenodd" pointerEvents="all" aria-hidden className="cursor-pointer" onPointerEnter={props.onPointerEnter} />
-                <g className="ring-seg-group" data-fanned={(fanned && active) || undefined} style={{ "--fx": `${off.x}px`, "--fy": `${off.y}px` } as React.CSSProperties}>
+                <g className="ring-seg-group" data-fanned={(fanned && active) || undefined} data-dimmed={dimmed || undefined} opacity={dimmed ? 0.25 : undefined} style={{ "--fx": `${off.x}px`, "--fy": `${off.y}px` } as React.CSSProperties}>
                   <path
                     ref={(el) => {
                       props.ref(el);
@@ -188,20 +218,26 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
                     data-segment={index}
                     role="button"
                     tabIndex={props.tabIndex}
-                    aria-label={t("segment", { name: unitName(item), host: host.name, state: unreachable ? t("unreachable") : ts(st) })}
+                    aria-label={t("segment", { name: unitName(item), host: host.name, state: unreachable ? t("unreachable") : ts(st) }) + (item.update ? `, ${t("updateAvailable")}` : "")}
                     aria-describedby={active ? infoId : undefined}
                     aria-keyshortcuts="Shift+F10"
                     fill="none"
                     stroke={unreachable ? UNREACHABLE_FILL : TONE_VAR[FLEET_TONE[st]]}
                     strokeWidth={g.segW}
                     strokeLinecap="butt"
-                    filter={st === "unhealthy" ? `url(#${glowId})` : undefined}
+                    filter={st === "down" || st === "unhealthy" || st === "restarting" ? `url(#${glowId})` : undefined}
                     opacity={!fan && active ? 0.8 : undefined}
                     className="ring-seg cursor-pointer outline-none"
                     onPointerEnter={props.onPointerEnter}
                     onFocus={props.onFocus}
                     onBlur={props.onBlur}
                   />
+                  {rest !== undefined && (
+                    <path d={arcPath(c, c, g.segR, rest, e)} data-remainder={item.stopped} fill="none" stroke={TONE_VAR.gray} strokeWidth={g.segW} strokeLinecap="butt" pointerEvents="none" aria-hidden />
+                  )}
+                  {item.update && (
+                    <path d={arcPath(c, c, g.segR - g.segW / 2 - updW * 1.4, s, e)} data-update-arc fill="none" stroke="var(--orange)" strokeWidth={updW} strokeLinecap="butt" pointerEvents="none" aria-hidden />
+                  )}
                   {unreachable && (
                     <path
                       d={sectorPath(c, c, g.segR - g.segW / 2 + edge / 2, g.segR + g.segW / 2 - edge / 2, s, e)}
@@ -221,10 +257,10 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
           );
         })}
         <text x={c} y={c - g.valueSize * 0.07} textAnchor="middle" className="pointer-events-none fill-foreground font-semibold tabular-nums" style={{ fontSize: g.valueSize }}>
-          {center.value}
+          {focusUnit ? `${focusUnit.running}/${focusUnit.containers.length}` : center.value}
         </text>
-        <text x={c} y={c + g.valueSize * 0.67} textAnchor="middle" className="pointer-events-none fill-muted-foreground" style={{ fontSize: g.captionSize }}>
-          {center.caption}
+        <text x={c} y={c + g.valueSize * 0.67} textAnchor="middle" className="pointer-events-none fill-muted-foreground" style={{ fontSize: g.captionSize }} data-slot="ring-caption">
+          {focusUnit ? unitName(focusUnit) : center.caption}
         </text>
       </svg>
       {popup.open &&
@@ -246,6 +282,8 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true 
           </div>,
           document.body,
         )}
+    </div>
+      {unraidToggle && <UnraidRingToggle />}
     </div>
   );
 }

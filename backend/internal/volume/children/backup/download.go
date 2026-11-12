@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split Rustic download; owned preparation, transport budgets and confirmed cleanup.
+// Deviations: Split Rustic download; owned preparation, transport budgets and confirmed cleanup; M16 bind mounts and backup completion.
 
 package backup
 
@@ -58,7 +58,7 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 	if actor == nil {
 		actor = &user.SystemUser
 	}
-	activityID, workCtx := activitylib.StartHandlerActivity(ctx, s.deps.Activity, "0", activitytypes.TypeResourceAction, "volume_backup_download", entry.VolumeName, entry.VolumeName, actor, "Preparing backup download", "Preparing backup download", database.JSON{"action": "download_volume_backup", "backupId": entry.ID}, false)
+	activityID, workCtx := activitylib.StartHandlerActivity(ctx, s.deps.Activity, "0", activitytypes.TypeResourceAction, "volume_backup_download", entry.VolumeName, volume.DisplayName(entry.VolumeName), actor, "Preparing backup download", "Preparing backup download", database.JSON{"action": "download_volume_backup", "backupId": entry.ID}, false)
 	if s.deps.Activity != nil && activityID == "" {
 		owner.Release(ctx)
 		return nil, 0, dto.NewProblem(503, "volume.backup.engine-unavailable", nil)
@@ -104,7 +104,7 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 	}
 	if s.deps.Events != nil {
 		metadata := database.JSON{"action": "backup_download", "backup_id": id, "size": size}
-		if err := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupDownload, entry.VolumeName, entry.VolumeName, actor.ID, actor.Username, "0", metadata); err != nil {
+		if err := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupDownload, entry.VolumeName, volume.DisplayName(entry.VolumeName), actor.ID, actor.Username, "0", metadata); err != nil {
 			slog.WarnContext(ctx, "could not log volume backup download event", "volume", entry.VolumeName, "error", err)
 		}
 	}

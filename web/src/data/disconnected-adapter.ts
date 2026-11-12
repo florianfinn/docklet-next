@@ -1,21 +1,52 @@
+// Source: Docklet Next/web/src/data/disconnected-adapter.ts
+// Revision: 6971ede4f4f71ac095aa5de94c8b21f58dcc7a4bae8d0236ca7812b99cc46d26
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: Original product-boundary implementation and evidence after the historical L4 import. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #32 Hub backup delete mapping. #69 connected first-run identity flow. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. #181 live volume management and lifecycle checks. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates.
+
 import type { DockletAdapter } from "./adapter";
-import { GENERIC_REASON, HUB_REF } from "./capability";
+import { AdapterOutcomeError, GENERIC_REASON, HUB_REF } from "./capability";
 
 export const BACKEND_DISCONNECTED = "backend-not-connected";
 
 /** Until the HTTP adapter arrives, every operation fails without fabricating data. */
 export function createDisconnectedAdapter(): DockletAdapter {
-  const unavailable = async (): Promise<never> => { throw new Error(BACKEND_DISCONNECTED); };
+  const unavailable = async (): Promise<never> => { throw new AdapterOutcomeError({ kind: "not-available", operationId: BACKEND_DISCONNECTED, resourceRef: HUB_REF, reasonCode: GENERIC_REASON }); };
   const subscribe = () => () => {};
   return {
     kind: "disconnected",
     getAuthMode: unavailable,
+    getAuthConfiguration: unavailable,
+    listUsers: unavailable,
+    createUser: unavailable,
+    updateUser: unavailable,
+    disableUser: unavailable,
+    enableUser: unavailable,
+    resetUserPassword: unavailable,
+    deleteUser: unavailable,
+    setUserAdministrator: unavailable,
+    setUserAppAssignments: unavailable,
+    listMyApiKeys: unavailable,
+    createMyApiKey: unavailable,
+    deleteMyApiKey: unavailable,
+
     getCurrentUser: unavailable,
     login: unavailable,
     logout: unavailable,
     changePassword: unavailable,
     updateMyLocale: unavailable,
     getHubBackupAccess: unavailable,
+    getContainerHistory: unavailable,
+    getStackHistory: unavailable,
+    getCapacity: unavailable,
+    getUiPreferences: unavailable,
+    putUiPreference: unavailable,
+    listServiceWidgets: unavailable,
+    getServiceWidget: unavailable,
+    getServiceWidgetConfig: unavailable,
+    saveServiceWidgetConfig: unavailable,
+    testServiceWidget: unavailable,
+    decideMediaRequest: unavailable,
     listHubBackups: unavailable,
     getHubBackupPolicies: unavailable,
     saveHubBackupPolicies: unavailable,
@@ -30,10 +61,15 @@ export function createDisconnectedAdapter(): DockletAdapter {
     getCapability: async (operationId, resourceRef = HUB_REF) => ({ operationId, resourceRef, available: false, disabledReasonCode: GENERIC_REASON }),
     listHosts: unavailable,
     listStacks: unavailable,
+    listNetworkSummaries: unavailable,
     getStack: unavailable,
     listContainers: unavailable,
     getSecurity: unavailable,
+    getActiveSecurity: unavailable,
+    getVulnerabilityCandidates: unavailable, scanVulnerabilityCandidates: unavailable,
+    getVulnerabilityAdvisory: unavailable, ignoreVulnerability: unavailable, unignoreVulnerability: unavailable,
     listEvents: unavailable,
+    listDashboardEvents: unavailable,
     listSchedule: unavailable,
     listActions: unavailable,
     runStackCommand: unavailable,
@@ -47,8 +83,10 @@ export function createDisconnectedAdapter(): DockletAdapter {
     restartService: unavailable,
     importSource: unavailable,
     convertDockerRun: unavailable,
+    openContainerShell: () => { throw new AdapterOutcomeError({ kind: "not-available", operationId: BACKEND_DISCONNECTED, resourceRef: HUB_REF, reasonCode: GENERIC_REASON }); },
     runContainerCommand: unavailable,
     recreateContainer: unavailable,
+    getContainerEditConfig: unavailable,
     setContainerOrigin: unavailable,
     installContainerUpdate: unavailable,
     reconnectHost: unavailable,
@@ -61,6 +99,8 @@ export function createDisconnectedAdapter(): DockletAdapter {
     subscribeChanges: subscribe,
     updateHost: unavailable,
     restartAgent: unavailable,
+    getSelfUpdate: unavailable,
+    selfUpdate: unavailable,
     registerHost: unavailable,
     connectHost: unavailable,
     removeHost: unavailable,
@@ -78,6 +118,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     writeFile: unavailable,
     createEntry: unavailable,
     renameEntry: unavailable,
+    moveEntry: unavailable,
     deleteEntry: unavailable,
     uploadFile: unavailable,
     setBackupPolicy: unavailable,

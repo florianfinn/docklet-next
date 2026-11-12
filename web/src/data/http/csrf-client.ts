@@ -2,10 +2,13 @@
 // Revision: af5fa9df01e730f7691d650985abd33d74f51ae5
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original CSRF bootstrap and HTTP adapter header handling.
+// Deviations: Original CSRF bootstrap and HTTP adapter header handling. M23 #425: a 401 body completes before the unauthorized event.
 
-import { discardResponse } from "./identity-reads";
+import { isCancelledError } from "@tanstack/react-query";
+
+import { discardResponse, drainResponse } from "./identity-reads";
 import { AdapterOutcomeError } from "../capability";
+import { maintenanceOutcome } from "./problem-code";
 
 const CSRF_HEADER = "X-CSRF-Token";
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
@@ -49,8 +52,8 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
     if (bootstrap) await bootstrap;
     if (token) return token;
     const response = await safeFetch(`${baseUrl}/auth/mode`, { credentials: "same-origin", headers: { Accept: "application/json" } });
-    discardResponse(response);
-    if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status });
+    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    drainResponse(response);
     if (!token) throw new AdapterOutcomeError({ kind: "error", code: "http.csrf-token-missing", status: response.status });
     return token;
   }
@@ -64,7 +67,8 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
       new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
       const options = { ...init, credentials: "same-origin" as const, headers };
       const write = !SAFE_METHODS.includes(method);
-      const attempt = () => send(request ? request.clone() : input, options);
+      // Every attempt, including the retry after a token renewal, honours an abort that happened meanwhile.
+      const attempt = () => { options.signal?.throwIfAborted(); return send(request ? request.clone() : input, options); };
       let response: Response;
       if (write) {
         headers.set(CSRF_HEADER, await requireToken());
@@ -78,8 +82,14 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
       } else response = await safeFetch(input, options);
       const path = new URL(request?.url ?? String(input), "https://hub.example.com").pathname;
       const credentialCheck = ["/auth/password", "/auth/login"].some(suffix => path === basePath + suffix);
-      if (response.status === 401 && !credentialCheck && typeof window !== "undefined") window.dispatchEvent(new Event("docklet:unauthorized"));
-      return response;
+      if (response.status !== 401 || credentialCheck || typeof window === "undefined") return response;
+      // Finish the body before announcing the loss: the identity reset that follows aborts owned requests, and this
+      // answer must end as a completed read. Consumers read the buffered copy.
+      let body: ArrayBuffer | undefined;
+      try { body = await response.arrayBuffer(); }
+      catch (error) { if (isCancelledError(error)) throw error; }
+      window.dispatchEvent(new Event("docklet:unauthorized"));
+      return new Response(body ?? null, { status: response.status, statusText: response.statusText, headers: response.headers });
     },
   };
 }

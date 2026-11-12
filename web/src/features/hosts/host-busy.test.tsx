@@ -47,10 +47,11 @@ describe("host action buttons", () => {
     const dialog = await screen.findByRole("dialog", { name: "Host Atlas" });
     await userEvent.click(within(dialog).getByRole("tab", { name: "Agent-Container" }));
     await userEvent.click(await within(dialog).findByRole("button", { name: "Agent neu starten" }));
+    const confirmation = await screen.findByRole("alertdialog");
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Agent neu starten" }));
     const restarting = await within(dialog).findByRole("button", { name: "Startet neu …" });
     expect(restarting.getAttribute("aria-busy")).toBe("true");
-    // The connection check is a separate action and stays available.
-    expect(within(dialog).getByRole("button", { name: "Verbindung prüfen" }).hasAttribute("aria-busy")).toBe(false);
+    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Verbindung prüfen" }) as HTMLButtonElement).disabled).toBe(true));
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Agent neu starten" }).hasAttribute("aria-busy")).toBe(false), { timeout: 20_000 });
   });
 });

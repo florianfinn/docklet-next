@@ -2,38 +2,21 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key.
+// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; Arcane image registry host helpers removed (#235).
 
 package libarcane
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/robfig/cron/v3"
-	kit "go.getarcane.app/kit/pkg"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 )
 
 const (
 	DepotTokenSettingKey = "depotToken"
-
-	GHCRRegistryHost      = "ghcr.io"
-	DockerHubRegistryHost = "docker.io"
-	ECRPublicRegistryHost = "public.ecr.aws"
 )
-
-// ArcaneRegistryHost normalizes a registry setting to a host that mirrors the getarcaneapp images, defaulting to GHCR.
-func ArcaneRegistryHost(registry string) string {
-	return kit.Ternary(strings.TrimSpace(registry) == DockerHubRegistryHost, DockerHubRegistryHost, GHCRRegistryHost)
-}
-
-// ArcaneImageRegistryHost resolves the update-check registry setting; ECR Public only hosts the manager and agent images.
-func ArcaneImageRegistryHost(registry string) string {
-	if strings.TrimSpace(registry) == ECRPublicRegistryHost {
-		return ECRPublicRegistryHost
-	}
-	return ArcaneRegistryHost(registry)
-}
 
 type SettingUpdate struct {
 	Key   string `json:"key"`
@@ -60,18 +43,19 @@ var timeoutSettingKeys = []string{
 
 var cronSettingKeys = []string{
 	"scheduledPruneInterval",
-	"autoUpdateInterval",
-	"pollingInterval",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
 	"expiredSessionsCleanupInterval",
 }
 
-var cronParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-
 // TimeoutSettingKeys returns the settings propagated to remote environments.
 func TimeoutSettingKeys() []string {
 	return slices.Clone(timeoutSettingKeys)
+}
+
+// AgentSyncedSettingKeys returns a fresh copy of every hub setting propagated to agents.
+func AgentSyncedSettingKeys() []string {
+	return append(TimeoutSettingKeys(), "activityEventLimit", "activityRunLimit")
 }
 
 func IsCronSettingKey(key string) bool {
@@ -82,6 +66,10 @@ func ValidateCronSetting(key, value string) error {
 	if value == "" || !IsCronSettingKey(key) {
 		return nil
 	}
-	_, err := cronParser.Parse(value)
+	// Cron settings take six explicit fields; descriptors such as @daily stay refused.
+	if strings.HasPrefix(strings.TrimSpace(value), "@") {
+		return fmt.Errorf("cron descriptor %q is not a six-field expression", value)
+	}
+	_, err := schedule.Parse(value, nil)
 	return err
 }

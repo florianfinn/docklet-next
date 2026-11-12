@@ -35,17 +35,17 @@ export const deHelp: typeof enHelp = {
       },
       timeZone: {
         title: "Zeitzone des Hubs",
-        short: "Zeitpläne und Datumsanzeigen verwenden die Prozesszeitzone des Hubs.",
-        full: "Die Variable TZ legt die Zeitzone beim Start fest. Allgemein zeigt den effektiven Wert nur lesbar; ändere die Startumgebung und starte den Hub neu.",
-        impact: "Eine Änderung von TZ verändert Zeitpläne und Datumsanzeigen nach dem Neustart.",
+        short: "Zeitpläne und Datumsanzeigen verwenden die wirksame Hub-Zeitzone.",
+        full: "Wähle unter Allgemein eine Zeitzone. Eine leere Auswahl verwendet TZ. Gespeicherte Änderungen verschieben künftige Hub-Zeitpläne ohne Neustart; entfernte Volume-Backups behalten ihre Host-Zeitzone.",
+        impact: "Künftige Läufe verwenden die neue Zone. Eingereihte und laufende Arbeit läuft weiter; verpasste Termine werden nicht nachgeholt.",
       },
     },
     settingsAppearance: {
       theme: {
         title: "Farbschema",
-        short: "Dunkle oder helle Oberfläche für diesen Browser.",
+        short: "Dunkle oder helle Oberfläche für dein Konto.",
         full: "Wechselt zwischen dunklem und hellem Schema. Die Farbrollen werden für beide Schemata so angepasst, dass Texte lesbar bleiben.",
-        impact: "Gilt nur in diesem Browser, nicht für andere Benutzer.",
+        impact: "Gilt für dein Konto in jedem Browser, nicht für andere Benutzer.",
       },
       palette: {
         title: "Farbpalette",
@@ -57,7 +57,7 @@ export const deHelp: typeof enHelp = {
         title: "Dichte",
         short: "Abstände und Zeilenhöhen der Oberfläche.",
         full: "Kompakt zeigt mehr Zeilen auf einmal, Großzügig mehr Luft zwischen den Elementen. Inhalte und Funktionen ändern sich nicht.",
-        impact: "Gilt nur in diesem Browser.",
+        impact: "Gilt für dein Konto in jedem Browser.",
       },
       motion: {
         title: "Animationen",
@@ -554,7 +554,7 @@ export const deHelp: typeof enHelp = {
       hide: {
         title: "Aus Übersicht ausblenden",
         short: "Verschiebt den Eintrag in die Kategorie „Ausgeblendet“.",
-        full: "Betrifft nur die Anzeige in diesem Browser. Der Stack oder Container läuft unverändert weiter und lässt sich jederzeit wieder einblenden.",
+        full: "Betrifft nur deine eigene Anzeige, in jedem Browser, in dem du dich anmeldest. Der Stack oder Container läuft unverändert weiter und lässt sich jederzeit wieder einblenden.",
         impact: "Nichts wird gestoppt oder gelöscht.",
       },
       scan: {

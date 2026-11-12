@@ -2,12 +2,14 @@ import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { CalendarClock, Check, Gauge, HardDrive, History, LayoutGrid, Plus, Radar, ScrollText, ShieldAlert, Siren, SlidersHorizontal, Globe } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
+import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useActionRuns, useMetrics } from "@/data/live";
-import { useEvents, useSchedule, useSecurity } from "@/data/queries";
+import { useActiveSecurity, useCapacity, useDashboardEvents, useSchedule, useServiceWidgets } from "@/data/queries";
+import { useIsUser } from "@/data/use-principal";
 import { isHostVisible } from "@/domain/hosts";
-import type { Tone } from "@/domain/model";
+import type { Host, Tone } from "@/domain/model";
 import { hasUpdate } from "@/domain/updates";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -15,7 +17,10 @@ import { useHostScope, useVisibleContainers, useVisibleStacks } from "@/shared/h
 import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 
+import { activeOverview } from "./active-images";
 import { attentionItems } from "./attention";
+import { ReadinessProvider, WidgetReady } from "./readiness";
+import { firstResult, useDashboardReadiness, useWidgetReady } from "./use-readiness";
 import { CustomizeSheet } from "./CustomizeSheet";
 import {
   clampSize,
@@ -34,7 +39,6 @@ import {
   widgetSize,
   withTransition,
   type CoreWidgetId,
-  type ServiceKind,
   type WidgetId,
   type WidgetSize,
 } from "./dashboard-layout";
@@ -42,9 +46,8 @@ import { DashboardSkeleton } from "./DashboardSkeleton";
 import { OpsSummary } from "./OpsSummary";
 import { useAttentionText } from "./attention-text";
 import { AppIcon } from "./services/app-icons";
-import { SERVICE_META } from "./services/service-data";
-import { ServiceConfigDialog } from "./services/ServiceConfigDialog";
 import { ServiceWidgetBody } from "./services/ServiceWidgets";
+import { SERVICE_COLOR } from "./services/widget-meta";
 import { useSortableGrid } from "./use-sortable-grid";
 import { useWidgetGrid, useWidgetResize } from "./use-widget-grid";
 import { AttentionWidget } from "./widgets/AttentionWidget";
@@ -81,37 +84,49 @@ export default function DashboardPage() {
   const hosts = useHostScope();
   const stacks = useVisibleStacks();
   const containers = useVisibleContainers();
-  const security = useSecurity();
-  const events = useEvents();
-  const schedule = useSchedule(hosts.visible.map((h) => h.id));
+  const security = useActiveSecurity();
+  // Active counts named by the containers using each image (AUTO-6); the Security page keeps the full overview.
+  const overview = useMemo(() => security.data && activeOverview(security.data, containers.data ?? []), [security.data, containers.data]);
+  const events = useDashboardEvents();
   const runs = useActionRuns();
   const metrics = useMetrics((s) => s?.hosts);
+  const metricsUnavailable = useMetrics((s) => s?.unavailable);
   const layout = useLayout();
   const animate = useMotionEnabled();
   const speed = useTokens().speed;
   const attentionText = useAttentionText();
   const [editing, setEditing] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const [configure, setConfigure] = useState<ServiceKind | null>(null);
+  const navigate = useNavigate();
+  const admin = !useIsUser();
+  const widgets = useServiceWidgets();
+  const summaries = useMemo(() => new Map((widgets.data ?? []).map((w) => [w.kind, w])), [widgets.data]);
+  const openWidgetSettings = admin ? () => navigate("/settings/serviceWidgets") : undefined;
   const [announce, setAnnounce] = useState("");
   const [now] = useState(() => Date.now());
+  const capacity = useCapacity();
 
   const visibleIds = useMemo(() => new Set(hosts.visible.map((h) => h.id)), [hosts.visible]);
-  const images = useMemo(() => (security.data?.enabled ? security.data.images.filter((i) => !i.unavailable && !!i.scannedAt && isHostVisible(hosts.selection, i.hostId)) : []), [security.data, hosts.selection]);
+  const images = useMemo(() => (overview?.enabled ? overview.images.filter((i) => !i.unavailable && !!i.scannedAt && isHostVisible(hosts.selection, i.hostId)) : []), [overview, hosts.selection]);
   // Metrics tick every 2 s; disk-based items only need a coarse refresh.
   const diskKey = metrics ? Math.round(Object.values(metrics).reduce((n, m) => n + m.disk, 0)) : 0;
   const attention = useMemo(
-    () => attentionItems({ hosts: hosts.visible, stacks: stacks.visible, containers: containers.visible, runs, images, metrics, now }),
+    () => attentionItems({ hosts: hosts.visible, stacks: stacks.visible, containers: containers.visible, runs, images, metrics, capacity: capacity.data, now }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- diskKey stands in for metrics
-    [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey],
+    [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey, capacity.data],
   );
   const updates = stacks.visible.reduce((n, s) => n + s.services.filter((x) => hasUpdate(x.update)).length, 0) + containers.visible.filter((c) => c.origin !== "compose" && hasUpdate(c.update)).length;
-  const unavailableSecurity = !!security.data?.unavailable?.some((h) => isHostVisible(hosts.selection, h.hostId)) || !!security.data?.images.some((i) => i.unavailable && isHostVisible(hosts.selection, i.hostId));
-  const securityNotScanned = !!security.data?.enabled && !unavailableSecurity && !images.length;
-  const critical = security.data?.enabled && !unavailableSecurity && images.length ? images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0) : undefined;
+  const unavailableSecurity = !!overview?.unavailable?.some((h) => isHostVisible(hosts.selection, h.hostId)) || !!overview?.images.some((i) => i.unavailable && isHostVisible(hosts.selection, i.hostId));
+  const securityNotScanned = !!overview?.enabled && !unavailableSecurity && !images.length;
+  const critical = overview?.enabled && !unavailableSecurity && images.length ? images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0) : undefined;
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
-  const visible = visibleWidgets(layout).filter((id) => import.meta.env.DEV || !isServiceWidget(id));
+  // Users only see service widgets that an administrator set up and turned on.
+  const visible = visibleWidgets(layout).filter((id) => {
+    if (!isServiceWidget(id)) return true;
+    const summary = summaries.get(id);
+    return !!summary && (admin || (summary.configured && summary.enabled));
+  });
   const apply = (fn: () => void) => withTransition(() => flushSync(fn), animate);
   const title = (id: WidgetId) => (isServiceWidget(id) ? t(`services.${id}.name`) : t(`widget.${id}.title`));
   const onCommit = useCallback(
@@ -142,29 +157,41 @@ export default function DashboardPage() {
     setAnnounce(t("customizeSheet.moved", { name: title(id), position: pos + 1, total: visible.length }));
   };
 
-  const body = (id: WidgetId): ReactNode => {
-    if (isServiceWidget(id)) return import.meta.env.DEV ? <ServiceWidgetBody kind={id} config={layout.services[id]} onConfigure={() => setConfigure(id)} /> : null;
+  const online = hosts.visible.filter((h) => h.status === "online");
+  const ready: Partial<Record<WidgetId, boolean>> = {
+    attention: firstResult(security) && firstResult(capacity),
+    updates: true, apps: true,
+    timeline: firstResult(events), events: firstResult(events),
+    // The first metrics sample, or explicit metrics unavailability, of every online host; other hosts show their state.
+    load: online.every((h) => !!metrics?.[h.id] || !!metricsUnavailable?.includes(h.id)),
+    capacity: firstResult(capacity),
+    security: firstResult(security),
+  };
+  // Shown service widgets are known once their summaries answered; a core error shows no widgets and settles.
+  const servicesKnown = !visibleWidgets(layout).some(isServiceWidget) || firstResult(widgets);
+  const coreFailed = stacks.isError || containers.isError;
+  const readiness = useDashboardReadiness(coreFailed ? [] : visible, firstResult(hosts) && firstResult(stacks) && firstResult(containers), coreFailed || servicesKnown);
+  const body = (id: WidgetId): ReactNode => id in ready ? <WidgetReady id={id} ready={!!ready[id]}>{content(id)}</WidgetReady> : content(id);
+  const content = (id: WidgetId): ReactNode => {
+    if (isServiceWidget(id)) {
+      const summary = summaries.get(id);
+      return summary ? <ServiceWidgetBody kind={id} summary={summary} admin={admin} /> : <WidgetBodySkeleton />;
+    }
     switch (id) {
       case "attention":
         return <AttentionWidget items={attention} hosts={hosts.byId} />;
       case "updates":
         return <UpdateRadarWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "timeline":
-        return events.isPending ? <WidgetBodySkeleton /> : events.isError ? <QueryError error={events.error} compact onRetry={() => void events.refetch()} /> : <TimelineWidget events={events.data} hosts={hosts.visible} now={now} />;
+        return events.isPending ? <WidgetBodySkeleton /> : events.isError ? <QueryError error={events.error} compact onRetry={() => void events.refetch()} /> : <TimelineWidget events={events.data.events} total={events.data.totalItems} hosts={hosts.visible} now={now} />;
       case "load":
         return <LoadWidget hosts={hosts.visible} />;
       case "capacity":
         return <CapacityWidget hosts={hosts.visible} />;
       case "schedule":
-        return schedule.isPending ? (
-          <WidgetBodySkeleton />
-        ) : schedule.isError ? (
-          <QueryError error={schedule.error} compact onRetry={() => void schedule.refetch()} />
-        ) : (
-          <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={hosts.byId} now={now} />
-        );
+        return <ScheduleBody hosts={hosts.visible} byId={hosts.byId} now={now} />;
       case "security":
-        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
+        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={overview!} visibleHostIds={visibleIds} />;
       case "apps":
         return <AppsWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "events":
@@ -173,13 +200,14 @@ export default function DashboardPage() {
         ) : events.isError ? (
           <QueryError error={events.error} compact onRetry={() => void events.refetch()} />
         ) : (
-          <EventsWidget events={events.data.filter((e) => !e.hostId || visibleIds.has(e.hostId))} hosts={hosts.byId} />
+          <EventsWidget events={events.data.events.filter((e) => !e.hostId || visibleIds.has(e.hostId))} total={events.data.totalItems} hosts={hosts.byId} />
         );
     }
   };
 
   return (
-    <>
+    <div className="contents" data-dashboard-core-ready={readiness.coreReady || undefined} data-dashboard-settled={readiness.settled || undefined}>
+    <ReadinessProvider report={readiness.report}>
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -235,7 +263,7 @@ export default function DashboardPage() {
                   description={isServiceWidget(id) ? t(`services.${id}.desc`) : t(`widget.${id}.desc`)}
                   icon={isServiceWidget(id) ? <AppIcon kind={id} /> : META[id].icon}
                   tone={isServiceWidget(id) ? undefined : META[id].tone}
-                  accent={isServiceWidget(id) ? SERVICE_META[id].color : undefined}
+                  accent={isServiceWidget(id) ? SERVICE_COLOR[id] : undefined}
                   slotRef={grid.slotRef(id)}
                   cardRef={grid.cardRef(id)}
                   chrome={{
@@ -247,7 +275,7 @@ export default function DashboardPage() {
                     onPointerDown: (e) => grid.onPointerDown(id, e),
                     onMove: (delta) => move(id, delta),
                     onHide: () => apply(() => layoutStore.set((l) => toggleWidget(l, id))),
-                    onConfigure: import.meta.env.DEV && isServiceWidget(id) ? () => setConfigure(id) : undefined,
+                    onConfigure: isServiceWidget(id) ? openWidgetSettings : undefined,
                     size: sizeOf(id),
                     columns: columns,
                     limits: { minW: WIDGET_MIN[id].w, maxW: Math.min(MAX_WIDGET_COLUMNS, columns), minH: WIDGET_MIN[id].h, maxH: MAX_WIDGET_ROWS },
@@ -263,8 +291,18 @@ export default function DashboardPage() {
           )}
         </>
       )}
-      <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} onConfigure={import.meta.env.DEV ? setConfigure : undefined} />
-      {import.meta.env.DEV && <ServiceConfigDialog kind={configure} onOpenChange={(o) => !o && setConfigure(null)} />}
-    </>
+      <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} services={widgets.data ?? []} admin={admin} onConfigure={openWidgetSettings} />
+    </ReadinessProvider>
+    </div>
   );
+}
+
+/** The schedule fan-out is read only while its widget is shown. */
+function ScheduleBody({ hosts, byId, now }: { hosts: Host[]; byId: Map<string, Host>; now: number }) {
+  const schedule = useSchedule(hosts.map((h) => h.id));
+  useWidgetReady("schedule", firstResult(schedule));
+  const visibleIds = new Set(hosts.map((h) => h.id));
+  if (schedule.isPending) return <WidgetBodySkeleton />;
+  if (schedule.isError) return <QueryError error={schedule.error} compact onRetry={() => void schedule.refetch()} />;
+  return <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={byId} now={now} />;
 }

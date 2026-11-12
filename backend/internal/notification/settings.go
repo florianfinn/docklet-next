@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296; M19 backend contracts and target identity integration.
 
 package notification
 
@@ -18,34 +18,61 @@ import (
 	"gorm.io/gorm"
 	"maps"
 	"strings"
+	"unicode/utf8"
 )
 
 func (s *NotificationService) GetAllSettings(ctx context.Context) ([]NotificationSettings, error) {
 	var settings []NotificationSettings
-	if err := s.db.WithContext(ctx).Find(&settings).Error; err != nil {
+	if err := s.db.WithContext(ctx).Order("name COLLATE NOCASE, id").Find(&settings).Error; err != nil {
 		return nil, fmt.Errorf("failed to get notification settings: %w", err)
 	}
 	return settings, nil
 }
 
-func (s *NotificationService) GetSettingsByProvider(ctx context.Context, provider notifications.NotificationProvider) (*NotificationSettings, error) {
+func (s *NotificationService) GetSettingsByID(ctx context.Context, id uint) (*NotificationSettings, error) {
 	var setting NotificationSettings
-	if err := s.db.WithContext(ctx).Where("provider = ?", provider).First(&setting).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&setting).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &notification.Problem{Code: "notification.target-not-found", Status: 404}
+		}
 		return nil, err
 	}
 	return &setting, nil
 }
 
-func (s *NotificationService) CreateOrUpdateSettings(ctx context.Context, provider notifications.NotificationProvider, enabled bool, localConfig database.JSON) (*NotificationSettings, error) {
+func (s *NotificationService) SaveTarget(ctx context.Context, id uint, input notification.Update) (*NotificationSettings, error) {
 
+	name := strings.TrimSpace(input.Name)
+	if name == "" || utf8.RuneCountInString(name) > 64 {
+		return nil, &notification.Problem{Code: "notification.name-invalid", Field: "/name", Status: 400}
+	}
+	provider, enabled, localConfig := notifications.NotificationProvider(input.Provider), input.Enabled, database.JSON(input.Config)
+	if !notifications.IsValidNotificationProvider(provider) {
+		return nil, &notification.Problem{Code: "notification.config-invalid", Field: "/provider", Status: 400}
+	}
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
 	var setting NotificationSettings
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Where("provider = ?", provider).First(&setting).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		if id != 0 {
+			if err := tx.Where("id = ?", id).First(&setting).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return &notification.Problem{Code: "notification.target-not-found", Status: 404}
+				}
+				return err
+			}
+			if setting.Provider != provider {
+				return &notification.Problem{Code: "notification.config-invalid", Field: "/provider", Status: 400}
+			}
+		}
+		var count int64
+		if err := tx.Model(&NotificationSettings{}).Where("name = ? COLLATE NOCASE AND id <> ?", name, id).Count(&count).Error; err != nil {
 			return err
 		}
+		if count > 0 {
+			return &notification.Problem{Code: "notification.name-taken", Field: "/name", Status: 409}
+		}
+		setting.Name = name
 		existing := setting.Config
 		encrypted, err := encryptNotificationConfigCredentialsInternal(provider, localConfig, existing)
 		if err != nil {
@@ -198,9 +225,13 @@ func cloneNotificationConfigInternal(localConfig database.JSON) database.JSON {
 	return cloned
 }
 
-func (s *NotificationService) DeleteSettings(ctx context.Context, provider notifications.NotificationProvider) error {
-	if err := s.db.WithContext(ctx).Where("provider = ?", provider).Delete(&NotificationSettings{}).Error; err != nil {
-		return fmt.Errorf("failed to delete notification settings: %w", err)
+func (s *NotificationService) DeleteSettings(ctx context.Context, id uint) error {
+	result := s.db.WithContext(ctx).Where("id = ?", id).Delete(&NotificationSettings{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return &notification.Problem{Code: "notification.target-not-found", Status: 404}
 	}
 	return nil
 }

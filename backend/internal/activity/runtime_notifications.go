@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation; M21 container image update failures.
 
 package activity
 
@@ -15,15 +15,17 @@ import (
 	"time"
 )
 
-// Deployment notices share the terminal receipt transaction and contain only coded facts.
+// Stack deployment and container image update notices share the terminal receipt
+// transaction and contain only coded facts.
 // A shutdown or restart interruption stays silent (OQ-1 b); an administrator disposition notifies.
 func runtimeNotifyFailureTx(tx *gorm.DB, now time.Time, row *RuntimeReceipt, code string, silent, disposition bool) error {
-	cfg := config.Load()
-	if silent || cfg.AgentMode || cfg.EdgeAgent || row.OperationID == nil || row.TargetKind == nil || *row.TargetKind != "stack" {
+	cfg := config.LoadRole()
+	if silent || cfg.AgentMode || cfg.EdgeAgent || row.OperationID == nil || row.TargetKind == nil {
 		return nil
 	}
-	switch *row.OperationID {
-	case "deploy-project", "redeploy-project", "update-project", "restore-project":
+	switch *row.TargetKind + ":" + *row.OperationID {
+	case "stack:deploy-project", "stack:redeploy-project", "stack:update-project", "stack:restore-project",
+		"container:update-container", "container:restore-container-image":
 	default:
 		return nil
 	}
@@ -41,9 +43,13 @@ func runtimeNotifyFailureTx(tx *gorm.DB, now time.Time, row *RuntimeReceipt, cod
 			host = env.Name
 		}
 	}
-	stack := ""
+	name := ""
 	if row.TargetName != nil {
-		stack = *row.TargetName
+		name = *row.TargetName
 	}
-	return notificationoutbox.Insert(tx, notificationoutbox.Row{Event: "deploy_failed", EnvironmentID: row.EnvironmentID, DedupKey: "deploy:" + row.EnvironmentID + ":" + row.RunID, Payload: database.JSON{"host": host, "stack": stack, "operation": *row.OperationID, "reason": code}, CreatedAt: now})
+	payload := database.JSON{"host": host, "stack": name, "operation": *row.OperationID, "reason": code}
+	if *row.TargetKind == "container" {
+		payload = database.JSON{"host": host, "container": name, "operation": *row.OperationID, "reason": code}
+	}
+	return notificationoutbox.Insert(tx, notificationoutbox.Row{Event: "deploy_failed", EnvironmentID: row.EnvironmentID, DedupKey: "deploy:" + row.EnvironmentID + ":" + row.RunID, Payload: payload, CreatedAt: now})
 }

@@ -9,6 +9,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"log/slog"
 	"os"
@@ -46,11 +47,11 @@ func (s *Service) sourceArchive(ctx context.Context, id string) (*backuptypes.Sy
 		return nil, "", archiveInfo{}, ErrSystemBackupNotFound
 	}
 	path := filepath.Join(s.backupDir(), name)
-	newest, err := newestMigration()
+	newest, err := s.db.LatestMigrationVersion()
 	if err != nil {
 		return nil, "", archiveInfo{}, ErrSystemBackupUnavailable
 	}
-	info, err := validateArchive(ctx, path, newest)
+	info, err := validateArchive(ctx, path, newest, s.db.MigrationOptions())
 	if err != nil {
 		return nil, "", archiveInfo{}, err
 	}
@@ -183,13 +184,13 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
-	marker, err := preparePair(ctx, s.config, s.db.Path(), id, started.ID)
+	marker, err := preparePair(ctx, s.config, s.db.Path(), id, started.ID, s.db.MigrationOptions())
 	if err != nil {
 		blocked()
 		return
 	}
 	s.maintenance.SetPhase("applying")
-	if err = installPair(ctx, restoreStateDir(s.db.Path()), marker); err != nil {
+	if err = installPair(ctx, restoreStateDir(s.db.Path()), marker, s.db.MigrationOptions()); err != nil {
 		blocked()
 		return
 	}
@@ -316,25 +317,14 @@ func OfflineRestore(ctx context.Context, cfg *config.Config, id string) error {
 		return restoreLockError(err)
 	}
 	defer lock.Stop()
+	// Classify the destination before checkpoint policy can chmod it or create WAL.
+	if err = database.ValidateExistingDatabase(ctx, path); err != nil {
+		return fmt.Errorf("%w: destination database: %v", errMigration, err)
+	}
 	if err = checkpointStoppedPair(ctx, path); err != nil {
 		return err
 	}
-	// The target is stopped. Validate any existing Hub identity/version before replacing it.
-	if _, err := os.Stat(path); err == nil {
-		pool, err := openImage(path)
-		if err != nil {
-			return errMigration
-		}
-		var count int
-		err = pool.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Scan(&count)
-		if err == nil && count > 0 {
-			err = database.ValidateSnapshot(ctx, pool, mustNewestMigration())
-		}
-		_ = pool.Close()
-		if err != nil {
-			return errMigration
-		}
-	}
+
 	marker, err := preparePair(ctx, cfg, path, id, "")
 	if err != nil {
 		return err

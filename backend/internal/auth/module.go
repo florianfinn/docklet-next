@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; M17 runtime history and personal preferences.
 
 // Package auth owns authentication, token issuance and verification, login
 // session policy, and the authentication HTTP surface.
@@ -59,12 +59,13 @@ func RegisterAuth(
 		authService:     authService,
 		settingsService: settingsService,
 	}
+	h.registerUIPreferences(api)
 	huma.Register(api, huma.Operation{
 		OperationID: "get-sign-in-mode",
 		Method:      http.MethodGet,
 		Path:        "/auth/mode",
 		Summary:     "Get active sign-in mode",
-		Description: "Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests, and cookie-less login/refresh POSTs without Origin, use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.",
+		Description: "Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.",
 		Tags:        []string{"Auth"},
 		Security:    []map[string][]string{},
 	}, h.GetSignInMode)

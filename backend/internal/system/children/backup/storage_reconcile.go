@@ -2,7 +2,7 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original startup storage reconciliation for issue #32.
+// Deviations: Original startup storage reconciliation for issue #32; M16 bind mounts and backup completion.
 
 package backup
 
@@ -21,6 +21,11 @@ import (
 
 // ReconcileStorage removes incomplete files and records left by a crashed process.
 func (s *Service) ReconcileStorage(ctx context.Context) error {
+	if s.db != nil {
+		if err := s.db.WithContext(ctx).Table("system_backup_runs").Where("copy_state = ?", "pending").Updates(map[string]any{"copy_state": "failed", "copy_error_code": "runtime.interrupted"}).Error; err != nil {
+			return err
+		}
+	}
 	dir := s.backupDir()
 	if err := s.archiveDirectoryError(); err != nil {
 		return ErrSystemBackupUnavailable

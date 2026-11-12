@@ -66,14 +66,15 @@ func TestRuntimeReceiverProcessChild(t *testing.T) {
 	if mode == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Second)
-	defer cancel()
 	// Agent initialization runs exactly the same shipped 003 migration schema.
-	db, err := database.Initialize(ctx, sqlitestore.URL(os.Getenv("RECEIVER_PROCESS_DB")), database.MigrationOptions{})
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(os.Getenv("RECEIVER_PROCESS_DB")), database.MigrationOptions{})
 	require.NoError(t, err)
 	svc := NewActivityService(db, nil)
-	generation, err := NewRuntimeService(svc, &b1ResolverInternal{}).InitializeGeneration(ctx)
+	generation, err := NewRuntimeService(svc, &b1ResolverInternal{}).InitializeGeneration(t.Context())
 	require.NoError(t, err)
+	// The checkpoint budget starts after setup, so migrations under load cannot use it up.
+	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Second)
+	defer cancel()
 	runID := os.Getenv("RECEIVER_PROCESS_RUN")
 	command := b3ProcessCommand(generation, runID, "")
 	pool, err := db.DB.DB()
@@ -102,7 +103,8 @@ func receiverProcessRun(t *testing.T, mode, path, runID, counter string) string 
 	t.Helper()
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	// Hang guard for the whole child, setup included; the child bounds its own checkpoint.
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, "-test.run=^TestRuntimeReceiverProcessChild$", "-test.v")
 	cmd.Env = append(os.Environ(), "RECEIVER_PROCESS_MODE="+mode, "RECEIVER_PROCESS_DB="+path, "RECEIVER_PROCESS_RUN="+runID, "RECEIVER_PROCESS_COUNTER="+counter)

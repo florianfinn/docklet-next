@@ -12,7 +12,7 @@ export function StackStatusBadge({ stack, host, className }: { stack: Stack; hos
   const tone = STACK_STATUS_TONE[status];
   return (
     <ToneBadge tone={tone} className={cn("min-w-24 justify-start", className)}>
-      {status === "busy" ? <Loader2 className="animate-spin" aria-hidden /> : <ToneDot tone={tone} pulse={status === "problem"} className="size-1.5" />}
+      {status === "busy" ? <Loader2 className="animate-spin" aria-hidden /> : <ToneDot tone={tone} pulse={status === "down" || status === "unhealthy"} className="size-1.5" />}
       {t(status)}
     </ToneBadge>
   );

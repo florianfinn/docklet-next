@@ -2,7 +2,7 @@
 // Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: Stable wire-code catalogue for runs and events.
+// Deviations: Stable wire-code catalogue for runs and events; M17 runtime history and personal preferences.
 
 package activity
 
@@ -10,6 +10,17 @@ package activity
 type Code string
 
 const (
+	CodeSelfUpdateFailed           Code = "update.self-failed"
+	CodeSelfUpdateUnknown          Code = "update.outcome-unknown"
+	CodeLoadSustained              Code = "load.sustained"
+	CodeConditionDown              Code = "container.condition.down"
+	CodeConditionUnhealthy         Code = "container.condition.unhealthy"
+	CodeConditionRestartLoop       Code = "container.condition.restart-loop"
+	CodeConditionRunningAgain      Code = "container.condition.running-again"
+	CodeContainerRecreateRecovered Code = "container.recreate-recovered"
+	CodeContainerRecreateAmbiguous Code = "container.recreate-ambiguous"
+	CodeContainerOriginLocked      Code = "container.origin-locked"
+	CodeRuntimeIdempotencyMismatch Code = "runtime.idempotency-mismatch"
 	CodeAutoHealRestarted          Code = "autoheal.restarted"
 	CodeAutoHealRestartFailed      Code = "autoheal.restart-failed"
 	CodeAutoHealLimitReached       Code = "autoheal.limit-reached"
@@ -111,16 +122,13 @@ const (
 	CodeEventEnvironmentMTLSCertIssued    Code = "environment.mtls.cert_issued"
 	CodeEventEnvironmentMTLSEnroll        Code = "environment.mtls.enroll"
 	CodeEventEnvironmentMTLSDownload      Code = "environment.mtls.download"
-	CodeEventWebhookCreate                Code = "webhook.create"
-	CodeEventWebhookUpdate                Code = "webhook.update"
-	CodeEventWebhookDelete                Code = "webhook.delete"
-	CodeEventWebhookTrigger               Code = "webhook.trigger"
 	CodeEventNotificationSend             Code = "notification.send"
 )
 
 // Values is the complete wire catalogue used by the API contract.
 func Values() []Code {
 	return []Code{
+		CodeContainerRecreateRecovered, CodeContainerRecreateAmbiguous, CodeContainerOriginLocked, CodeRuntimeIdempotencyMismatch,
 		CodeRunRequestMismatch,
 		CodeRuntimeOutcomeUnknown,
 		CodeRuntimeInterrupted,
@@ -226,16 +234,13 @@ func Values() []Code {
 		CodeEventEnvironmentMTLSCertIssued,
 		CodeEventEnvironmentMTLSEnroll,
 		CodeEventEnvironmentMTLSDownload,
-		CodeEventWebhookCreate,
-		CodeEventWebhookUpdate,
-		CodeEventWebhookDelete,
-		CodeEventWebhookTrigger,
 		CodeEventNotificationSend,
 		CodeAutoHealRestarted,
 		CodeAutoHealRestartFailed,
 		CodeAutoHealLimitReached,
 		CodeAutoHealInterrupted,
 		CodeNotificationDeliveryFailed,
+		CodeLoadSustained, CodeConditionDown, CodeConditionUnhealthy, CodeConditionRestartLoop, CodeConditionRunningAgain, CodeSelfUpdateFailed, CodeSelfUpdateUnknown,
 	}
 }
 

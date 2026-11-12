@@ -7,8 +7,11 @@
 package api
 
 import (
+	"log/slog"
+
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"reflect"
 	"strconv"
@@ -40,6 +43,17 @@ func imageErrorTransformer(ctx huma.Context, status string, value any) (any, err
 	}
 	if _, ok := value.(*imageDTO.OperationError); ok {
 		return value, nil
+	}
+	if _, ok := value.(*environmentDTO.HostProblem); ok {
+		return value, nil
+	}
+	// The public body becomes a neutral code below; the server log keeps the cause of an unexpected failure.
+	if model, ok := value.(*huma.ErrorModel); ok && code >= 500 {
+		causes := make([]string, 0, len(model.Errors))
+		for _, detail := range model.Errors {
+			causes = append(causes, detail.Message)
+		}
+		slog.WarnContext(ctx.Context(), "Image or update request failed", "method", ctx.Method(), "path", ctx.URL().Path, "status", code, "detail", model.Detail, "causes", strings.Join(causes, "; "))
 	}
 	problem := "image.usage-unavailable"
 	if strings.Contains(ctx.URL().Path, "container-registries") {
@@ -97,7 +111,11 @@ func registerImageSafetyErrors(api huma.API) {
 				if upgrade || jobs || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") {
 					errorSchema = &huma.Schema{OneOf: []*huma.Schema{errorSchema, api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}
 				}
+				prior := op.Responses[status]
 				op.Responses[status] = &huma.Response{Description: "Typed neutral image or registry failure", Content: map[string]*huma.MediaType{"application/json": {Schema: errorSchema}}}
+				if prior != nil && prior.Content["application/problem+json"] != nil {
+					op.Responses[status].Content["application/problem+json"] = prior.Content["application/problem+json"]
+				}
 			}
 		}
 	}

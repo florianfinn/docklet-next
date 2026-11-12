@@ -8,12 +8,11 @@ import { useAdapter } from "@/data/use-adapter";
 import { formatRelative } from "@/domain/format";
 import type { Host } from "@/domain/model";
 import { HostChip } from "@/shared/components/host-chip";
-import { requestServiceRestart } from "@/shared/components/service-restart-store";
 import { IconTile } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 
-import { useStackCommands } from "@/shared/hooks/use-stack-commands";
+import { AttentionServiceRestart } from "./AttentionServiceRestart";
 import type { AttentionItem, AttentionKind } from "../attention";
 import { useAttentionText } from "../attention-text";
 
@@ -32,10 +31,6 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
   const t = useTranslations("dashboard.attention");
   const title = useAttentionText();
   const navigate = useNavigate();
-  const adapter = useAdapter();
-  const cmd = useStackCommands();
-  const reconnect = useCapability("reconnectHost");
-  const restart = useCapability("restartService");
 
   const sub = (item: AttentionItem) => {
     const v = item.values;
@@ -65,19 +60,12 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => navigate(`/stacks/${item.stackId}?tab=logs&service=${item.service}`)}>
               {t("actions.logs")}
             </Button>
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!restart.available} title={restart.reason} onClick={() => {
-                const { stackId, service } = item;
-                if (stackId && service) requestServiceRestart([{ stackId, stackName: String(item.values.stack ?? stackId), service, containerId: item.containerId }], () => cmd.restartService(stackId, service));
-              }}>
-              {t("actions.restart")}
-            </Button>
+            <AttentionServiceRestart item={item} />
           </>
         );
       case "offline":
         return (
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!reconnect.available} title={reconnect.reason} onClick={() => item.hostId && void adapter.reconnectHost(item.hostId)}>
-            {t("actions.check")}
-          </Button>
+          <HostCheckButton hostId={item.hostId} label={t("actions.check")} />
         );
       case "failed":
         return (
@@ -140,4 +128,10 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
       </ol>
     </ScrollArea>
   );
+}
+
+function HostCheckButton({ hostId, label }: { hostId?: string; label: string }) {
+  const adapter = useAdapter();
+  const capability = useCapability("reconnectHost", { kind: "host", id: hostId ?? "" });
+  return <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!hostId || !capability.available} title={capability.reason} onClick={() => hostId && void adapter.reconnectHost(hostId)}>{label}</Button>;
 }

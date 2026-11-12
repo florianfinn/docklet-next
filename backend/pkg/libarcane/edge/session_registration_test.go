@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation.
+// Deviations: Original host registration implementation; request visibility after the register ACK for #347.
 
 package edge
 
@@ -75,8 +75,9 @@ func TestEdgeRegistrationInProcessTokenLifecycle(t *testing.T) {
 			})
 			stream := &memoryRegistrationStream{ctx: metadata.NewIncomingContext(ctx, metadata.Pairs(HeaderAgentToken, token)), token: token}
 			stream.onRegister = func() {
-				tunnel, ok := registry.Get("example-host").Get()
+				tunnel, ok := registry.tunnels.Get("example-host")
 				require.True(t, ok)
+				require.False(t, registry.Get("example-host").IsPresent())
 				require.Equal(t, "example-key", tunnel.APIKeyID)
 				require.Equal(t, AgentTokenHash(token), tunnel.TokenHash)
 			}
@@ -138,9 +139,16 @@ func TestEdgeWebSocketRegistrationTokenLifecycle(t *testing.T) {
 			err = wsjson.Read(ctx, conn, &response)
 			if state == "valid" {
 				require.NoError(t, err)
-				require.True(t, response.Accepted)
-				tunnel, ok := registry.Get("example-host").Get()
-				require.True(t, ok)
+				require.Equal(t, MessageTypeRegisterResponse, response.Type, "first frame: %+v", response)
+				require.True(t, response.Accepted, "rejected: %q", response.Error)
+				// The registry publishes the tunnel only after the server has sent this ACK and cleared
+				// its pending flag, so the client can see the ACK a moment before the tunnel is visible.
+				var tunnel *AgentTunnel
+				require.Eventually(t, func() bool {
+					var ok bool
+					tunnel, ok = registry.Get("example-host").Get()
+					return ok
+				}, time.Second, time.Millisecond)
 				require.Equal(t, "example-key", tunnel.APIKeyID)
 				require.Equal(t, AgentTokenHash(token), tunnel.TokenHash)
 			} else {

@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; fixed event and finished-activity limits.
+// Deviations: Local module namespace; fixed event and finished-activity limits; M19 backend contracts and target identity integration.
 
 package scheduler
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"log/slog"
 
 	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
@@ -27,11 +28,20 @@ type EventCleanupJob struct {
 }
 
 func NewEventCleanupJob(eventService *event.EventService, activityService *activity.ActivityService, settingsService *settings.SettingsService) *EventCleanupJob {
-	return &EventCleanupJob{
+	j := &EventCleanupJob{
 		eventService:    eventService,
 		activityService: activityService,
 		settingsService: settingsService,
 	}
+	if settingsService != nil {
+		settingsService.SubscribeSettingsChanges([]string{"activityEventLimit", "activityRunLimit"}, func(_ []libarcane.SettingUpdate) {
+			_, err := j.Run(context.Background())
+			if err != nil {
+				slog.Warn("Activity retention after save failed", "error", err)
+			}
+		})
+	}
+	return j
 }
 
 func (j *EventCleanupJob) Name() string {
@@ -46,7 +56,7 @@ func (j *EventCleanupJob) Schedule(ctx context.Context) string {
 func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, error) {
 	slog.InfoContext(ctx, "Running event cleanup job", "jobName", EventCleanupJobName)
 
-	deletedEvents, err := j.eventService.PruneEvents(ctx, 500)
+	deletedEvents, err := j.eventService.PruneEvents(ctx, j.settingsService.GetIntSetting(ctx, "activityEventLimit", 500))
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to prune events", "jobName", EventCleanupJobName, "error", err)
 		return schedulertypes.Outcome{}, err
@@ -54,11 +64,11 @@ func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, erro
 
 	slog.InfoContext(ctx, "Event cleanup job completed successfully",
 		"jobName", EventCleanupJobName,
-		"maxEntries", 500,
+		"maxEntries", j.settingsService.GetIntSetting(ctx, "activityEventLimit", 500),
 		"deleted", deletedEvents)
 
 	if j.activityService != nil {
-		deleted, err := j.activityService.PruneHistory(ctx, 100)
+		deleted, err := j.activityService.PruneHistory(ctx, j.settingsService.GetIntSetting(ctx, "activityRunLimit", 100))
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to prune activity history", "jobName", EventCleanupJobName, "error", err)
 			return schedulertypes.Outcome{}, err
@@ -66,7 +76,7 @@ func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, erro
 
 		slog.InfoContext(ctx, "Activity history cleanup completed successfully",
 			"jobName", EventCleanupJobName,
-			"maxEntries", 100,
+			"maxEntries", j.settingsService.GetIntSetting(ctx, "activityRunLimit", 100),
 			"deleted", deleted)
 	}
 	return schedulertypes.Outcome{Status: schedulertypes.Succeeded}, nil

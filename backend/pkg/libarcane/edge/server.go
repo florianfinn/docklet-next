@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Edge protocol marker exchange (#362).
 
 package edge
 
@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/florianfinn/docklet-next/types/notification"
 	"io"
 	"log/slog"
@@ -20,7 +21,7 @@ import (
 	"time"
 	"uuid"
 
-	certgen "github.com/florianfinn/docklet-next/cli/pkg/generate"
+	certgen "github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge/certgen"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/mo"
 	kit "go.getarcane.app/kit/pkg"
@@ -39,11 +40,11 @@ import (
 
 const (
 	// TunnelStaleTimeout is how long before a tunnel is considered stale.
-	TunnelStaleTimeout = 2 * time.Minute
+	TunnelStaleTimeout = 90 * time.Second
 	// tunnelStaleSweepInterval is how often stale tunnels are reaped. The sweep
-	// is a backstop behind read-deadline liveness, so it runs well under
-	// TunnelStaleTimeout to keep the dead-but-selectable window short.
-	tunnelStaleSweepInterval = time.Minute
+	// enforces application progress on both transports, including ServeHTTP
+	// gRPC streams whose transport can remain alive without heartbeats.
+	tunnelStaleSweepInterval = 15 * time.Second
 	// streamDeliveryTimeout bounds per-message delivery wait to a pending consumer.
 	// This prevents silent data loss while avoiding indefinite blocking.
 	streamDeliveryTimeout = 5 * time.Second
@@ -324,6 +325,11 @@ func (s *TunnelServer) populateSessionMetadata(tunnel *AgentTunnel, registerMsg 
 	if registerMsg != nil {
 		tunnel.AgentInstance = strings.TrimSpace(registerMsg.AgentInstance)
 		tunnel.Capabilities = append([]string(nil), registerMsg.Capabilities...)
+		agentProtocol := contract.ParseEdgeProtocol(registerMsg.Capabilities)
+		if agentProtocol.Malformed {
+			slog.Warn("Edge agent sent a malformed protocol marker; treating it as protocol 1", "environmentId", tunnel.EnvironmentID)
+		}
+		tunnel.EdgeProtocol = agentProtocol.Version
 	}
 
 	if tunnel.Conn != nil {
@@ -397,6 +403,7 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 		_ = tunnel.closeForMaintenance()
 		return
 	}
+	tunnel.registerPending.Store(true)
 	accepted, drainPrevious, rejectReason, err := s.registry.RegisterSession(callbackCtx, tunnel, TunnelStaleTimeout)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to register edge agent session",
@@ -432,11 +439,13 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 		"environmentId", tunnel.EnvironmentID,
 		"sessionId", tunnel.SessionID,
 		"securityMode", tunnel.SecurityMode,
+		"edgeProtocol", tunnel.EdgeProtocol,
 	)
 
 	// Echo the agent's capabilities and append the manager's own so the agent
 	// learns what this manager supports (older agents ignore extra strings).
-	capabilities := kit.Unique(append(slices.Clone(tunnel.Capabilities), tunnelCapabilityProtoParity, tunnelCapabilityChunkedRequest))
+	// Protocol markers are never echoed: the reply carries only the manager's own.
+	capabilities := kit.Unique(append(contract.WithoutEdgeProtocol(tunnel.Capabilities), tunnelCapabilityProtoParity, tunnelCapabilityChunkedRequest, contract.EdgeProtocolCapability()))
 
 	if sendErr := tunnel.Conn.Send(&TunnelMessage{
 		Type:          MessageTypeRegisterResponse,
@@ -456,6 +465,7 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 		return
 	}
 
+	tunnel.registerPending.Store(false)
 	s.updateConnectionStatusInternal(callbackCtx, tunnel, true)
 
 	defer func() {
@@ -505,9 +515,9 @@ func (s *TunnelServer) handleTunnelMessage(ctx context.Context, tunnel *AgentTun
 	case MessageTypeHeartbeat:
 		s.handleHeartbeat(ctx, tunnel, msg)
 	case MessageTypeResponse:
-		s.deliverResponse(ctx, tunnel, msg)
+		s.deliverResponse(ctx, tunnel, msg, deliveryTimer)
 	case MessageTypeCommandAck, MessageTypeCommandOutput, MessageTypeCommandComplete, MessageTypeFileChunk:
-		s.deliverResponse(ctx, tunnel, msg)
+		s.deliverResponse(ctx, tunnel, msg, deliveryTimer)
 	case MessageTypeEvent:
 		s.handleEvent(ctx, tunnel, msg)
 	case MessageTypeStreamData, MessageTypeStreamEnd, MessageTypeWebSocketData, MessageTypeWebSocketClose, MessageTypeStreamClose:
@@ -522,7 +532,11 @@ func (s *TunnelServer) handleTunnelMessage(ctx context.Context, tunnel *AgentTun
 }
 
 func (s *TunnelServer) handleHeartbeat(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
-	tunnel.UpdateHeartbeat()
+	now := time.Now()
+	if s.cleanupSchedule != nil && s.cleanupSchedule.Now != nil {
+		now = s.cleanupSchedule.Now()
+	}
+	tunnel.updateHeartbeatAt(now)
 	ack := &TunnelMessage{
 		ID:   msg.ID,
 		Type: MessageTypeHeartbeatAck,
@@ -532,19 +546,25 @@ func (s *TunnelServer) handleHeartbeat(ctx context.Context, tunnel *AgentTunnel,
 	}
 }
 
-func (s *TunnelServer) deliverResponse(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
+// A burst of response chunks can outrun the consumer for a moment; like stream
+// data, delivery waits up to streamDeliveryTimeout before failing the request.
+func (s *TunnelServer) deliverResponse(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage, deliveryTimer *time.Timer) {
 	if req, ok := tunnel.Pending.Load(msg.ID); ok {
 		pending, isPending := req.(*PendingRequest)
 		if !isPending {
 			return
 		}
+		deliveryTimer.Stop()
+		deliveryTimer.Reset(streamDeliveryTimeout)
+		defer deliveryTimer.Stop()
 		select {
 		case pending.ResponseCh <- msg:
-		default:
-			err := fmt.Errorf("response delivery failed because pending request %s is not consuming messages", msg.ID)
+		case <-ctx.Done():
+		case <-deliveryTimer.C:
+			err := fmt.Errorf("response delivery timed out for pending request %s", msg.ID)
 			tunnel.Pending.Delete(msg.ID)
 			pending.failureCh <- err
-			slog.WarnContext(ctx, "Failed pending request with full response channel", "id", msg.ID)
+			slog.WarnContext(ctx, "Failed slow pending response consumer", "id", msg.ID, "timeout", streamDeliveryTimeout)
 		}
 		return
 	}
@@ -610,18 +630,28 @@ func (s *TunnelServer) StartCleanupLoop(ctx context.Context) {
 	defer s.cleanupDoneOnce.Do(func() { close(s.cleanupDone) })
 	ticker := time.NewTicker(tunnelStaleSweepInterval)
 	defer ticker.Stop()
+	ticks := ticker.C
+	if s.cleanupSchedule != nil && s.cleanupSchedule.Ticks != nil {
+		ticks = s.cleanupSchedule.Ticks
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			removed := s.registry.CleanupStale(ctx, TunnelStaleTimeout)
+		case now, ok := <-ticks:
+			if !ok {
+				return
+			}
+			removed := s.registry.CleanupStaleAt(ctx, TunnelStaleTimeout, now)
 			for _, tunnel := range removed {
 				s.updateConnectionStatusInternal(context.WithoutCancel(ctx), tunnel, false)
 			}
 			if len(removed) > 0 {
 				slog.InfoContext(ctx, "Cleaned up stale tunnels", "count", len(removed))
+			}
+			if s.cleanupSchedule != nil && s.cleanupSchedule.AfterSweep != nil {
+				s.cleanupSchedule.AfterSweep()
 			}
 		}
 	}

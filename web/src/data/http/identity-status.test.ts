@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original status-only response ownership regressions for issue #133.
 
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createIdentityReads } from "./identity-reads";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth } from "./auth";
@@ -12,7 +12,7 @@ import { createSettingsCore } from "./settings-core";
 import { createHostCommands } from "./host-commands";
 import { csrf } from "./runtime-commands.test-support";
 
-it.each(["settings-success", "settings-failure", "setup", "auth-failure", "host-failure"])("%s discards 50 status-only bodies without retaining controllers", async (consumer) => {
+it.each(["settings-success", "settings-failure", "setup", "auth-failure", "host-failure"])("%s settles 50 status-only bodies without retaining controllers", async (consumer) => {
   let cancelled = 0, aborted = 0;
   const reads = createIdentityReads(async (input, init) => {
     if (String(input).endsWith("/auth/mode")) return new Response("{}", { headers: { "X-CSRF-Token": csrf } });
@@ -30,7 +30,44 @@ it.each(["settings-success", "settings-failure", "setup", "auth-failure", "host-
       : settings.saveSettings("general", general);
     await action.catch(() => undefined);
   }
-  expect(cancelled).toBe(50);
+  // Failures cancel their unread body; successes drain it in the background and never cancel it.
+  expect(cancelled).toBe(consumer.includes("failure") ? 50 : 0);
   reads.reset();
   expect(aborted).toBe(0);
+});
+
+it.each(["settings", "host"])("%s cancels an unclosed status-only failure before awaiting its body", async consumer => {
+  let cancelled = 0;
+  let controller!: ReadableStreamDefaultController;
+  const client = { fetch: (async () => new Response(new ReadableStream({ start(value) { controller = value; }, cancel() { cancelled++; } }), { status: 503 })), token: async () => csrf };
+  const action = consumer === "settings" ? createSettingsCore("/api", client).saveSettings("hostDefaults", { connection: "direct", projectDir: "/srv/projects", installDir: "/srv/agent", puid: "", pgid: "", detectSocketGroup: true })
+    : createHostCommands("/api", client, async () => {}, () => {}).removeHost("example");
+  const settled = action.then(() => undefined, error => error);
+  try {
+    await vi.waitFor(() => expect(cancelled).toBe(1), { timeout: 250 });
+    const error = await settled;
+    if (consumer === "settings") expect(error.message).toBe("settings.write.503");
+    else expect(error.outcome).toMatchObject({ kind: "error", status: 503 });
+  } finally {
+    if (!cancelled) controller.close();
+    await settled;
+  }
+});
+
+it.each(["retention", "setup", "csrf"])("%s reads a successful status-only body to its end without cancelling it", async consumer => {
+  let cancelled = 0, pulled = 0;
+  const body = () => new ReadableStream<Uint8Array>({
+    pull(controller) { pulled++; if (pulled > 1) controller.close(); else controller.enqueue(new TextEncoder().encode("[]")); },
+    cancel() { cancelled++; },
+  });
+  const reads = createIdentityReads(async () => new Response(body(), { headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf } }));
+  const client = createCsrfClient("/api", reads.fetch);
+  const settings = createSettingsCore("/api", client);
+  const hostDefaults = { connection: "direct" as const, projectDir: "/srv/projects", installDir: "/srv/agent", puid: "1000", pgid: "1000", detectSocketGroup: true };
+  const general = { hubName: "Example", hubAddress: "", domainUrl: "", linkBase: "auto" as const, timeZone: "UTC" };
+  if (consumer === "retention") await settings.setBackupDefaultRetention!(9);
+  else if (consumer === "setup") await settings.completeSetup({ general, auth: { mode: "none" }, hostDefaults } as Parameters<typeof settings.completeSetup>[0]);
+  else await client.token();
+  await vi.waitFor(() => expect(pulled).toBeGreaterThan(1), { timeout: 250 });
+  expect(cancelled).toBe(0);
 });

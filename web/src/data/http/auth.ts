@@ -2,29 +2,33 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Connected sign-in and profile HTTP calls.
+// Deviations: Connected sign-in and profile HTTP calls. M23 #425: session discovery skips the anonymous probe without the session hint in local mode.
 
 import { discardResponse } from "./identity-reads";
+import { clearSessionHint, hasSessionHint } from "./session-hint";
 import { CancelledError } from "@tanstack/react-query";
 
+import type { components } from "@/api/generated/schema";
 import type { AuthApi, CurrentUser } from "@/data/api";
 import type { AuthMode } from "@/domain/settings";
 
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { maintenanceOutcome } from "./problem-code";
 
 function user(value: unknown): CurrentUser {
   if (!value || typeof value !== "object") throw new Error("auth.invalid-user");
   const item = value as Record<string, unknown>;
   if (typeof item.id !== "string" || typeof item.username !== "string" || typeof item.requiresPasswordChange !== "boolean") throw new Error("auth.invalid-user");
-  return { id: item.id, username: item.username, requiresPasswordChange: item.requiresPasswordChange, locale: typeof item.locale === "string" ? item.locale : null };
+  return { id: item.id, username: item.username, requiresPasswordChange: item.requiresPasswordChange, isAdmin: item.isAdmin !== false, assignments: (item.assignments ?? []) as components["schemas"]["UserAppAssignment"][], locale: typeof item.locale === "string" ? item.locale : null };
 }
 
 export type SessionChange = "established" | "renewed" | "confirmed" | "lost";
 
 // Replacement clears observations; renewal keeps same-user history; loss never reconnects.
-export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0): AuthApi {
+export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0, principal: (user: CurrentUser) => void = () => {}): AuthApi {
   let currentUserId: string | undefined;
+  let currentRights: string | undefined;
   let sessionVersion = 0;
   let identityEpoch = 0;
   let renewedStamp: number | undefined;
@@ -52,7 +56,13 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     } catch {
       throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
     }
-    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    if (response.status === 403) {
+      // Proxy refusals (access.not-registered, access.disabled) carry their code for the sign-in gate.
+      const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
+      const code = typeof problem?.code === "string" && problem.code.startsWith("access.") ? problem.code : "http.error";
+      throw new AdapterOutcomeError({ kind: "error", code, status: 403 });
+    }
+    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");
     return payload.data;
@@ -63,10 +73,16 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     const epoch = identityEpoch;
     const identity = currentUserId;
     try {
+      // A local-mode browser without the session hint and without a session known to this document holds no session:
+      // answer as a refused session, without a request. A sign-in here always probes, whatever cookies a proxy passes.
+      if (currentUserId === undefined && !hasSessionHint() && await getAuthConfiguration().then(({ mode }) => mode, () => undefined) === "local") throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 });
       const result = user(await request("/auth/me"));
       assertCurrent(version);
-      if (result.id !== currentUserId) sessionChanged("established", result.id);
+      const rights = JSON.stringify([result.isAdmin, result.assignments]);
+      principal(result);
+      if (result.id !== currentUserId || currentRights !== undefined && rights !== currentRights) sessionChanged("established", result.id);
       else onSessionChange("confirmed");
+      currentRights = rights;
       return result;
     } catch (error) {
       if (version !== sessionVersion + sessionGeneration()) {
@@ -74,17 +90,24 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
         if (rereadRenewal && identity && identity === currentUserId && epoch === identityEpoch && renewedFrom !== undefined && version >= renewedFrom && renewedStamp === sessionVersion + sessionGeneration()) return getCurrentUser(false);
         throw new CancelledError();
       }
-      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) sessionChanged("lost");
+      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { clearSessionHint(); sessionChanged("lost"); }
       throw error;
     }
   }
 
-  return {
-    async getAuthMode() {
-      const payload = await request("/auth/mode") as { mode?: unknown };
+  let modeRead: Promise<{ mode: AuthMode; logoutUrl?: string }> | undefined;
+  // Concurrent start-up readers (mode query, session discovery) share one public mode read.
+  function getAuthConfiguration() {
+    modeRead ??= (async () => {
+      const payload = await request("/auth/mode") as components["schemas"]["AuthSignInConfiguration"];
       if (payload.mode !== "local" && payload.mode !== "proxy" && payload.mode !== "none") throw new Error("auth.invalid-mode");
-      return payload.mode as AuthMode;
-    },
+      return { mode: payload.mode as AuthMode, ...(payload.mode === "proxy" && payload.logoutUrl ? { logoutUrl: payload.logoutUrl } : {}) };
+    })().finally(() => { modeRead = undefined; });
+    return modeRead;
+  }
+  return {
+    getAuthConfiguration,
+    getAuthMode: async () => (await getAuthConfiguration()).mode,
     getCurrentUser,
     async login(username, password) {
       const from = sessionVersion + sessionGeneration();
@@ -92,6 +115,8 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       const result = await request("/auth/login", "POST", { username, password }) as { user?: unknown };
       const signedIn = user(result.user);
       assertCurrent(version);
+      principal(signedIn);
+      currentRights = JSON.stringify([signedIn.isAdmin, signedIn.assignments]);
       sessionChanged(signedIn.id === currentUserId ? "renewed" : "established", signedIn.id, from);
       return signedIn;
     },

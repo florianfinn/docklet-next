@@ -15,6 +15,7 @@ const LANES: Exclude<UpdateVisual, "current" | "error" | "local" | "unchecked" |
 
 /** Updates grouped by kind (major/minor/patch/new image state) with hover details. */
 export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<string, Host> }) {
+  const serviceText = useTranslations("common.stackUpdates");
   const t = useTranslations("dashboard.radar");
   const scheduleText = useScheduleText();
   const cmd = useStackCommands();
@@ -56,7 +57,7 @@ export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: M
                 name={`${stack.name} / ${svc.name}`}
                 update={svc.update}
                 side="left"
-                actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), busy: !!stack.busyActionId, updateLabel: undefined }}
+                actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), busy: !!stack.busyActionId, updateLabel: serviceText("service", { name: svc.name }) }}
               />
             </li>
           ))}

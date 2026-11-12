@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; Complete helper image default assertions.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; Complete helper image default assertions; M18 live scheduling, policy and contract foundation.
 
 package settings
 
@@ -99,10 +99,9 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		"followProjectSymlinks",
 		"autoUpdateExcludedContainers",
 		"imageEventWatcherEnabled",
-		"vulnerabilityScanEnabled",
+		"vulnerabilityScanSchedule",
 		"vulnerabilityScanInterval",
 		"toolsImage",
-		"updateCheckRegistry",
 		"trivyDbRegistry",
 		"trivyNetwork",
 		"trivySecurityOpts",
@@ -123,14 +122,12 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Empty(t, sv.Value)
 		case "imageEventWatcherEnabled":
 			require.Equal(t, "false", sv.Value)
-		case "vulnerabilityScanEnabled":
-			require.Equal(t, "false", sv.Value)
+		case "vulnerabilityScanSchedule":
+			require.Equal(t, `{"mode":"manual"}`, sv.Value)
 		case "vulnerabilityScanInterval":
 			require.Equal(t, "0 0 0 * * *", sv.Value)
 		case "toolsImage":
 			require.Empty(t, sv.Value)
-		case "updateCheckRegistry":
-			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":
 			require.Empty(t, sv.Value)
 		case "trivyNetwork":
@@ -327,11 +324,11 @@ func TestSettingsService_UpdateSettingRejectsInvalidCronBeforePersistence(t *tes
 	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
 	require.NoError(t, err)
 
-	require.NoError(t, svc.UpdateSetting(ctx, "pollingInterval", "*/5 * * * * *"))
-	require.Error(t, svc.UpdateSetting(ctx, "pollingInterval", "not a cron schedule"))
+	require.NoError(t, svc.UpdateSetting(ctx, "eventCleanupInterval", "*/5 * * * * *"))
+	require.Error(t, svc.UpdateSetting(ctx, "eventCleanupInterval", "not a cron schedule"))
 
 	var setting SettingVariable
-	require.NoError(t, svc.db.WithContext(ctx).Where("key = ?", "pollingInterval").First(&setting).Error)
+	require.NoError(t, svc.db.WithContext(ctx).Where("key = ?", "eventCleanupInterval").First(&setting).Error)
 	require.Equal(t, "*/5 * * * * *", setting.Value)
 }
 
@@ -469,14 +466,14 @@ func TestSettingsServiceActorNotifiesSubscriberOnceForMultipleMatchingKeysIntern
 
 	var calls atomic.Int32
 	notified := make(chan []libarcane.SettingUpdate, 1)
-	svc.SubscribeSettingsChanges([]string{"pollingEnabled", "pollingInterval"}, func(updates []libarcane.SettingUpdate) {
+	svc.SubscribeSettingsChanges([]string{"updateNotify", "updateCheckInterval"}, func(updates []libarcane.SettingUpdate) {
 		calls.Add(1)
 		notified <- updates
 	})
 
 	_, err = svc.UpdateSettings(ctx, settings.Update{
-		PollingEnabled:  new("false"),
-		PollingInterval: new("0 */5 * * * *"),
+		UpdateNotify:        new("true"),
+		UpdateCheckInterval: new("6h"),
 	})
 	require.NoError(t, err)
 	require.Len(t, <-notified, 2)

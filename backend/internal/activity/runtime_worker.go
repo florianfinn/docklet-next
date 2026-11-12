@@ -15,6 +15,7 @@ import (
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"gorm.io/gorm"
 )
@@ -94,6 +95,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	}
 	var outputErr error
 	var imageResult *updaterDTO.LifecycleResult
+	var recreateResult *containerDTO.RecreateResult
 	if execute && phaseErr == nil && owner.ctx.Err() == nil {
 		output, err := s.captureInternal(owner.ctx, owner.id.RunID)
 		if err != nil {
@@ -103,6 +105,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 			command := owner.command.command
 			command.ProposedRunID = owner.id.RunID
 			execution := updaterDTO.WithResultSink(owner.ctx, func(result updaterDTO.LifecycleResult) { owned := result; imageResult = &owned })
+			execution = containerDTO.WithRecreateResultSink(execution, func(result containerDTO.RecreateResult) { owned := result; recreateResult = &owned })
 			phaseErr = s.localExecution.Executor.ExecuteRuntime(execution, command, output)
 			outputErr = runtimeCaptureFailureInternal(output, phaseErr)
 			outputErr = errors.Join(outputErr, runtimeFinishOutputInternal(owner.ctx, output))
@@ -112,27 +115,15 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	defer s.activity.runningMu.Unlock()
 	var uncertain interface{ RuntimeUncertain() bool }
 	if errors.As(phaseErr, &uncertain) && uncertain.RuntimeUncertain() {
-		owner.err = s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
-			if imageResult != nil {
-				if err := runtimeImageResultTx(tx, owner.id.RunID, imageResult); err != nil {
-					return err
-				}
-			}
-			_, err := runtimeEvidenceTxInternal(tx, now, owner.id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: owner.startedAt})
-			return err
-		})
-		if owner.err == nil {
-			delete(s.owners, owner.id.RunID)
-			owner.cancel(nil)
-			owner.deadlineCancel()
-			s.activity.releaseSlotInternal(owner.id.RunID)
-		}
+		owner.result = &runtimeLocalResultInternal{held: true, startedAt: copyPtrInternal(owner.startedAt), imageLifecycle: imageResult}
+		_, owner.err = s.settleOwnerInternal(owner)
 		return
 	}
-	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, runtimeTimeInternal(s.activity.nowInternal()))
+	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, recreateResult != nil, runtimeTimeInternal(s.activity.nowInternal()))
 	owner.result.imageLifecycle = imageResult
+	owner.result.recreate = recreateResult
 	_, owner.err = s.settleOwnerInternal(owner)
-	if owner.err == nil {
+	if owner.err == nil && !owner.result.held {
 		if settled, ok := s.localExecution.Executor.(interface{ RuntimeSettled(context.Context) }); ok {
 			settled.RuntimeSettled(context.WithoutCancel(owner.ctx))
 		}
@@ -201,18 +192,31 @@ func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executi
 	return execute && err == nil, err
 }
 
-func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, now time.Time) *runtimeLocalResultInternal {
+// A recreate past its first journal write runs detached; its own outcome (result
+// or recreate problem) wins over a later cancellation or run deadline.
+func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, recreated bool, now time.Time) *runtimeLocalResultInternal {
 	result := &runtimeLocalResultInternal{state: "success", code: activitytypes.CodeActivitySuccess,
 		outputLost: outputErr != nil, message: "Runtime workflow completed", settledAt: now, startedAt: copyPtrInternal(owner.startedAt)}
+	var problem *containerDTO.Problem
+	recreateProblem := errors.As(workflowErr, &problem) && (problem.Code == "container.recreate-recovered" || problem.Code == "container.recreate-ambiguous")
+	detached := (recreated && workflowErr == nil) || recreateProblem
 	switch {
-	case owner.cancelRequested:
+	case owner.cancelRequested && !detached:
 		result.state, result.code, result.message = "cancelled", activitytypes.CodeRuntimeCancelled, "Runtime workflow cancelled; effects unverified"
-	case owner.ctx.Err() != nil:
+	case owner.ctx.Err() != nil && !detached:
 		result.state, result.code, result.message = "failed", activitytypes.CodeRuntimeInterrupted, "Runtime workflow interrupted; effects unverified"
 		result.errorText = new(result.message)
 	case workflowErr != nil || outputErr != nil:
 		result.state, result.code, result.message = "failed", activitytypes.CodeRuntimeFailed, "Runtime workflow or output failed; effects unverified"
 		// Persist bounded coded evidence, not arbitrary SDK errors containing secrets.
+		result.errorText = new(result.message)
+	}
+	if result.state == "failed" && recreateProblem {
+		result.code = activitytypes.Code(problem.Code)
+		result.message = problem.Code
+		if step := problem.Step(); step != "" {
+			result.message = problem.Code + ": " + step + " failed"
+		}
 		result.errorText = new(result.message)
 	}
 	return result

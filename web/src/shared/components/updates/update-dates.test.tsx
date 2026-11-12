@@ -23,17 +23,15 @@ for (const locale of ["de", "en-US"] as const) {
     const f = updateFixture(); await f.adapter.getCurrentUser();
     f.state.policy.checkedAt = "2026-10-25T09:00:00Z";
     f.state.policy.applyCheckedAt = "2026-10-25T10:00:00Z";
-    f.state.schedule.jobs[0]!.nextRun = "2026-10-27T11:00:00Z";
     f.state.points[0]!.orphaned = true;
-    const reads = ["getAutoUpdatePolicy", "getUpdateSchedules", "listRestorePoints", "listHostRestorePoints"] as const;
+    const reads = ["getAutoUpdatePolicy", "listRestorePoints", "listHostRestorePoints"] as const;
     const completed = reads.map(() => deferred<void>());
     reads.forEach((name, index) => { const original = f.adapter[name]!; Object.assign(f.adapter, { [name]: async (id: string) => { const value = await original(id); completed[index]!.resolve(); return value; } }); });
     const view = renderWithApp(<><LiveStackUpdates stackId="direct~project" /><LiveRestorePoints stackId="direct~project" /><HostUpdateSettings hostId="direct" name="Example" /></>, f.adapter);
     await act(async () => { await Promise.all(completed.map((read) => read.promise)); });
-    await screen.findByRole("button", { name: catalogs[locale].common.stackUpdates.editPolicy });
-    await screen.findByRole("button", { name: catalogs[locale].common.stackUpdates.editSchedules });
+    await screen.findByRole("combobox");
     await waitFor(() => expect(screen.queryAllByRole("button", { name: catalogs[locale].common.stackUpdates.deletePoint }).length).toBe(2));
-    for (const at of [f.state.policy.checkedAt, f.state.policy.applyCheckedAt, f.state.schedule.jobs[0]!.nextRun]) {
+    for (const at of [f.state.policy.checkedAt, f.state.policy.applyCheckedAt]) {
       expect(document.body.textContent).toContain(formatDateTime(at));
       expect(document.body.textContent).not.toContain(at);
     }

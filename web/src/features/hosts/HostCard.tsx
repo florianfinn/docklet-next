@@ -6,7 +6,7 @@ import { useTranslations } from "use-intl";
 import { useCapability } from "@/data/use-capability";
 import { RotateTokenButton } from "./RotateTokenButton";
 import { formatRelative } from "@/domain/format";
-import { hostTone, isHostVisible } from "@/domain/hosts";
+import { hostTone, isHostVisible, isHostAvailable } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
 import { SYSTEM_LABEL, type SystemComponent } from "@/domain/system";
 import { versionLabel } from "@/domain/updates";
@@ -20,6 +20,7 @@ import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
+import { SystemMetadata } from "./SystemMetadata";
 import { AgentReportSection } from "./AgentReportSection";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 import { useHostAction, useHostCommands } from "./use-host-commands";
@@ -37,6 +38,7 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
 function SystemSection({ component }: { component: SystemComponent | undefined }) {
   const t = useTranslations("hosts.card.systemComponent");
   const ts = useTranslations("common.status");
+  if (component?.metadataOnly) return <SystemMetadata component={component} />;
   return (
     <section aria-label={t("title")} data-slot="system-component" className="flex items-start gap-2.5 rounded-xl border border-dashed bg-muted/15 p-3">
       <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -65,8 +67,8 @@ function SystemSection({ component }: { component: SystemComponent | undefined }
 interface HostCardProps {
   host: Host;
   system: SystemComponent | undefined;
-  stacks: number;
-  containers: number;
+  stacks?: number;
+  containers?: number;
   allIds: string[];
   onFiles?: (host: Host) => void;
 }
@@ -77,7 +79,8 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const tc = useTranslations("common.host");
   const dt = useAdapterText();
   const cmd = useHostCommands();
-  const reconnect = useCapability("reconnectHost");
+  const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
+  const connection = useCapability("connectHost", { kind: "host", id: host.id });
   const selection = useHostSelection();
   const [confirm, setConfirm] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -146,14 +149,14 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       </dl>
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />
-      {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents"><SystemSection component={system} /></CapabilityGate>}
-      <p className="text-xs text-muted-foreground">{t("card.usage", { stacks, containers })}</p>
+      {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents" resourceRef={{ kind: "host", id: host.id }}><SystemSection component={system} /></CapabilityGate>}
+      <p className="text-xs text-muted-foreground">{stacks === undefined || containers === undefined ? t("card.usageUnknown") : t("card.usage", { stacks, containers })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
-        {pending ? (import.meta.env.DEV ? (
-          <BusyButton size="sm" busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>
+        {pending ? (
+          <BusyButton size="sm" disabled={!connection.available} title={connection.reason} busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>
             {t("card.connect")}
           </BusyButton>
-        ) : <span className="self-center text-xs text-muted-foreground">{t("card.waiting")}</span>) : (
+        ) : (
           <BusyButton
             size="sm"
             variant="outline"
@@ -167,7 +170,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           </BusyButton>
         )}
         <RotateTokenButton host={host} />
-        {onFiles && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
+        {onFiles && host.id !== "0" && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
           <FileArchive data-icon="inline-start" />
           {t("card.files")}
         </Button>}
@@ -193,7 +196,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         open={confirm}
         onOpenChange={setConfirm}
         title={t("card.removeTitle", { name: host.name })}
-        description={t("card.removeBody")}
+        description={`${t("card.removeCounts", { stacks: isHostAvailable(host) && !host.inventory?.stale ? String(stacks ?? t("card.unknown")) : t("card.unknown"), containers: isHostAvailable(host) && !host.inventory?.stale ? String(containers ?? t("card.unknown")) : t("card.unknown") })} ${t("card.removeBody")}`}
         confirmLabel={t("card.removeConfirm")}
         destructive
         onConfirm={async () => (await cmd.remove(host.id)) ?? false}

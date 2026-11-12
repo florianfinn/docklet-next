@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Extracted mutation/rollback helpers; compare optional update baselines at ordered apply boundaries; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Extracted mutation/rollback helpers; compare optional update baselines at ordered apply boundaries; M12 persisted volume lifecycle and legacy restore cut; M16 bind mounts and backup completion.
 
 package workspace
 
@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/acfs"
@@ -59,9 +60,26 @@ func volumeWorkspaceWriteIdentityFromConfigUserInternal(configUser string) volum
 }
 
 func (s *Service) resolveVolumeWorkspaceWriteIdentityInternal(ctx context.Context, dockerClient *client.Client, containerID, volumeName string) volumeWorkspaceWriteIdentityInternal {
-	consumerIDs, err := docker.GetContainersUsingVolume(ctx, dockerClient, volumeName)
+	var consumerIDs []string
+	var err error
+	if volume.IsBindKey(volumeName) {
+		source, parseErr := volume.BindSource(volumeName)
+		if parseErr == nil {
+			rows, listErr := dockerClient.ContainerList(ctx, client.ContainerListOptions{All: true})
+			err = listErr
+			if listErr == nil {
+				for _, c := range rows.Items {
+					if !bindpath.Self(c) && !bindpath.Helper(c) && bindpath.Uses(c, source, false) {
+						consumerIDs = append(consumerIDs, c.ID)
+					}
+				}
+			}
+		}
+	} else {
+		consumerIDs, err = docker.GetContainersUsingVolume(ctx, dockerClient, volumeName)
+	}
 	if err != nil {
-		slog.WarnContext(ctx, "could not list containers for volume workspace write identity", "volume", volumeName, "error", err.Error())
+		slog.WarnContext(ctx, "Could not resolve workspace consumers", "volume", volumeName)
 	}
 	identity := volumeWorkspaceWriteIdentityInternal{}
 	identitySource := ""
@@ -105,7 +123,12 @@ func (s *Service) resolveVolumeWorkspaceWriteIdentityInternal(ctx context.Contex
 	}
 	// PUID-style images drop privileges after start, so Config.User stays empty; the owner of the
 	// volume root is the next best signal for the runtime identity.
-	stdout, _, err := s.deps.Exec(ctx, containerID, "", []string{"stat", "-c", "%u:%g", "/volume"})
+	root := "/volume"
+	if s.deps.BindKind != nil && s.deps.BindKind(volumeName) == "file" {
+		source, _ := volume.BindSource(volumeName)
+		root = path.Join(root, path.Base(source))
+	}
+	stdout, _, err := s.deps.Exec(ctx, containerID, "", []string{"stat", "-c", "%u:%g", root})
 	if err != nil {
 		return volumeWorkspaceWriteIdentityInternal{}
 	}
@@ -341,7 +364,8 @@ func (
 		_ = pipeWriter.CloseWithError(err)
 		archiveDone <- err
 	}()
-	_, copyErr := dockerClient.CopyToContainer(ctx, containerID, client.CopyToContainerOptions{DestinationPath: "/tmp/arcane-workspace", Content: pipeReader, CopyUIDGID: identity.execUser != ""})
+	// Archive headers carry the write identity; copyUIDGID would replace them with the tools image user (root).
+	_, copyErr := dockerClient.CopyToContainer(ctx, containerID, client.CopyToContainerOptions{DestinationPath: "/tmp/arcane-workspace", Content: pipeReader})
 	_ = pipeReader.Close()
 	archiveErr := <-archiveDone
 	for _, stagedContent := range contents {

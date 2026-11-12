@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,7 +34,7 @@ func TestSessionSSEExplicitAndDurableCadence(t *testing.T) {
 			t.Run(fmt.Sprintf("active=%v/explicit=%v", active, explicit), func(t *testing.T) {
 				db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"))
 				require.NoError(t, err)
-				require.NoError(t, db.AutoMigrate(&user.User{}, &session.UserSession{}))
+				require.NoError(t, db.AutoMigrate(&access.Assignment{}, &user.User{}, &session.UserSession{}))
 				u := &user.User{Username: "example-sse"}
 				require.NoError(t, db.Create(u).Error)
 				service := session.NewSessionService(&database.DB{DB: db})

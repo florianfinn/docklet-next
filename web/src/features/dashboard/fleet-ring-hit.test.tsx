@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
 import { simulationStore } from "@/data/demo/simulation";
+import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
 
 import { fleetBreakdown, fleetUnits } from "./fleet-status";
@@ -11,9 +12,12 @@ import { FleetRing } from "./FleetRing";
 import { cellAt, hitBand, hitCells, layoutRing, polar, ringGeometry, segmentFan } from "./ring-geometry";
 
 beforeEach(() => {
+  // Geometry and menu fixtures explicitly include every origin group.
+  preferencesStore.set((state) => ({ ...state, showUnraidRing: true }));
   simulationStore.set((s) => ({ ...s, latency: "instant", live: false }));
 });
 afterEach(() => {
+  preferencesStore.set((state) => ({ ...state, showUnraidRing: false }));
   simulationStore.reset();
   localStorage.clear();
 });
@@ -29,9 +33,9 @@ describe("ring units", () => {
     const { hosts, units } = await demo();
     const cedar = units.filter((u) => u.hostId === "cedar");
     expect(cedar.map((u) => [u.kind, u.name, u.containers.length, u.state])).toEqual([["stack", "Wiki", 2, "unreachable"]]);
-    // 9 stacks plus 3 origin groups of containers outside Compose; 8 confirmed running.
+    // 9 stacks plus 3 origin groups of containers outside Compose; a partly stopped stack counts as running (#371).
     const b = fleetBreakdown(hosts, units);
-    expect([units.filter((u) => u.kind === "stack").length, units.filter((u) => u.kind === "group").length, b.units, b.running + b.starting, b.unreachable, b.problem, b.stopped, b.partial]).toEqual([9, 3, 12, 8, 1, 1, 1, 1]);
+    expect([units.filter((u) => u.kind === "stack").length, units.filter((u) => u.kind === "group").length, b.units, b.running, b.unreachable, b.unhealthy, b.down, b.stopped]).toEqual([9, 3, 12, 9, 1, 1, 0, 1]);
 
     const { container } = renderWithApp(<FleetRing hosts={hosts} units={units} label="Ring" center={{ value: "8/12", caption: "" }} size={320} />);
     const segs = [...container.querySelectorAll<SVGPathElement>("path[data-runtime]")];

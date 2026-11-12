@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; runtime ingress ownership fields.
+// Deviations: Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery; register ACK publication ordering for #347; Edge protocol fields (#362).
 
 package edge
 
@@ -26,6 +26,8 @@ type activeWSStream struct {
 	conn   TunnelConnection // tunnel connection the stream was opened on
 	cancel context.CancelFunc
 	dataCh chan wsPayload
+	// done closes with the stream; dataCh is never closed so a waiting sender cannot panic.
+	done   chan struct{}
 	mu     sync.Mutex
 	closed bool
 }
@@ -73,6 +75,8 @@ type TunnelClient struct {
 
 type clientRegistrationInternal struct {
 	sessionID string
+	// hubEdgeProtocol is the protocol the manager advertised in its reply.
+	hubEdgeProtocol int
 }
 
 // connBox wraps the active TunnelConnection so it can be swapped atomically on
@@ -221,11 +225,15 @@ type AgentTunnel struct {
 	Transport     string
 	SecurityMode  string
 	Capabilities  []string
+	// EdgeProtocol is the agent's advertised protocol (missing marker = 1).
+	EdgeProtocol  int
 	State         string
 	DisconnectErr string
 	mu            sync.RWMutex
 	done          chan struct{}
 	closeOnce     sync.Once
+
+	registerPending atomic.Bool
 }
 
 // TunnelRegistry manages active edge agent tunnel connections
@@ -238,6 +246,7 @@ type internalTunnelRequestContextKey struct{}
 
 // TunnelServer handles incoming edge agent connections on the manager side.
 type TunnelServer struct {
+	cleanupSchedule    *CleanupSchedule
 	sessionKeyResolver func(context.Context, string, string) (string, error)
 	registry           *TunnelRegistry
 	resolver           EnvironmentResolver

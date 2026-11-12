@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split durable execution helpers; M12 persisted volume lifecycle and legacy restore cut.; a failed activity link completes with the tracked work context.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split durable execution helpers; M12 persisted volume lifecycle and legacy restore cut.; a failed activity link completes with the tracked work context; M16 bind mounts and backup completion.
 
 package backup
 
@@ -26,7 +26,7 @@ func (s *Service) StartBackup(ctx context.Context, environmentID, volumeName str
 	if err != nil {
 		return volume.BackupEntry{}, err
 	}
-	activityID, workCtx := activitylib.StartHandlerActivity(owner.ctx, s.deps.Activity, environmentID, activitytypes.TypeResourceAction, "volume", volumeName, volumeName, &user, "Creating backup", "Creating volume backup", database.JSON{"action": "create_volume_backup", "backupId": entry.ID}, false)
+	activityID, workCtx := activitylib.StartHandlerActivity(owner.ctx, s.deps.Activity, environmentID, activitytypes.TypeResourceAction, "volume", volumeName, volume.DisplayName(volumeName), &user, "Creating backup", "Creating volume backup", database.JSON{"action": "create_volume_backup", "backupId": entry.ID}, false)
 	if activityID == "" {
 		err = s.completeBackupInternal(owner.ctx, entry, errors.New("activity unavailable"))
 		owner.Release(ctx)

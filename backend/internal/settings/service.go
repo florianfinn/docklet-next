@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; M19 backend contracts and target identity integration.
 
 package settings
 
@@ -18,15 +18,12 @@ import (
 	"sync/atomic"
 	"uuid"
 
-	"github.com/florianfinn/docklet-next/types/category"
 	"github.com/florianfinn/docklet-next/types/features"
-	searchtypes "github.com/florianfinn/docklet-next/types/search"
 	"github.com/samber/mo"
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/concurrency"
@@ -82,6 +79,7 @@ func NewSettingsService(ctx context.Context, db *database.DB) (*SettingsService,
 		changes:      concurrency.NewSignal[[]libarcane.SettingUpdate](),
 	}
 	svc.envOverrides = resolveSettingsEnvOverridesInternal()
+	warnRetiredSettingVariablesInternal(ctx)
 	if len(svc.envOverrides) > 0 {
 		slog.InfoContext(ctx, "Loaded Environment Settings Overrides", "count", len(svc.envOverrides))
 	}
@@ -410,17 +408,4 @@ func (s *SettingsService) RequireFeature(ctx context.Context, id features.ID) er
 		return nil
 	}
 	return fmt.Errorf("feature %s is disabled: %w", id, common.ErrFeatureDisabled)
-}
-
-type SettingsSearchService struct {
-	categories []category.Category
-}
-
-func NewSettingsSearchService() *SettingsSearchService {
-	return &SettingsSearchService{categories: search.BuildCategories[Settings](searchtypes.SettingsProfile)}
-}
-
-// GetSettingsCategories returns the category index initialized by the service.
-func (s *SettingsSearchService) GetSettingsCategories() []category.Category {
-	return s.categories
 }

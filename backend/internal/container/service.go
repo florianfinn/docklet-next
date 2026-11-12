@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 standalone image update and restore safety.
 
 package container
 
@@ -18,6 +18,7 @@ import (
 
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
@@ -44,6 +45,8 @@ import (
 )
 
 type ContainerService struct {
+	operations      *containerOperations
+	containerImages containerImagePort
 	dockerService   *dockerInternal.DockerClientService
 	eventService    *event.EventService
 	imageService    *image.ImageService
@@ -73,8 +76,13 @@ func NewContainerService(
 	settingsService *settings.SettingsService,
 	projectService *project.ProjectService,
 ) *ContainerService {
+	var images containerImagePort
+	if imageService != nil {
+		images = imageService
+	}
 	return &ContainerService{
 		eventService:    eventService,
+		containerImages: images,
 		dockerService:   dockerService,
 		imageService:    imageService,
 		settingsService: settingsService,
@@ -427,7 +435,18 @@ func (s *ContainerService) StopContainer(ctx context.Context, containerID string
 		action:    "stop",
 		eventType: event.EventTypeContainerStop,
 		runContainerAction: func(dockerClient *client.Client) error {
-			_, err := dockerClient.ContainerStop(ctx, containerID, client.ContainerStopOptions{Timeout: new(30)})
+			before, err := dockerClient.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+			if err != nil {
+				return err
+			}
+			_, err = dockerClient.ContainerStop(ctx, containerID, client.ContainerStopOptions{Timeout: new(30)})
+			if err == nil {
+				composeProject := ""
+				if before.Container.Config != nil {
+					composeProject = before.Container.Config.Labels["com.docker.compose.project"]
+				}
+				return s.projectService.RecordContainerStopIntent(ctx, before.Container.ID, before.Container.Name, composeProject)
+			}
 			return err
 		},
 	})
@@ -657,6 +676,9 @@ func (s *ContainerService) RedeployContainer(ctx context.Context, containerID st
 	}
 
 	containerInfo := containerJSON.Container
+	if err := effectOriginGuard(containerInfo); err != nil {
+		return "", err
+	}
 	if containerInfo.Config == nil {
 		err = errors.New("container config is nil")
 		s.eventService.LogErrorEvent(ctx, event.EventTypeContainerError, "container", containerID, "", user.ID, user.Username, "0", err, database.JSON{
@@ -678,18 +700,6 @@ func (s *ContainerService) RedeployContainer(ctx context.Context, containerID st
 			"step":   "self_redeploy_blocked",
 		})
 		return "", err
-	}
-
-	// If this container belongs to a known compose project, redeploy through the
-	// compose-aware path so that compose file changes (healthchecks, env, etc.) and
-	// the project's include/project_directory/env-file context are honored. The
-	// standalone Docker-API path below only clones the existing container config
-	// from the daemon and would silently ignore any compose edits.
-	if newID, handled, composeErr := s.tryRedeployViaComposeProjectInternal(ctx, containerInfo, containerID, containerName, user); handled {
-		if composeErr != nil {
-			return "", composeErr
-		}
-		return newID, nil
 	}
 
 	if imageName != "" {
@@ -736,6 +746,12 @@ func (
 	string,
 	error,
 ) {
+	if err := effectOriginGuard(containerInfo); err != nil {
+		return "", err
+	}
+	if updaterDTO.ExecutionIdentityFromContext(ctx).RunID != "" {
+		return s.recreateDurable(ctx, dockerClient, containerInfo, newName, newConfig, newHostConfig, networkingConfig, apiVersion)
+	}
 	containerID := containerInfo.ID
 	containerName := strings.TrimPrefix(containerInfo.Name, "/")
 	wasRunning := containerInfo.State != nil && containerInfo.State.Running

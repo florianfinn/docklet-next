@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
 
 package imageupdate
 
 import (
 	"context"
 	"go.getarcane.app/kit/pkg"
+	"net/url"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -61,7 +62,9 @@ func (h *ImageUpdateHandler) CheckImageUpdate(ctx context.Context, input *CheckI
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	result, err := h.imageUpdateService.ReadUpdateInfo(runtimeCtx, input.ImageRef)
+	result, err := readHost(runtimeCtx, h.imageUpdateService, input.EnvironmentID, "GET", "/api/environments/0/image-updates/check?imageRef="+url.QueryEscape(input.ImageRef), nil, func() (*imageupdate.Response, error) {
+		return h.imageUpdateService.ReadUpdateInfo(runtimeCtx, input.ImageRef)
+	})
 	if err != nil {
 		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
@@ -80,7 +83,9 @@ func (h *ImageUpdateHandler) CheckImageUpdateByID(ctx context.Context, input *Ch
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	result, err := h.imageUpdateService.ReadUpdateByID(runtimeCtx, input.ImageID)
+	result, err := readHost(runtimeCtx, h.imageUpdateService, input.EnvironmentID, "GET", "/api/environments/0/image-updates/check/"+url.PathEscape(input.ImageID), nil, func() (*imageupdate.Response, error) {
+		return h.imageUpdateService.ReadUpdateByID(runtimeCtx, input.ImageID)
+	})
 	if err != nil {
 		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
@@ -108,7 +113,9 @@ func (h *ImageUpdateHandler) CheckMultipleImages(ctx context.Context, input *Che
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	results, err := h.imageUpdateService.ReadMultiple(runtimeCtx, input.Body.ImageRefs)
+	results, err := readHost(runtimeCtx, h.imageUpdateService, input.EnvironmentID, "POST", "/api/environments/0/image-updates/check-batch", input.Body, func() (imageupdate.BatchResponse, error) {
+		return h.imageUpdateService.ReadMultiple(runtimeCtx, input.Body.ImageRefs)
+	})
 	if err != nil {
 		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
@@ -126,7 +133,7 @@ func (h *ImageUpdateHandler) CheckAllImages(ctx context.Context, input *CheckAll
 		return nil, image.Failure("registry.inline-credentials-not-allowed", 400)
 	}
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	results, err := h.imageUpdateService.ReadAll(runtimeCtx)
+	results, err := readHost(runtimeCtx, h.imageUpdateService, input.EnvironmentID, "POST", "/api/environments/0/image-updates/check-all", input.Body, func() (imageupdate.BatchResponse, error) { return h.imageUpdateService.ReadAll(runtimeCtx) })
 	if err != nil {
 		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}

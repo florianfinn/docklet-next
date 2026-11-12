@@ -149,9 +149,9 @@ it("stale settled generic snapshot preserves newer late executor evidence after 
     mergeSummary: f.helper.mergeSummary, retained: f.helper.retained, publish() {}, unauthorized() {} });
   const older = reader.load(); await reached.promise;
   f.state.run = snapshot("edge", { status: "failed", outcomeState: "known", cancelRequested: true });
-  f.state.recovery = { executorState: "success", disposition: "released", dispositionReason: "Executor stopped and inspected", releaseAcknowledged: true, executorResultCode: "runtime.succeeded" };
+  f.state.recovery = { executorState: "success", disposition: "released", dispositionReason: "Executor stopped and inspected", releaseAcknowledged: true, executorResultCode: "activity.success" };
   const late = await f.helper.getRuntimeRun("edge", RUN_ID);
-  expect(late).toMatchObject({ outcomeState: "known", runtime: { released: true, lateResult: "runtime.succeeded" } });
+  expect(late).toMatchObject({ outcomeState: "known", runtime: { released: true, lateResult: "activity.success" } });
   f.state.detailStatus = 503; release.resolve(); const observed = await older;
   for (const run of [reader.runs()[0]!, observed[0]!, f.helper.retained()[0]!]) {
     expect(run, "stale settled generic row must preserve late executor evidence").toMatchObject({ status: "failed", outcomeState: "known", cancelRequested: true,

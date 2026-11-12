@@ -13,7 +13,7 @@ import (
 )
 
 func TestAppVersionAdvertisesAgentContract(t *testing.T) {
-	service := NewVersionService(nil, true, "dev", "unknown", nil, nil, nil, nil)
+	service := NewVersionService(nil, true, "", "dev", "unknown", nil, nil)
 	info := service.GetAppVersionInfo(t.Context())
 	require.Equal(t, contract.AgentHubVersion, info.AgentContractVersion)
 	require.Equal(t, contract.AgentHubFingerprint, info.AgentContractFingerprint)

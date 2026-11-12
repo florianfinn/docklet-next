@@ -7,15 +7,20 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
+	environmentDTO "github.com/florianfinn/docklet-next/types/environment"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,4 +90,56 @@ func TestRetiredUpdateOperationsAdvertiseTypedRefusal(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, string(body), "ImageOperationError")
 	}
+}
+
+func TestImageRuntimeHostProblemSurvivesFinalAPIPass(t *testing.T) {
+	for _, code := range []string{"host.restarting", "host.busy", "agent.restart-superseded"} {
+		t.Run(code, func(t *testing.T) {
+			router := echo.New()
+			cfg := huma.DefaultConfig("test", "test")
+			cfg.Transformers = append(cfg.Transformers, imageErrorTransformer)
+			api := humaecho.NewWithGroup(router, router.Group("/api"), cfg)
+			huma.Register(api, huma.Operation{OperationID: "host-refusal", Method: "POST", Path: "/environments/{id}/updater/projects/{projectId}/update"}, func(context.Context, *struct {
+				ID        string `path:"id"`
+				ProjectID string `path:"projectId"`
+			}) (*struct{ Body any }, error) {
+				return nil, &environmentDTO.HostProblem{Code: code, Status: 409}
+			})
+			op := api.OpenAPI().Paths["/environments/{id}/updater/projects/{projectId}/update"].Post
+			handlerutil.HostProblemResponses(api, op, "409")
+			registerImageSafetyErrors(api)
+			schema, err := json.Marshal(op.Responses["409"])
+			require.NoError(t, err)
+			require.Contains(t, string(schema), "HostProblem")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest("POST", "/api/environments/example/updater/projects/example/update", nil))
+			require.Equal(t, 409, rec.Code)
+			require.Contains(t, rec.Body.String(), code)
+			require.NotContains(t, rec.Body.String(), "update.invalid-target")
+		})
+	}
+}
+
+// An unexpected updater failure keeps a neutral public body while the server log names its cause.
+func TestUnexpectedUpdaterFailureLogsCause(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	router := echo.New()
+	cfg := huma.DefaultConfig("test", "test")
+	cfg.Transformers = append(cfg.Transformers, imageErrorTransformer)
+	api := humaecho.NewWithGroup(router, router.Group("/api"), cfg)
+	huma.Register(api, huma.Operation{OperationID: "project-check", Method: "POST", Path: "/environments/{id}/updater/projects/{projectId}/check"}, func(context.Context, *struct {
+		ID        string `path:"id"`
+		ProjectID string `path:"projectId"`
+	}) (*struct{ Body any }, error) {
+		return nil, errors.New("save project update checks: example cause")
+	})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/environments/0/updater/projects/example/check", nil))
+	require.Equal(t, 500, rec.Code)
+	require.NotContains(t, rec.Body.String(), "example cause")
+	require.Contains(t, logs.String(), "example cause")
+	require.Contains(t, logs.String(), "/api/environments/0/updater/projects/example/check")
 }

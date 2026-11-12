@@ -2,7 +2,11 @@
 import type { enStacks } from "./en";
 
 export const deStacks: typeof enStacks = {
-  inventory: { readError: "Inventar konnte nicht gelesen werden", mappingError: "Ungültige Inventardaten", host: "{name}: {reason}.", asOf: "Veraltete Werte, Stand {time}.", noSnapshot: "Noch keine gespeicherten Werte vorhanden.", updateRequired: "Agent-Update erforderlich", credentialRejected: "Agent-Token ungültig", unavailable: "Host nicht erreichbar" },
+  import: {"found": {"compose": "Compose-Datei", "env-example": "Umgebungsbeispiel", "image-config": "Image-Konfiguration", "ports": "Ports", "volumes": "Volumes", "environment": "Umgebungsvariablen"}, "missing": {"env-file": "Umgebungsdatei erforderlich", "label-file": "Label-Datei erforderlich", "include": "Eingebundene Datei erforderlich", "extends": "Erweiterte Datei erforderlich", "build-context": "Build-Kontext erforderlich", "variables": "Variablenwerte erforderlich", "compose": "Compose-Konfiguration erforderlich"}, "errors": {"invalid-reference": "Ungültige Quellreferenz", "registry-not-configured": "Registry ist nicht konfiguriert", "not-found": "Quelle nicht gefunden", "too-large": "Quelle ist zu groß", "timeout": "Zeitüberschreitung beim Abrufen der Quelle", "redirect-refused": "Weiterleitung der Quelle abgelehnt", "source-unavailable": "Quelle nicht verfügbar", "invalid-compose": "Ungültige Compose-Konfiguration", "unauthorized": "Registry-Anmeldung fehlgeschlagen", "busy": "Ein Import läuft bereits"}},
+  stopMode: {"modeUnavailable": "Der Stopp-Modus des Hubs kann nicht gelesen werden. Wähle unten eine ausdrückliche Aktion.", "down": "Herunterfahren (Container entfernen)", "stop-containers": "Container stoppen", "containersRemoved": "Container entfernt", "definitionInvalid": "Die Compose-Definition kann nicht aufgelöst werden. Repariere sie, um die Services wieder anzuzeigen."},
+  inventory: { scopeStaleNote: "Inventarkatalog konnte nicht aktualisiert werden.", scopeStale: "Inventarkatalog konnte nicht aktualisiert werden", readError: "Inventar konnte nicht gelesen werden", mappingError: "Ungültige Inventardaten", host: "{name}: {reason}.", asOf: "Veraltete Werte, Stand {time}.", noSnapshot: "Noch keine gespeicherten Werte vorhanden.", updateRequired: "Agent-Update erforderlich", credentialRejected: "Agent-Token ungültig", unavailable: "Host nicht erreichbar" },
+  serviceState: { "not-created": "Container entfernt" },
+  definitionHint: { "definition-invalid": "Die Compose-Definition konnte nicht aufgelöst werden." },
   title: "Stacks",
   description: "{scope} · nur Stacks. Run-, Unraid- und andere Container ohne Compose stehen unter Container.",
   scopeAll: "Alle Hosts gemeinsam",
@@ -121,6 +125,7 @@ export const deStacks: typeof enStacks = {
     trigger: { deploy: "Deploy", redeploy: "Redeploy", update: "Update", restore: "Wiederherstellung" },
   },
   logs: {
+    keyboardHint: "Pfeiltasten wechseln die Zeile; Pos1 und Ende springen zur ersten und letzten Zeile; Ende setzt die Live-Ansicht fort.",
     delivery: {
       connecting: "Verbindung zu den Logs wird hergestellt …", live: "Live-Logs", retrying: "Verbindung unterbrochen. Neuer Versuch …", offline: "Offline. Die Verbindung wird fortgesetzt, sobald du online bist.",
       unavailable: "Logs sind für diese Ressource nicht verfügbar.", error: "Logübertragung fehlgeschlagen. Erneut versuchen, um die letzten Zeilen anzufordern.", unauthenticated: "Melde dich an, um Logs zu empfangen.",

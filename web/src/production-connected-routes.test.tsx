@@ -145,7 +145,7 @@ it("connects the production security route and Scans settings to HTTP producers"
   expect(screen.getAllByText("example:1.0.0")).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/synthetic|synthetisch|Befunde sind/);
   await act(() => router.navigate("/settings/security"));
-  await screen.findByRole("switch", { name: "Automatische Scans" });
+  await screen.findByRole("radio", { name: "Manuell" });
   expect(screen.getByText(/Nächste Ausführung:/) !== null).toBe(true);
   expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/environments/0/jobs"))).toBe(true);
 });
@@ -155,7 +155,7 @@ it("connects notification targets and per-host Auto Heal to HTTP producers witho
   const { default: targets } = await import("./data/http/testdata/notification-targets.json");
   const f = securityFixture();
   const base = f.fetcher.getMockImplementation()!;
-  const heal = { enabled: true, maxRestarts: 4, windowMinutes: 45, excludedStacks: ["web"], excludedContainers: [], managedByEnvironment: false };
+  const heal = { enabled: true, maxRestarts: 4, windowMinutes: 45, cooldownMinutes: 10, invalidFields: [], excludedStacks: ["web"], excludedContainers: [], managedByEnvironment: false };
   const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
   f.fetcher.mockImplementation(async (input, init) => {
     const url = new URL(String(input), "https://hub.example.com");

@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original v9 volume vocabulary, localization and admission contract proofs.
+// Deviations: Original v9 volume vocabulary, localization and admission contract proofs. M23 #435: active summaries contract coverage.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -12,14 +12,14 @@ import { agentFixture } from "../scripts/agent-contract.mjs";
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("v9 backup vocabulary is fingerprinted and translated in both locales", () => {
-  const text = read("types/contract/testdata/agent-hub-v10.json");
+  const text = read("types/contract/testdata/agent-hub-v18.json");
   const fixture = JSON.parse(text);
   const source = read("types/contract/agent.go");
-  assert.match(source, /const AgentHubVersion = 10/);
-  assert.match(source, /const MinimumAgentVersion = 10/);
+  assert.match(source, /const AgentHubVersion = 18/);
+  assert.match(source, /const MinimumAgentVersion = 18/);
   assert.ok(source.includes(createHash("sha256").update(text).digest("hex")));
-  assert.equal(fixture.version, 10);
-  assert.equal(fixture.minimumAgentContractVersion, 10);
+  assert.equal(fixture.version, 18);
+  assert.equal(fixture.minimumAgentContractVersion, 18);
   const problem = read("types/backup/problem.go");
   const codes = problem.match(/Code\s+string\s+`[^`]*enum:"([^"]+)"/)[1].split(",");
   const reasons = problem.match(/Reason\s+string\s+`[^`]*enum:"([^"]+)"/)[1].split(",");
@@ -36,7 +36,7 @@ test("v9 backup vocabulary is fingerprinted and translated in both locales", () 
 
 test("backup admissions advertise accepted IDs and removed routes stay absent", () => {
   const document = JSON.parse(read("api/openapi.json"));
-  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v10.json")).volumeBackups;
+  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v18.json")).volumeBackups;
   for (const path of [
     "/environments/{id}/volumes/{volumeName}/backups",
     "/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore",
@@ -57,4 +57,18 @@ test("backup admissions advertise accepted IDs and removed routes stay absent", 
   assert.equal(fixture.uploadLimit, 4 * 2 ** 30);
   assert.equal(fixture.expandedUploadLimit, 16 * 2 ** 30);
   assert.equal(fixture.edgeDownloadLimit, 512 * 2 ** 20);
+});
+
+test("v13 fingerprints bind and probe payload schemas", () => {
+ const fixture = read("types/contract/testdata/agent-hub-v18.json");
+ const spec = JSON.parse(read("api/openapi.json"));
+ const manifest = JSON.parse(fixture);
+ for (const name of ["VolumeBind", "VolumeBindConsumer", "VolumeBindMeasurement", "BackupTargetProbeRequest", "BackupTargetProbeResult"]) {
+  assert.ok(manifest.volumeBackups.schemas[name], name);
+  const changed = structuredClone(spec);
+  const properties = changed.components.schemas[name].properties;
+  delete properties[Object.keys(properties)[0]];
+  assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)), Buffer.from(fixture)), Buffer.from(fixture), name);
+ }
+ assert.deepEqual(manifest.bindMounts.edgeRoutes.map((r) => r.command), ["volume.binds.list", "volume.binds.size", "volume.backup.target.probe"]);
 });

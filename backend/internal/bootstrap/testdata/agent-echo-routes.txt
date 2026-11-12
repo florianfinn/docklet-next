@@ -2,7 +2,7 @@
 # Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Echo route snapshot for issue #8.
+# Deviations: Echo route snapshot for issue #8; M23 #435 active image summaries.
 DELETE /api/environments/:id/activities/history
 DELETE /api/environments/:id/containers/:containerId
 DELETE /api/environments/:id/images/:imageId
@@ -29,6 +29,7 @@ GET /api/environments/:id/containers/:containerId/logs/download
 GET /api/environments/:id/containers/:containerId/processes
 GET /api/environments/:id/containers/counts
 GET /api/environments/:id/diagnostics/actors
+GET /api/environments/:id/history/sample
 GET /api/environments/:id/image-updates/by-refs
 GET /api/environments/:id/image-updates/check
 GET /api/environments/:id/image-updates/check/:imageId
@@ -71,10 +72,10 @@ GET /api/environments/:id/system/docker/info
 GET /api/environments/:id/system/upgrade/check
 GET /api/environments/:id/updater/:kind/:targetId/restore-points
 GET /api/environments/:id/updater/history
+GET /api/environments/:id/updater/policies
 GET /api/environments/:id/updater/policies/:kind/:targetId
 GET /api/environments/:id/updater/projects/:projectId/baseline
 GET /api/environments/:id/updater/restore-points
-GET /api/environments/:id/updater/schedules
 GET /api/environments/:id/updater/status
 GET /api/environments/:id/updater/system-image-hints
 GET /api/environments/:id/uploads/:kind/:uploadId
@@ -94,10 +95,13 @@ GET /api/environments/:id/volumes/backups/overview
 GET /api/environments/:id/volumes/backups/repository
 GET /api/environments/:id/volumes/backups/targets/:targetId/references
 GET /api/environments/:id/volumes/backups/targets/local/recovery-key
+GET /api/environments/:id/volumes/binds
 GET /api/environments/:id/volumes/counts
 GET /api/environments/:id/volumes/prune
 GET /api/environments/:id/volumes/sizes
+GET /api/environments/:id/vulnerabilities/advisories/:key
 GET /api/environments/:id/vulnerabilities/all
+GET /api/environments/:id/vulnerabilities/candidates
 GET /api/environments/:id/vulnerabilities/export
 GET /api/environments/:id/vulnerabilities/ignored
 GET /api/environments/:id/vulnerabilities/image-options
@@ -112,7 +116,6 @@ GET /api/environments/:id/ws/containers/:containerId/terminal
 GET /api/environments/:id/ws/projects/:projectId/logs
 GET /api/environments/:id/ws/system/stats
 GET /api/health
-GET /api/settings/categories
 GET /api/version
 HEAD /api/environments/:id/system/health
 HEAD /api/health
@@ -128,6 +131,8 @@ POST /api/environments/:id/containers/:containerId/commit
 POST /api/environments/:id/containers/:containerId/edit
 POST /api/environments/:id/containers/:containerId/kill
 POST /api/environments/:id/containers/:containerId/pause
+POST /api/environments/:id/containers/:containerId/previous-image/restore
+POST /api/environments/:id/containers/:containerId/recreate
 POST /api/environments/:id/containers/:containerId/redeploy
 POST /api/environments/:id/containers/:containerId/restart
 POST /api/environments/:id/containers/:containerId/start
@@ -144,6 +149,7 @@ POST /api/environments/:id/images/:name/tag
 POST /api/environments/:id/images/prune
 POST /api/environments/:id/images/pull
 POST /api/environments/:id/images/upload
+POST /api/environments/:id/images/vulnerabilities/active-summaries
 POST /api/environments/:id/images/vulnerabilities/summaries
 POST /api/environments/:id/jobs/:jobId/restart
 POST /api/environments/:id/jobs/:jobId/run
@@ -162,6 +168,7 @@ POST /api/environments/:id/projects/:projectId/down
 POST /api/environments/:id/projects/:projectId/pull
 POST /api/environments/:id/projects/:projectId/redeploy
 POST /api/environments/:id/projects/:projectId/restart
+POST /api/environments/:id/projects/:projectId/stop
 POST /api/environments/:id/projects/:projectId/unarchive
 POST /api/environments/:id/projects/:projectId/up
 POST /api/environments/:id/projects/:projectId/update-services
@@ -184,12 +191,16 @@ POST /api/environments/:id/volumes/:volumeName/backups/upload
 POST /api/environments/:id/volumes/:volumeName/rename
 POST /api/environments/:id/volumes/backups/repository/check
 POST /api/environments/:id/volumes/backups/targets/:targetId/test
+POST /api/environments/:id/volumes/backups/targets/probe
+POST /api/environments/:id/volumes/binds/size
 POST /api/environments/:id/volumes/prune
+POST /api/environments/:id/vulnerabilities/candidates/scan
 POST /api/environments/:id/vulnerabilities/ignore
 POST /api/environments/:id/vulnerabilities/ignore/bulk
 POST /api/environments/:id/vulnerabilities/scan
 POST /api/environments/:id/vulnerabilities/unignore/bulk
-POST /api/settings/search
+POST /api/system/agent/restart
+POST /api/updater/check-all
 PUT /api/environments/:id/auto-heal
 PUT /api/environments/:id/containers/:containerId/auto-update
 PUT /api/environments/:id/job-schedules
@@ -197,7 +208,6 @@ PUT /api/environments/:id/projects/:projectId
 PUT /api/environments/:id/projects/:projectId/workspace
 PUT /api/environments/:id/settings
 PUT /api/environments/:id/updater/policies/:kind/:targetId
-PUT /api/environments/:id/updater/schedules
 PUT /api/environments/:id/uploads/:kind/:uploadId/chunks/:index
 PUT /api/environments/:id/volumes/:volumeName/backup-policy
 PUT /api/environments/:id/volumes/:volumeName/workspace

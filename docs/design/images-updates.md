@@ -40,7 +40,9 @@ one notification entry through existing channels per new candidate version.
 M4 uses admitted-user literal Compose image rewrites for version updates and
 image-only replacement for same-tag rebuilds; no generated override exists.
 M5 limits update, policies and restore points to Compose stacks; standalone
-containers expose update information only.
+containers expose update information only. The 2026-10-30 entry of the
+[core adoption ledger](core-adoption.md#decision-ledger) reverses this, the `off`
+default and the update-and-restore-only restore points in M18.
 #229 owns all G1–G4 implementation work and its explicit database risk gate.
 
 M10 includes host-scoped pull, remove and prune; registry create/edit/delete/test
@@ -128,8 +130,8 @@ agent modes. An H mutation reaching an agent outside trusted admission refuses.
 | delete-restore-point (new) | DELETE E/updater/{kind}/{targetId}/restore-points/{pointId} | H→A / proposed `updater.restore.delete` | Update rights; refuse a point held by an active/unknown restore |
 | restore-update (new) | POST E/updater/{kind}/{targetId}/restore-points/{pointId}/restore | H admission only | Update/restore rights; executor uses trusted runtime execute |
 | get-system-image-hints (new) | GET E/updater/system-image-hints | H aggregation; proposed A observation `updater.system.hints` | `image-updates:read`; hub applies version cap |
-| trigger-upgrade / trigger-update-all | POST E/system/upgrade or /upgrade/all | Existing operator routes; `system.upgrade.run` / existing update-all forwarding | `system:upgrade`; every agent dispatch is capped server-side at running hub version |
-| check-upgrade / update-all-status | GET E/system/upgrade/check or /upgrade/all/status | Existing operator reads; no watcher rollout | Existing rights; capped/blocked targets grant no replacement authority |
+| trigger-upgrade | POST E/system/upgrade | Hub-owned self-update envelope; `system.upgrade.run` (docs/design/app-updates.md) | `system:upgrade`, administrators; every agent target is capped at the running hub version |
+| check-upgrade | GET E/system/upgrade/check | Self-update check; `system.upgrade.check` | Existing rights; eligibility grants no replacement authority |
 
 Project manual updates reuse `run-updater` with `type=project` and the exact
 selected project ID. Batch options remain bounded and permission-checked per
@@ -509,7 +511,8 @@ Offline remote hosts can retain editable hub schedules without pretending the
 executor accepted work; failures are explicit at trigger/dispatch time.
 
 At contract v7 agents do **not** register their inherited `AutoUpdateJob` or
-continuous/event-driven `ImageUpdateWatcher`. The hub likewise replaces its old
+continuous/event-driven `ImageUpdateWatcher`. (M18: the agent-local jobs and
+host schedules below are removed; see the [update policy model](update-policy-model.md).) The hub likewise replaces its old
 continuous watcher with the one owned scheduled check source. Agent-mode
 job-schedule writes for auto-update/polling fields refuse with
 `update.schedule-hub-owned`; manual run/retry/restart of either M10 job refuses
@@ -888,7 +891,8 @@ new stack-update admission may update images. Discovery-free workspace calls
 remain ordinary deploy operations. Webhook runtime start/stop/restart/redeploy/
 up/down remain; webhook update authority awaits its separate actor-model review.
 PR2a owns narrow webhook/legacy-ingress changes and tests zero file/pull/recreate
-effects on refused hub/agent paths; PR1 introduces no workload-update capability.
+effects on refused hub/agent paths; PR1 introduces no workload-update capability. The webhook module, including
+its runtime actions, was removed in M20 (#358).
 
 For PR2a restore, refuse `restore.shared-reference` only if a tag must move and
 another running/stopped workload uses that reference with a different saved ID,
