@@ -123,7 +123,7 @@
     "leaseScope": "image-mutation",
     "normalComposePullsTakeLease": false,
     "protectionReasons": ["in-use","system","restore-point","active-update"],
-    "errorCodes": ["agent.unavailable","container.origin-locked","container.recreate-ambiguous","container.recreate-recovered","deploy.point-unavailable","image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","restore.deploy-failed","restore.image-mismatch","restore.in-use","restore.not-found","restore.shared-reference","restore.unavailable","settings.invalid-time-zone","update.agent-local-job-disabled","update.auto-excluded","update.baseline-unavailable","update.check-unavailable","update.config-drift","update.deploy-failed","update.image-binding-unsupported","update.invalid-policy","update.invalid-target","update.path-retired","update.permission-denied","update.persistence-failed","update.policy-changed","update.requires-hub-update","update.schedule-hub-owned","update.schedule-owner-unset","update.service-coupled","update.snapshot-unavailable","update.system-version-unknown","update.candidate-changed","update.target-changed","update.target-not-found"],
+    "errorCodes": ["agent.unavailable","container.origin-locked","container.recreate-ambiguous","container.recreate-recovered","deploy.point-unavailable","image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","restore.deploy-failed","restore.image-mismatch","restore.in-use","restore.not-found","restore.shared-reference","restore.unavailable","settings.invalid-time-zone","update.agent-local-job-disabled","update.auto-excluded","update.baseline-unavailable","update.check-unavailable","update.config-drift","update.deploy-failed","update.image-binding-unsupported","update.invalid-policy","update.invalid-target","update.path-retired","update.permission-denied","update.persistence-failed","update.policy-changed","update.requires-hub-update","update.schedule-hub-owned","update.schedule-owner-unset","update.service-coupled","update.snapshot-unavailable","update.system-version-unknown","update.candidate-changed","update.target-changed","update.target-not-found","update.unstable","update.auto-restored","update.auto-restore-failed","update.auto-restore-unavailable","update.interrupted","update.candidate-failed","restore.files-changed","container.auto-remove"],
     "edgeCommands": ["image.list","image.counts","image.inspect","image.pull","image.delete","image.prune","image.tag","image.upload","image_update.check","image_update.check_one","image_update.check_batch","image_update.check_all","image_update.summary","image_update.by_refs","container_registry.sync","system.upgrade.run"],
     "registryPublicFields": ["id","url","description?","insecure","enabled","registryType","repositoryNames","awsRegion?","createdAt","updatedAt","hasCredential"],
     "updateStates": ["unchecked","current","version","rebuild","local","unknown","error"],
@@ -172,7 +172,7 @@
           "additionalProperties": false,
           "properties": {
             "code": {
-              "enum": ["agent.unavailable","container.origin-locked","container.recreate-ambiguous","container.recreate-recovered","deploy.point-unavailable","image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","restore.deploy-failed","restore.image-mismatch","restore.in-use","restore.not-found","restore.shared-reference","restore.unavailable","settings.invalid-time-zone","update.agent-local-job-disabled","update.auto-excluded","update.baseline-unavailable","update.check-unavailable","update.config-drift","update.deploy-failed","update.image-binding-unsupported","update.invalid-policy","update.invalid-target","update.path-retired","update.permission-denied","update.persistence-failed","update.policy-changed","update.requires-hub-update","update.schedule-hub-owned","update.schedule-owner-unset","update.service-coupled","update.snapshot-unavailable","update.system-version-unknown","update.candidate-changed","update.target-changed","update.target-not-found"],
+              "enum": ["agent.unavailable","container.origin-locked","container.recreate-ambiguous","container.recreate-recovered","deploy.point-unavailable","image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","restore.deploy-failed","restore.image-mismatch","restore.in-use","restore.not-found","restore.shared-reference","restore.unavailable","settings.invalid-time-zone","update.agent-local-job-disabled","update.auto-excluded","update.baseline-unavailable","update.check-unavailable","update.config-drift","update.deploy-failed","update.image-binding-unsupported","update.invalid-policy","update.invalid-target","update.path-retired","update.permission-denied","update.persistence-failed","update.policy-changed","update.requires-hub-update","update.schedule-hub-owned","update.schedule-owner-unset","update.service-coupled","update.snapshot-unavailable","update.system-version-unknown","update.candidate-changed","update.target-changed","update.target-not-found","update.unstable","update.auto-restored","update.auto-restore-failed","update.auto-restore-unavailable","update.interrupted","update.candidate-failed","restore.files-changed","container.auto-remove"],
               "type": "string"
             },
             "message": {"type":"string"}
@@ -225,15 +225,18 @@
       {"method":"POST","path":"/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore","operationId":"restore-update","sha256":"b697cb4fc920a3c1f327ed02c5f1ecfbdfe12a8313d90aa09b55cbbf15639c74"}
     ],
     "schemas": {
-      "UpdaterContainerImageRequest": {"sha256":"a63917fd8fa0ca3c802a04c1e5a3a83c90d0930bbe7dd2d75c8f8537cf1e77c5"},
-      "UpdaterLifecycleRequest": {"sha256":"74478ab08119bd835378d8ec0d2aba4672317056f2b6cf00cdd5c8ae3161076e"},
+      "UpdaterContainerImageRequest": {"sha256":"67272ba15d7f67a393ce7636e5002fae320ca48f4da5996c684f92f7776a41a6"},
+      "UpdaterLifecycleRequest": {"sha256":"117395e69d80b7380181ed85c88dcfcf97010b3329a135939ef6bfd9b93e34bd"},
       "UpdaterLifecycleIntent": {"sha256":"2f4ccaff689610b693669796e51662a00fe1c5411dee2b9124e97265687bf396"},
-      "UpdaterPolicyBinding": {"sha256":"bf4abb7900dc020784127c1a648a2a7464a8c80655e89bf9cd6492c7cbd13cb7"},
+      "UpdaterPolicyBinding": {"sha256":"d28693f101ebb2ac87a651a983c273670e387e49aac036e83a12cfaed3eee7c0"},
       "UpdaterImageSelection": {"sha256":"bafcb6906dff24c4e7ad9df5bc930991979ee412d335c9eb6869102d920f52df"},
-      "UpdaterLifecycleResult": {"sha256":"f78a579b0b52ee976ace5552cf34632617875f5a23e118e150747fa340ff8416"},
-      "UpdaterRestorePoint": {"sha256":"57fd3fd6c08de557e283b1abab6787e131a986fb4eb586da23c17e931325f292"},
+      "UpdaterLifecycleResult": {"sha256":"c640fef2c5a38e9370104619a069ccab795d27c5bd4fd0d276454d458ea798ae"},
+      "UpdaterRecoveryResult": {"sha256":"b0fde5dd222b1de8060b07dc99ec511ddfb53272e628b082ab70463125be258b"},
+      "UpdaterAppliedCandidate": {"sha256":"acd32f4de0bb1719afdbfe1c745ace4655e2d0bbcfd47d94388d25ce40a416f7"},
+      "UpdaterVerifiedImageRequest": {"sha256":"cf9be04bafeb96d4c5b21610891e4e665ae0f92a70d2609102d75cc074ca084e"},
+      "UpdaterRestorePoint": {"sha256":"132d84d5c60c6e228a90bfaa05457a5cea245f0ada9104937b3679bb8d9d1ff4"},
       "UpdaterPointImage": {"sha256":"d6b87f8a92b5310b7860c3706ea4ea9298249c4e70760122be31079509d44d2c"},
-      "UpdaterBaselineStatus": {"sha256":"1bc3cf1e447e78b3e03a708bd463faab72ef79b0b184a2326598fcc0687c702c"},
+      "UpdaterBaselineStatus": {"sha256":"0092260ebb80239d052125a4a48c120787745bb108729fd84c15b87c9d587eac"},
       "ActivityRuntimeOptions": {"sha256":"960f1bed8857e8f1a658dd3cff4509716d78792a06a709b7725824bba80f3090"},
       "ActivityRuntimeTargetRequest": {"sha256":"712c5ed295d4baed3976e93f520786bd5fd4b3387f2a69abe22428a4bfd6355b"},
       "ActivityRuntimeTargetMetadata": {"sha256":"9cddd953974b3410def985c81132bdf0e0ed6c4fb1ebf3ee3526f34c8968917d"}
@@ -280,17 +283,17 @@
       {"method":"POST","path":"/updater/check-all","operationId":"check-all-updates","sha256":"65c2203466ccbd4dbdaa3f41472c7e3996d517a212a11213ad04287a4984c06f"}
     ],
     "schemas": {
-      "ProjectUpdateInfo": {"sha256":"a33b1f62a80d96cc0dcb60d355f8708be20e01618981b4b7acdabaa740a5161d"},
-      "UpdaterAutoUpdatePolicy": {"sha256":"1b5088e38cbffc29bcf5c526e209741bc1297c9d0b093e91fb72af5a1c953203"},
+      "ProjectUpdateInfo": {"sha256":"1ade0c5d6715200fd8c038501ff2ff3503b68b7c79c081ce02dc15083e895165"},
+      "UpdaterAutoUpdatePolicy": {"sha256":"5d12feb6b6e4e79c71f85a82a4b81d1060713d1a1d27a7deccc558c40faeed20"},
       "UpdaterUpdatePolicyInput": {"sha256":"e54f737d56de5444a206bb01f8b0e0bea1786ec4ec4f6638eb12d015604ea89a"},
       "UpdaterUpdateCandidate": {"sha256":"fa66965e30135bf2893054b3ef364624d48e3e7e855c05b83f692bf9f27aaa7a"},
       "UpdaterUpdateWindow": {"sha256":"b8ae73b91921d6e6e93b0f0a8e8220c326d36ca708c5100b0a32719348ece58b"},
       "JobscheduleConfig": {"sha256":"23a7234d30089bddfec1e1c54d930f4bda6ff18f0c017f2f4584a10c3a6e1dcf"},
       "JobscheduleUpdate": {"sha256":"aa0bd775c121a870f849c2201f770b20fe58f4497ac1c54f1b384f432a16cf1e"},
-      "JobscheduleJobStatus": {"sha256":"459ad4608962605caf7c4f59f75f12569ee8ecc891d11cc0be2b57c07a3187b5"},
-      "SchedulerOutcome": {"sha256":"ccd71113895b46d03d6de1a5976a6b2ebd0691b80a6e5e27da90b999c919eca7"},
-      "SchedulerTargetOutcome": {"sha256":"caaab07bc41895cebd7244e9c7df93255464da52761bed1f4ff58a0ca09a3eb7"},
-      "UpdaterSystemImageHint": {"sha256":"8a3eff1cffcf6defd83545ed42653d8a033a7eb89ad382bc7a0bba967dc1574e"},
+      "JobscheduleJobStatus": {"sha256":"283f6f47581be5f43946bca69ab63ea819f4d7031216c6d65d739f5637b2229b"},
+      "SchedulerOutcome": {"sha256":"2205c59dc9c1bd85cb7ff336f24f40fdc2ad366d798697cbf6dbed45054ab359"},
+      "SchedulerTargetOutcome": {"sha256":"8115df75265fa60fce41f26b8ba2b05eaf5f142daf681e5fb1ff78747374c4d5"},
+      "UpdaterSystemImageHint": {"sha256":"5025a993a11cda55088f3eb0b728640929cc8d91bff073484a7da3b8043a7491"},
       "UpdaterSystemImageHints": {"sha256":"1d1b3c851b9360e8d781cb08ec30c9a6b62f314546b27178072ef74dd80294ef"},
       "VersionInfo": {"sha256":"5291d2f09c3fd953fccf20c069d078fce17e963c280581f7324768fd71698712"}
     },
@@ -748,6 +751,7 @@
             "type": "string"
           },
           "metadata": {"additionalProperties":{},"type":"object"},
+          "operation": {"type":"string"},
           "outcomeState": {"enum":["known","unknown"],"type":"string"},
           "progress": {"format":"int64","type":"integer"},
           "resourceId": {"type":"string"},

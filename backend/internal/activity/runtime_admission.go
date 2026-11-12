@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Durable-first admission, parent arbitration and atomic coded evidence; transactional host restart exclusion.
+// Deviations: Durable-first admission, parent arbitration and atomic coded evidence; transactional host restart exclusion. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -145,6 +145,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					if err := tx.Model(&Activity{}).Where("id=?", row.RunID).UpdateColumn("metadata", database.JSON{"changedFields": runtimeRecreateFields(c.command.Options)}).Error; err != nil {
 						return err
 					}
+				}
+				if err := runtimeObserveAdmissionTx(tx, now, row.RunID, c.command); err != nil {
+					return err
 				}
 				if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
 					return err

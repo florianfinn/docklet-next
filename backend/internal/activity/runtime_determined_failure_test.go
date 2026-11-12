@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original M13 closing-verification regressions.
+// Deviations: Original M13 closing-verification regressions. M24 recovery failure evidence in policy fixtures.
 
 package activity
 
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	dto "github.com/florianfinn/docklet-next/types/activity"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"io"
@@ -24,8 +25,11 @@ func TestRuntimeDeterminedFailureNotifiesWhenShutdownInterruptsItsSave(t *testin
 			app, stop := context.WithCancel(t.Context())
 			defer stop()
 			var work context.Context
-			f := b2Fixture(t, app, func(ctx context.Context, _ RuntimeCommand, _ io.Writer) error {
+			f := b2Fixture(t, app, func(ctx context.Context, command RuntimeCommand, _ io.Writer) error {
 				work = ctx
+				if command.Options.Lifecycle != nil && command.Options.Lifecycle.Policy != nil {
+					updaterDTO.RecordLifecycleResult(ctx, updaterDTO.LifecycleResult{RunID: command.ProposedRunID, Code: "update.deploy-failed", HTTPStatus: 500, Recovery: &updaterDTO.RecoveryResult{Outcome: "not-needed"}})
+				}
 				return errors.New("controlled workflow failure")
 			})
 			injected := false

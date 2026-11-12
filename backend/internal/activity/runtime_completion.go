@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Atomic local evidence, conditional Activity/final audit and retained retry.
+// Deviations: Atomic local evidence, conditional Activity/final audit and retained retry. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -82,6 +82,25 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 	if !valid || result.settledAt.IsZero() || result.message == "" {
 		return empty, nil, errRuntimeInvalidInternal
 	}
+
+	result.imageLifecycle, err = runtimeCheckedTerminalTx(tx, row, result.state, string(result.code), result.imageLifecycle)
+	if err != nil {
+		return empty, nil, err
+	}
+	if result.imageLifecycle != nil && result.imageLifecycle.Code == "runtime.outcome-unknown" {
+		if err := runtimeImageResultTx(tx, row.RunID, result.imageLifecycle); err != nil {
+			return empty, nil, err
+		}
+		if err := runtimeWriteObservedTx(tx, now, row, result.imageLifecycle); err != nil {
+			return empty, nil, err
+		}
+		row, err = runtimeEvidenceTxInternal(tx, now, id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: result.startedAt})
+		if err != nil {
+			return empty, nil, err
+		}
+		snapshot, err := runtimeSnapshotTxInternal(tx, row)
+		return snapshot, nil, err
+	}
 	wasTerminal := row.ExecutorSettledAt != nil
 	if result.state == "success" && !wasTerminal && *row.ExecutorState != "executing" && !result.recovered {
 		return empty, nil, &runtimeConflictInternal{}
@@ -102,6 +121,9 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		if err := runtimeDeployEvidenceTx(tx, row); err != nil {
 			return empty, nil, err
 		}
+	}
+	if err := runtimeWriteObservedTx(tx, now, row, result.imageLifecycle); err != nil {
+		return empty, nil, err
 	}
 	if wasTerminal {
 		snapshot, err := runtimeSnapshotTxInternal(tx, row)
@@ -195,6 +217,7 @@ func (s *RuntimeService) settleOwnerInternal(owner *runtimeOwnerInternal) (activ
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, err
 	}
+	held = held || snapshot.OutcomeState == activitytypes.RuntimeOutcomeUnknown
 	owner.result.held = held
 	if final != nil {
 		s.activity.publishMessageInternal(snapshot.EnvironmentID, snapshot.Type, activityMessageToDTOInternal(final))

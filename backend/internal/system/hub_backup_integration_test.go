@@ -2,7 +2,7 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original startup reconciliation and failure-write regression test for issue #32.
+// Deviations: Original startup reconciliation and failure-write regression test for issue #32. M24 backup test waits for terminal activity before reusing its gate.
 
 package system
 
@@ -193,7 +193,8 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	require.NotEmpty(t, run.ActivityID)
 	require.Eventually(t, func() bool {
 		latest, err := system.backupStoreInternal().Run(t.Context(), run.ID)
-		return err == nil && latest.Status == backuptypes.SystemBackupStatusSucceeded
+		detail, detailErr := activities.GetActivityDetail(t.Context(), "0", run.ActivityID, 20)
+		return err == nil && latest.Status == backuptypes.SystemBackupStatusSucceeded && detailErr == nil && detail.Activity.Status == activitytypes.StatusSuccess
 	}, 30*time.Second, 100*time.Millisecond)
 	latest, err := system.backupStoreInternal().Run(t.Context(), run.ID)
 	require.NoError(t, err)
@@ -229,7 +230,8 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		stored, loadErr := system.backupStoreInternal().Run(t.Context(), manual.ID)
-		return loadErr == nil && stored.Status == backuptypes.SystemBackupStatusSucceeded
+		detail, detailErr := activities.GetActivityDetail(t.Context(), "0", manual.ActivityID, 20)
+		return loadErr == nil && stored.Status == backuptypes.SystemBackupStatusSucceeded && detailErr == nil && detail.Activity.Status == activitytypes.StatusSuccess
 	}, 30*time.Second, 100*time.Millisecond)
 	first, err := service.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerScheduled,
 		backuptypes.CreateSystemBackupRequest{PolicyID: "daily"})

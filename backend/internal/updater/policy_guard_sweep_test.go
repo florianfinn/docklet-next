@@ -2,7 +2,7 @@
 // Revision: 4023414fcf620a9ea4be2429ee70fa8fd8230f9c
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Policy execution guard sweep uses receipts, errors and persisted checkpoints.
+// Deviations: Policy execution guard sweep uses receipts, errors and persisted checkpoints. M24 recovery evidence, validation and reason contracts.
 
 package updater
 
@@ -62,7 +62,7 @@ func TestPolicySnapshotDispositionMapping(t *testing.T) {
 		{"unknown-success", a.StatusSuccess, a.RuntimeOutcomeUnknown, st.Failed, true},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			target, unknown := imagePolicySnapshotTarget("stack", "child", a.RuntimeSnapshot{Activity: a.Activity{Status: row.status}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: row.knowledge}})
+			target, unknown := imagePolicySnapshotTarget("stack", "child", a.RuntimeSnapshot{Activity: a.Activity{Status: row.status, ImageLifecycle: &dto.LifecycleResult{Verified: row.status == a.StatusSuccess}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: row.knowledge}})
 			require.Equal(t, row.expected, target.Status)
 			require.Equal(t, row.uncertain, unknown)
 			require.Equal(t, "child", target.ActivityID)
@@ -245,7 +245,7 @@ func TestPolicyReconcileReadFailureNeverDispatches(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, policy.AdmitChild(f.db.DB, &dto.PolicyBinding{ChildID: child.ID}, child.ID))
 	f.p.ports.snapshot = func(context.Context, string, string) (a.RuntimeSnapshot, bool, error) {
-		return a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}, true, errors.New("synthetic receipt read failure")
+		return a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess, ImageLifecycle: &dto.LifecycleResult{Verified: true}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}, true, errors.New("synthetic receipt read failure")
 	}
 	out := f.run(t, "auto-update", st.Run{ID: "wrapper", AttemptCount: 2})
 	require.Len(t, out.Targets, 1)

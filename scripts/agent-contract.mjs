@@ -47,7 +47,7 @@ export function agentFixture(spec, fixture) {
     if (!operations?.includes("update-project") || !operations.includes("restore-project") || !operations.includes("update-container") || !operations.includes("restore-container-image"))
       throw new Error("missing lifecycle execution producer");
     manifest.lifecycleOperations = operations;
-    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
+    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RecoveryResult", "AppliedCandidate", "VerifiedImageRequest", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
     const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
     const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
       .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))

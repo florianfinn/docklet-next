@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation.
+// Deviations: Original notification and Auto Heal foundation. M24 recovery failure evidence in policy fixtures.
 
 package activity
 
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	dto "github.com/florianfinn/docklet-next/types/activity"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"testing"
@@ -70,7 +71,7 @@ func TestPolicyChildDeployFailureNotifiesOnce(t *testing.T) {
 	require.NotNil(t, c.Options.Lifecycle.Policy)
 	admitted, err := f.service.Admit(t.Context(), c)
 	require.NoError(t, err)
-	result := runtimeLocalResultInternal{state: "failed", code: dto.CodeRuntimeFailed, message: "Runtime failed", settledAt: f.store.now}
+	result := runtimeLocalResultInternal{state: "failed", code: dto.CodeRuntimeFailed, message: "Runtime failed", settledAt: f.store.now, imageLifecycle: &updaterDTO.LifecycleResult{RunID: admitted.ActivityID, Code: "update.deploy-failed", HTTPStatus: 500, Recovery: &updaterDTO.RecoveryResult{Outcome: "not-needed"}}}
 	ctx := context.WithValue(t.Context(), gateRunContextKey{}, admitted.ActivityID)
 	for range 2 {
 		require.NoError(t, f.service.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {

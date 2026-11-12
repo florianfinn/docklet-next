@@ -2,7 +2,7 @@ export const enBackend = {
   errors: {
     "candidate": {"unavailable": "The candidate could not be checked remotely in the registry.", "deferred": "This candidate has not been checked yet."},
     "agent": {"unavailable": "The host cannot be reached. Check the connection."},
-    "container": {"origin-locked": "Docklet does not manage updates for this container.", "recreate-ambiguous": "The container replacement could not be identified.", "recreate-recovered": "The container replacement was recovered."},
+    "container": {"auto-remove": "Automatic restore is unavailable for a running auto-remove container.","origin-locked": "Docklet does not manage updates for this container.", "recreate-ambiguous": "The container replacement could not be identified.", "recreate-recovered": "The container replacement was recovered."},
     "deploy": {"point-unavailable": "The deployment completed without a restore point."},
     "settings": {"invalid-time-zone": "Choose a valid time zone."},
     "history": {"sample-too-large": "The history sample exceeds the size limit.", "sample-invalid": "The host returned an invalid history sample.", "unavailable": "History is unavailable.", "invalid-range": "Choose a history range of 24h, 7d or 30d."},
@@ -86,7 +86,7 @@ export const enBackend = {
       "sync-failed": "Registry settings could not be synced to the agent. Check its connection and retry.",
       "unavailable": "The registry could not be reached. Check its address and network connection."
     },
-    "restore": {
+    "restore": {"files-changed": "The stack files changed. Automatic restore is unavailable.",
       "unavailable": "This restore point is incomplete or its retained images are unavailable.",
       "shared-reference": "Another workload prevents moving a shared image reference. Resolve the conflict before restoring.",
       "image-mismatch": "The restored image bindings could not be verified. Inspect the run before retrying.",
@@ -94,7 +94,7 @@ export const enBackend = {
       "not-found": "The restore point was not found. Refresh the point list.",
       "deploy-failed": "The restore deployment failed. Inspect its partial result before another recovery attempt."
     },
-    "update": {
+    "update": {"unstable": "The updated version did not run stably.","auto-restored": "The update failed. The previous version is running again. Volume data was not restored.","auto-restore-failed": "The update and automatic restore failed. Action is needed. Volume data was not restored.","auto-restore-unavailable": "The update failed and automatic restore was unavailable. Volume data was not restored.","interrupted": "The update was interrupted. Check the target. Volume data was not restored.","candidate-failed": "This candidate previously failed and was restored. It will be skipped.",
       "candidate-changed": "The candidate image changed. Check it again before updating.",
       "service-coupled": "This service must be updated together with its stack.",
       "permission-denied": "The recorded actor no longer has the required permissions.",

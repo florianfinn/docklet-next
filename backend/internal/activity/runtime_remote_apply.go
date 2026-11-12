@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Bounded remote runtime implementation, active in production since #125.
+// Deviations: Bounded remote runtime implementation, active in production since #125. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -44,13 +44,41 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		}
 		d := outcome.Detail
 		kind, ok := runtimeActivityTypeInternal(*row.OperationID, *row.TargetKind)
-		if !ok || d.Activity.Type != kind || d.Activity.ResourceID == nil || *d.Activity.ResourceID != *row.TargetID || d.Activity.ResourceType == nil || *d.Activity.ResourceType != *row.TargetKind || d.Activity.StartedBy == nil || d.Activity.StartedBy.UserID != *row.CallerID {
+		if !ok || d.Activity.Operation != "" && string(d.Activity.Operation) != *row.OperationID || d.Activity.Type != kind || d.Activity.ResourceID == nil || *d.Activity.ResourceID != *row.TargetID || d.Activity.ResourceType == nil || *d.Activity.ResourceType != *row.TargetKind || d.Activity.StartedBy == nil || d.Activity.StartedBy.UserID != *row.CallerID {
 			return &runtimeConflictInternal{}
 		}
 		terminal := outcome.State == activitytypes.RuntimeAnswerTerminal
 		if row.ExecutorSettledAt != nil || (!fromQuery && row.LastReconciledAt != nil && !terminal) {
 			snapshot, err = runtimeSnapshotTxInternal(tx, row)
 			return err
+		}
+
+		if terminal {
+			checked, err := runtimeCheckedTerminalTx(tx, row, string(d.Activity.Status), d.Activity.MessageCode, d.Activity.ImageLifecycle)
+			if err != nil {
+				return err
+			}
+			if checked != nil {
+				d.Activity.ImageLifecycle = checked
+				if d.Activity.Metadata == nil {
+					d.Activity.Metadata = map[string]any{}
+				}
+				d.Activity.Metadata["imageLifecycle"] = *checked
+			}
+			if err := runtimeWriteObservedTx(tx, now, row, checked); err != nil {
+				return err
+			}
+			if checked != nil && checked.Code == "runtime.outcome-unknown" {
+				if err := runtimeImageResultTx(tx, row.RunID, checked); err != nil {
+					return err
+				}
+				row, err = runtimeEvidenceTxInternal(tx, now, id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: row.ExecutorStartedAt})
+				if err != nil {
+					return err
+				}
+				snapshot, err = runtimeSnapshotTxInternal(tx, row)
+				return err
+			}
 		}
 		// Active is authoritative receipt acceptance, not proof that effects
 		// started. The carrier does not supply a separate executing timestamp.

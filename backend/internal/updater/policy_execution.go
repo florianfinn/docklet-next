@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Serial policy children through runtime admission; receipt-only restart recovery.
+// Deviations: Serial policy children through runtime admission; receipt-only restart recovery. M24 recovery evidence, validation and reason contracts.
 
 package updater
 
@@ -220,26 +220,49 @@ func policyTargetWithActivity(target, id string, status st.RunStatus, code strin
 	return out
 }
 func imagePolicySnapshotTarget(target, id string, snapshot activityDTO.RuntimeSnapshot) (st.TargetOutcome, bool) {
+
 	code := ""
-	if snapshot.ImageLifecycle != nil {
-		code = snapshot.ImageLifecycle.Code
-		if imageDTO.ValidateReason(code) != nil || code == "runtime.outcome-unknown" {
-			return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
-		}
+	unknown := func() (st.TargetOutcome, bool) {
+		return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
 	}
 	if snapshot.OutcomeState == activityDTO.RuntimeOutcomeUnknown || snapshot.Status != activityDTO.StatusSuccess && snapshot.Status != activityDTO.StatusFailed && snapshot.Status != activityDTO.StatusCancelled {
-		return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
+		return unknown()
+	}
+	lifecycle := snapshot.ImageLifecycle
+	if lifecycle != nil {
+		code = lifecycle.Code
+		if imageDTO.ValidateReason(code) != nil || code == "runtime.outcome-unknown" {
+			return unknown()
+		}
+	}
+	if snapshot.MessageCode == "runtime.interrupted" || lifecycle != nil && lifecycle.Recovery != nil && lifecycle.Recovery.Outcome == "interrupted" {
+		return policyTargetWithActivity(target, id, st.Failed, "update.interrupted"), false
+	}
+	if snapshot.Status == activityDTO.StatusCancelled {
+		return policyTargetWithActivity(target, id, st.Canceled, code), false
+	}
+	if lifecycle == nil {
+		return unknown()
 	}
 	status := st.Failed
 	if snapshot.Status == activityDTO.StatusSuccess {
 		status = st.Succeeded
+		code = ""
 	}
-	if snapshot.Status == activityDTO.StatusCancelled {
-		status = st.Canceled
+	if lifecycle.Recovery != nil {
+		switch lifecycle.Recovery.Outcome {
+		case "restored":
+			code = "update.auto-restored"
+		case "restore-failed":
+			code = "update.auto-restore-failed"
+		case "unavailable":
+			code = "update.auto-restore-unavailable"
+		}
 	}
-	if code == "image.busy" {
+	if code == "image.busy" || code == "update.candidate-failed" {
 		status = st.Skipped
 	}
+
 	return policyTargetWithActivity(target, id, status, code), false
 }
 func (s *UpdaterService) reconcileImagePolicyChild(ctx context.Context, p *imagePolicyService, env, target string, child policy.Child) (st.TargetOutcome, bool) {

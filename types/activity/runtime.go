@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Required runtime projection vocabulary for activated v4 DTOs.
+// Deviations: Required runtime projection vocabulary for activated v4 DTOs. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -27,7 +27,8 @@ type RuntimeKnowledge struct {
 // RuntimeSnapshot requires flat receipt knowledge beside the activity projection.
 // A hub release may project failed while executor outcome remains unknown.
 type RuntimeSnapshot struct {
-	Result *container.RecreateResult `json:"result,omitempty"`
+	Operation RuntimeOperation          `json:"operation,omitempty"`
+	Result    *container.RecreateResult `json:"result,omitempty"`
 	Activity
 	RuntimeKnowledge
 }
