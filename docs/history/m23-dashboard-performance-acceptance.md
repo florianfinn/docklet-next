@@ -20,7 +20,7 @@ S3b. Each step was reviewed by the other provider.
 | --- | --- | --- |
 | #435 #428 #425 #401 | S1a bounded event reads (`since`), session presence hint, disk-path fallback | R1 passed; two non-blockers fixed, one settled with query-plan evidence. |
 | #435 | S1b agent route for active vulnerability counts (agent contract 18) | R1 passed; two non-blockers fixed. |
-| #391 #389 #398 | S2 hub maintenance holds and skipped reads of unavailable hosts | R1 and verify rounds 1–4 failed (hold lifecycle, consumer mismatch, guard coverage); after a rebuild from a root-cause table, verify round 5 passed. |
+| #391 #389 #398 | S2 hub maintenance holds and skipped reads of unavailable hosts | R1 and verification rounds 2–4 failed (hold lifecycle, consumer mismatch, guard coverage); after a rebuild from a root-cause table, verification round 5 passed. |
 | #435 | S3a Dashboard events window, readiness markers, active-count consumer | R1 failed; round 2 passed. |
 | #428 | S3b inventory scope retention and metrics lifetime | R1 and round 2 failed; round 3 passed with one accepted deferral (R1E-7). |
 | #401 #400 #431 #430 | S4 capacity source and time axis, run gate confirmation, density statement | R1 failed (unknown-outcome confirmation); round 2 passed. |
@@ -34,9 +34,11 @@ The candidate run failed three cells, and the delta runs found further causes:
 
 - **Change notifications cancelled reads (MNT1, OFF1).** A stream change aborted
   reads in flight, which showed as aborts during hub maintenance and as repeated
-  reads after a host returned. Refreshes now never cancel a read: a superseded
-  refetch of loaded data repeats (at most three times) without publishing its
-  outdated value. Readers mark their attempt current where they read their
+  reads after a host returned. Change-notification refreshes no longer cancel a
+  read: a superseded refetch of loaded data discards its outcome and repeats, at
+  most three times, after which the last outcome stands. A notification that
+  arrives just before a result is published triggers one further refresh.
+  Identity resets still cancel and reset queries. Readers mark their attempt current where they read their
   changeable state, the internal host catalogue is versioned per change, moves
   between skipped host statuses refresh only the host list, and automatic backup
   overview reads of a host share one read for 2 s. Eight review rounds closed
@@ -45,8 +47,10 @@ The candidate run failed three cells, and the delta runs found further causes:
   list projected a live baseline (Compose inputs and a Docker observation) for
   every never-saved stack policy, serially. On the hub host with nine default
   stacks the list took 1.3–5 s, and the schedule widget waited on it. The list
-  now leaves the default stack identity to the single policy read. The candidate
-  had passed DASH1 only because its fleet happened to have saved policies.
+  now leaves the default stack identity to the single policy read. The
+  candidate's policy state was not controlled, so its DASH1 pass is not
+  comparable; by maintainer decision M-5 the final measurement used never-saved
+  (revision 0) policies on the whole fleet.
 - **DASH3 attribution.** The always-visible summary row reads capacity and
   active counts; by maintainer decision it counts as a consumer, so these reads
   are not hidden-widget reads.
@@ -54,9 +58,10 @@ The candidate run failed three cells, and the delta runs found further causes:
 ## Accepted scope and method
 
 The sandbox had the hub-local host H, one Direct agent D and one Edge agent E,
-with a labelled fleet of about 50 containers per host. Timings and requests were
-measured at the hub origin over HTTP/1.1 with Chromium and the DevTools
-protocol.
+with 50, 23 and 25 containers respectively, including 10 labelled workloads per
+host. Timings and requests were measured at the hub origin over HTTP/1.1 with
+Chromium and the DevTools protocol, except GATE1, which ran through the
+buffering public route.
 
 | Cell | Behaviour |
 | --- | --- |
@@ -67,7 +72,7 @@ protocol.
 | MNT1 | Hub archive with Dashboard and Containers open: hint within 1 s, reads held (no maintenance 503), no error UI, reads resume |
 | OFF1 | Direct, then Edge agent stopped with Dashboard, Security and Backup targets open: no reads of the offline host, quiet recovery, at most one refresh per query |
 | TGT1 | Backup target edited while the Edge agent is stopped: pending, no repository read while offline, delivered after restart |
-| GATE1 | An update issued 200 ms after the preceding run turned terminal is admitted |
+| GATE1 | Through the buffering public route, with the browser still showing the preceding run as running: an update issued within 200 ms after that run turned terminal is admitted (observed at +7 ms) |
 | CAP1 | Missing disk path on D: meter and trend from one source, path shown |
 | DENS1 | 100 containers per host: Dashboard, Containers and Stacks load without error |
 | KIT/REG | Kit build, deploy, smoke and regression walk on all three hosts |
@@ -107,7 +112,7 @@ one case what was fixed:
 - Host load was not controlled; the three hosts share one kernel, and the
   recorded load average was evidence only. Chromium only.
 - Timing cells were measured at the hub origin over HTTP/1.1, not through the
-  public route.
+  public route; only GATE1 used the public route.
 - DASH2, GATE1, CAP1 and DENS1 were measured on the candidate and carried; their
   code paths did not change afterwards.
 - DASH1 was measured with default update policies. Saved policies are faster;
@@ -118,5 +123,6 @@ one case what was fixed:
 
 - #462: the shell's navigation counters read the full Security data and the
   decorated volume list on every page.
-- R1E-7 (first-load tracking of seen rows across identity changes) is an
-  accepted deferral without an issue.
+- R1E-7 (a host whose first inventory read failed is still marked loaded, so
+  after it goes offline its hub-retained snapshot is not read) is an accepted
+  deferral without an issue.
