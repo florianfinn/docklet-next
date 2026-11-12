@@ -90,6 +90,8 @@ Two module gaps found: `addRouteToFile` rejects a new file that holds only a
 comment, and additions to a flow-style map stay on one flow line. Creating a new
 route file needs a block-style skeleton.
 
+The resulting module design is in [proxy module](proxy-module.md).
+
 ## Next evidence
 
 1. With separate operator approval for each session: a further scoped write test on the
