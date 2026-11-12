@@ -63,7 +63,12 @@ candidate is **Skipped**, with `update.candidate-failed`.
 
 The hub emits one scheduled failure notice at authoritative settlement. A transport
 hold alone sends no notice and never proves execution failure. Interrupted runs
-settle with an interrupted notice once executor evidence is available. Successful
+settle with an interrupted notice once executor evidence is available: while its
+run is held because the agent is unreachable, a scheduled window keeps querying the
+executor every 30 seconds for up to 10 minutes, without resending the update, so a
+restarted agent's interrupted result reaches the job target and the notice. After
+that limit the target stays `runtime.outcome-unknown`; the job's Retry reconciles
+it from the receipt, and a finished job run is never rewritten. Successful
 updates and skipped candidates send no failure notice. Manual **Update with check**
 keeps the existing manual notification rules; its activity carries recovery evidence.
 When the run changed the workload (restored, restore failed, unavailable or
