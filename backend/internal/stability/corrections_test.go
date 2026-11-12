@@ -19,7 +19,9 @@ func TestExtraReplicaFails(t *testing.T) {
 	clock := newClock()
 	t0 := clock.Now()
 	engine := fakeEngine{
-		list:    func(context.Context, string, string) ([]Instance, error) { return []Instance{{ID: "a"}, {ID: "b"}}, nil },
+		list: func(context.Context, string, string) ([]Instance, error) {
+			return []Instance{{ID: "a"}, {ID: "b"}}, nil
+		},
 		inspect: func(_ context.Context, id string) (Container, error) { return running(id, t0), nil },
 	}
 	expectFail(t, New(clock, engine).Observe(context.Background(), stackSet(t, 1, false), t0))

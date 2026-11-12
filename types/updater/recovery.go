@@ -13,6 +13,7 @@ import (
 
 const MaxSuppressedCandidates = 64
 const MaxAppliedCandidates = 256
+
 // Evidence holds up to MaxAppliedCandidates applied tuples of realistic length.
 const MaxRecoveryEvidenceBytes = 64 << 10
 

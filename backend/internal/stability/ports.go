@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	Window        = 120 * time.Second
-	Interval      = 2 * time.Second
-	Grace         = 5 * time.Second
+	Window   = 120 * time.Second
+	Interval = 2 * time.Second
+	Grace    = 5 * time.Second
 	// CodeUnstable is listed in the types/image reason vocabulary.
 	CodeUnstable  = "update.unstable"
 	CodeCancelled = string(activity.CodeRuntimeCancelled)
