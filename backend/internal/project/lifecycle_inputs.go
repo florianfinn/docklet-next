@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M18 shared-image selection guard.
+// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M18 shared-image selection guard; #406 nested COMPOSE_FILE base refused as unsupported.
 
 package project
 
@@ -56,6 +56,10 @@ func (s *ProjectService) lifecycleInputs(ctx context.Context, p *Project) (*life
 		return nil, lifecycleFailure("update.snapshot-unavailable")
 	}
 	path, err := s.ResolveProjectComposeFile(ctx, p)
+	if errors.Is(err, projects.ErrComposeFileNestedBase) {
+		// Loading from a subdirectory changes working directory and env semantics.
+		return nil, lifecycleFailure("update.image-binding-unsupported")
+	}
 	if err != nil {
 		return nil, lifecycleFailure("update.snapshot-unavailable")
 	}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; nested COMPOSE_FILE base classified (#406).
 
 package projects
 
@@ -142,6 +142,7 @@ func TestParseComposeEnvOptions(t *testing.T) {
 		_, err := ParseComposeEnvOptions(dir, EnvMap{"COMPOSE_FILE": "../base.yml"})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, common.ErrComposeFileEnvInvalid)
+		assert.NotErrorIs(t, err, ErrComposeFileNestedBase)
 	})
 
 	t.Run("non-root first entry rejected", func(t *testing.T) {
@@ -149,6 +150,8 @@ func TestParseComposeEnvOptions(t *testing.T) {
 		_, err := ParseComposeEnvOptions(dir, EnvMap{"COMPOSE_FILE": "sub/extra.yml:base.yml"})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, common.ErrComposeFileEnvInvalid)
+		assert.ErrorIs(t, err, ErrComposeFileNestedBase)
+		assert.Equal(t, `the first COMPOSE_FILE entry "sub/extra.yml" must be in the project directory`, err.Error())
 	})
 
 	t.Run("missing entry rejected", func(t *testing.T) {
