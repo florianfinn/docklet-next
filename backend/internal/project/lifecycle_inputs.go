@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M18 shared-image selection guard; #406 nested COMPOSE_FILE base refused as unsupported.
+// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M24 controlled writer seam and uncertain-effect propagation; M18 shared-image selection guard; #406 nested COMPOSE_FILE base refused as unsupported.
 
 package project
 
@@ -40,7 +40,7 @@ func lifecycleFailure(code string) error {
 		status = 400
 	case "update.target-not-found", "restore.not-found":
 		status = 404
-	case "update.persistence-failed", "update.deploy-failed", "restore.deploy-failed":
+	case "update.persistence-failed", "update.deploy-failed", "update.unstable", "restore.deploy-failed":
 		status = 500
 	case "image.pull-failed", "image.tag-failed":
 		status = 502
@@ -160,6 +160,10 @@ func lifecycleYAMLHas(n *yaml.Node, key string) bool {
 	}
 	return false
 }
+
+// lifecycleWriteFile keeps the confined in-place writer replaceable in fault tests.
+var lifecycleWriteFile = acfs.Write
+
 func (s *ProjectService) lifecycleWrite(ctx context.Context, p *Project, current, desired *life.Snapshot, actor user.Actor) error {
 	s.contentMu.Lock()
 	defer s.contentMu.Unlock()
@@ -181,12 +185,23 @@ func (s *ProjectService) lifecycleWrite(ctx context.Context, p *Project, current
 		if _, err := acfs.LogicalPath(root, p.Path); err != nil {
 			return lifecycleFailure("update.target-changed")
 		}
-		if err := acfs.Write(ctx, p.Path, "/"+f.Path, f.Content, acfs.WriteOptions{Mode: 0600, InPlace: true}); err != nil {
+		if err := lifecycleBeforeRecoveryEffect(ctx); err != nil {
+			return err
+		}
+		lifecycleMarkRecoveryEffect(ctx)
+		if err := lifecycleWriteFile(ctx, p.Path, "/"+f.Path, f.Content, acfs.WriteOptions{Mode: 0600, InPlace: true}); err != nil {
+			if lifecycleUncertain(err) {
+				return err
+			}
 			return lifecycleFailure("update.target-changed")
 		}
 	}
 	for _, f := range desired.Files {
 		if !f.Present {
+			if err := lifecycleBeforeRecoveryEffect(ctx); err != nil {
+				return err
+			}
+			lifecycleMarkRecoveryEffect(ctx)
 			if err := acfs.Remove(ctx, p.Path, "/"+f.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return lifecycleFailure("update.target-changed")
 			}

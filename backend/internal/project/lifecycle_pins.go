@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement.
+// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement. M24 tracks committed selection effects and recovery cancellation boundaries.
 
 package project
 
@@ -190,7 +190,13 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 		if !img.Present {
 			continue
 		}
+		if err = lifecycleBeforeRecoveryEffect(ctx); err != nil {
+			return err
+		}
 		if err = s.imageService.ImageGuard().Protect(ctx, guard.Protection{ImageID: img.ImageID, Reason: "active-update", OwnerID: run}); err != nil {
+			return err
+		}
+		if err = lifecycleBeforeRecoveryEffect(ctx); err != nil {
 			return err
 		}
 		if _, err = c.ImageTag(ctx, client.ImageTagOptions{Source: img.ImageID, Target: life.Pin("runs", run, key)}); err != nil {
@@ -200,9 +206,13 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 		if e == nil && current.InspectResponse.ID == img.ImageID {
 			continue
 		}
-		if err = s.lifecycleStore().Effect(ctx, run); err != nil {
+		if err = s.lifecycleEffect(ctx, run); err != nil {
 			return err
 		}
+		if err = lifecycleBeforeRecoveryEffect(ctx); err != nil {
+			return err
+		}
+		lifecycleMarkRecoveryEffect(ctx)
 		if _, err = c.ImageTag(ctx, client.ImageTagOptions{Source: img.ImageID, Target: img.Reference}); err != nil {
 			return lifecycleFailure("image.tag-failed")
 		}
