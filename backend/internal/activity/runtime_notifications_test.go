@@ -2,7 +2,7 @@
 // Revision: a910be6a64e97a4ce3a422f12451a5301b115f7a
 // Retrieved: 2026-10-29
 // License: Apache-2.0
-// Deviations: Original notification and Auto Heal foundation. M24 recovery failure evidence in policy fixtures.
+// Deviations: Original notification and Auto Heal foundation. M24 recovery failure evidence in policy fixtures; explicit checked notice inputs and terminal replay hook assertions.
 
 package activity
 
@@ -94,7 +94,7 @@ func TestDeployFailureOperationFilterAndIdempotentReplay(t *testing.T) {
 		row := &RuntimeReceipt{RunID: op, EnvironmentID: "0", OperationID: &op, TargetKind: new("stack"), TargetName: new("Example")}
 		for range 2 {
 			require.NoError(t, f.store.svc.db.Transaction(func(tx *gorm.DB) error {
-				return runtimeNotifyFailureTx(tx, f.store.now, row, "runtime.failed", false, false)
+				return runtimeNotifyFailureTx(tx, f.store.now, row, "runtime.failed", false, false, nil)
 			}))
 		}
 	}
@@ -114,6 +114,8 @@ func TestRemoteDeployApplyAndDispositionAreAtomicAndDeduplicated(t *testing.T) {
 				}
 				f.start(t)
 				before := f.receipt(t)
+				require.NoError(t, f.store.svc.db.Exec("CREATE TABLE terminal_notice_hook_calls (id INTEGER)").Error)
+				require.NoError(t, f.store.svc.db.Exec("CREATE TRIGGER terminal_notice_hook_count BEFORE INSERT ON notification_outbox BEGIN INSERT INTO terminal_notice_hook_calls VALUES(1); END").Error)
 				if fault {
 					require.NoError(t, f.store.svc.db.Exec(`CREATE TRIGGER notification_fault BEFORE INSERT ON notification_outbox BEGIN SELECT RAISE(ABORT,'controlled failure'); END`).Error)
 				}
@@ -144,6 +146,9 @@ func TestRemoteDeployApplyAndDispositionAreAtomicAndDeduplicated(t *testing.T) {
 				var rows []notificationoutbox.Row
 				require.NoError(t, f.store.svc.db.Find(&rows).Error)
 				require.Len(t, rows, 1)
+				var hooks int64
+				require.NoError(t, f.store.svc.db.Table("terminal_notice_hook_calls").Count(&hooks).Error)
+				require.EqualValues(t, 1, hooks, "replayed terminal apply returns before invoking the hook, including after a rolled-back outbox fault")
 			})
 		}
 	}
@@ -187,7 +192,7 @@ func TestContainerImageFailureNotifiesOnce(t *testing.T) {
 			row := &RuntimeReceipt{RunID: "example-run", EnvironmentID: "0", OperationID: new(tc.operation), TargetKind: new("container"), TargetName: new("app")}
 			for range 2 {
 				require.NoError(t, f.store.svc.db.Transaction(func(tx *gorm.DB) error {
-					return runtimeNotifyFailureTx(tx, f.store.now, row, string(dto.CodeRuntimeFailed), tc.silent, false)
+					return runtimeNotifyFailureTx(tx, f.store.now, row, string(dto.CodeRuntimeFailed), tc.silent, false, nil)
 				}))
 			}
 			var rows []notificationoutbox.Row

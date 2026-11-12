@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original v14 container image command foundation; executor follows in S3.
+// Deviations: Original v14 container image command foundation; zero-effect fallback for missing ports. M24 zero-effect refusal for missing observed executor ports.
 
 package activity
 
@@ -25,7 +25,7 @@ func (s *ActivityService) AdmitPolicyContainerUpdate(ctx context.Context, env, t
 	return admitted, err
 }
 
-// S3 replaces this temporary zero-effect result on the same milestone branch.
+// Missing container ports refuse before any effect, including observed executions.
 func unavailableContainerImage(ctx context.Context, command RuntimeCommand) error {
 	result := dto.LifecycleResult{RunID: command.ProposedRunID, Code: "runtime.target-unavailable", HTTPStatus: 503}
 	if dto.ObservedExecutionFromContext(ctx).Mode != "" {

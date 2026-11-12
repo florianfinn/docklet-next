@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Process-owned local interruption before runtime readiness.
+// Deviations: Process-owned local interruption before runtime readiness. M24 observed interruption evidence for both admission modes.
 
 package activity
 
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	dto "github.com/florianfinn/docklet-next/types/updater"
 	"gorm.io/gorm"
 )
 
@@ -85,9 +86,17 @@ func (s *RuntimeService) SettleLocalStartup(ctx context.Context, current Runtime
 				default:
 					return &runtimeConflictInternal{}
 				}
+				observed, err := runtimeObservedRunTx(tx, runID)
+				if err != nil {
+					return err
+				}
+				var lifecycle *dto.LifecycleResult
+				if observed != nil {
+					lifecycle = &dto.LifecycleResult{RunID: runID, Code: "runtime.interrupted", HTTPStatus: 500, Recovery: &dto.RecoveryResult{Outcome: "interrupted"}}
+				}
 				message := "Runtime workflow interrupted; effects unverified"
 				snapshot, final, err = runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeLocalResultInternal{
-					state: "failed", code: activitytypes.CodeRuntimeInterrupted, message: message, silentNotification: true,
+					state: "failed", code: activitytypes.CodeRuntimeInterrupted, message: message, silentNotification: true, imageLifecycle: lifecycle,
 					errorText: &message, startedAt: copyPtrInternal(row.ExecutorStartedAt), settledAt: now,
 				})
 				return err

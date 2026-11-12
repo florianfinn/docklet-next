@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Atomic local evidence, conditional Activity/final audit and retained retry. M24 recovery evidence, validation and reason contracts.
+// Deviations: Atomic local evidence, conditional Activity/final audit and retained retry. M24 recovery evidence, validation and reason contracts. M24 manual-success suppression clearing and checked notice evidence.
 
 package activity
 
@@ -125,6 +125,11 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 	if err := runtimeWriteObservedTx(tx, now, row, result.imageLifecycle); err != nil {
 		return empty, nil, err
 	}
+	if !wasTerminal && result.state == "success" {
+		if err := runtimeClearFailedTargetTx(tx, row); err != nil {
+			return empty, nil, err
+		}
+	}
 	if wasTerminal {
 		snapshot, err := runtimeSnapshotTxInternal(tx, row)
 		return snapshot, nil, err
@@ -163,7 +168,7 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 	if err := tx.Create(final).Error; err != nil {
 		return empty, nil, err
 	}
-	if err := runtimeNotifyFailureTx(tx, now, row, string(result.code), result.silentNotification, false); err != nil {
+	if err := runtimeNotifyFailureTx(tx, now, row, string(result.code), result.silentNotification, false, result.imageLifecycle); err != nil {
 		return empty, nil, err
 	}
 	snapshot, err := runtimeSnapshotTxInternal(tx, row)
