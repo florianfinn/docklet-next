@@ -233,6 +233,9 @@ func runtimeJoinedRecovery(result *updaterDTO.LifecycleResult) bool {
 	switch result.Recovery.Outcome {
 	case "restored", "restore-failed", "unavailable":
 		return true
+	case "not-needed":
+		// A verified result passed its observation; only a refusal is unverified.
+		return result.Verified
 	}
 	return false
 }

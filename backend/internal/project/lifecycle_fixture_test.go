@@ -81,6 +81,8 @@ type lifecycleFixture struct {
 	onTag                     func(string) error
 	normalDeploy              bool
 	containerd                bool
+	// listFails answers the container list with a daemon error.
+	listFails bool
 }
 
 func newLifecycleFixture(t *testing.T) *lifecycleFixture {
@@ -187,6 +189,10 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 			hook()
 			f.mu.Lock()
+		}
+		if f.listFails {
+			http.Error(w, "synthetic daemon failure", 500)
+			return
 		}
 		rows := []map[string]any{}
 		for _, c := range f.workloads {

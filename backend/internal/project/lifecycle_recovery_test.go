@@ -287,3 +287,22 @@ func TestObservedStackSuccessfulRebuildRecoveryHasNoSecondReconciliation(t *test
 	require.Equal(t, lifecycleOldID, f.tags["registry.example.com/app:1.0.0"])
 	require.Equal(t, 2, f.deploys)
 }
+
+// R1S4-3: a failed current read during recovery is no evidence of an external
+// edit; the outcome stays unavailable with the generic reason and changes nothing.
+func TestObservedStackRecoveryReadFailureIsUnavailable(t *testing.T) {
+	f, _ := observedStackFixture(t)
+	intent := observedStackIntent(t, f, "scheduled", "version")
+	beforeTags := 0
+	f.up = func(context.Context, *compose.Project) error {
+		beforeTags = f.tagWrites
+		f.mu.Lock()
+		f.listFails = true
+		f.mu.Unlock()
+		return errors.New("synthetic deploy failure")
+	}
+	out := f.wait(f.admit(intent))
+	requireStackRecovery(t, out, "unavailable", "restore.unavailable")
+	require.Equal(t, beforeTags, f.tagWrites)
+	require.Equal(t, 1, f.deploys)
+}

@@ -73,3 +73,17 @@ func TestObservedJoinedFailureWinsOverCancellation(t *testing.T) {
 		require.Equal(t, activityDTO.CodeRuntimeFailed, result.code)
 	}
 }
+
+// R1S4-1: a verified observed success is joined; a cancel that arrived after the
+// observation passed cannot turn it into a cancelled, verified (unknown) run.
+func TestObservedVerifiedSuccessWinsOverCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	verified := &dto.LifecycleResult{Verified: true, Recovery: &dto.RecoveryResult{Outcome: "not-needed"}}
+	owner := &runtimeOwnerInternal{ctx: ctx, cancelRequested: true}
+	result := runtimeResultInternal(owner, nil, nil, runtimeJoinedRecovery(verified), time.Now())
+	require.Equal(t, "success", result.state)
+	// A zero-effect refusal is unverified and stays cancellable.
+	refusal := &dto.LifecycleResult{Code: "update.candidate-failed", HTTPStatus: 409, Recovery: &dto.RecoveryResult{Outcome: "not-needed"}}
+	require.False(t, runtimeJoinedRecovery(refusal))
+}

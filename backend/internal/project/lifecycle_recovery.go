@@ -62,8 +62,12 @@ func (s *ProjectService) recoverOwnPoint(ctx context.Context, run, registration 
 	}
 	// Capture a fresh source after the failure. In particular, a completed deploy
 	// has new container IDs and cannot use the old source as its create barrier.
+	// A failed current read is not evidence of an edit; only differing bytes are.
 	_, source, err := s.lifecycleCurrent(ctx, point.TargetID, registration)
-	if err != nil || life.Hash(files) != life.Hash(source.Files) {
+	if err != nil {
+		return finish(lifecycleFailure("restore.unavailable"))
+	}
+	if life.Hash(files) != life.Hash(source.Files) {
 		return finish(lifecycleFailure("restore.files-changed"))
 	}
 	if source.TargetIdentity != point.TargetIdentity {
