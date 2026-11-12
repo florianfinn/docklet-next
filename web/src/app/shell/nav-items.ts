@@ -57,6 +57,7 @@ export const NAV: NavGroup[] = [
   {
     key: "resources",
     items: [
+      { key: "proxy", to: "/proxy", icon: Waypoints },
       { key: "networks", to: "/networks", icon: Network },
       { key: "volumes", to: "/volumes", icon: Database },
       { key: "images", to: "/images", icon: Package },
@@ -75,7 +76,6 @@ export const NAV: NavGroup[] = [
   {
     key: "later",
     items: [
-      { key: "proxy", to: "/preview/proxy", icon: Waypoints, preview: true },
       { key: "games", to: "/preview/games", icon: Gamepad2, preview: true },
     ],
   },

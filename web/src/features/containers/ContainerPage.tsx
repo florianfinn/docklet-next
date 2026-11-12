@@ -1,9 +1,10 @@
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
+import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -32,6 +33,8 @@ import { ContainerFacts, ContainerProvenance } from "./ContainerFacts";
 import { useContainerRestart } from "./container-restart";
 import { OriginBadge } from "./OriginBadge";
 import { RecreateDialog } from "./RecreateDialog";
+
+const ProxyContext = import.meta.env.DEV ? lazy(() => import("@/features/design-lab/proxy/ProxyContext")) : null;
 
 const LEVEL_CLASS = { info: "", debug: "text-muted-foreground", warn: "bg-warning/8 text-warning", error: "bg-destructive/10 text-destructive" } as const;
 
@@ -124,6 +127,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
 }
 
 function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
+  const adapter = useAdapter();
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
@@ -156,6 +160,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <ContainerProvenance c={c} />
+          {ProxyContext && adapter.kind === "demo" && <Suspense fallback={null}><ProxyContext containerId={c.id} hostId={c.hostId} /></Suspense>}
           <Card className="gap-3 py-4">
             <CardHeader className="flex flex-row items-center justify-between px-4">
               <CardTitle className="text-sm">{ti("resources")}</CardTitle>

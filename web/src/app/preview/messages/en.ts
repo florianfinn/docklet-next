@@ -1,6 +1,8 @@
+import { enProxy } from "./proxy-en";
 // American English texts of the honest preview pages for sections outside phase one.
 
 export const enPreview = {
+  proxy: enProxy,
   badge: "Later · Preview",
   lead: "This section is not yet part of the first prototype phase. Planned scope according to product decisions:",
   noFake: "There are deliberately no buttons without effect here.",

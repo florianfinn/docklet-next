@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import "@xyflow/react/dist/style.css";
 import "./topology.css";
@@ -9,6 +10,7 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
+import { useAdapter } from "@/data/use-adapter";
 import { useTopology } from "@/data/queries";
 import { hostTone } from "@/domain/hosts";
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
@@ -448,13 +450,16 @@ function TopologySection() {
   />}</>;
 }
 
+const NetworkIdeas = import.meta.env.DEV ? lazy(() => import("@/features/design-lab/proxy/NetworkIdeas")) : null;
+
 export default function NetworksPage() {
+  const adapter = useAdapter();
   const t = useTranslations("networks");
   return (
     <>
       <PageHeader title={t("title")} description={t("description")} />
       <ReactFlowProvider>
-        <TopologySection />
+        {NetworkIdeas && adapter.kind === "demo" ? <Suspense fallback={null}><NetworkIdeas><TopologySection /></NetworkIdeas></Suspense> : <TopologySection />}
       </ReactFlowProvider>
     </>
   );

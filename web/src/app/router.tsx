@@ -29,6 +29,7 @@ const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const ProfilePage = lazy(() => import("@/features/settings/ProfilePage"));
 const SetupPage = lazy(() => import("@/features/setup/SetupPage"));
 const DemoLoginPage = lazy(() => import("@/features/auth/login/LoginPage"));
+const ProxyPage = import.meta.env.DEV ? lazy(() => import("@/features/design-lab/proxy/ProxyPage")) : null;
 const PreviewPage = import.meta.env.DEV ? lazy(() => import("./preview/PreviewPage")) : null;
 
 function HubRouteGate() {
@@ -67,6 +68,7 @@ const shellRoutes: RouteObject[] = [
       { path: "settings", element: <Navigate to="/settings/general" replace /> },
       { path: "settings/:section", element: <SettingsPage /> },
       { path: "profile", element: <ProfilePage /> },
+      ...(ProxyPage ? [{ path: "proxy", element: <ProxyPage /> }, { path: "preview/proxy", element: <Navigate to="/proxy" replace /> }] : []),
       ...(PreviewPage ? [{ path: "preview/:section", element: <PreviewPage /> }] : []),
       { path: "*", element: <NotFound /> },
     ],

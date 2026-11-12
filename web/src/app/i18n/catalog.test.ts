@@ -75,8 +75,8 @@ const catalogueModules = import.meta.glob<Record<string, Tree>>("/src/**/message
 describe("catalogue contracts", () => {
   it("validates every catalogue pair, including pool and disconnected backend messages", () => {
     const englishFiles = Object.keys(catalogueModules).filter((path) => path.endsWith("en.ts"));
-    expect(englishFiles).toHaveLength(28);
-    expect(Object.keys(catalogueModules)).toHaveLength(56);
+    expect(englishFiles).toHaveLength(29);
+    expect(Object.keys(catalogueModules)).toHaveLength(58);
     const used = new Set<string>();
     const errors = englishFiles.flatMap((path) => {
       const english = Object.values(catalogueModules[path]!)[0]!;

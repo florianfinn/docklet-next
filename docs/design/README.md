@@ -41,5 +41,6 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Tools helper image](tools-image.md) | Pinned two-platform helper, offline acfs, gated publication and corresponding BusyBox source |
 | [Hub database backup](hub-backup.md) | Coordinated SQLite archives, paired restore and interruption recovery |
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
+| [Proxy UI concept](proxy-ui-concept.md) | Local Traefik UI and three routing-map placements |
 
 Historical plans belong in the [history index](../history/README.md).

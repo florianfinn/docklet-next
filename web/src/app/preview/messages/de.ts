@@ -1,7 +1,9 @@
+import { deProxy } from "./proxy-de";
 // German texts of the honest preview pages for sections outside phase one.
 import type { enPreview } from "./en";
 
 export const dePreview: typeof enPreview = {
+  proxy: deProxy,
   badge: "Später · Vorschau",
   lead: "Dieser Bereich ist noch nicht Teil der ersten Prototyp-Phase. Geplanter Umfang laut Produktentscheidungen:",
   noFake: "Hier gibt es bewusst keine Schaltflächen ohne Wirkung.",

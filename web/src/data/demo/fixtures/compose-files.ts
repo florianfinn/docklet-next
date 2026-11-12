@@ -53,6 +53,13 @@ services:
       PAPERLESS_REDIS: redis://broker:6379
       PAPERLESS_DBHOST: db
       PAPERLESS_URL: https://docs.example.com
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.documents.rule: Host(\`docs.example.com\`)
+      traefik.http.routers.documents.entrypoints: websecure
+      traefik.http.routers.documents.tls.certresolver: dns-primary
+      traefik.http.routers.documents.middlewares: compress@file,custom-headers@file
+      traefik.http.services.documents.loadbalancer.server.port: "8000"
   db:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -107,6 +114,13 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PASSWORD: \${DB_PASSWORD}
       NEXTCLOUD_TRUSTED_DOMAINS: cloud.example.com
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.cloud.rule: Host(\`files.example.net\`)
+      traefik.http.routers.cloud.entrypoints: websecure
+      traefik.http.routers.cloud.tls.certresolver: http-primary
+      traefik.http.routers.cloud.middlewares: compress@file
+      traefik.http.services.cloud.loadbalancer.server.port: "80"
     networks: [web, internal]
   postgres:
     image: postgres:17-alpine

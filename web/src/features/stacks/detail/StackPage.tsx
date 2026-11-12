@@ -1,9 +1,10 @@
 import { InventoryNotice } from "../InventoryNotice";
-import { ArrowLeft, FileCode2, FileText, History, LayoutGrid, Layers } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, FileCode2, FileText, History, LayoutGrid, Layers, Waypoints } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { useAdapter } from "@/data/use-adapter";
 import { useStack, useStacks } from "@/data/queries";
 import type { StackDetail } from "@/domain/model";
 import { EmptyState, QueryError } from "@/shared/components/page";
@@ -21,6 +22,8 @@ import { DeploymentsTab } from "./DeploymentsTab";
 import { OverviewTab } from "./OverviewTab";
 import { StackHeader } from "./StackHeader";
 import { StackPageSkeleton } from "./StackPageSkeleton";
+
+const ProxyContext = import.meta.env.DEV ? lazy(() => import("@/features/design-lab/proxy/ProxyContext")) : null;
 
 type Tab = "overview" | "editor" | "logs" | "deployments";
 const TABS: { id: Tab; icon: typeof LayoutGrid }[] = [
@@ -57,10 +60,12 @@ function FilesUnavailable({ onRetry }: { onRetry: () => void }) {
 /** Existing stack: header, tabs and the shared draft kept across tab switches. */
 function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => void }) {
   const t = useTranslations("stacks.detail");
+  const tp = useTranslations("shell.nav");
+  const adapter = useAdapter();
   const { byId, all } = useHostScope();
   const stacks = useStacks();
   const [params, setParams] = useSearchParams();
-  const tab = (TABS.some((x) => x.id === params.get("tab")) ? params.get("tab") : "overview") as Tab;
+  const tab = ProxyContext && adapter.kind === "demo" && params.get("tab") === "proxy" ? "proxy" : (TABS.some((x) => x.id === params.get("tab")) ? params.get("tab") : "overview") as Tab;
   const [mode, setMode] = useState<EditorMode>("advanced");
   // The draft only ever starts from files that were actually read. A later read
   // failure keeps the last loaded files as its base; writes stay gated meanwhile.
@@ -81,6 +86,7 @@ function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => 
               {id === "editor" && draft.dirty && <i className="size-1.5 rounded-full bg-primary" aria-hidden />}
             </TabsTrigger>
           ))}
+          {ProxyContext && adapter.kind === "demo" && <TabsTrigger value="proxy"><Waypoints />{tp("proxy")}</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview">
           <OverviewTab stack={stack} host={host} />
@@ -98,6 +104,7 @@ function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => 
         <TabsContent value="deployments">
           <DeploymentsTab stack={stack} />
         </TabsContent>
+        {ProxyContext && adapter.kind === "demo" && <TabsContent value="proxy"><Suspense fallback={null}><ProxyContext stackId={stack.id} hostId={stack.hostId} /></Suspense></TabsContent>}
       </Tabs>
     </>
   );
