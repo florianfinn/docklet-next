@@ -9,14 +9,17 @@ package stability
 import (
 	"context"
 	"time"
+
+	activity "github.com/florianfinn/docklet-next/types/activity"
 )
 
 const (
 	Window        = 120 * time.Second
 	Interval      = 2 * time.Second
 	Grace         = 5 * time.Second
+	// CodeUnstable is listed in the types/image reason vocabulary.
 	CodeUnstable  = "update.unstable"
-	CodeCancelled = "runtime.cancelled"
+	CodeCancelled = string(activity.CodeRuntimeCancelled)
 )
 
 // Clock keeps t0, waits and engine deadlines in the same monotonic time domain.
@@ -52,7 +55,7 @@ type Instance struct {
 	OneOff bool
 }
 
-// Container is an exact-ID inspect result. Empty Health means no healthcheck;
+// Container is an exact-ID inspect result. Empty or "none" Health means no healthcheck;
 // State and Health use Docker's running/exited and starting/healthy/unhealthy values.
 type Container struct {
 	ID           string

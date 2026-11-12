@@ -19,9 +19,10 @@ type sample struct {
 }
 
 type membership struct {
-	seen  map[string]sample
-	count int
-	ready bool
+	seen    map[string]sample
+	count   int
+	ready   bool
+	sampled bool
 }
 
 func unstable(detail string) Verdict { return Verdict{Code: CodeUnstable, Detail: detail} }
@@ -108,8 +109,10 @@ func (o *Observer) sample(ctx context.Context, required requirement, state *memb
 	}
 	current := map[string]bool{}
 	state.ready = true
+	stack := required.id == ""
 	for _, instance := range instances {
-		if instance.OneOff {
+		// One-off exclusion is a stack membership rule; a container target is always required.
+		if stack && instance.OneOff {
 			continue
 		}
 		if instance.ID == "" || current[instance.ID] {
@@ -129,11 +132,15 @@ func (o *Observer) sample(ctx context.Context, required requirement, state *memb
 		if container.ID != instance.ID {
 			return "Container identity changed"
 		}
-		if container.OneOff {
+		if stack && container.OneOff {
 			continue
 		}
 		current[instance.ID] = true
 		previous, seen := state.seen[instance.ID]
+		// After a forced recreate every replica exists at t0; a later ID was never observed for W.
+		if !seen && state.sampled {
+			return "Container appeared during observation"
+		}
 		if (!seen && container.RestartCount != 0) || (seen && container.RestartCount != previous.restartCount) {
 			return "Required container restarted"
 		}
@@ -150,10 +157,14 @@ func (o *Observer) sample(ctx context.Context, required requirement, state *memb
 		if container.State != "running" {
 			return "Required container is not running"
 		}
-		if container.Health == "unhealthy" {
+		health := container.Health
+		if health == "none" {
+			health = ""
+		}
+		if health == "unhealthy" {
 			return "Required container is unhealthy"
 		}
-		if required.kind == CompletionJob || (container.Health != "" && container.Health != "healthy") {
+		if required.kind == CompletionJob || (health != "" && health != "healthy") {
 			state.ready = false
 		}
 		state.seen[instance.ID] = sample{startedAt: container.StartedAt, restartCount: container.RestartCount}
@@ -167,5 +178,6 @@ func (o *Observer) sample(ctx context.Context, required requirement, state *memb
 		}
 	}
 	state.count = len(current)
+	state.sampled = true
 	return ""
 }

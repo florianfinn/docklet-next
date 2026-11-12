@@ -89,11 +89,12 @@ func TestO3dRestoredCounterReset(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			clock := newClock()
 			t0 := clock.Now()
-			// Docker API Start resets a restored original's old counter of four to zero.
-			old := running("a", t0.Add(-time.Hour))
-			old.RestartCount = 4
-			old.RestartCount = 0
-			old.StartedAt = t0
+			// The original was inspected stopped with a counter of four; the Docker API
+			// Start that restores it resets the counter to zero before t0.
+			stopped := running("a", t0.Add(-time.Hour))
+			stopped.State, stopped.RestartCount = "exited", 4
+			old := stopped
+			old.State, old.RestartCount, old.StartedAt = "running", 0, t0
 			engine := fakeEngine{inspect: func(context.Context, string) (Container, error) {
 				c := old
 				elapsed := clock.Now().Sub(t0)
