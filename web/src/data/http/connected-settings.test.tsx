@@ -2,8 +2,9 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original connected settings persistence and in-flight draft tests. M19 web consumer integration.
+// Deviations: Original connected settings persistence and in-flight draft tests. M19 web consumer integration. #410 simple-user hub zone.
 
+import { useQuery } from "@tanstack/react-query";
 import { useFormatter } from "use-intl";
 
 import { screen, waitFor } from "@testing-library/react";
@@ -11,6 +12,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useConnectedSettings } from "@/data/queries";
+import { queryKeys } from "@/data/query-keys";
+import { useAdapter } from "@/data/use-adapter";
+import { setAppLocale } from "@/app/i18n/locale-store";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { useScheduleText } from "@/shared/components/schedule/use-schedule-text";
 import { renderRoutes } from "@/test/render";
@@ -167,4 +171,23 @@ it("reads and writes configured retention counts through the real settings HTTP 
   await server.adapter.saveSettings("activity", { ...settings.activity, maxEvents: 321, maxFinishedActions: 42 });
   expect(server.writes.at(-1)).toMatchObject({ activityEventLimit: "321", activityRunLimit: "42" });
   expect((await server.adapter.getConnectedSettings()).activity).toMatchObject({ maxEvents: 321, maxFinishedActions: 42 });
+});
+
+function UserSchedule() {
+  // AuthGate owns the principal read in the app; the probe performs it here.
+  const adapter = useAdapter();
+  const user = useQuery({ queryKey: queryKeys.currentUser, queryFn: () => adapter.getCurrentUser() });
+  return user.data ? <ScheduleProbe /> : null;
+}
+
+it.each(["en-US", "de"] as const)("#410: a simple user sees schedules in the hub zone without reading connected settings in %s", async (locale) => {
+  setAppLocale(locale);
+  const server = connectedServer("Asia/Tokyo");
+  const adapter = { ...server.adapter, getCurrentUser: vi.fn(async () => ({ id: "member", username: "member", isAdmin: false, assignments: [], requiresPasswordChange: false })) };
+  const connectedRead = vi.spyOn(adapter, "getConnectedSettings");
+  renderRoutes([{ path: "/", element: <UserSchedule /> }], ["/"], adapter as typeof server.adapter);
+  await waitFor(() => expect(screen.getByTestId("schedule-zone").textContent?.startsWith("Asia/Tokyo")).toBe(true));
+  expect(screen.getByTestId("schedule-instant").textContent).toBe("2026-10-18T00:00:00.000Z");
+  expect(screen.getByTestId("formatted-date").textContent).toBe("21:00");
+  expect(connectedRead).not.toHaveBeenCalled();
 });
