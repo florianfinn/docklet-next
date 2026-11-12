@@ -2,8 +2,9 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M24 recovery vocabulary classification.
+// Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M24 recovery vocabulary classification. M24 S6: observed recovery and update UI follow-ups.
 
+import { RECOVERY_OUTCOME_KEYS } from "./wire-catalogue-update";
 import { ADVISORY_USAGE_CODE_KEYS, REQUEST_CODE_KEYS, IMAGE_ERROR_KEYS, CONTAINER_CODE_KEYS, HOST_CODE_KEYS, ACCESS_CODE_KEYS, NETWORK_CODE_KEYS, WIDGET_CODE_KEYS } from "./wire-catalogue-errors";
 import { BACKUP_CODE_KEYS, BACKUP_REASON_KEYS, VOLUME_COMMAND_KEYS } from "./wire-catalogue-backup";
 import { NOTIFICATION_CODE_KEYS, AUTOHEAL_CODE_KEYS, NOTIFICATION_TEST_KEYS, DELIVERY_REASON_KEYS, SETTINGS_CODE_KEYS } from "./wire-catalogue-settings";
@@ -13,6 +14,7 @@ import { CANDIDATE_STATE_KEYS, CANDIDATE_RUN_STATUS_KEYS, BACKUP_STATUS_KEYS, BA
 
 /** Exact property identities are pinned, including equivalent unions on different DTOs. */
 export const GUARDED_WIRE_ENUMS = [
+  { name: "RECOVERY_OUTCOME_KEYS", keys: RECOVERY_OUTCOME_KEYS, properties: ["UpdaterRecoveryResult.outcome"] },
   { name: "CANDIDATE_STATE_KEYS", keys: CANDIDATE_STATE_KEYS, properties: ["VulnerabilityCandidateResult.state"] },
   { name: "CANDIDATE_RUN_STATUS_KEYS", keys: CANDIDATE_RUN_STATUS_KEYS, properties: ["VulnerabilityCandidateRun.status"] },
   { name: "ADVISORY_USAGE_CODE_KEYS", keys: ADVISORY_USAGE_CODE_KEYS, properties: ["VulnerabilityAdvisoryUsage.code"] },
@@ -49,7 +51,6 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
-  { property: "UpdaterRecoveryResult.outcome", reason: "Backend recovery contract without a rendered consumer yet; the separately owned S6 recovery UI step adds render proofs. Frozen typed map: wire-catalogue-update.ts." },
   { property: "VulnerabilityAdvisoryUpdate.state", reason: "Consumer update states are translated with security.detail.updateAvailable, noUpdate and updateUnknown in AdvisoryContent." },
   { property: "VulnerabilityAdvisoryUsage.state", reason: "Usage availability controls the explicit security.detail.usageUnavailable message in AdvisoryContent." },
   ...["SystemSelfUpdateEligibility.state", "SystemSelfUpdateEligibility.code", "SystemSelfUpdateOperation.phase", "SystemSelfUpdateOperation.outcome", "SystemSelfUpdateResponse.phase", "SystemSelfUpdateResponse.code"].map((property) => ({ property, reason: "Backend recovery contract without a rendered consumer yet; the separately owned self-update UI step adds render proofs. Frozen typed maps: wire-catalogue-self-update.ts." })),

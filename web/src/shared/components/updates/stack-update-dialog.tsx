@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original live update UI for issue #231.
+// Deviations: Original live update UI for issue #231. M24 S6: observed recovery and update UI follow-ups.
 
 import { useIsUser } from "@/data/use-principal";
 import { openActionDialog } from "@/features/activity/action-dialog-store";
@@ -28,7 +28,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useImageError } from "@/features/images/use-image-error";
 import { UpdateUnavailable } from "./live-state";
 
-export function StackUpdateDialog({ stackId, point, services: initialServices, onClose }: { stackId: string; point?: UpdatePoint; services?: string[]; onClose: () => void }) {
+export function StackUpdateDialog({ stackId, point, services: initialServices, autoRestore = false, onClose }: { stackId: string; point?: UpdatePoint; services?: string[]; autoRestore?: boolean; onClose: () => void }) {
   const user = useIsUser();
   const stack = useStack(stackId);
   const [service, setService] = useState(initialServices?.[0] ?? "*"), [wholeStackHint, setWholeStackHint] = useState(false);
@@ -45,7 +45,7 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, o
   const canSend = read.available && write.available && (!point || points.available) && !!data && validPoint && (!point || ack === data?.savedRevision) && !action.busy && !runId;
   const close = () => { action.reset(); onClose(); };
   useEffect(() => identityLifetime(adapter).listen(onClose), [adapter, onClose]);
-  return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t("noData")}</DialogDescription></DialogHeader>
+  return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t(autoRestore ? "updateWithCheckHelp" : "noData")}</DialogDescription></DialogHeader>
     {!read.available || !write.available || (point && !points.available) ? <UpdateUnavailable reason={read.reason ?? write.reason ?? points.reason} /> : baseline.isError ? <p role="alert">{errorText(baseline.error)}</p> : !data ? <p>{t("loading")}</p> : <>
       {!data.available && <p role="status">{errorText(data.code ?? "update.baseline-unavailable")}</p>}
       {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} /><span className="min-w-0 flex-1 break-all">{t("replace", { revision: data.savedRevision })}</span></label></>}
@@ -54,12 +54,12 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, o
     {wholeStackHint && <p role="status">{t("wholeStack")}</p>}
     {action.error && <p role="alert">{action.error}</p>}
     {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=${user ? "overview" : "deployments"}`} onClick={() => { if (user) openActionDialog(runId); }}>{t("openRun", { id: runId })}</Link></p>}
-    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(service === "*" ? {} : { services: [service] }) }), (id) => setReceipt({ id, identity: data!.targetIdentity }), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button></div>
+    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(autoRestore ? { autoRestore: true } : {}), ...(service === "*" ? {} : { services: [service] }) }), (id) => setReceipt({ id, identity: data!.targetIdentity }), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button></div>
   </DialogContent></Dialog>;
 }
 export function StackUpdateDialogController() {
-  const adapter = useAdapter(), location = useLocation(), [selection, setSelection] = useState<{ stackId: string; services?: string[]; location: string }>();
-  useEffect(() => { const receive = (event: Event) => { const id = (event as CustomEvent<{ stackId?: unknown; services?: string[] }>).detail?.stackId; if (typeof id === "string") setSelection({ stackId: id, services: (event as CustomEvent<{ services?: string[] }>).detail.services, location: location.key }); }; window.addEventListener("docklet:stack-update", receive); const off = identityLifetime(adapter).listen(() => setSelection(undefined)); return () => { off(); window.removeEventListener("docklet:stack-update", receive); }; }, [adapter, location.key]);
+  const adapter = useAdapter(), location = useLocation(), [selection, setSelection] = useState<{ stackId: string; services?: string[]; autoRestore?: boolean; location: string }>();
+  useEffect(() => { const receive = (event: Event) => { const id = (event as CustomEvent<{ stackId?: unknown; services?: string[]; autoRestore?: boolean }>).detail?.stackId; if (typeof id === "string") setSelection({ stackId: id, services: (event as CustomEvent<{ services?: string[]; autoRestore?: boolean }>).detail.services, autoRestore: (event as CustomEvent<{ autoRestore?: boolean }>).detail.autoRestore === true, location: location.key }); }; window.addEventListener("docklet:stack-update", receive); const off = identityLifetime(adapter).listen(() => setSelection(undefined)); return () => { off(); window.removeEventListener("docklet:stack-update", receive); }; }, [adapter, location.key]);
   const stackId = selection?.location === location.key ? selection.stackId : undefined;
-  return stackId ? <StackUpdateDialog key={`${stackId}:${selection?.services?.join(",") ?? "*"}`} stackId={stackId} services={selection?.services} onClose={() => setSelection(undefined)} /> : null;
+  return stackId ? <StackUpdateDialog key={`${stackId}:${selection?.services?.join(",") ?? "*"}:${selection?.autoRestore === true}`} stackId={stackId} services={selection?.services} autoRestore={selection?.autoRestore} onClose={() => setSelection(undefined)} /> : null;
 }

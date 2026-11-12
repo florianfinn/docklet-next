@@ -2,8 +2,9 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original receipt-driven recreate progress, catalogued step names and replacement navigation.
+// Deviations: Original receipt-driven recreate progress, catalogued step names and replacement navigation. M24 S6: observed recovery and update UI follow-ups.
 
+import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useNavigate } from "react-router";
@@ -64,6 +65,6 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
     {run?.steps.map((step, index) => <p key={`${step.key}:${index}`}>{step.label} · {ta(`step.${step.state}`)}</p>)}
     {run?.error && <p className="text-destructive">{run.error}</p>}
     {state.status === "error" && <p>{t("readFailed")}</p>}
-    {run && <RecreateResultLink run={run} />}
+    {run && <><UpdateRecovery run={run} /><RecreateResultLink run={run} /></>}
   </div>;
 }

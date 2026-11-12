@@ -102,3 +102,21 @@ it("W3 ignores a late replacement result after the viewing identity changes", as
   expect(router.state.location.pathname).toBe("/containers/old");
   expect(screen.queryByRole("link", { name: "Ersatz-Container öffnen" }) === null).toBe(true);
 });
+
+it.each([false, true])("F5 container update/previous-image restore navigates after receipt settlement, restore=%s", async (restore) => {
+  let receive: ((state: ActionDetailState) => void) | undefined;
+  const adapter: DockletAdapter = { ...createDemoAdapter(), kind: "http", getCapability: async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true }),
+    installContainerUpdate: async () => "run", restoreContainerImage: async () => "run",
+    getContainerPreviousImage: async () => ({ imageId: "sha256:" + "a".repeat(64), reference: "example/app:1", createdAt: "2026-11-12T12:00:00Z" }),
+    observeActionDetail: (_host, _run, listener) => { receive = listener; return () => { receive = undefined; }; },
+  };
+  const { ContainerUpdateDialog } = await import("./ContainerUpdates");
+  const { router } = renderRoutes([{ path: "/containers/:containerId", element: <ContainerUpdateDialog container={c} restore={restore} close={() => {}} /> }], ["/containers/0~old"], adapter);
+  const submit = await screen.findByRole("button", { name: restore ? "Vorheriges Image wiederherstellen" : "Container aktualisieren" });
+  await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false)); await userEvent.click(submit);
+  await waitFor(() => expect(typeof receive).toBe("function"));
+  act(() => receive?.({ status: "error", error: new Error("read unavailable") }));
+  expect(router.state.location.pathname).toBe("/containers/0~old");
+  act(() => receive?.({ status: "ready", run: { id: "run", kind: "update", title: { code: "runMessages.value", params: { value: "Update" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status: "succeeded", steps: [], progress: 100, startedAt: "2026-11-12T12:00:00Z", log: [], output: [], recreateResult: { oldId: "old", newId: "replacement", oldName: "app", newName: "app" } } }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/containers/0~replacement"));
+});

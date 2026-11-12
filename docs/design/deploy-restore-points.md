@@ -3,7 +3,7 @@ Source: docklet-next/issues/344
 Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 Retrieved: 2026-11-04
 License: Apache-2.0
-Deviations: Original restore points before deploy and redeploy rationale.
+Deviations: Original restore points before deploy and redeploy rationale. M24 S6: observed recovery and update UI follow-ups.
 -->
 
 # Restore points before deploy and redeploy
@@ -17,7 +17,7 @@ Extends [images and updates](images-updates.md) and the restore-point protection
 ## Accepted decisions (do not reopen)
 
 - B2: restore points also before deploy and redeploy; after a failure the point is offered for
-  recovery. core-adoption: no automatic rollback; no promise to restore application data
+  recovery. core-adoption: plain manual updates offer manual recovery; [observed updates](scheduled-update-recovery.md) can restore workloads, never application data
   (volume/bind data is never saved).
 - Five retained points per target with the restore-target and healthy-baseline anchors and one
   failed-attempt slot (M6, confirmed 2026-10-30 "five retained restore points").

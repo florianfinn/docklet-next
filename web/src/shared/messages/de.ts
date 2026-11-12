@@ -13,6 +13,13 @@ export const deCommon: typeof enCommon = {
     loading: "Updates werden geprüft …", candidates: "{count, plural, one {# Update-Kandidat} other {# Update-Kandidaten}}", install: "Updates installieren",
   },
   stackUpdates: {
+    recoveryStale: "Aktualisiere diesen Container vor der Wiederherstellung des vorherigen Images; seine Bestandsdaten sind veraltet.",
+    recoveryHeld: "Eine Wiederherstellung ist nicht verfügbar, solange dieser Punkt verwendet wird oder sein Ergebnis unbekannt ist.",
+    updateOptions: "Update-Optionen",
+    updateWithCheck: "Update mit Prüfung",
+    updateWithCheckHelp: "Beobachtet die neue Version 2 Minuten lang und stellt bei einem Fehler die vorherige Version wieder her. Volume-Daten werden nicht wiederhergestellt.",
+    volumeNotRestored: "Volume-Daten wurden nicht wiederhergestellt; die App hat sie möglicherweise bereits migriert.",
+
     deletePoint: "Wiederherstellungspunkt löschen",
     deleteHelp: "Gespeicherte Konfiguration und Image-Verweise dieses Punkts dauerhaft freigeben. Auch ein Aufbewahrungsanker kann gelöscht werden. Volume- und Bind-Daten bleiben unverändert.",
     deleted: "Wiederherstellungspunkt gelöscht.",

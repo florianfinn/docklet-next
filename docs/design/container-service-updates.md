@@ -3,7 +3,7 @@ Source: docklet-next/issues/342
 Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 Retrieved: 2026-11-04
 License: Apache-2.0
-Deviations: Original container and single service updates rationale.
+Deviations: Original container and single service updates rationale. M24 S6: observed recovery and update UI follow-ups.
 -->
 
 # Container and single service updates
@@ -20,7 +20,7 @@ lifecycle in [images and updates](images-updates.md).
   stack updates. Unraid and uncertain origin stay locked (M14).
 - A20: one service of a stack can be updated; the whole-stack update stays.
 - core-adoption: show failures and offer the previous image/configuration for manual recovery; no
-  automatic rollback; no promise to restore application data.
+  automatic rollback for plain manual updates; observed updates follow [scheduled recovery](scheduled-update-recovery.md), never restoring application data.
 
 ## Starting point (main 89f69980)
 

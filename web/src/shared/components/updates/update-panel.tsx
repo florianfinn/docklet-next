@@ -2,8 +2,9 @@
 // Revision: 13a7ac760fa7be93eef992a9af0160a821915fd9cb12f70aff53cdbc187fe339
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #82 displays unchecked inventory update state honestly. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #82 displays unchecked inventory update state honestly. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service. M24 S6: observed recovery and update UI follow-ups.
 
+import { UpdateSplitButton } from "./update-split-button";
 import { useIsUser } from "@/data/use-principal";
 import type { ResourceRef } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
@@ -26,6 +27,7 @@ import { latestOf, UPDATE_ICON, UPDATE_TONE, useUpdateCopy } from "./update-visu
 export interface UpdateActions {
   resourceRef?: ResourceRef;
   onUpdate?: () => void;
+  onUpdateChecked?: () => void;
   updateOperation?: "installStackUpdates" | "installContainerUpdate";
   onRecheck?: () => void;
   updateLabel?: string;
@@ -131,7 +133,7 @@ function Footer({ actions, pending }: { actions: UpdateActions; pending: boolean
 function ActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
   const adapter = useAdapter(), t = useTranslations("common.updates");
   const user = useIsUser();
-  if (adapter.kind === "http" && !user) return pending && actions.onUpdate ? <div className="p-3"><Button size="sm" onClick={actions.onUpdate}>{actions.updateLabel ?? t("actionUpdateStack")}</Button></div> : null;
+  if (adapter.kind === "http" && !user) return pending && actions.onUpdate ? <div className="p-3">{actions.onUpdateChecked ? <UpdateSplitButton label={actions.updateLabel ?? t("actionUpdateStack")} disabled={actions.busy} onUpdate={actions.onUpdate} onChecked={actions.onUpdateChecked} /> : <Button size="sm" onClick={actions.onUpdate}>{actions.updateLabel ?? t("actionUpdateStack")}</Button>}</div> : null;
   return <DemoActionFooter actions={actions} pending={pending} />;
 }
 function DemoActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
@@ -140,7 +142,8 @@ function DemoActionFooter({ actions, pending }: { actions: UpdateActions; pendin
   const t = useTranslations("common.updates");
   return (
     <div className="flex flex-col gap-2 border-t border-border/50 bg-muted/40 p-3">
-      {pending && actions.onUpdate && !actions.blockedReason && (
+      {pending && actions.onUpdate && actions.onUpdateChecked && !actions.blockedReason && <UpdateSplitButton label={actions.updateLabel ?? t("actionUpdateStack")} disabled={actions.busy || !install.available} title={install.reason} onUpdate={actions.onUpdate} onChecked={actions.onUpdateChecked} />}
+      {pending && actions.onUpdate && !actions.onUpdateChecked && !actions.blockedReason && (
         <Button size="sm" className="group w-full" onClick={actions.onUpdate} disabled={actions.busy || !install.available} title={install.reason}>
           {actions.busy ? <Spinner data-icon="inline-start" /> : <UPDATE_ICON.minor data-icon="inline-start" className="transition-transform group-hover:-translate-y-0.5" />}
           {actions.updateLabel ?? t(actions.updateOperation === "installStackUpdates" ? "actionUpdateStack" : "actionUpdateContainer")}

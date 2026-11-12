@@ -2,7 +2,7 @@
 // Revision: 5f56262875af9a8ec0fe9007cb889bd3a513085d
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail.
+// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail. M24 S6: observed recovery and update UI follow-ups.
 
 import type { CSSProperties, ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
@@ -92,7 +92,7 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
   const groups = securityColumnGroups(view, columns.map((c) => c.id), condensed);
   const help = new Map(Object.entries(HEADER_HELP).map(([id, key]) => [id, t(`headerHelp.${key}`, { severity: columns.find((c) => c.id === id)?.label ?? "" })]));
   const onChange = (id: string, value: string) => setValues((cur) => ({ ...cur, [id]: value }));
-  const labelled = (row: SecurityRow<K>, ids: readonly K[]) => <dl className="grid min-w-0 gap-2">{ids.map((id) => <div key={id} className="min-w-0" data-field={id}>
+  const labelled = (row: SecurityRow<K>, ids: readonly K[]) => <dl className={cn("grid min-w-0 gap-2", view === "cards" && "grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))]")}>{ids.map((id) => <div key={id} className="min-w-0" data-field={id}>
     <dt className="text-[11px] text-muted-foreground"><FieldLabel label={columns.find((c) => c.id === id)!.label} help={view === "cards" ? help.get(id) : undefined} /></dt>
     <dd className="min-w-0 text-xs [overflow-wrap:anywhere]">{row.cells[id]}</dd>
   </div>)}</dl>;
