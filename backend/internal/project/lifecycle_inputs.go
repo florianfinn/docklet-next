@@ -56,9 +56,9 @@ func (s *ProjectService) lifecycleInputs(ctx context.Context, p *Project) (*life
 		return nil, lifecycleFailure("update.snapshot-unavailable")
 	}
 	path, err := s.ResolveProjectComposeFile(ctx, p)
-	if errors.Is(err, projects.ErrComposeFileNestedBase) {
+	if refusal := UnsupportedUpdateLayout(err); refusal != nil {
 		// Loading from a subdirectory changes working directory and env semantics.
-		return nil, lifecycleFailure("update.image-binding-unsupported")
+		return nil, refusal
 	}
 	if err != nil {
 		return nil, lifecycleFailure("update.snapshot-unavailable")

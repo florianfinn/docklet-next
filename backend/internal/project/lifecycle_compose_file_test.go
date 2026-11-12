@@ -7,12 +7,16 @@
 package project
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	dto "github.com/florianfinn/docklet-next/types/updater"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,4 +57,24 @@ func TestLifecycleRefusesNestedComposeFileBaseAsUnsupported(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Update checks refuse a nested base before reading details; a peer's nested base
+// keeps blocking identity lookups but never reads as the target's own refusal.
+func TestNestedComposeFileRefusalForChecksAndIdentity(t *testing.T) {
+	f := newLifecycleFixture(t)
+	require.NoError(t, f.service.UpdateLayoutRefusal(t.Context(), f.project.ID))
+	peerPath := filepath.Join(f.root, "example-peer")
+	require.NoError(t, os.MkdirAll(filepath.Join(peerPath, "deploy"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(peerPath, "deploy", "compose.yaml"), []byte("services:\n  app:\n    image: registry.example.com/app:1.0.0\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(peerPath, ".env"), []byte("COMPOSE_FILE=deploy/compose.yaml\n"), 0600))
+	peer := &Project{BaseModel: database.BaseModel{ID: uuid.NewString()}, Name: "example-peer", Path: peerPath, DirName: new("example-peer")}
+	require.NoError(t, f.db.Create(peer).Error)
+
+	lifecycleCode(t, f.service.UpdateLayoutRefusal(t.Context(), peer.ID), "update.image-binding-unsupported")
+	_, _, err := f.service.ResolveRuntimeProjectIdentity(t.Context(), peer.ID, "")
+	require.True(t, errors.Is(err, projects.ErrComposeFileNestedBase), "%v", err)
+	_, _, err = f.service.ResolveRuntimeProjectIdentity(t.Context(), f.project.ID, "")
+	require.Error(t, err)
+	require.False(t, errors.Is(err, projects.ErrComposeFileNestedBase), "a peer's layout must not read as the target's refusal")
 }

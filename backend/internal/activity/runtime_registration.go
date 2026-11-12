@@ -172,6 +172,9 @@ func (r *RuntimeReceiver) Resolve(ctx context.Context, request activitytypes.Run
 	}
 	resolved, err := r.prepare.ResolveRuntimeTarget(ctx, request.Target)
 	if err != nil {
+		if problem := runtimeLayoutProblem(request.Target.Kind, err); problem != nil {
+			return activitytypes.RuntimeTargetMetadata{}, problem
+		}
 		return activitytypes.RuntimeTargetMetadata{}, err
 	}
 	out := activitytypes.RuntimeTargetMetadata{Target: resolved.Target, ComposeManaged: resolved.ComposeManaged, Origin: resolved.Origin, ComposeProjectLabel: resolved.ComposeProjectLabel, Protected: resolved.Protected}
