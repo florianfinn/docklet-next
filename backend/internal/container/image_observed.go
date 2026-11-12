@@ -209,14 +209,25 @@ func (s *ContainerService) observedLifecycle(ctx context.Context, c *client.Clie
 		result.Recovery = &updaterDTO.RecoveryResult{Outcome: s.verifyOriginal(ctx, c, watch, before)}
 		switch watch.failure {
 		case "update.target-changed":
-			return imageDTO.Failure(watch.failure, 409)
+			err = imageDTO.Failure(watch.failure, 409)
 		case stability.CodeUnstable:
-			return imageDTO.Failure(watch.failure, 500)
+			err = imageDTO.Failure(watch.failure, 500)
+		default:
+			err = imageDTO.Failure("update.deploy-failed", 500)
 		}
-		return imageDTO.Failure("update.deploy-failed", 500)
+	}
+	if watch.journaled {
+		return joinedFailure{err}
 	}
 	return err
 }
+
+// joinedFailure marks a failure that the detached journal sequence settled
+// after its first workload effect; a later cancellation cannot have prevented it.
+type joinedFailure struct{ error }
+
+func (e joinedFailure) Unwrap() error       { return e.error }
+func (e joinedFailure) RuntimeJoined() bool { return true }
 
 // appliedContainerCandidate is the failed-candidate tuple of a standalone
 // container: no service, the repository without tag, the pullable manifest.

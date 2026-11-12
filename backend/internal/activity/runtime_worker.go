@@ -200,7 +200,8 @@ func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr e
 		outputLost: outputErr != nil, message: "Runtime workflow completed", settledAt: now, startedAt: copyPtrInternal(owner.startedAt)}
 	var problem *containerDTO.Problem
 	recreateProblem := errors.As(workflowErr, &problem) && (problem.Code == "container.recreate-recovered" || problem.Code == "container.recreate-ambiguous")
-	detached := joined || recreateProblem
+	var joinedErr interface{ RuntimeJoined() bool }
+	detached := joined || recreateProblem || (errors.As(workflowErr, &joinedErr) && joinedErr.RuntimeJoined())
 	switch {
 	case owner.cancelRequested && !detached:
 		result.state, result.code, result.message = "cancelled", activitytypes.CodeRuntimeCancelled, "Runtime workflow cancelled; effects unverified"

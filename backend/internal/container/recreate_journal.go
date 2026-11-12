@@ -113,6 +113,10 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 		}
 		if recovery.Result != nil {
 			dto.RecordRecreateResult(ctx, *recovery.Result)
+			// A refused replacement is still live; the run keeps its failure.
+			if recovery.Code != "" {
+				return recovery.Result.NewID, imageDTO.Failure(recovery.Code, 409)
+			}
 			return recovery.Result.NewID, nil
 		}
 		return "", dto.RecreateFailure(recovery.Code, step)
@@ -366,7 +370,8 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 	}
 	// The original is expected to be gone only after removal began, or after an
 	// AutoRemove original was stopped before the replacement started.
-	if old == nil && j.Phase != "intent-remove-old" && j.Phase != "done" && (!j.AutoRemove || j.Phase != "started") {
+	autoRemoved := j.AutoRemove && (j.Phase == "started" || (j.Phase == "intent-start" && observedRecreateFrom(ctx) != nil))
+	if old == nil && j.Phase != "intent-remove-old" && j.Phase != "done" && !autoRemoved {
 		return s.ambiguousRecreate(ctx, j)
 	}
 	if old != nil && (old.ID != j.OldID || (strings.TrimPrefix(old.Name, "/") != j.OldName && strings.TrimPrefix(old.Name, "/") != j.BackupName)) {
@@ -394,6 +399,11 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 		return dto.RecreateRecovery{RunID: j.RunID, Code: "container.recreate-recovered"}, nil
 	}
 	if replacement == nil {
+		// A live observed update keeps the original until proof: a vanished
+		// replacement compensates instead of finishing or holding.
+		if deferredRecreateFrom(ctx) != nil && observedBeforeRemoval(j.Phase) && old != nil {
+			return s.compensateRecreate(ctx, c, j, old, nil)
+		}
 		if j.NewID != "" {
 			return s.ambiguousRecreate(ctx, j)
 		}
@@ -401,6 +411,17 @@ func (s *ContainerService) recoverRecreate(ctx context.Context, c *client.Client
 			return s.recoveredRecreate(ctx, j)
 		}
 		return s.compensateRecreate(ctx, c, j, old, nil)
+	}
+	// Docker removed a stopped running AutoRemove original; the replacement is
+	// the only copy and is kept. A running one is the update's result.
+	if old == nil && j.Phase == "intent-start" {
+		if replacement.State != nil && replacement.State.Running {
+			return s.finishRecoveredRecreate(ctx, c, j, nil)
+		}
+		if err := s.saveRecreate(ctx, j, "done"); err != nil {
+			return dto.RecreateRecovery{}, err
+		}
+		return dto.RecreateRecovery{RunID: j.RunID, Code: "update.deploy-failed"}, nil
 	}
 	// A live observed update never finishes here: it proves and observes the
 	// replacement first, or compensates a replacement that is not running.

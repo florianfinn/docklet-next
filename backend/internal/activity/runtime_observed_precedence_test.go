@@ -53,3 +53,23 @@ func TestRefusedReplacementWinsOverCancellation(t *testing.T) {
 	require.Equal(t, "failed", result.state)
 	require.Equal(t, activityDTO.CodeRuntimeFailed, result.code)
 }
+
+type joinedTestFailure struct{ error }
+
+func (e joinedTestFailure) Unwrap() error       { return e.error }
+func (e joinedTestFailure) RuntimeJoined() bool { return true }
+
+// R1S3-4: a detached failure after the first workload effect carries no R and
+// Recovery not-needed; its joined marker keeps it against cancel and deadline.
+func TestObservedJoinedFailureWinsOverCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	failure := joinedTestFailure{imageDTO.Failure("update.deploy-failed", 500)}
+	lifecycle := &dto.LifecycleResult{Code: "update.deploy-failed", HTTPStatus: 500, Recovery: &dto.RecoveryResult{Outcome: "not-needed"}}
+	for _, cancelled := range []bool{true, false} {
+		owner := &runtimeOwnerInternal{ctx: ctx, cancelRequested: cancelled}
+		result := runtimeResultInternal(owner, failure, nil, runtimeJoinedRecovery(lifecycle), time.Now())
+		require.Equal(t, "failed", result.state)
+		require.Equal(t, activityDTO.CodeRuntimeFailed, result.code)
+	}
+}
