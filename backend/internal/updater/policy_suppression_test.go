@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,10 +31,16 @@ type suppressionExecutor struct {
 	outcome, code string
 	applied       []dto.AppliedCandidate
 	calls         int
+	// refuseSuppressed mirrors the container executor's scheduled candidate check.
+	refuseSuppressed bool
 }
 
 func (e *suppressionExecutor) ExecuteRuntime(ctx context.Context, c activity.RuntimeCommand, _ io.Writer) error {
 	e.calls++
+	if e.refuseSuppressed && c.Options.ContainerImage != nil && c.Options.ContainerImage.Policy != nil && slices.Contains(c.Options.ContainerImage.Policy.Suppressed, e.applied[0]) {
+		dto.RecordLifecycleResult(ctx, dto.LifecycleResult{RunID: c.ProposedRunID, Code: "update.candidate-failed", HTTPStatus: 409, Recovery: &dto.RecoveryResult{Outcome: "not-needed"}})
+		return image.Failure("update.candidate-failed", 409)
+	}
 	result := dto.LifecycleResult{RunID: c.ProposedRunID, Code: e.code, HTTPStatus: 500, Applied: e.applied, Recovery: &dto.RecoveryResult{Outcome: e.outcome}}
 	if e.code == "" {
 		result.Verified, result.HTTPStatus, result.Recovery.Outcome = true, 0, "not-needed"
@@ -252,6 +259,63 @@ func TestPolicyContainerSuppressionRecordThenSkip(t *testing.T) {
 	require.Equal(t, "update.candidate-failed", second.Targets[0].Code)
 	require.Equal(t, 1, r.executor.calls)
 	require.Equal(t, rows, r.bindings[1].Suppressed)
+}
+
+// The real container skip is an executor refusal after admission: a terminal
+// failed run that settles Skipped without a notice or a new failed row.
+func TestPolicyContainerExecutorSkipSettlesEndToEnd(t *testing.T) {
+	f := newPolicyFixture(t)
+	one, err := f.p.store.Policy(t.Context(), "0", "example-registration", "app", "container")
+	require.NoError(t, err)
+	one.Mode, one.ActorID, one.TargetIdentity = "scheduled", "example-actor", "app"
+	one.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
+	require.NoError(t, f.p.store.SavePolicy(t.Context(), one, 0))
+	r := newSuppressionRuntime(t, f)
+	r.executor.applied[0].Service = ""
+	r.executor.refuseSuppressed = true
+	f.p.ports.targets = func(context.Context, string) ([]updateTarget, error) {
+		return []updateTarget{{Kind: "container", ID: "app", Name: "app", ContainerID: "docker-id", Eligible: true}}, nil
+	}
+	f.p.ports.checkContainer = func(context.Context, string, updateTarget) (*projectDTO.UpdateInfo, error) { return f.check, nil }
+	f.p.ports.admitContainer = func(ctx context.Context, env, target, key string, b dto.PolicyBinding) (activity.RuntimeAdmissionResult, error) {
+		r.bindings = append(r.bindings, b)
+		return r.service.Admit(ctx, activity.RuntimeCommand{Store: r.store, Key: key, ProposedRunID: b.ChildID, Actor: user.Actor{ID: "example-actor", Username: "Operator"}, Operation: activity.RuntimeUpdateContainer, Target: activity.RuntimeTarget{Kind: "container", ID: target, Name: new("app")}, Options: activity.RuntimeOptions{ContainerImage: &dto.ContainerImageRequest{Policy: &b}}})
+	}
+	first := f.run(t, "auto-update", st.Run{ID: "container-one"})
+	require.Equal(t, "update.auto-restored", first.Targets[0].Code)
+	second := f.run(t, "auto-update", st.Run{ID: "container-two"})
+	require.Equal(t, 2, r.executor.calls, "the skip is decided by the executor, not admission")
+	require.Equal(t, st.Succeeded, second.Status)
+	require.Equal(t, st.Skipped, second.Targets[0].Status)
+	require.Equal(t, "update.candidate-failed", second.Targets[0].Code)
+	var children []policy.Child
+	require.NoError(t, f.db.Find(&children, "policy_id = ?", one.ID).Error)
+	require.Len(t, children, 2)
+	codes := map[string]string{}
+	for _, child := range children {
+		require.Equal(t, "settled", child.Status)
+		codes[child.Code] = child.RuntimeID
+	}
+	require.Equal(t, second.Targets[0].ActivityID, codes["update.candidate-failed"])
+	rows, err := f.p.store.FailedCandidates(t.Context(), one.ID, "app")
+	require.NoError(t, err)
+	require.Equal(t, r.executor.applied, rows)
+	var notices []notificationoutbox.Row
+	require.NoError(t, f.db.Find(&notices).Error)
+	require.Len(t, notices, 1, "the executor skip does not notify")
+	require.Equal(t, "auto-restored", notices[0].Payload["reason"])
+}
+
+func TestPolicySuppressionReadFailureLeavesNoChild(t *testing.T) {
+	f := newPolicyFixture(t)
+	f.save(t, "example-stack", "scheduled")
+	newSuppressionRuntime(t, f)
+	require.NoError(t, f.db.Exec("DROP TABLE image_policy_failed_candidates").Error)
+	out := f.run(t, "auto-update", st.Run{ID: "window"})
+	require.Equal(t, "update.persistence-failed", out.Targets[0].Code)
+	var count int64
+	require.NoError(t, f.db.Model(&policy.Child{}).Count(&count).Error)
+	require.Zero(t, count, "no prepared child outlives a failed suppression read")
 }
 
 func TestPolicyManualCheckDoesNotClearFailedCandidate(t *testing.T) {

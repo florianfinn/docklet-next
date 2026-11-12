@@ -33,7 +33,8 @@ func runtimeClearFailedTargetTx(tx *gorm.DB, row *RuntimeReceipt) error {
 	target := *row.TargetID
 	if *row.TargetKind == "container" {
 		if row.TargetName == nil || *row.TargetName == "" {
-			return errRuntimeInvalidInternal
+			// No canonical name, nothing to clear; never fail a successful completion.
+			return nil
 		}
 		target = strings.TrimPrefix(*row.TargetName, "/")
 	}

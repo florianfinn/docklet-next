@@ -81,6 +81,9 @@ func runtimeNotifyFailureTx(tx *gorm.DB, now time.Time, row *RuntimeReceipt, cod
 	}
 	if scheduled {
 		payload["scheduled"] = true
+		if outcome := recoveryOutcome(checked); outcome != "" {
+			payload["recovery"] = outcome
+		}
 		if checked != nil && checked.Recovery != nil && checked.Recovery.Code != "" {
 			payload["recoveryReason"] = checked.Recovery.Code
 		}

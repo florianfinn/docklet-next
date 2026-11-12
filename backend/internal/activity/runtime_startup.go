@@ -92,7 +92,13 @@ func (s *RuntimeService) SettleLocalStartup(ctx context.Context, current Runtime
 				}
 				var lifecycle *dto.LifecycleResult
 				if observed != nil {
-					lifecycle = &dto.LifecycleResult{RunID: runID, Code: "runtime.interrupted", HTTPStatus: 500, Recovery: &dto.RecoveryResult{Outcome: "interrupted"}}
+					// Only an executing stack may have had an effect here: a container
+					// run with a journal settled above, and pending/accepted never started.
+					outcome := "not-needed"
+					if *row.ExecutorState == "executing" && (row.OperationID == nil || !runtimeContainerImageOperation(RuntimeOperation(*row.OperationID))) {
+						outcome = "interrupted"
+					}
+					lifecycle = &dto.LifecycleResult{RunID: runID, Code: "runtime.interrupted", HTTPStatus: 500, Recovery: &dto.RecoveryResult{Outcome: outcome}}
 				}
 				message := "Runtime workflow interrupted; effects unverified"
 				snapshot, final, err = runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeLocalResultInternal{

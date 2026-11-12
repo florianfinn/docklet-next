@@ -88,22 +88,24 @@ func outboxText(eventType, host string, payload database.JSON, linkBase string) 
 			subject = "container " + container
 		}
 		if scheduled, _ := payload["scheduled"].(bool); scheduled {
-			text := fmt.Sprintf("Scheduled update of %s on %s failed.", subject, host)
-			separator := " "
+			// Short first line for the subject; details follow in the body.
+			head, detail := "Scheduled update failed", "Reason: "+reasonPhrase(str("reason"))
 			switch str("reason") {
 			case "auto-restored":
-				text += " The previous version is running again."
+				detail = "The previous version is running again."
 			case "auto-restore-failed":
-				text = fmt.Sprintf("Scheduled update of %s on %s failed and the automatic restore failed too — action needed.", subject, host)
+				detail = "The automatic restore failed too — action needed."
 			case "auto-restore-unavailable":
-				text = fmt.Sprintf("Scheduled update of %s on %s failed; an automatic restore was not possible (%s) — action needed.", subject, host, reasonPhrase(str("recoveryReason")))
+				detail = fmt.Sprintf("An automatic restore was not possible (%s) — action needed.", reasonPhrase(str("recoveryReason")))
 			case "update-interrupted":
-				text = fmt.Sprintf("Scheduled update of %s on %s was interrupted — check the target.", subject, host)
-			default:
-				text = fmt.Sprintf("%s failed: %s on %s\nReason: %s", title, subject, host, reasonPhrase(str("reason")))
-				separator = "\n"
+				head, detail = "Scheduled update interrupted", "Check the target."
 			}
-			lines = append(lines, text+separator+"Volume data was not restored; the app may already have migrated it.")
+			lines = append(lines, fmt.Sprintf("%s: %s on %s", head, subject, host), detail)
+			// A not-needed recovery proved no workload effect worth restoring.
+			switch str("recovery") {
+			case "restored", "restore-failed", "unavailable", "interrupted":
+				lines = append(lines, "Volume data was not restored; the app may already have migrated it.")
+			}
 		} else {
 			lines = append(lines, fmt.Sprintf("%s failed: %s on %s", title, subject, host), "Reason: "+reasonPhrase(str("reason")))
 		}

@@ -120,8 +120,10 @@ func TestRecoveryNoticeLocalOutcomesAndMode(t *testing.T) {
 					require.Equal(t, "deploy:0:"+admitted.ActivityID, rows[0].DedupKey)
 					if mode == "scheduled" {
 						require.Equal(t, true, rows[0].Payload["scheduled"])
+						require.Equal(t, outcome, rows[0].Payload["recovery"])
 					} else {
 						require.NotContains(t, rows[0].Payload, "scheduled")
+						require.NotContains(t, rows[0].Payload, "recovery")
 					}
 					if outcome == "unavailable" && mode == "scheduled" {
 						require.Equal(t, "restore.files-changed", rows[0].Payload["recoveryReason"])
@@ -132,39 +134,52 @@ func TestRecoveryNoticeLocalOutcomesAndMode(t *testing.T) {
 	}
 }
 
+// Startup claims an interruption effect only for an executing stack: a pending
+// or accepted run never started, and a journalled container run settled first.
 func TestRecoveryNoticeStartupByAdmissionMode(t *testing.T) {
 	for _, mode := range []string{"scheduled", "manual", "unobserved"} {
 		for _, kind := range []string{"stack", "container"} {
-			t.Run(mode+"/"+kind, func(t *testing.T) {
-				f := b1Fixture(t)
-				c := noticeCommand(t, f, mode, kind)
-				admitted, err := f.service.Admit(t.Context(), c)
-				require.NoError(t, err)
-				b3Phase(t, f, c, admitted.ActivityID, "executing")
-				count, err := f.service.SettleLocalStartup(t.Context(), c.Store)
-				require.NoError(t, err)
-				require.EqualValues(t, 1, count)
-				snapshot, err := f.service.boundSnapshotInternal(t.Context(), RuntimeRunReference{Store: c.Store, RunID: admitted.ActivityID})
-				require.NoError(t, err)
-				require.Equal(t, a.StatusFailed, snapshot.Status)
-				require.Equal(t, "runtime.interrupted", snapshot.MessageCode)
-				require.Equal(t, a.RuntimeOutcomeKnown, snapshot.OutcomeState)
-				if mode != "unobserved" {
-					require.NotNil(t, snapshot.ImageLifecycle)
-					require.False(t, snapshot.ImageLifecycle.Verified)
-					require.Equal(t, "interrupted", snapshot.ImageLifecycle.Recovery.Outcome)
-				}
-				rows := noticeRows(t, f)
-				if mode == "scheduled" {
-					require.Len(t, rows, 1)
-					require.Equal(t, "update-interrupted", rows[0].Payload["reason"])
-				} else {
-					require.Empty(t, rows)
-				}
-				count, err = f.service.SettleLocalStartup(t.Context(), c.Store)
-				require.NoError(t, err)
-				require.Zero(t, count)
-			})
+			for _, phase := range []string{"pending", "accepted", "executing"} {
+				t.Run(mode+"/"+kind+"/"+phase, func(t *testing.T) {
+					f := b1Fixture(t)
+					c := noticeCommand(t, f, mode, kind)
+					admitted, err := f.service.Admit(t.Context(), c)
+					require.NoError(t, err)
+					if phase != "pending" {
+						b3Phase(t, f, c, admitted.ActivityID, phase)
+					}
+					count, err := f.service.SettleLocalStartup(t.Context(), c.Store)
+					require.NoError(t, err)
+					require.EqualValues(t, 1, count)
+					snapshot, err := f.service.boundSnapshotInternal(t.Context(), RuntimeRunReference{Store: c.Store, RunID: admitted.ActivityID})
+					require.NoError(t, err)
+					require.Equal(t, a.StatusFailed, snapshot.Status)
+					require.Equal(t, "runtime.interrupted", snapshot.MessageCode)
+					require.Equal(t, a.RuntimeOutcomeKnown, snapshot.OutcomeState)
+					want := "not-needed"
+					if kind == "stack" && phase == "executing" {
+						want = "interrupted"
+					}
+					if mode != "unobserved" {
+						require.NotNil(t, snapshot.ImageLifecycle)
+						require.False(t, snapshot.ImageLifecycle.Verified)
+						require.Equal(t, want, snapshot.ImageLifecycle.Recovery.Outcome)
+					} else {
+						require.Nil(t, snapshot.ImageLifecycle)
+					}
+					rows := noticeRows(t, f)
+					if mode == "scheduled" {
+						require.Len(t, rows, 1)
+						require.Equal(t, "update-interrupted", rows[0].Payload["reason"])
+						require.Equal(t, want, rows[0].Payload["recovery"])
+					} else {
+						require.Empty(t, rows)
+					}
+					count, err = f.service.SettleLocalStartup(t.Context(), c.Store)
+					require.NoError(t, err)
+					require.Zero(t, count)
+				})
+			}
 		}
 	}
 }
@@ -338,4 +353,18 @@ func TestRecoveryNoticeContainerStartupRecoveryPort(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Without a canonical name there is nothing to clear; the success still settles.
+func TestManualContainerSuccessWithoutNameSettles(t *testing.T) {
+	f := b1Fixture(t)
+	c := noticeCommand(t, f, "manual", "container")
+	admitted, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err)
+	b3Phase(t, f, c, admitted.ActivityID, "executing")
+	require.NoError(t, f.store.svc.db.Model(&RuntimeReceipt{}).Where("run_id = ?", admitted.ActivityID).Update("target_name", nil).Error)
+	life := &dto.LifecycleResult{RunID: admitted.ActivityID, Verified: true, Recovery: &dto.RecoveryResult{Outcome: "not-needed"}}
+	result := runtimeLocalResultInternal{state: "success", code: a.CodeActivitySuccess, message: "Completed", settledAt: f.store.now, imageLifecycle: life, startedAt: b3Receipt(t, f, admitted.ActivityID).ExecutorStartedAt}
+	completeNotice(t, f, c, admitted.ActivityID, result)
+	require.NotNil(t, b3Receipt(t, f, admitted.ActivityID).SettledAt)
 }

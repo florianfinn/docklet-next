@@ -143,6 +143,11 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
 	}
+	// Read before PrepareChild: a failed read leaves no prepared child behind.
+	suppressed, err := p.store.FailedCandidates(actorCtx, one.ID, one.TargetIdentity)
+	if err != nil {
+		return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
+	}
 	child, fresh, err := p.store.PrepareChild(actorCtx, one, jobRun)
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, policyCode(err, "update.persistence-failed")), false
@@ -150,11 +155,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if !fresh {
 		return s.reconcileImagePolicyChild(ctx, p, one.EnvironmentID, one.TargetID, child)
 	}
-	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID}
-	binding.Suppressed, err = p.store.FailedCandidates(actorCtx, one.ID, one.TargetIdentity)
-	if err != nil {
-		return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
-	}
+	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID, Suppressed: suppressed}
 	var accepted activity.RuntimeAdmissionResult
 	if one.TargetKind == "container" {
 		accepted, err = p.ports.admitContainer(actorCtx, one.EnvironmentID, resolved.ContainerID, child.ID, binding)
