@@ -19,6 +19,7 @@ func TestPolicyRecoveryMapping(t *testing.T) {
 		name                    string
 		status                  a.Status
 		outcome, code, wantCode string
+		message                 string
 		want                    st.RunStatus
 		missing, unknown        bool
 	}{
@@ -33,9 +34,13 @@ func TestPolicyRecoveryMapping(t *testing.T) {
 		{name: "queued-cancel", status: a.StatusCancelled, missing: true, want: st.Canceled},
 		{name: "candidate-failed", status: a.StatusFailed, outcome: "not-needed", code: "update.candidate-failed", wantCode: "update.candidate-failed", want: st.Skipped},
 		{name: "missing", status: a.StatusSuccess, missing: true, wantCode: "runtime.outcome-unknown", want: st.Failed, unknown: true},
+		// A known zero-effect refusal is an ordinary failed attempt; the next window retries.
+		{name: "refused", status: a.StatusFailed, outcome: "not-needed", code: "runtime.target-unavailable", wantCode: "runtime.target-unavailable", want: st.Failed},
+		{name: "interrupted-refusal", status: a.StatusFailed, message: "runtime.interrupted", outcome: "not-needed", code: "runtime.target-unavailable", wantCode: "update.interrupted", want: st.Failed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := a.RuntimeSnapshot{Activity: a.Activity{Status: tc.status}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
+			snapshot.MessageCode = tc.message
 			if !tc.missing {
 				snapshot.ImageLifecycle = &dto.LifecycleResult{Code: tc.code}
 				if tc.outcome != "" {

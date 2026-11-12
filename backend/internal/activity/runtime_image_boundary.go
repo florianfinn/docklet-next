@@ -83,7 +83,8 @@ func checkedTerminalLifecycle(run, status, code string, bound bool, result *dto.
 		}
 	case "failed":
 		if code == "runtime.interrupted" {
-			if checked.Verified || recovery != nil && recovery.Outcome != "interrupted" {
+			// A zero-effect refusal stays "not-needed" when the owner context ended around it.
+			if checked.Verified || recovery != nil && recovery.Outcome != "interrupted" && recovery.Outcome != "not-needed" {
 				return unknown()
 			}
 			break

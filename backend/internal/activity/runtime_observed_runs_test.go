@@ -41,6 +41,7 @@ func TestObservedEvidenceGrammar(t *testing.T) {
 			{name: "failed missing evidence", status: "failed", bound: true, missing: true, wantUnknown: true},
 			{name: "failed interrupted", status: "failed", code: "runtime.interrupted", outcome: "interrupted", bound: true},
 			{name: "failed interrupted absent", status: "failed", code: "runtime.interrupted", bound: true, missing: true},
+			{name: "failed interrupted zero-effect", status: "failed", code: "runtime.interrupted", outcome: "not-needed", bound: true},
 			{name: "cancelled after effect", status: "cancelled", outcome: "interrupted", bound: true},
 			{name: "cancelled no effect", status: "cancelled", outcome: "not-needed", bound: true},
 			{name: "cancelled queued", status: "cancelled", bound: true, missing: true},

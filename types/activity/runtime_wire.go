@@ -23,6 +23,10 @@ import (
 const RuntimeMaxBodyBytes = 1 << 20
 const RuntimeMaxOutputBytes = 256 << 10
 
+// RuntimeMaxMetadataBytes bounds stored activity metadata; it holds checked
+// recovery evidence (at most 64 KiB) beside a few small routing keys.
+const RuntimeMaxMetadataBytes = 128 << 10
+
 var ErrRuntimeWire = errors.New("invalid runtime response")
 
 // Only an authenticated Execute busy/cancelling response is no-worker authority.
