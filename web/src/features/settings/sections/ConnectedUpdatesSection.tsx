@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original approved connected update settings and policy table. M24 S6: observed recovery and update UI follow-ups.
 
+import { AdapterOutcomeError, unavailable } from "@/data/capability";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "use-intl";
 import { startPresented } from "@/features/activity/run-presentation";
@@ -38,11 +39,11 @@ function PoliciesTable({ hosts, timeZone }: { hosts: Host[]; timeZone: string })
   const adapter = useAdapter(), t = useTranslations("settings.updates"), common = useTranslations("common.stackUpdates");
   const queries = useQueries({ queries: hosts.map((host) => ({ queryKey: ["stack", "update-policies", host.id], queryFn: async () => {
     const cap = await adapter.getCapability("listUpdatePolicies", { kind: "host", id: host.id });
-    if (!cap.available) throw new Error(cap.disabledReasonCode);
+    if (!cap.available) throw unavailable("listUpdatePolicies", { kind: "host", id: host.id }, cap.disabledReasonCode);
     return adapter.listUpdatePolicies!(host.id);
   } })) });
   return <>
-    {queries.map((q, i) => q.isError ? <div key={hosts[i]!.id}><HostChip host={hosts[i]!} /><QueryError error={q.error} onRetry={() => void q.refetch()} /></div> : null)}
+    {queries.map((q, i) => q.isError ? <div key={hosts[i]!.id}><HostChip host={hosts[i]!} /><QueryError error={q.error} onRetry={q.error instanceof AdapterOutcomeError && q.error.outcome.kind === "not-available" ? undefined : () => void q.refetch()} /></div> : null)}
     <OverviewTable fitKey="update-policies" columns={() => [
       { id: "name", label: t("target"), className: "min-w-40" },
       { id: "host", label: t("host") },

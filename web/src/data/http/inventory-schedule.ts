@@ -63,7 +63,7 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
             return old.length ? old.map((r) => ({ ...r, unavailable: true })) : [{ id: `${host}~schedule-unavailable`, hostId: host, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
           }
         })(),
-        (host === "0" ? jobs.getUpdateCheckJob(host).then((j) => [{ id: `${host}~update-check`, hostId: host, kind: "update-check" as const, title: "", cadence: j.schedule, nextRunAt: j.nextRun, enabled: j.enabled }], (error: unknown) => {
+        (host === "0" ? jobs.getUpdateCheckJob(host).then((j) => [{ id: `${host}~update-check`, hostId: host, kind: "update-check" as const, title: "", cadence: "", nextRunAt: j.nextRun, enabled: j.enabled }], (error: unknown) => {
           if (isCancelledError(error) || isMaintenanceError(error)) throw error;
           return previous.filter((r) => r.kind === "update-check" && r.id !== `${host}~schedule-unavailable`).map((r) => ({ ...r, unavailable: true }));
         }) : Promise.resolve([])),

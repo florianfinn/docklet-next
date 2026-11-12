@@ -21,7 +21,7 @@ export function JobUpdateOutcomes({ run }: { run: ActionRun }) {
   const query = useQuery({ queryKey: ["activity", host, "job-targets", ref?.jobId, ref?.runId, run.status], queryFn: () => adapter.getUpdateJobTargets!(host, ref!.jobId, ref!.runId), enabled: !!ref && !!adapter.getUpdateJobTargets, refetchInterval: run.status === "running" || run.status === "queued" ? 2000 : false });
   if (!ref) return null;
   return <>{query.isError && <QueryError compact error={query.error} />}{query.data?.map((target) => <div key={target.id} className="rounded-lg border p-3 text-sm" data-job-target={target.id}>
-    <p>{target.id} · {activity(`jobStep.${target.status}`)}</p>
+    <p>{target.targetId ?? target.id} · {activity(`jobStep.${target.status}`)}</p>
     {target.code && <p>{errors(target.code)}</p>}
     {/* The child's recovery evidence decides the volume warning; a target code alone cannot prove an effect. */}
     {target.activityId && target.environmentId && target.status !== "skipped" && <ActionDetail run={{ ...run, id: target.activityId, hostId: target.environmentId, jobRef: undefined, updateRecovery: undefined }}>{(child) => <UpdateRecovery run={child} />}</ActionDetail>}

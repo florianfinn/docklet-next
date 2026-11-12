@@ -36,7 +36,7 @@ export function createUpdateSettings(o: { baseUrl: string; client: CsrfClient; g
     async getUpdateJobTargets(host, jobId, runId) {
       const run = record(await request(`/environments/${encodeURIComponent(host)}/jobs/${encodeURIComponent(jobId)}/runs/${encodeURIComponent(runId)}`));
       if (id(run.id) !== runId || id(run.jobId) !== jobId || id(run.environmentId) !== host) throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
-      return list(record(run.outcome).targets ?? null).map((raw) => { const t = record(raw); return { id: id(t.id), status: choice(t.status, ["queued", "waiting", "running", "retrying", "succeeded", "partial", "skipped", "failed", "needs_attention", "canceled"]), code: reason(t.code), activityId: t.activityId === undefined ? undefined : id(t.activityId), environmentId: t.environmentId === undefined ? undefined : id(t.environmentId) }; });
+      return list(record(run.outcome).targets ?? null).map((raw) => { const t = record(raw); return { id: id(t.id), status: choice(t.status, ["queued", "waiting", "running", "retrying", "succeeded", "partial", "skipped", "failed", "needs_attention", "canceled"]), code: reason(t.code), activityId: t.activityId === undefined ? undefined : id(t.activityId), environmentId: t.environmentId === undefined ? undefined : id(t.environmentId), targetId: t.targetId === undefined ? undefined : id(t.targetId) }; });
     },
     async getUpdateSettings() {
       const raw = await request("/environments/0/settings", "GET", "saveSettings");

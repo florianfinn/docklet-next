@@ -212,6 +212,8 @@ it("F5 dashboard keeps policy windows and adds only the hub update-check job wit
   const checks = rows.filter((r) => r.kind === "update-check");
   expect(checks).toHaveLength(1);
   expect(checks[0]).toMatchObject({ id: "0~update-check", hostId: "0", nextRunAt: f.state.job.nextRun, enabled: true });
+  // The backend cron expression is a wire value, never UI text.
+  expect(checks[0]!.cadence).toBe("");
   expect(rows.filter((r) => r.kind === "auto-update")).toHaveLength(2);
   expect(f.calls.filter((c) => c.path.endsWith("/jobs")).every((c) => c.path === "/api/environments/0/jobs")).toBe(true);
 });

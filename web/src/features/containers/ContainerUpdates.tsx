@@ -30,7 +30,7 @@ export function ContainerUpdateDialog({ container: c, restore, autoRestore = fal
   const previous = useQuery({ queryKey: ["container", c.id, "previous-image"], queryFn: async () => (await adapter.getContainerPreviousImage!(c.id)) ?? null, enabled: restore && !!adapter.getContainerPreviousImage, staleTime: 0 });
   const action = useUpdateAction(c.id), [run, setRun] = useState<string>();
   useEffect(() => identityLifetime(adapter).listen(close), [adapter, close]);
-  return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{restore ? t("previousImage") : update("actionUpdateContainer")}</DialogTitle><DialogDescription>{restore ? t("previousImageHelp") : autoRestore ? t("updateWithCheckHelp") : c.name}</DialogDescription></DialogHeader>
+  return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{restore ? t("previousImage") : update("actionUpdateContainer")}</DialogTitle><DialogDescription>{restore ? t("previousImageHelp") : autoRestore ? <>{c.name} · {t("updateWithCheckHelp")}</> : c.name}</DialogDescription></DialogHeader>
     {restore && previous.data && <p className="break-all">{previous.data.reference} · {formatDateTime(previous.data.createdAt)}</p>}
     {restore && previous.isError && <p role="alert">{errors(previous.error)}</p>}
     {action.error && <p role="alert">{action.error}</p>}

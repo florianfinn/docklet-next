@@ -38,7 +38,7 @@ export interface SystemHints {
     compatibleReference?: string; state: "current" | "available" | "pinned" | "unknown";
     requiresHubUpdate: boolean; manualOnly: true; code?: string }[];
 }
-export interface UpdateJobTarget { id: string; status: UpdateRunStatus; code?: string; activityId?: string; environmentId?: string }
+export interface UpdateJobTarget { id: string; status: UpdateRunStatus; code?: string; activityId?: string; environmentId?: string; targetId?: string }
 export interface UpdatesApi {
   getUpdateCheckJob?(hostId: string): Promise<{ enabled: boolean; schedule: string; nextRun?: string }>;
   getUpdateJobTargets?(hostId: string, jobId: string, runId: string): Promise<UpdateJobTarget[]>;

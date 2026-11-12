@@ -237,7 +237,7 @@ export const deSettings: typeof enSettings = {
     notifyHint: "Über die eingerichteten Kanäle unter Benachrichtigungen.",
     checkNow: "Jetzt alle prüfen",
     defaultMode: "Standard ist „Nur prüfen“. Automatische Installation wird je Stack oder Container eingeschaltet.",
-    noRollback: "Geplante Updates und „Update mit Prüfung“ beobachten die neue Version 2 Minuten lang und versuchen bei Fehlern eine Wiederherstellung. Einfache manuelle Updates erfordern eine manuelle Wiederherstellung. Volume-Daten werden nie wiederhergestellt.",
+    noRollback: "Geplante Updates und „Update mit Prüfung“ beobachten die neue Version 2 Minuten lang und versuchen bei Fehlern, die vorherige Version wiederherzustellen. Einfache manuelle Updates erfordern eine manuelle Wiederherstellung. Volume-Daten werden nie wiederhergestellt.",
     host: "Host",
     windowHelp: "Geplante Updates laufen in diesem Zeitfenster in der Hub-Zeitzone. Reine Prüfungen haben kein Installationsfenster. Jede Änderung speichert diese Zeile.",
     table: "Automatische Installation",

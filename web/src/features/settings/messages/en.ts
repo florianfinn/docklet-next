@@ -236,7 +236,7 @@ export const enSettings = {
     notifyHint: "Through the channels configured under Notifications.",
     checkNow: "Check all now",
     defaultMode: "The default is “Check only”. Automatic installation is turned on per stack or container.",
-    noRollback: "Scheduled updates and “Update with check” watch the new version for 2 minutes and try to restore it on failure. Plain manual updates require manual recovery. Volume data is never restored.",
+    noRollback: "Scheduled updates and “Update with check” watch the new version for 2 minutes and try to restore the previous version on failure. Plain manual updates require manual recovery. Volume data is never restored.",
     host: "Host",
     windowHelp: "Scheduled updates run in this window in the hub time zone. Check-only targets have no install window. Each change saves this row.",
     table: "Automatic installation",

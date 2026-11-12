@@ -238,7 +238,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     id: run.id,
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
-    ...(job && typeof run.metadata?.jobId === "string" && /^(update-check$|update-window:)/.test(run.metadata.jobId) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
+    ...(job && typeof run.metadata?.jobId === "string" && /^update-window:/.test(run.metadata.jobId) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
     kind, sourceOperation: run.type,
     title: { code: `activity.runKind.${kind}`, params: {} },
     target: jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: target } },
