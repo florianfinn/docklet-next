@@ -40,11 +40,26 @@ configuration and shows the outcome. It does not reimplement or separately test
 ACME. Acceptance checks the written configuration, the served certificate and the
 reported issuance errors against a real installation.
 
+## Classifier result (2026-11-12)
+
+The development-only classifier (`traefik-import.ts`) reads the private copy
+without writing to it. It finds 11 routers: 3 editable in the form, 7 text-only
+and 1 infrastructure. The text-only reasons are shared services, `priority`, a
+combined rule and a service defined in a secret file. Middleware references
+resolve as local, plugin or external, and none counts as an error.
+
+Applying a no-op edit to every router leaves the file byte-identical, 11 of 11.
+Targeted edits patch only value spans of the Document source. A synthetic fixture
+with the same shape covers comments and unrelated bytes. YAML anchors, aliases,
+tags and removals from compact flow maps are refused explicitly; the file is never
+reserialized as a whole. Removing a route keeps every service, because files that
+cannot be read may still reference it.
+
+Recommended direction, to be confirmed at module kickoff: imported file, router and service identities
+are preserved and changed through targeted patches. Routes on shared services stay
+text-only in the first version, and resolvers are selected, never created.
+
 ## Next evidence
 
-1. A classifier runs over the private copy. It reports, per router, whether the
-   form can edit it, whether it is preserved as text only, and whether there are
-   external references. The comment-preserving edit is checked on a synthetic
-   fixture with the same shape.
-2. With separate operator approval for each session: a scoped write test on the
+1. With separate operator approval for each session: a scoped write test on the
    real installation in its own file, with a backup first and removal as rollback.
