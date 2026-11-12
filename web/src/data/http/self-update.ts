@@ -13,6 +13,8 @@ import { SELF_UPDATE_PHASE_KEYS } from "../wire-catalogue-self-update";
 import { wireKey } from "../wire-catalogue";
 import { object, runtimeError } from "./runtime-mapping";
 import type { CsrfClient } from "./csrf-client";
+import { pausableTimeout } from "./deadline-pause";
+import { maintenanceOutcome } from "./problem-code";
 
 interface Options {
   baseUrl: string;
@@ -34,7 +36,7 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
     const controller = new AbortController(); controllers.add(controller);
     const abort = () => controller.abort(); parent?.addEventListener("abort", abort, { once: true });
     if (parent?.aborted) abort();
-    const timeout = setTimeout(abort, 15_000);
+    const stopTimer = pausableTimeout(15_000, abort);
     const current = () => { if (owner !== generation() || version !== epoch || parent?.aborted) throw new CancelledError(); };
     try {
       const response = await client.fetch(`${baseUrl}${path}`, {
@@ -46,6 +48,8 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       current();
       const body: unknown = await response.json(); current();
       if (!response.ok) {
+        const refused = maintenanceOutcome(response);
+        if (refused) throw refused;
         const problem = object(body);
         const code = selfUpdateCodeKey(problem.code as string) ? problem.code : selfUpdateCodeKey(problem.detail as string) ? problem.detail : "http.error";
         throw runtimeError(code as string, response.status);
@@ -55,7 +59,7 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       current();
       if (input && !(error instanceof Error && "outcome" in error)) throw runtimeError("update.outcome-unknown");
       throw error;
-    } finally { clearTimeout(timeout); controllers.delete(controller); parent?.removeEventListener("abort", abort); }
+    } finally { stopTimer(); controllers.delete(controller); parent?.removeEventListener("abort", abort); }
   }
   async function allowed(host: string) {
     const owner = generation(), version = epoch;
@@ -74,7 +78,7 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       timers.delete(id);
       if (!current()) return;
       const controller = new AbortController(); controllers.add(controller);
-      const timeout = setTimeout(() => controller.abort(), 15_000);
+      const stopTimer = pausableTimeout(15_000, () => controller.abort());
       let done = false;
       try {
         const [run, app] = await Promise.allSettled([
@@ -93,7 +97,7 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
           }
         }
       } finally {
-        clearTimeout(timeout); controllers.delete(controller);
+        stopTimer(); controllers.delete(controller);
         if (current() && !done && Date.now() < deadline) {
           timers.set(id, setTimeout(() => { void poll(); }, delay));
           delay = Math.min(delay * 2, 10_000);

@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { components } from "@/api/generated/schema";
 import { AdapterOutcomeError } from "../capability";
-import { createHttpHistory, createHttpUiPreferences } from "./history";
+import { createHttpHistory, createHttpUiPreferences, mapCapacity } from "./history";
 
 type WireBucket = components["schemas"]["HistoryBucket"];
 
@@ -82,7 +82,7 @@ describe("history transport", () => {
     ]));
     const [first, second] = await createHttpHistory("/api", c).getCapacity();
     expect(calls[0]!.url).toBe("/api/history/capacity");
-    expect(first).toEqual({ hostId: "host-1", diskTotal: 100, diskUsed: 40, growthPerDay: 5, daysUntilFull: 12, series: [{ at: "2026-11-02T00:00:00.000Z", used: 40 }] });
+    expect(first).toEqual({ hostId: "host-1", diskTotal: 100, diskUsed: 40, growthPerDay: 5, daysUntilFull: 12, series: [{ at: "2026-11-02T00:00:00.000Z", used: 40 }], domain: { start: "2026-11-01T00:00:00.000Z", end: "2026-11-02T00:00:00.000Z" }, diskSource: "/srv" });
     expect(second).toEqual({ hostId: "host-2", diskTotal: 2, diskUsed: 1, series: [] });
   });
 });
@@ -104,4 +104,11 @@ describe("preference transport", () => {
     const error = await createHttpUiPreferences("/api", c).putUiPreference("views", {}).catch((e: unknown) => e);
     expect(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "preferences.too-large" && error.outcome.status === 413).toBe(true);
   });
+});
+
+it("C2-b the capacity trend keeps only buckets of the current disk source, the full bucket domain and the source", () => {
+  const bucket = (day: number, source: string, total = 100) => ({ start: new Date(Date.UTC(2026, 9, day)).toISOString(), diskTotal: total, diskUsed: day, diskSource: source });
+  const capacity = mapCapacity({ hostId: "first", totalBytes: 100, usedBytes: 50, diskSource: "/", growthBytesPerDay: null, daysUntilFull: null, growthUnavailable: true,
+    history: { range: "30d", uptimePercent: null, totals: {}, buckets: [bucket(1, "/example"), bucket(2, "/"), bucket(3, "/", 0), bucket(4, "/")] } } as never);
+  expect([capacity.series.map((p) => p.used), capacity.domain, capacity.diskSource]).toEqual([[2, 4], { start: "2026-10-01T00:00:00.000Z", end: "2026-10-04T08:00:00.000Z" }, "/"]);
 });

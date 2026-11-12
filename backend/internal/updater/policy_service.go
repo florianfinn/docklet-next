@@ -163,6 +163,12 @@ func (s *UpdaterService) imagePolicyActor(ctx context.Context, env, actor, key s
 	return context.WithValue(ctx, user.CurrentUserContextKey{}, identity), nil
 }
 func (s *UpdaterService) GetImagePolicy(ctx context.Context, env, target string, kinds ...string) (dto.AutoUpdatePolicy, error) {
+	return s.imagePolicy(ctx, env, target, true, kinds...)
+}
+
+// imagePolicy reads one policy row. With live set, a default (revision 0) stack policy also resolves the target's
+// current identity through the baseline port (Compose inputs and Docker observation); lists skip that projection.
+func (s *UpdaterService) imagePolicy(ctx context.Context, env, target string, live bool, kinds ...string) (dto.AutoUpdatePolicy, error) {
 	p, err := s.hubPolicies()
 	if err != nil {
 		return dto.AutoUpdatePolicy{}, err
@@ -175,7 +181,7 @@ func (s *UpdaterService) GetImagePolicy(ctx context.Context, env, target string,
 	if err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
-	if row.Revision == 0 && row.TargetKind == "stack" {
+	if live && row.Revision == 0 && row.TargetKind == "stack" {
 		if live, e := p.ports.baseline(ctx, env, target); e == nil && live.Valid() {
 			row.TargetIdentity = live.TargetIdentity
 		}

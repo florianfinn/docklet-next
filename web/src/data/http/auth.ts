@@ -2,9 +2,10 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Connected sign-in and profile HTTP calls.
+// Deviations: Connected sign-in and profile HTTP calls. M23 #425: session discovery skips the anonymous probe without the session hint in local mode.
 
 import { discardResponse } from "./identity-reads";
+import { clearSessionHint, hasSessionHint } from "./session-hint";
 import { CancelledError } from "@tanstack/react-query";
 
 import type { components } from "@/api/generated/schema";
@@ -13,6 +14,7 @@ import type { AuthMode } from "@/domain/settings";
 
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { maintenanceOutcome } from "./problem-code";
 
 function user(value: unknown): CurrentUser {
   if (!value || typeof value !== "object") throw new Error("auth.invalid-user");
@@ -60,7 +62,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       const code = typeof problem?.code === "string" && problem.code.startsWith("access.") ? problem.code : "http.error";
       throw new AdapterOutcomeError({ kind: "error", code, status: 403 });
     }
-    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");
     return payload.data;
@@ -71,6 +73,9 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     const epoch = identityEpoch;
     const identity = currentUserId;
     try {
+      // A local-mode browser without the session hint and without a session known to this document holds no session:
+      // answer as a refused session, without a request. A sign-in here always probes, whatever cookies a proxy passes.
+      if (currentUserId === undefined && !hasSessionHint() && await getAuthConfiguration().then(({ mode }) => mode, () => undefined) === "local") throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 });
       const result = user(await request("/auth/me"));
       assertCurrent(version);
       const rights = JSON.stringify([result.isAdmin, result.assignments]);
@@ -85,15 +90,20 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
         if (rereadRenewal && identity && identity === currentUserId && epoch === identityEpoch && renewedFrom !== undefined && version >= renewedFrom && renewedStamp === sessionVersion + sessionGeneration()) return getCurrentUser(false);
         throw new CancelledError();
       }
-      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) sessionChanged("lost");
+      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { clearSessionHint(); sessionChanged("lost"); }
       throw error;
     }
   }
 
-  async function getAuthConfiguration() {
+  let modeRead: Promise<{ mode: AuthMode; logoutUrl?: string }> | undefined;
+  // Concurrent start-up readers (mode query, session discovery) share one public mode read.
+  function getAuthConfiguration() {
+    modeRead ??= (async () => {
       const payload = await request("/auth/mode") as components["schemas"]["AuthSignInConfiguration"];
       if (payload.mode !== "local" && payload.mode !== "proxy" && payload.mode !== "none") throw new Error("auth.invalid-mode");
       return { mode: payload.mode as AuthMode, ...(payload.mode === "proxy" && payload.logoutUrl ? { logoutUrl: payload.logoutUrl } : {}) };
+    })().finally(() => { modeRead = undefined; });
+    return modeRead;
   }
   return {
     getAuthConfiguration,

@@ -4,8 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original capacity trend widget tests for issue #337.
 
-import { waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { describe, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
@@ -45,5 +46,62 @@ describe("capacity widget (CP1)", () => {
     expect(kinds([trend(a!.id, { daysUntilFull: 12 })])).toEqual([["err", 12]]);
     expect(kinds([trend(a!.id, { daysUntilFull: 45 })])).toEqual([["warn", 45]]);
     expect(kinds([trend(a!.id, {})])).toEqual([]);
+  });
+});
+
+describe("capacity line time axis and source (#400, #401)", () => {
+  const day = (d: number, hour = 0) => new Date(Date.UTC(2026, 9, d, hour)).toISOString();
+  it("C2-c places each bucket by time over the 30-day domain and breaks the line at a gap", async () => {
+    const [a] = online;
+    // Domain 1 Oct .. 31 Oct in 8-hour buckets; three consecutive buckets, a gap, then two more.
+    const series = [[1, 8], [1, 16], [2, 0], [5, 0], [5, 8]].map(([d, h]) => ({ at: day(d!, h), used: 500 * GIB }));
+    const adapter = { ...createDemoAdapter(), getCapacity: async () => [trend(a!.id, { series, domain: { start: day(1), end: day(31) }, diskSource: "/" })] };
+    const { container } = renderWithApp(<CapacityWidget hosts={[a!]} />, adapter);
+    await waitFor(() => expect(container.querySelector("[data-capacity-line]")).not.toBeNull());
+    const line = container.querySelector<SVGElement>("[data-capacity-line]")!;
+    const segments = [...line.querySelectorAll<SVGElement>("[data-points]")].map((s) => s.dataset.points);
+    expect([line.dataset.capacitySegments, segments]).toEqual(["2", ["1.11,12 2.22,12 3.33,12", "13.33,12 14.44,12"]]);
+  });
+
+  it("C2-b the card names the path its trend was measured at (EN/DE)", async () => {
+    const [a] = online;
+    const adapter = { ...createDemoAdapter(), getCapacity: async () => [trend(a!.id, { diskSource: "/" })] };
+    const { container } = renderWithApp(<CapacityWidget hosts={[a!]} />, adapter);
+    await waitFor(() => expect(container.querySelector("[data-capacity-line]")).not.toBeNull());
+    expect(container.querySelector("[data-capacity-source]")?.textContent).toBe("Gemessen unter /");
+  });
+});
+
+describe("demo capacity follows the hub's 30-day shape (#400)", () => {
+  it("draws the demo trend as one connected line over 90 eight-hour buckets", async () => {
+    const [a] = online;
+    const { container } = renderWithApp(<CapacityWidget hosts={[a!]} />, createDemoAdapter());
+    await waitFor(() => expect(container.querySelector("[data-capacity-line]")).not.toBeNull());
+    const line = container.querySelector<SVGElement>("[data-capacity-line]")!;
+    const points = line.querySelector("polyline")!.getAttribute("data-points")!.split(" ");
+    // Bucket ends, like the HTTP mapper: the first point sits one step in, the last at the domain end.
+    expect([line.dataset.capacityLine, line.dataset.capacitySegments, points[0]!.split(",")[0], points.at(-1)!.split(",")[0]]).toEqual(["90", "1", "1.11", "100"]);
+  });
+});
+
+describe("capacity refresh on a later Dashboard visit (#401 DR-10)", () => {
+  it("a remount a minute later refetches the capacity trend", async () => {
+    const getCapacity = vi.fn(async () => [] as HostCapacity[]);
+    function Toggle() {
+      const [shown, setShown] = useState(true);
+      return <><button type="button" onClick={() => setShown((v) => !v)}>toggle</button>{shown && <CapacityWidget hosts={online} />}</>;
+    }
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    renderWithApp(<Toggle />, { ...createDemoAdapter(), getCapacity });
+    await waitFor(() => expect(getCapacity).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+    clock.mockReturnValue(now + 61_000);
+    fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+    // waitFor measures time with Date.now, which is pinned here: wait on a real timer instead.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    const calls = getCapacity.mock.calls.length;
+    clock.mockRestore();
+    expect(calls).toBe(2);
   });
 });

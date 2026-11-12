@@ -2,8 +2,9 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
+import { mergeInventoryObservations } from "./inventory-observations";
 import type { operations } from "@/api/generated/schema";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { InventoryObservation } from "@/domain/model";
@@ -49,7 +50,7 @@ export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch,
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) return fail(`${operation}.invalid-page`);
       rows.push(...body.data);
       // Keep the oldest page timestamp and any stale reason across a paginated read.
-      observation = { observedAt: observation.observedAt && result.observation.observedAt ? [observation.observedAt, result.observation.observedAt].sort()[0] : result.observation.observedAt, stale: observation.stale || result.observation.stale, reason: observation.reason ?? result.observation.reason };
+      observation = mergeInventoryObservations([observation, result.observation]);
       if (rows.length >= body.pagination.totalItems) return { rows: rows as NonNullable<Body<I>["data"]>, observation };
       if (!body.data.length) return fail(`${operation}.short-page`);
     }

@@ -2,14 +2,17 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
+import { skipReason, skipsReads } from "./host-read-policy";
 import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
 import { createStackImport } from "./stack-import";
-import { nextOccurrence } from "@/domain/schedule";
+import { createScheduleReader } from "./inventory-schedule";
+import { createInventoryOwner } from "./inventory-owner";
+import { freshFrom } from "../refresh-owner";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
 import { createUpdateSettings } from "./update-settings";
@@ -44,24 +47,26 @@ import { mapEvent, mapStatus } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createHttpHistory, createHttpUiPreferences } from "./history";
 import { createHttpServiceWidgets } from "./service-widgets";
-import { createCsrfClient } from "./csrf-client";
+import { problemCode } from "./problem-code";
+import { createTransportChain } from "./transport-chain";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
-import { createHostReadAdmission } from "./host-read-admission";
 import { createSharedReads } from "./shared-reads";
-import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import { createShellSockets, type ShellSocket } from "./shell";
 import { createRuntimeLogs } from "./logs";
 import { createVulnerabilityCandidates } from "./vulnerability-candidates";
 import { createVulnerabilityAdvisories } from "./vulnerability-advisory";
 import { registerIdentityLifetime } from "../identity-lifetime";
-import { createIdentityReads } from "./identity-reads";
 import { activityDeadline } from "./activity-deadline";
 import { createActivityTargets } from "./activity-targets";
 import { mapActivityDetail } from "./map-dto";
 import { createActivityReader } from "./activity-reader";
 import { createEventReader } from "./event-reader";
+import { DASHBOARD_EVENT_LIMIT, DASHBOARD_EVENT_WINDOW_MS, createDashboardEvents } from "./dashboard-events";
+import { type Body, type ReadOperation, createPager } from "./paged-read";
+import { pausableTimeout } from "./deadline-pause";
+import { isMaintenanceError } from "../maintenance-retry";
 import { createVolumePrune } from "./volume-prune";
 import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
@@ -74,8 +79,6 @@ import { createContainerOrigin } from "./container-origin";
 import { createStackAuthoring } from "./stack-authoring";
 import { createStackTerminals } from "./stack-terminals";
 
-type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
-type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
@@ -218,7 +221,7 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
   if ((object.code === "run.busy" || object.code === "run.cancelling") && typeof object.activeRunId === "string" && object.activeRunId) {
     return new AdapterOutcomeError({ kind: "conflict", code: object.code, activeRunId: object.activeRunId });
   }
-  return new AdapterOutcomeError({ kind: "error", code: typeof object.code === "string" ? object.code : "http.error", status });
+  return new AdapterOutcomeError({ kind: "error", code: problemCode(error) ?? "http.error", status });
 }
 
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
@@ -233,37 +236,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (closing && await closing) throw new CancelledError();
     if (signedOut) throw new CancelledError();
   }
-  const network = createHostReadAdmission(options.fetch ?? globalThis.fetch, baseUrl);
-  // Admitted reads still waiting for their answer; a logout lets them land before the session ends.
-  const answering = new Set<Promise<void>>();
-  // Below CSRF queuing and the transport retry, so each physical attempt is admitted on its own.
-  const identityReads = createIdentityReads(async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
-    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    const read = (method === "GET" || method === "HEAD") && !path.includes("/auth/");
-    if (read && (closing || signedOut)) await admit();
-    const answer = network(input, init);
-    if (read) {
-      const landed = answer.then(() => undefined, () => undefined);
-      answering.add(landed);
-      void landed.then(() => answering.delete(landed));
-    }
-    return answer;
+  const { maintenance, hostPolicy, identityReads, answering, client } = createTransportChain({
+    baseUrl, fetch: options.fetch ?? globalThis.fetch, admit, closing: () => !!closing || signedOut,
+    generation: () => identityGeneration, suspend: () => suspendIdentity(),
   });
-  const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
-  const client = { token: rawClient.token, fetch: (async (input, init) => {
+  // A hub backup download is a browser navigation outside fetch: it waits for logout admission and maintenance itself.
+  const hubBackups = createHttpHubBackups(baseUrl, client, options.uploadFactory, async () => {
+    await admit();
     const version = identityGeneration;
-    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
-    const response = await rawClient.fetch(input, init);
-    // Auth and activity/runtime consumers already own their authoritative 401 path.
-    const ownedRejection = ["/auth/login", "/auth/password", "/auth/me"].some((suffix) => path.endsWith(suffix)) || /\/(activities|runtime-runs)(\/|$)|\/(capabilities|environments)$/.test(path);
-    if (version === identityGeneration && response.status === 401 && !ownedRejection) {
-      const body = await response.arrayBuffer();
-      if (version === identityGeneration) suspendIdentity();
-      return new Response(body, { status: response.status, headers: response.headers });
-    }
-    return response;
-  }) as typeof fetch };
+    await maintenance.released();
+    if (version !== identityGeneration) throw new CancelledError();
+    await admit();
+  });
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
@@ -314,14 +298,22 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let environmentState: string | undefined;
   const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology", "security"];
   const environmentCache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, gcTime: 30_000 } } });
-  const environmentsKey = ["environments"];
-  const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
+  // Each invalidation starts a new catalogue version: a read in flight from before it is never joined by later callers.
+  let catalogueVersion = 0;
+  const environments = () => environmentCache.fetchQuery({ queryKey: ["environments", catalogueVersion], queryFn: async () => {
+    const catalogue = catalogueVersion, token = hostPolicy.beginCatalogue();
+    const rows = await page("listEnvironments", "/environments", 100);
+    // An obsolete catalogue version still answers its own callers but no longer sets the dispatch policy.
+    if (catalogue === catalogueVersion) hostPolicy.applyCatalogue(token, rows);
+    return rows;
+  } });
   function invalidateCapabilities() { capabilityReads.clear(); }
-  function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
+  function invalidateEnvironments() { sharedReads.clear(); catalogueVersion++; }
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
+    inventoryOwner.reset();
     backups.invalidate();
-    events.identityChanged();
+    events.identityChanged(); dashboardEvents.identityChanged();
     authenticated = nextActive;
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
@@ -334,6 +326,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     shells.reset();
     metrics.reset(false, retain);
     identityReads.reset();
+    maintenanceSeen = false; maintenance.reset(); hostPolicy.reset();
     conditions.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
@@ -351,7 +344,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (authenticated) { metrics.reset(true, retain); connect(); }
   }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
-    return JSON.stringify(rows.map((row) => [
+    // A host whose reads are skipped reads alike in every status with the same refusal (offline, pending): moving
+    // between them changes no inventory, so it refreshes the host list only.
+    return JSON.stringify(rows.map((row) => skipsReads(row.status) ? [row.id, skipReason(row.status), row.enabled, row.registrationRevision] : [
       row.id,
       row.connectedAt,
       row.edgeSessionId,
@@ -386,6 +381,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       descriptors = await pending;
     } catch (error) {
       if (operationId === "listActions" && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
+      // Hub maintenance decides nothing about the capability: the caller meets the maintenance outcome.
+      if (isMaintenanceError(error)) throw error;
       // Transport loss or a server failure can recover; a refusal or a missing or denied descriptor cannot.
       const status = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.status : 0;
       const lost = error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "http.error" && (status === undefined || status < 400 || status >= 500);
@@ -404,28 +401,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!descriptor.available) throw unavailable(operationId, descriptor.resourceRef, descriptor.disabledReasonCode);
   }
 
-  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<NonNullable<Body<I>["data"]>> {
-    const result: NonNullable<Body<I>["data"]> = [] as unknown as NonNullable<Body<I>["data"]>;
-    let start = 0;
-    for (;;) {
-      if (signal?.aborted) throw new CancelledError();
-      let responseIncomplete = false;
-      const body = await read(operationId, route, { start, limit, order: "desc", ...(operationId === "list-activities" ? { includeSummary: "true" } : {}), ...(operationId === "listEvents" ? { sort: "timestamp" } : {}) }, (response) => { responseIncomplete = response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable"; observeResponse?.(response); }, signal);
-      if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
-      result.push(...body.data as never[]);
-      start += body.data.length;
-      if (limit === -1 && start < body.pagination.totalItems && responseIncomplete === false) throw classifiedError({ code: `${operationId}.short-page` });
-      if (limit === -1 || start >= body.pagination.totalItems) return result;
-      if (body.data.length === 0) throw classifiedError({ code: `${operationId}.short-page` });
-    }
-  }
+  const page = createPager(read, classifiedError);
 
   async function checkIdentity(): Promise<boolean> {
     if (identityCheck) return identityCheck;
     const version = identityGeneration;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const stop = () => { clearTimeout(timeout); controller.abort(); };
+    const stopTimer = pausableTimeout(10_000, () => controller.abort());
+    const stop = () => { stopTimer(); controller.abort(); };
     stopIdentityCheck = stop;
     const pending = (async () => {
       try {
@@ -435,7 +418,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         if (response.status === 401) { suspendIdentity(); return false; }
         if (!response.ok) throw classifiedError(null, response.status);
         return authenticated;
-      } finally { clearTimeout(timeout); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
+      } finally { stopTimer(); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
     })();
     identityCheck = pending;
     void pending.finally(() => { if (identityCheck === pending) identityCheck = undefined; }).catch(() => undefined);
@@ -534,6 +517,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     try { return rows.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
   }, () => identityGeneration, () => hasReadConsumer(adapter.subscribeChanges, "events"));
   const loadEvents = events.load;
+  const dashboardEvents = createDashboardEvents(async (signal) => {
+    await requireCapability("listEvents");
+    const body = await read("listEvents", "/events", { since: new Date(Date.now() - DASHBOARD_EVENT_WINDOW_MS).toISOString(), limit: DASHBOARD_EVENT_LIMIT, sort: "timestamp", order: "desc" }, undefined, signal);
+    if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: "listEvents.invalid-page" });
+    try { return { events: body.data.map(mapEvent), totalItems: body.pagination.totalItems }; } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+  }, () => identityGeneration, { hasConsumer: () => hasReadConsumer(adapter.subscribeChanges, "dashboardEvents"), changed: () => changeListeners.forEach((listener) => listener(["dashboardEvents"])) });
 
   function refreshRuns(recovery = false): void {
     if (principal?.isAdmin === false || actionListeners.size === 0) return;
@@ -558,6 +547,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function refreshSubscribed(reopen = false): void {
     invalidateEnvironments();
     events.changed();
+    // A new connection's initial event frame, not its open, refreshes the Dashboard's recent events.
+    if (!reopen) dashboardEvents.missed();
     refreshRuns(reopen);
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security"]));
   }
@@ -603,13 +594,16 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
       events.changed();
+      dashboardEvents.frame();
       changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
     if (envelope.channel === "environments") {
+      const rows = envelope.environment?.environments;
+      // The read policy sees the new catalogue before any invalidation dispatches a read.
+      if (Array.isArray(rows)) hostPolicy.applyStream(rows);
       invalidateCapabilities();
       invalidateEnvironments();
-      const rows = envelope.environment?.environments;
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
@@ -622,10 +616,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function connect(): void {
     if (!authenticated || closing || signedOut || source || (!actionListeners.size && !changeListeners.size)) return;
+    // The native stream bypasses fetch: it starts only after a hub maintenance hold ends.
+    if (maintenance.holding()) { if (!streamHeld) { streamHeld = true; void maintenance.released().then(() => { streamHeld = false; connect(); }); } return; }
     sourceOpen = false;
     let opened: Source;
     try {
       opened = sourceFactory(`${baseUrl}/stream?channels=${principal?.isAdmin === false ? "environments" : "activities%2Cevents%2Cenvironments"}`);
+      dashboardEvents.streamStarted(principal?.isAdmin !== false);
     } catch (error) {
       window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
       scheduleReconnect();
@@ -646,11 +643,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       actions.markError();
       // A reconnecting EventSource keeps its native retry cadence. Only CLOSED
       // sources need a replacement after the authoritative identity check.
-      const closed = opened.readyState === 2;
+      const held = maintenance.holding();
+      const closed = opened.readyState === 2 || held;
       if (closed) { opened.close(); source = undefined; sourceOpen = false; }
+      if (held) { connect(); return; }
       void checkIdentity().then((valid) => { if (closed && valid && version === identityGeneration) scheduleReconnect(); }, () => { if (closed && version === identityGeneration) scheduleReconnect(); });
     };
   }
+
+  let streamHeld = false;
+  // After hub maintenance every read may be outdated (a restore replaces the database): refresh all topics once.
+  let maintenanceSeen = false;
+  maintenance.subscribe((state) => {
+    if (state.active) { maintenanceSeen = true; return; }
+    if (!maintenanceSeen) return;
+    maintenanceSeen = false;
+    invalidateCapabilities(); invalidateEnvironments(); backups.invalidate();
+    // The event owner queues a fresh snapshot behind any read that started before the restore.
+    dashboardEvents.missed();
+    changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "security", "topology", "events", "schedule", "volumes", "settings", "images", "registries"]));
+  });
 
   function scheduleReconnect(): void {
     if (!authenticated || closing || signedOut || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
@@ -683,14 +695,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   const observations = new Map<string, InventoryObservation>();
-  async function listHosts() {
+  /** `attempt` names a refresh-owner fetch whose catalogue read starts here (`freshFrom`); it never aborts. */
+  async function listHosts(attempt?: AbortSignal) {
     const version = identityGeneration;
     await requireCapability("listHosts");
+    freshFrom(attempt);
+    const catalogue = catalogueVersion;
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();
     try {
       const hosts = rows.map((row) => ({ ...mapHost(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row), inventory: observations.get(row.id) }));
-      environmentState = environmentKey(rows);
+      // A catalogue from before a later stream frame does not replace the state that frame compared against.
+      if (catalogue === catalogueVersion) environmentState = environmentKey(rows);
       return hosts;
     }
     catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
@@ -700,21 +716,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     observations.set(hostId, state);
     if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
   }
-  function scopedObservations<T extends object>(make: (observe: typeof observeHost) => T): T {
-    return new Proxy(make(() => {}), { get(_target, key) {
-      return (...args: unknown[]) => {
-        const version = identityGeneration;
-        const reader = make((hostId, state) => { if (version === identityGeneration) observeHost(hostId, state); });
-        const method = Reflect.get(reader, key) as (...values: unknown[]) => unknown;
-        return method(...args);
-      };
-    } });
-  }
+  const inventoryOwner = createInventoryOwner(() => identityGeneration, listHosts, requireCapability, fetcher, observeHost);
   const conditions = createConditionReader(baseUrl, fetcher);
-  const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe, conditions.read));
-  const userInventory = scopedObservations((observe) => createUserInventory(baseUrl, fetcher, listHosts, () => principal, observe, conditions.read));
-  const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
-  function backupChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
+  const inventory = inventoryOwner.wrap((observe, fetch, hosts, require) => createInventoryReader(baseUrl, fetch, hosts, require, observe, (id, signal) => conditions.read(id, signal, fetch)));
+  const userInventory = inventoryOwner.wrap((observe, fetch, hosts) => createUserInventory(baseUrl, fetch, hosts, () => principal, observe, (id, signal) => conditions.read(id, signal, fetch)));
+  const resourceReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createResourceReader(baseUrl, fetch, hosts, require, observe));
+  // A backup change ends shared overview reads before consumers refresh (AUTO-10).
+  function backupChanged() { sharedReads.clear(); backups.invalidate(); changeListeners.forEach((listener) => listener(["volumes", "settings", "schedule"])); }
   const backups = createBackups({
     baseUrl,
     client,
@@ -728,7 +736,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       targets.notify(host, id, undefined, true);
     },
   });
-  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration, backups.decorate);
+  const volumeReads = inventoryOwner.wrap((observe, fetch, hosts, require) => createVolumeReads(baseUrl, fetch, hosts, require, observe, () => identityGeneration, backups.decorate, inventoryOwner.volumeRows));
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
@@ -785,7 +793,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     runContainerCommand: runtime.runContainerCommand,
     recreateContainer: runtime.recreateContainer,
     restartService: runtime.restartService,
-    getRuntimeRun: runtime.getRuntimeRun,
+    getRuntimeRun: runtime.getRuntimeRun, confirmRun: runtime.confirmRun,
     cancelRuntimeRun: runtime.cancelRuntimeRun,
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,
@@ -793,7 +801,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createSettingsCore(baseUrl, client),
     ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
-    ...createHttpHubBackups(baseUrl, client, options.uploadFactory, admit),
+    ...hubBackups,
+    // The page's detailed status read is also the browser-wide maintenance observation of this identity.
+    async getHubBackupMaintenance() {
+      const version = identityGeneration;
+      const status = await hubBackups.getHubBackupMaintenance();
+      if (version === identityGeneration) maintenance.observe(status);
+      return status;
+    },
     ...createHttpHistory(baseUrl, client),
     ...createHttpUiPreferences(baseUrl, client, () => ownedWrites.signal),
     ...createHttpServiceWidgets(baseUrl, client),
@@ -807,7 +822,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...resourceReads,
     ...createVulnerabilityCandidates({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, writeSignal: () => ownedWrites.signal, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
-    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...backups.api,
     async getVolume(id, parent) {
@@ -843,40 +858,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
     ...createNetworkCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["topology", "containers"])); } }),
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
-    async listSchedule(hostIds) {
-      const selected = hostIds ?? (await listHosts()).map((h) => h.id);
-      const backupRows = (await Promise.all(selected.map(async (host) => {
-        try {
-          return (await backups.api.getBackupOverview(host)).volumes
-            .filter((v) => v.backup?.enabled && v.backup.nextRunAt)
-            .map((v) => ({
-              id: `${host}~backup-${v.name}`,
-              hostId: host,
-              kind: "backup" as const,
-              title: v.name,
-              volumeId: v.id,
-              cadence: v.backup!.schedule.mode,
-              nextRunAt: v.backup!.nextRunAt,
-              enabled: true,
-            }));
-        }
-        catch { return []; }
-      }))).flat();
-      return [...backupRows, ...(await Promise.all(selected.map(async (hostId) => {
-        try {
-          const config = await adapter.listUpdatePolicies!(hostId);
-          const timeZone = (await adapter.getUpdateSettings!()).timeZone;
-          return config.filter((p) => p.mode === "scheduled" && p.window).map((p) => {
-            const window = p.window!;
-            const schedule = window.kind === "daily" ? { mode: "daily" as const, time: window.time } : { mode: "weekly" as const, day: (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[window.day!]!, time: window.time };
-            return { id: `${hostId}~${p.targetKind}-${p.targetId}`, hostId, kind: "auto-update" as const, title: p.targetName, cadence: window.kind, nextRunAt: nextOccurrence(schedule, new Date(), timeZone)?.toISOString(), enabled: true, code: p.applyCode };
-          });
-        } catch (error) {
-          if (isCancelledError(error)) throw error;
-          return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
-        }
-      }))).flat()];
-    },
+    listSchedule: createScheduleReader(baseUrl, client, listHosts, getCapability, () => identityGeneration, backups.api.getBackupOverview, () => adapter.getUpdateSettings!()),
     listActions: () => principal?.isAdmin === false ? Promise.resolve(runtime.retained()) : actions.load(),
     observeActionDetail(host, id, listener) {
       const offActions = adapter.subscribeActions(() => {});
@@ -913,6 +895,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return () => { healthListeners.delete(listener); };
     },
     listEvents: loadEvents,
+    listDashboardEvents: dashboardEvents.load,
     subscribeActions(listener) {
       actionListeners.add(listener);
       runtime.observe(true);
@@ -922,6 +905,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return () => { if (!actionListeners.delete(listener)) return; if (!actionListeners.size) { targets.dropIdle(); runtime.observe(false); } disconnectIfUnused(); };
     },
     subscribeStackTerminals(listener) { stackListeners.add(listener); return () => { stackListeners.delete(listener); }; },
+    maintenance: { state: maintenance.state, subscribe: maintenance.subscribe },
     subscribeChanges(listener) {
       changeListeners.add(listener);
       connect();

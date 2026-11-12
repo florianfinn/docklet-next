@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { resetActionIdentity } from "@/features/activity/run-presentation";
@@ -13,6 +13,8 @@ import { identityLifetime } from "./identity-lifetime";
 import { registerReadConsumer } from "./read-consumers";
 import { queryKeys } from "./query-keys";
 import { useCurrentUser } from "./queries";
+import { createAppQueryClient } from "./app-query-client";
+import { refresh } from "./refresh-owner";
 
 const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   hosts: [queryKeys.hosts, queryKeys.systemComponents],
@@ -22,6 +24,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   security: [queryKeys.security],
   topology: [queryKeys.topology, queryKeys.networks],
   events: [queryKeys.events],
+  dashboardEvents: [queryKeys.dashboardEvents],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot, ["backup-overviews"], ["backup-overview"], ["backup-repository"]],
   settings: [queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
@@ -38,22 +41,19 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
     () => {
       if (!enabled) return;
       const offDemand = registerReadConsumer(adapter.subscribeChanges, "events", () => client.getQueryCache().find({ queryKey: queryKeys.events, exact: true })?.isActive() ?? false);
+      const offRecent = registerReadConsumer(adapter.subscribeChanges, "dashboardEvents", () => client.getQueryCache().find({ queryKey: queryKeys.dashboardEvents, exact: true })?.isActive() ?? false);
       const offStacks = adapter.subscribeStackTerminals?.(({ stackId, hostId }) => {
-        void client.invalidateQueries({ queryKey: queryKeys.stack(stackId) });
         // The stack's own descriptors and its host's container descriptors may change with the run.
-        void client.invalidateQueries({ predicate: ({ queryKey: [root, , kind, id] }) => root === "capability"
+        const capabilities = client.getQueryCache().findAll({ predicate: ({ queryKey: [root, , kind, id] }) => root === "capability"
           && (kind === "stack" && id === stackId || kind === "container" && typeof id === "string" && id.startsWith(`${hostId}~`)) });
-        for (const key of [queryKeys.stacks, queryKeys.containers, queryKeys.images, queryKeys.volumes, queryKeys.topology, queryKeys.networks]) void client.invalidateQueries({ queryKey: key, exact: true });
+        refresh(client, [queryKeys.stack(stackId)], [...capabilities.map((query) => query.queryKey), queryKeys.stacks, queryKeys.containers, queryKeys.images, queryKeys.volumes, queryKeys.topology, queryKeys.networks]);
       });
+      // One notification refreshes each matching query once and never aborts a read in flight (refresh-owner.ts).
       const offChanges = adapter.subscribeChanges((topics) => {
-        if (topics.some((topic) => topic === "containers" || topic === "stacks" || topic === "hosts")) {
-          void client.invalidateQueries({ queryKey: ["capability"] });
-        }
-        for (const topic of new Set(topics)) {
-          for (const key of TOPIC_KEYS[topic]) void client.invalidateQueries({ queryKey: key });
-        }
+        const capability = topics.some((topic) => topic === "containers" || topic === "stacks" || topic === "hosts") ? [["capability"]] : [];
+        refresh(client, [...capability, ...[...new Set(topics)].flatMap((topic) => TOPIC_KEYS[topic])]);
       });
-      return () => { offDemand(); offChanges(); offStacks?.(); };
+      return () => { offDemand(); offRecent(); offChanges(); offStacks?.(); };
     },
     [adapter, client, enabled],
   );
@@ -107,15 +107,7 @@ function GateParents({ adapter }: { adapter: DockletAdapter }) {
 /** Provides the adapter behind the run gate, so no page can start the same run twice. */
 export function AdapterProvider({ adapter: inner, children }: { adapter: DockletAdapter; children: ReactNode }) {
   const adapter = useMemo(() => withRunGate(inner), [inner]);
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, refetchOnWindowFocus: false, staleTime: 30_000 },
-          mutations: { retry: false },
-        },
-      }),
-  );
+  const [client] = useState(createAppQueryClient);
   return (
     <AdapterContext.Provider value={adapter}>
       <QueryClientProvider client={client}>

@@ -17,6 +17,8 @@ import type { CsrfClient } from "./csrf-client";
 import { splitInventoryId } from "./inventory-mapping";
 import { isRuntimeTokenReadError } from "./runtime-token-read";
 import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDetail, type RuntimeRun } from "./runtime-mapping";
+import { pausableTimeout } from "./deadline-pause";
+import { MAINTENANCE_CODE } from "./problem-code";
 
 export const COMMAND_RETRY_MS = 10 * 60_000;
 export const RIGHTS_MAX_AGE_MS = 30_000;
@@ -80,7 +82,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     const abort = () => controller.abort();
     init.signal?.addEventListener("abort", abort, { once: true });
     if (init.signal?.aborted) abort();
-    const timeout = setTimeout(() => controller.abort(), url.includes("/runtime-runs/") && !init.method ? 40_000 : 15_000);
+    const stopTimer = pausableTimeout(url.includes("/runtime-runs/") && !init.method ? 40_000 : 15_000, () => controller.abort());
     try {
       const response = await client.fetch(url, { ...init, signal: controller.signal, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers } });
       check(version);
@@ -95,7 +97,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
       throw error instanceof AdapterOutcomeError ? error : runtimeError("http.error");
     }
-    finally { clearTimeout(timeout); init.signal?.removeEventListener("abort", abort); controllers.delete(controller); }
+    finally { stopTimer(); init.signal?.removeEventListener("abort", abort); controllers.delete(controller); }
   }
   async function access(host: string) {
     const version = generation;
@@ -118,7 +120,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     try { user = await rights.task; }
     catch (error) {
       check(version);
-      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
+      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && (error.outcome.status === 401 || error.outcome.code === MAINTENANCE_CODE)) throw error;
       throw runtimeError("runtime.permissions-unavailable");
     }
     check(version);
@@ -326,6 +328,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     recreateContainer: (id: string, edit: RecreateInput, key?: string) => command("container", id, "recreate", undefined, { edit, key }),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
     getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },
+    confirmRun: (host: string, id: string) => detail(host, id, false),
     cancelRuntimeRun: (host: string, id: string) => mutate(host, id, "cancel"),
     releaseRuntimeRun: (host: string, id: string, input: RuntimeReleaseInput) => mutate(host, id, "release", input),
     detail, project, mergeSummary,

@@ -33,6 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { useHubBackupAccess } from "./use-backup-access";
 import { formatSimpleBackupSchedule, parseSimpleBackupSchedule, validBackupTime, type BackupFrequency, type BackupWeekday } from "./simple-schedule";
+import { useMaintenance } from "@/data/use-maintenance";
 
 const keys = { runs: ["hub-backup-runs"], policy: ["hub-backup-policy"], storage: ["hub-backup-storage"], maintenance: ["hub-backup-maintenance"] } as const;
 
@@ -235,11 +236,14 @@ export default function HubBackupsPage() {
   const seenMaintenance = useRef(false);
   const [actionError, setActionError] = useState("");
   const canRead = access.data?.read === true;
+  // The transport's shared observation starts the page's own detailed status read at once.
+  const observed = useMaintenance();
+  useEffect(() => { if (observed.active) void client.invalidateQueries({ queryKey: keys.maintenance }); }, [observed.active, client]);
   const maintenance = useQuery({ queryKey: keys.maintenance, queryFn: () => adapter.getHubBackupMaintenance(), enabled: canRead,
     refetchInterval: (query) => {
       const restoreStatus = client.getQueryData<string>(["hub-restore-activity", restoreActivityId]);
       const failed = ["failed", "cancelled", "canceled"].includes(restoreStatus ?? "");
-      return query.state.data?.active || (restoreStarted && !failed) ? 1000 : 15_000;
+      return query.state.data?.active || observed.active || (restoreStarted && !failed) ? 1000 : 15_000;
     }, retry: false });
   const runs = useQuery({ queryKey: keys.runs, queryFn: () => adapter.listHubBackups(), enabled: canRead && !maintenance.data?.active, refetchInterval: 2500 });
   const policies = useQuery({ queryKey: keys.policy, queryFn: () => adapter.getHubBackupPolicies(), enabled: canRead && !maintenance.data?.active });

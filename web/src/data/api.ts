@@ -2,7 +2,7 @@
 // Revision: 357dd6dee16118e0880ca694d222699556389d977c3d15d6148e23e2acee23d7
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #439: Compose self-update controls and capability integration.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #439: Compose self-update controls and capability integration. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
@@ -20,6 +20,7 @@ import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
 import type { BackupBrowse, BackupOverview, BackupPolicy, BackupRepository, BackupSelection, Volume, VolumeDetail } from "@/domain/volumes";
 import type { AuthMode } from "@/domain/settings";
+import type { ReadTag } from "./http/host-read-policy";
 
 export type AppAssignment = components["schemas"]["UserAppAssignment"];
 export type ManagedUser = Pick<components["schemas"]["UserUser"], "id" | "username" | "isAdmin" | "disabledAt" | "requiresPasswordChange"> & { assignments: AppAssignment[] };
@@ -130,8 +131,11 @@ export interface HostsApi {
   /** Connects the agent and returns the connection run's action id. */
   connectHost(hostId: string): Promise<string | HostCheckResult>;
   removeHost(hostId: string): Promise<void>;
-  /** Docklet's own components per host; they never appear in stack or container lists. */
-  listSystemComponents(): Promise<SystemComponent[]>;
+  /**
+   * Docklet's own components per host; they never appear in stack or container lists. `attempt` is the caller's fetch
+   * signal: it identifies the attempt for its freshness boundary only and never aborts the read.
+   */
+  listSystemComponents(attempt?: AbortSignal): Promise<SystemComponent[]>;
   /** Rotates an existing host credential and returns the new token once. */
   issueAgentToken(hostId: string): Promise<string>;
 }
@@ -187,7 +191,7 @@ export interface ProjectWorkspaceApi {
 }
 
 export interface VolumesApi extends ProjectWorkspaceApi {
-  listVolumes(onPartial?: (rows: Volume[]) => void, signal?: AbortSignal): Promise<Volume[]>;
+  listVolumes(onPartial?: (rows: Volume[]) => void, signal?: AbortSignal, tag?: ReadTag): Promise<Volume[]>;
   getVolume(id: string, signal?: AbortSignal): Promise<VolumeDetail & { scope?: string }>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
@@ -221,9 +225,10 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   downloadBackup(volumeId: string, runId: string): Promise<Blob | undefined>;
   deleteBackup(volumeId: string, runId: string): Promise<void>;
   uploadRestore(volumeId: string, file: File, mode?: "replace" | "new", newVolumeName?: string): Promise<string>;
-  getBackupOverview(hostId: string): Promise<BackupOverview>;
-  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void): Promise<BackupOverview[]>;
-  getBackupRepository(hostId: string): Promise<BackupRepository>;
+  getBackupOverview(hostId: string, tag?: ReadTag): Promise<BackupOverview>;
+  /** `tag` marks an automatic read the transport may skip for an unavailable host. */
+  listBackupOverviews(onPartial?: (rows: BackupOverview[]) => void, tag?: ReadTag): Promise<BackupOverview[]>;
+  getBackupRepository(hostId: string, tag?: ReadTag): Promise<BackupRepository>;
   checkBackupRepository(hostId: string): Promise<string>;
   listBackupTargets(): Promise<BackupTarget[]>;
   /** Initial retention count of new plans (hub setting, 0–3650, 0 keeps all); existing plans keep their own. */
@@ -258,8 +263,11 @@ export interface ConnectNetworkInput {
  * "containers" topics; every call is checked again on the adapter side.
  */
 export interface NetworksApi {
-  /** The caller supplies its existing query snapshot for host-local read fallback. */
-  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology): Promise<Topology>;
+  /**
+   * The caller supplies its existing query snapshot for host-local read fallback. `attempt` is the caller's fetch
+   * signal: it identifies the attempt for its freshness boundary only and never aborts the read.
+   */
+  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology, tag?: ReadTag, attempt?: AbortSignal): Promise<Topology>;
   /** Field errors throw "invalid-network"; disconnected hosts "host-offline". */
   createNetwork(input: CreateNetworkInput): Promise<TopologyNetwork>;
   /** Refused for Docker's own networks, Compose-owned networks and while containers are attached. */
@@ -282,7 +290,7 @@ export interface PullImageInput {
 
 export interface ImagesApi {
   /** Images of all connected and disconnected hosts with consumers derived from the containers. */
-  listImages(onPartial?: (rows: DockerImage[]) => void, signal?: AbortSignal): Promise<DockerImage[]>;
+  listImages(onPartial?: (rows: DockerImage[]) => void, signal?: AbortSignal, tag?: ReadTag): Promise<DockerImage[]>;
   /** Resolves after stream completion; the activity frame is optional. */
   pullImage(input: PullImageInput): Promise<ImagePullResult>;
   /** Refused with "in-use" while any container (running or stopped) uses the image. */

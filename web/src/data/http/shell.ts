@@ -7,6 +7,7 @@
 import type { CapabilityDescriptor } from "../capability";
 import { shellExit, type OpenShell, type ShellOptions, type ShellResize } from "../shell";
 import { splitInventoryId } from "./inventory-mapping";
+import { pausableTimeout } from "./deadline-pause";
 export type ShellSocket = Pick<WebSocket, "onopen" | "onmessage" | "onerror" | "onclose" | "binaryType" | "readyState" | "send" | "close">;
 export function shellAddress(baseUrl: string, id: string, options: ShellOptions) {
   const [host, raw] = splitInventoryId(id);
@@ -45,7 +46,7 @@ export function createShellSockets(options: {
       // Browsers hide failed-upgrade HTTP bodies. A plain GET rechecks the same
       // hub route without upgrading or opening another shell activity.
       let reason = "";
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const stopTimer = pausableTimeout(5000, () => controller.abort());
       try {
         const response = await options.fetch(shellAddress(options.baseUrl, id, query), { credentials: "same-origin", signal: controller.signal });
         const problem: unknown = await response.json();
@@ -53,7 +54,7 @@ export function createShellSockets(options: {
         if (response.status === 401) reason = "authentication.required";
         if (response.status === 403) reason = "capability.unavailable";
       } catch { /* A lost route has no more specific bounded reason. */ }
-      finally { clearTimeout(timeout); }
+      finally { stopTimer(); }
       exit(reason);
     }
     void (async () => {

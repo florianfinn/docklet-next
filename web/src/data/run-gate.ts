@@ -4,7 +4,7 @@ import type { ActionKind, ActionRun } from "@/domain/model";
 import type { CodedActionRun, MessageCode } from "./message-code";
 
 import { AdapterOutcomeError } from "./capability";
-import type { DockletAdapter, RuntimeCommandRequest, RuntimeAdmission } from "./adapter";
+import type { CodedRuntimeActionRun, DockletAdapter, RuntimeCommandRequest, RuntimeAdmission } from "./adapter";
 
 /**
  * A repeat of a check that succeeded within this window returns that result.
@@ -160,6 +160,8 @@ export class RunGate {
   private readonly entries = new Map<string, Entry>();
   private readonly runs = new Map<string, CodedActionRun>();
   private readonly listeners = new Set<(notice: GateNotice) => void>();
+  /** One confirmation read per blocker id while it runs. */
+  private readonly confirming = new Map<string, Promise<CodedRuntimeActionRun>>();
   private unwatch: (() => void) | undefined;
   private parentOf: ParentResolver = () => undefined;
   private readonly inner: DockletAdapter;
@@ -173,7 +175,7 @@ export class RunGate {
 
   reset(): void {
     ++this.generation;
-    this.entries.clear(); this.runs.clear(); this.listeners.clear();
+    this.entries.clear(); this.runs.clear(); this.listeners.clear(); this.confirming.clear();
     const stop = this.unwatch; this.unwatch = undefined; stop?.();
   }
 
@@ -258,20 +260,37 @@ export class RunGate {
     return a.scope === b.scope || a.parent === b.scope || b.parent === a.scope;
   }
 
-  private blockerOf(rule: GateRule, parent: string | undefined): string | undefined | false {
+  private blockerOf(rule: GateRule, parent: string | undefined, confirmed: ReadonlySet<string>): string | undefined | false {
     const me = { scope: rule.scope!, parent };
     for (const e of this.entries.values()) {
-      if (e.rule.key === rule.key || !e.rule.scope || !active(this.status(e))) continue;
+      if (e.rule.key === rule.key || !e.rule.scope || !active(this.status(e)) || (e.runId && confirmed.has(e.runId))) continue;
       if (this.conflicts(me, { scope: e.rule.scope, parent: e.parent })) return e.runId;
     }
     const ownRuns = new Set([...this.entries.values()].filter((e) => e.rule.key === rule.key).map((e) => e.runId));
     for (const r of this.runs.values()) {
-      if (!active(r.status) || ownRuns.has(r.id)) continue;
+      if (!active(r.status) || ownRuns.has(r.id) || confirmed.has(r.id)) continue;
       // A same-kind run started elsewhere (API, other tab) on this target: the hub joins an identical command or answers busy.
       if (this.inner.kind === "http" && rule.kind && r.kind === rule.kind && targetOf(r) === rule.scope) continue;
       if (scopesOf(r).some((scope) => this.conflicts(me, { scope, parent: this.parentOf(scope) }))) return r.id;
     }
     return false;
+  }
+
+  /** Host of a blocking run, from the run list or a remembered start. */
+  private hostOf(runId: string): string | undefined {
+    return this.runs.get(runId)?.hostId ?? [...this.entries.values()].find((e) => e.runId === runId)?.hostId;
+  }
+
+  /** Reads the hub's record of a blocker once; concurrent attempts share the read. */
+  private confirm(hostId: string, runId: string): Promise<CodedRuntimeActionRun> {
+    let read = this.confirming.get(runId);
+    if (!read) {
+      read = this.inner.confirmRun!(hostId, runId);
+      const pending = read;
+      this.confirming.set(runId, pending);
+      void pending.finally(() => { if (this.confirming.get(runId) === pending) this.confirming.delete(runId); }).catch(() => undefined);
+    }
+    return read;
   }
 
   async admit(request: RuntimeCommandRequest, options: { quiet?: boolean } = {}): Promise<RuntimeAdmission> {
@@ -286,7 +305,9 @@ export class RunGate {
   }
 
   /** Starts through the gate; `fresh: false` skips the freshness answer (explicit recheck). */
-  run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean; quiet?: boolean; send?: () => Promise<string>; joined?: () => void } = {}): Promise<unknown> {
+  run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean; quiet?: boolean; send?: () => Promise<string>; joined?: () => void } = {},
+    /** Blockers this attempt confirmed terminal with a known outcome. */
+    confirmed: ReadonlySet<string> = new Set()): Promise<unknown> {
     const generation = this.generation;
     const check = () => { if (generation !== this.generation) throw new CancelledError(); };
     const ruleOf = GATE_RULES[method];
@@ -313,10 +334,21 @@ export class RunGate {
     }
     const parent = rule.scope ? this.parentOf(rule.scope) : undefined;
     if (rule.scope) {
-      const blocker = this.blockerOf(rule, parent);
+      const blocker = this.blockerOf(rule, parent, confirmed);
       if (blocker !== false) {
-        if (!options.quiet) this.notify({ reason: "busy", key: rule.key, runId: blocker, title: blocker ? this.runs.get(blocker)?.title : undefined });
-        return Promise.reject(new RunBusyError(blocker));
+        const refuse = () => {
+          if (!options.quiet) this.notify({ reason: "busy", key: rule.key, runId: blocker, title: blocker ? this.runs.get(blocker)?.title : undefined });
+          return Promise.reject(new RunBusyError(blocker));
+        };
+        const host = blocker ? this.hostOf(blocker) : undefined;
+        // A local row may lag behind the hub: read the blocker's record once, then repeat the complete admission.
+        if (!blocker || !host || !this.inner.confirmRun) return refuse();
+        return this.confirm(host, blocker).then((run) => {
+          check();
+          // The read publishes its row, so the decision cannot wait for re-admission: only a terminal, known answer for this run admits.
+          if (run.id !== blocker || run.hostId !== host || active(run.status) || run.outcomeState === "unknown") return refuse();
+          return this.run(method, args, options, new Set([...confirmed, blocker]));
+        }, () => { check(); return refuse(); });
       }
     }
 

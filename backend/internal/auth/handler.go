@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints.
 
 package auth
 
@@ -879,7 +879,7 @@ func handleBearerAuthInternal(api huma.API, ctx huma.Context, authService *AuthS
 		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Application has been updated. Refreshing session.")
 		return nil, true
 	}
-	if errors.Is(err, common.ErrSessionRevoked) || errors.Is(err, common.ErrTokenValidation) {
+	if errors.Is(err, common.ErrSessionRevoked) || errors.Is(err, common.ErrTokenValidation) || errors.Is(err, common.ErrExpiredToken) {
 		for _, cookieHeader := range cookie.BuildClearTokenCookieStringsFor(cookie.SecureCookieFromContext(ctx.Context())) {
 			ctx.AppendHeader("Set-Cookie", cookieHeader)
 		}

@@ -59,8 +59,12 @@ export interface HostCapacity {
   /** Bytes per day; absent until 24 h of data on the current disk path exist. */
   growthPerDay?: number;
   daysUntilFull?: number;
-  /** Daily points of the last 30 days, oldest first. */
+  /** Daily points of the last 30 days, oldest first; dropped buckets leave gaps. */
   series: { at: string; used: number }[];
+  /** Time span of the 30-day buckets (first start … last end); the line places points by time within it. */
+  domain?: { start: string; end: string };
+  /** The disk path the trend was measured at. */
+  diskSource?: string;
 }
 
 /** The hub keys container history by name on its host, so it continues across recreations. */

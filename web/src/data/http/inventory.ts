@@ -2,8 +2,9 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C1 #383: target container reads with exact ownership fallback. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C1 #383: target container reads with exact ownership fallback. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
+import { mergeInventoryObservations } from "./inventory-observations";
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
 
@@ -15,6 +16,7 @@ import { createInventoryTransport, inventoryFailure } from "./inventory-transpor
 import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { normalizeProjectName } from "./project-ownership";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
+import { isMaintenanceError } from "../maintenance-retry";
 
 export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
@@ -22,7 +24,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
   async function hostInventory(host: Host, signal?: AbortSignal) {
     const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects", undefined, signal), list("list-containers", host.id, "containers", undefined, signal), readConditions(host.id, signal)]);
     signal?.throwIfAborted();
-    const observation: InventoryObservation = { ...projects.observation, ...(containers.observation.stale ? containers.observation : {}), stale: projects.observation.stale || containers.observation.stale };
+    const observation: InventoryObservation = mergeInventoryObservations([projects.observation, containers.observation]);
     onState(host.id, observation);
     const projectRows = projects.rows as ProjectRow[];
     const containerRows = containers.rows as ContainerRow[];
@@ -44,7 +46,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
     if (project.runtimeServices?.some((service) => service.containerId && !containers.rows.some((row) => row.id === service.containerId))) {
       containers = await list("list-containers", host.id, "containers");
     }
-    const observation: InventoryObservation = { ...projects.observation, ...(containers.observation.stale ? containers.observation : {}), stale: projects.observation.stale || containers.observation.stale };
+    const observation: InventoryObservation = mergeInventoryObservations([projects.observation, containers.observation]);
     onState(host.id, observation);
     const allContainers = (containers.rows as ContainerRow[]).map((row) => mapContainer(row, host.id, projectRows, observation));
     return withConditions({ stacks: withoutSystem([mapStack(project, host.id, allContainers, observation)]), containers: withoutSystem(allContainers) }, conditions);
@@ -59,7 +61,8 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       const batch = await budget((signal) => hostInventory(host, signal)).then((batch) => {
         recovery.observed(host, batch.observation); return batch;
       }).catch((error) => {
-        parent?.throwIfAborted(); recovery.failed(host, error);
+        // A hub maintenance refusal fails the whole read, so the query keeps its rows while it retries.
+        parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error);
         const observation = inventoryFailure(host.id, error); onState(host.id, observation);
         return { stacks: [], containers: [], observation };
       });
@@ -80,7 +83,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       // file content, which only the compose read carries and which is never cached.
       const [detail, batch, files] = await Promise.all([
         read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`),
-        stackInventory(host, projectId).catch((error) => { onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
+        stackInventory(host, projectId).catch((error) => { if (isMaintenanceError(error)) throw error; onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");

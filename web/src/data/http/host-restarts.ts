@@ -12,6 +12,7 @@ import { RESTART_STATE_KEYS } from "../wire-catalogue-states";
 import { operationReasonKey } from "../operation-reason";
 import type { CsrfClient } from "./csrf-client";
 import { runtimeError, runtimeResponseError } from "./runtime-mapping";
+import { activeNow, pausableTimeout } from "./deadline-pause";
 
 type Restart = components["schemas"]["EnvironmentAgentRestartRun"];
 interface Options {
@@ -34,7 +35,8 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
     const done = terminal(row);
     const prior = rows.get(row.runId);
     const reached = Math.max(prior?.reached ?? 0, phase);
-    const until = prior?.until ?? Date.now() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
+    // The follow budget runs on the active clock: a hub maintenance hold does not use it up.
+    const until = prior?.until ?? activeNow() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
     // A failed or unknown restart marks done only phases that were observed.
     const failedStep = (index: number) => index < reached ? "done" : index === reached ? "error" : "skipped";
     const reason = operationReasonKey(row.code ?? "");
@@ -58,7 +60,7 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
     const current = () => { if (owner !== generation() || version !== epoch || signal?.aborted) throw new CancelledError(); };
     const controller = new AbortController(); controllers.add(controller);
     const abort = () => controller.abort(); signal?.addEventListener("abort", abort, { once: true });
-    const timeout = setTimeout(abort, 15_000);
+    const stopTimer = pausableTimeout(15_000, abort);
     try {
       const response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/agent/${suffix}`, { method, credentials: "same-origin", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } });
       current(); const body = await response.json(); current();
@@ -66,7 +68,7 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       const row = body.data as Restart;
       if (body.success !== true || !row?.runId || ![...phases, "failed", "unknown"].includes(row.state) || !Number.isFinite(Date.parse(row.createdAt)) || !Number.isFinite(Date.parse(row.deadline)) || ((row.state === "failed" || row.state === "unknown") && !row.code) || (row.state === "connected" && row.code)) throw runtimeError("hosts.invalid-restart");
       return row;
-    } finally { clearTimeout(timeout); controllers.delete(controller); signal?.removeEventListener("abort", abort); }
+    } finally { stopTimer(); controllers.delete(controller); signal?.removeEventListener("abort", abort); }
   }
   function schedule(host: string, id: string) {
     if (timers.has(id) || !rows.has(id) || terminal(rows.get(id)!.row)) return;
@@ -77,7 +79,7 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       let stop = false;
       // A removed run or host, or any read past the follow budget, keeps the last observation.
       void detail(host, id).catch((error: unknown) => { stop = (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 404); })
-        .finally(() => { if (!stop && Date.now() <= (rows.get(id)?.until ?? 0) && version === epoch && owner === generation()) schedule(host, id); });
+        .finally(() => { if (!stop && activeNow() <= (rows.get(id)?.until ?? 0) && version === epoch && owner === generation()) schedule(host, id); });
     }, 1000));
   }
   async function detail(host: string, id: string, signal?: AbortSignal): Promise<CodedActionRun> {

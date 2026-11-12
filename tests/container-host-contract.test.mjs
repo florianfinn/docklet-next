@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original M14 container and host operations foundation.
+// Deviations: Original M14 container and host operations foundation. M23 #435: active summaries contract coverage.
 
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
@@ -11,7 +11,7 @@ const read = path => readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
 
 test("v11 contains every M14 code, shape and bilingual catalogue entry",()=>{
  const spec=JSON.parse(read("api/openapi.json"));
- const fixture=JSON.parse(read("types/contract/testdata/agent-hub-v17.json")).containerHostOperations;
+ const fixture=JSON.parse(read("types/contract/testdata/agent-hub-v18.json")).containerHostOperations;
  for(const [name,schema] of Object.entries(fixture.schemas)) assert.deepEqual(schema,spec.components.schemas[name],name);
  for(const name of ["ContainerProblem","EnvironmentHostProblem"]){
   for(const code of fixture.schemas[name].properties.code.enum){
@@ -32,7 +32,7 @@ test("v11 contains every M14 code, shape and bilingual catalogue entry",()=>{
 
 test("stack stop, definition states and bilingual descriptions are in the v11 contract",()=>{
  const spec=JSON.parse(read("api/openapi.json"));
- const fixture=JSON.parse(read("types/contract/testdata/agent-hub-v17.json")).containerHostOperations;
+ const fixture=JSON.parse(read("types/contract/testdata/agent-hub-v18.json")).containerHostOperations;
  assert.ok(fixture.runtimeOperations.includes("stop-project"));
  assert.deepEqual(fixture.stackServiceState,spec.components.schemas.ProjectRuntimeService.properties.status);
  assert.ok(fixture.stackServiceState.enum.includes("not-created"));

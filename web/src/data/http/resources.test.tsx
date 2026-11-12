@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource inventory contract tests.
+// Deviations: Original resource inventory contract tests. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -60,7 +60,7 @@ it.each(["listImages", "listVolumes", "getTopology"] as const)("retains %s times
   f.state.reason = "agent.unavailable";
   const retained = await f.adapter[operation]();
   const rows = Array.isArray(retained) ? retained : retained.networks;
-  expect(rows[0]?.inventory).toEqual({ stale: true, reason: "agent.unavailable", observedAt: at });
+  expect(rows[0]?.inventory).toEqual({ stale: true, reason: "agent.unavailable", recovery: "agent.unavailable", observedAt: at });
   f.state.reason = ""; f.state.observedAt = "2026-10-17T12:05:00Z";
   const fresh = await f.adapter[operation]();
   expect((Array.isArray(fresh) ? fresh : fresh.networks)[0]?.inventory).toMatchObject({ stale: false, observedAt: f.state.observedAt });

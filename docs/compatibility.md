@@ -31,14 +31,14 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `17` |
-| Minimum accepted agent contract (`MinimumAgentVersion`) | `17` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `18` |
+| Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
-contracts older than 17 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. A contract-17 agent must also have
+contracts older than 18 cannot become compatible hosts; the hub reports
+`update-required` and `agent.update-required`. A contract-18 agent must also have
 the expected schema fingerprint. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
@@ -61,3 +61,8 @@ that enforcement. The agent contract check remains separate.
 - In-app hub and agent updates have no automatic rollback. Recover manually using
   the saved env pin and a compatible database backup when needed. Agent updates
   cannot target a version newer than the hub. See [the upgrade guide](upgrade.md).
+- Docklet is designed and tested for about 50 containers per host. The
+  documented upper bound is 100 containers per host; Docklet does not enforce it,
+  and hosts above it run outside the documented range.
+- The Dashboard reads at most 500 events of the last 24 hours. When more exist it
+  says so and links to the Activity Center, which keeps the full history.

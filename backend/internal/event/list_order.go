@@ -15,6 +15,9 @@ import (
 // paginateEventsInternal paginates an event list query with the explicit event order.
 func paginateEventsInternal(params pagination.QueryParams, q *gorm.DB, result *[]Event) (pagination.Response, error) {
 	q, params = orderEventListInternal(q, params)
+	if params.Filters["since"] != "" {
+		return paginateWindowEvents(params, q, result)
+	}
 	return pagination.PaginateAndSortDB(params, q, result)
 }
 

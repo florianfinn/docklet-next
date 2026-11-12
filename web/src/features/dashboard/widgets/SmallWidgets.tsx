@@ -4,11 +4,13 @@ import { Link, useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useScanAction } from "@/features/security/use-scan-action";
+import { RecentEventsLimit } from "./TimelineWidget";
 import { useCapability } from "@/data/use-capability";
 import { useMetrics } from "@/data/live";
 import { useCapacity } from "@/data/queries";
 import { formatCountdown, formatGb, formatRelative } from "@/domain/format";
 import type { HostCapacity } from "@/domain/history";
+import { capacitySegments } from "../capacity-line";
 import { jobHref } from "@/domain/job-links";
 import { formatNumber } from "@/domain/locale";
 import type { EventLevel, Host, JobKind, OpsEvent, ScheduledJob, SecurityOverview, Severity, Stack } from "@/domain/model";
@@ -40,7 +42,8 @@ export function CapacityWidget({ hosts }: { hosts: Host[] }) {
         return (
           <li key={h.id} className="flex flex-col gap-1.5" data-capacity-host={h.id}>
             <Meter label={h.name} value={m?.disk ?? 0} color={h.color} sub={t("used", { used: formatGb(used), total: formatGb(total) })} />
-            {trend && <CapacityLine series={trend.series} total={trend.diskTotal} color={h.color} label={t("line")} />}
+            {trend && <CapacityLine trend={trend} color={h.color} label={t("line")} />}
+            {trend?.diskSource && <span className="text-[11px] text-muted-foreground" data-capacity-source={trend.diskSource}>{t("measuredAt", { path: trend.diskSource })}</span>}
             <div className="flex items-center justify-between text-[11px]">
               <span data-tone={h.status !== "online" ? "gray" : tone} className="font-medium text-(--tone)">
                 {h.status === "standby" ? status("standby") : m.inventory?.stale || h.status !== "online" ? t("offline") : growth === undefined ? "" : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
@@ -58,12 +61,15 @@ export function CapacityWidget({ hosts }: { hosts: Host[] }) {
 const GIB = 1024 ** 3;
 
 /** Disk usage of the last 30 days as share of the current disk size. */
-function CapacityLine({ series, total, color, label }: { series: HostCapacity["series"]; total: number; color: string; label: string }) {
-  if (series.length < 2 || total <= 0) return null;
-  const points = series.map((p, i) => `${(i / (series.length - 1)) * 100},${(1 - Math.min(1, p.used / total)) * 24}`).join(" ");
+function CapacityLine({ trend, color, label }: { trend: HostCapacity; color: string; label: string }) {
+  const segments = capacitySegments(trend);
+  if (trend.series.length < 2 || !segments.length) return null;
+  const coordinates = (points: Array<[number, number]>) => points.map(([x, y]) => `${Math.round(x * 100) / 100},${Math.round(y * 100) / 100}`).join(" ");
   return (
-    <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="h-6 w-full overflow-visible" role="img" aria-label={label} data-capacity-line={series.length}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="h-6 w-full overflow-visible" role="img" aria-label={label} data-capacity-line={trend.series.length} data-capacity-segments={segments.length}>
+      {segments.map((points) => points.length > 1
+        ? <polyline key={points[0]![0]} data-points={coordinates(points)} points={coordinates(points)} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        : <circle key={points[0]![0]} data-points={coordinates(points)} cx={points[0]![0]} cy={points[0]![1]} r={0.8} fill={color} />)}
     </svg>
   );
 }
@@ -210,11 +216,12 @@ export function AppsWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<stri
 
 const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: "err", warn: "warn", ok: "ok", info: "info" };
 
-export function EventsWidget({ events, hosts }: { events: OpsEvent[]; hosts: Map<string, Host> }) {
+export function EventsWidget({ events, hosts, total }: { events: OpsEvent[]; hosts: Map<string, Host>; total?: number }) {
   const t = useTranslations("dashboard.events");
-  if (!events.length) return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
+  if (!events.length) return <div className="flex flex-col gap-1 text-sm text-muted-foreground"><p>{t("empty")}</p><p className="flex text-xs"><RecentEventsLimit total={total} /></p></div>;
   return (
     <ScrollArea className="h-full">
+      <p className="flex pr-2 text-xs text-muted-foreground"><RecentEventsLimit total={total} /></p>
       <ol className="flex flex-col pr-2">
         {events.slice(0, 12).map((e) => (
           <li key={e.id} className="flex gap-2.5 border-b border-border/50 py-2 last:border-0">

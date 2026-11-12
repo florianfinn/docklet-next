@@ -207,7 +207,17 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     ...demoVulnerabilityCandidates(db, runner),
     ...demoVulnerabilityAdvisories(db, () => db.changed("security")),
     getSecurity: () => simulateRead("security", () => (empty() ? { ...clone(db.security), images: [], findings: [], history: [] } : clone(db.security))),
+    getActiveSecurity: () => simulateRead("security", () => ({
+      enabled: db.security.enabled,
+      images: empty() ? [] : db.security.images.filter((i) => !!i.scannedAt).map((i) => ({ id: i.id ?? i.ref, hostId: i.hostId, ref: i.ref, inUse: i.usage !== "unused", counts: { ...i.counts }, scannedAt: i.scannedAt })),
+      unavailable: [],
+    })),
     listEvents: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.events).map(encodeDemoEvent))),
+    listDashboardEvents: () => simulateRead("dashboard", () => {
+      const since = Date.now() - 24 * 60 * 60 * 1_000;
+      const recent = empty() ? [] : db.events.filter((event) => Date.parse(event.at) >= since);
+      return { events: clone(recent.slice(0, 500)).map(encodeDemoEvent), totalItems: recent.length };
+    }),
     listSchedule: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.schedule))),
     listActions: async () => clone(encodeDemoRuns(runner.list())),
 

@@ -12,11 +12,11 @@ import type { SystemComponent } from "@/domain/system";
 import { AdapterOutcomeError, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import type { CsrfClient } from "./csrf-client";
 import { runtimeResponseError } from "./runtime-mapping";
-interface Options { baseUrl: string; client: CsrfClient; hosts: () => Promise<Host[]>; capability: (op: string, ref: ResourceRef) => Promise<CapabilityDescriptor>; generation: () => number }
+interface Options { baseUrl: string; client: CsrfClient; hosts: (attempt?: AbortSignal) => Promise<Host[]>; capability: (op: string, ref: ResourceRef) => Promise<CapabilityDescriptor>; generation: () => number }
 export function createSystemComponents({ baseUrl, client, hosts, capability, generation }: Options) {
-  return async (): Promise<SystemComponent[]> => {
+  return async (attempt?: AbortSignal): Promise<SystemComponent[]> => {
     const owner = generation(), current = () => { if (owner !== generation()) throw new CancelledError(); };
-    const items = await hosts(); current();
+    const items = await hosts(attempt); current();
     return Promise.all(items.map(async host => {
       let info = host.componentVersion;
       let toolsImage = info?.toolsImage;

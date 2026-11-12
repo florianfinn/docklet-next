@@ -8,6 +8,7 @@ import type { components } from "@/api/generated/schema";
 import type { ManagedUser, PersonalApiKey, UsersApi } from "../api";
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { maintenanceOutcome } from "./problem-code";
 
 export const USER_OPERATIONS = ["listUsers", "createUser", "updateUser", "disableUser", "enableUser", "resetUserPassword", "deleteUser", "setUserAdministrator", "setUserAppAssignments", "listMyApiKeys", "createMyApiKey", "deleteMyApiKey", "getAuthConfiguration"];
 
@@ -38,7 +39,7 @@ export function createHttpUsers(baseUrl: string, client: CsrfClient): UsersApi {
         // The paginated envelope has totals outside data.
         const response = await client.fetch(`${baseUrl}/users?start=${rows.length}&limit=100`, { credentials: "same-origin", headers: { Accept: "application/json" } });
         const payload = await response.json() as components["schemas"]["BasePaginatedUserUser"];
-        if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status });
+        if (!response.ok) throw maintenanceOutcome(response) ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status });
         if (!payload.success || !Array.isArray(payload.data) || !payload.pagination) throw new Error("users.invalid-page");
         rows.push(...payload.data.map(mapManagedUser));
         if (rows.length >= payload.pagination.totalItems) return rows;

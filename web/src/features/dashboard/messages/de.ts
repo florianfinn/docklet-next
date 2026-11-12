@@ -257,9 +257,13 @@ export const deDashboard: typeof enDashboard = {
     hoursAgo: "−{h} h",
     legend: { activity: "Aktivität", deploy: "Deploy", update: "Update", restart: "Neustart", health: "Fehler", backup: "Backup", scan: "Scan", host: "Host", config: "Konfiguration" },
     empty: "Keine Ereignisse in den letzten 24 Stunden.",
+    more: "+{count} weitere",
+    count: "{count, plural, one {# Ereignis} other {# Ereignisse}}",
   },
+  recent: { truncated: "Mehr als {limit} Ereignisse in den letzten 24 Stunden", showAll: "Alle Ereignisse anzeigen" },
   load: { cpu: "CPU", mem: "RAM", toggle: "Kennzahl", axis: "{value} %" },
   capacity: {
+    measuredAt: "Gemessen unter {path}",
     used: "{used} von {total}",
     days: "voll in ca. {days} Tagen",
     plenty: "Reichweite über ein Jahr",

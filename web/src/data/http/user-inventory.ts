@@ -14,6 +14,7 @@ import type { Host, InventoryObservation } from "@/domain/model";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { mapStack, splitInventoryId, type ProjectRow } from "./inventory-mapping";
+import { isMaintenanceError } from "../maintenance-retry";
 
 export function createUserInventory(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, principal: () => CurrentUser | undefined, onState: (host: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "getStack"> {
   const { list, read } = createInventoryTransport(baseUrl, fetcher, onState);
@@ -31,7 +32,7 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
           recovery.observed(host, projects.observation);
           onState(host.id, projects.observation);
         } catch (error) {
-          parent?.throwIfAborted(); recovery.failed(host, error);
+          parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error);
           onState(host.id, inventoryFailure(host.id, error));
         }
         batches.push(rows); onPartial?.(batches.flat()); return rows;

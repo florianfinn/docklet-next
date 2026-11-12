@@ -144,7 +144,7 @@ export const enCommon = {
     badge: "Hidden from overview",
   },
   query: {
-    unavailableTitle: "This feature is unavailable",
+    maintenance: "Hub maintenance is running. The data loads when it ends.", unavailableTitle: "This feature is unavailable",
     errorTitle: "Data could not be loaded",
     errorHint: (import.meta.env.DEV ? "A failure simulation is active in the design lab or the source is not responding." : "The source could not be reached."),
     emptyTitle: "No entries",

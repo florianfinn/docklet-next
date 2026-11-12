@@ -2,7 +2,7 @@
 // Revision: fd1ea0afb7f3373b87d565e9465f180a4244d34f7476aab43eace99b81f3ef33
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #69 connected identity production routes and catalogues. Production image/registry UI and validation for #230. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: hub maintenance status.
 
 // American English texts of the application shell (navigation, host filter, profile menu).
 
@@ -36,6 +36,7 @@ export const enShell = {
     setup: "First-run setup",
     newHost: "Add host",
   },
+  maintenance: { backup: "Hub maintenance: backup", restore: "Hub maintenance: restore", active: "Hub maintenance", overdue: "Hub maintenance takes longer than expected" },
   partialSecurity: "Partial security total: scan data is unavailable for one or more hosts.",
   hostFilter: {
     title: "Host filter",

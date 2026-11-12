@@ -256,9 +256,13 @@ export const enDashboard = {
     hoursAgo: "−{h} h",
     legend: { activity: "Activity", deploy: "Deploy", update: "Update", restart: "Restart", health: "Error", backup: "Backup", scan: "Scan", host: "Host", config: "Configuration" },
     empty: "No events in the last 24 hours.",
+    more: "+{count} more",
+    count: "{count, plural, one {# event} other {# events}}",
   },
+  recent: { truncated: "{limit}+ events in the last 24 hours", showAll: "Show all events" },
   load: { cpu: "CPU", mem: "RAM", toggle: "Metric", axis: "{value}%" },
   capacity: {
+    measuredAt: "Measured at {path}",
     used: "{used} of {total}",
     days: "full in about {days} days",
     plenty: "Runway over one year",

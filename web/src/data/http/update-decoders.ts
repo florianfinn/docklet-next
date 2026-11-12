@@ -25,7 +25,8 @@ export function points(value: unknown, target?: string): UpdatePoint[] {
 export function policy(value: unknown, host: string, target: string, kind: "stack" | "container" = "stack"): StackUpdatePolicy {
   const o = record(value);
   if ((o.mode === "scheduled") !== (o.window !== undefined)) throw invalidUpdate();
-  // The producer sends a stack's baseline hash, a container's name, or "" before a target was bound (updater GetImagePolicy).
+  // The producer sends a stack's baseline hash, a container's name, or "" before a target was bound (updater GetImagePolicy);
+  // policy lists also send "" for default stack policies, whose identity only the single read resolves.
   const identity = text(o.targetIdentity);
   if (kind === "stack" && identity !== "" && !/^[a-f0-9]{64}$/.test(identity)) throw invalidUpdate();
   if (o.environmentId !== host || o.targetId !== target || o.targetKind !== kind) throw invalidUpdate();

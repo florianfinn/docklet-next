@@ -138,6 +138,31 @@ func TestDefaultStackPolicyProjectsAvailableIdentityWithoutRequiringBaseline(t *
 	require.Zero(t, row.Revision)
 }
 
+func TestPolicyListLeavesDefaultStackIdentityToTheSingleRead(t *testing.T) {
+	f := newPolicyFixture(t)
+	baselines := 0
+	f.p.ports.baseline = func(context.Context, string, string) (dto.BaselineStatus, error) {
+		baselines++
+		return f.baseline, nil
+	}
+	f.p.ports.targets = func(context.Context, string) ([]updateTarget, error) {
+		return []updateTarget{{Kind: "stack", ID: "first", Name: "first", Eligible: true}, {Kind: "stack", ID: "second", Name: "second", Eligible: true}}, nil
+	}
+	rows, err := f.s.ListImagePolicies(t.Context(), "0")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Zero(t, baselines)
+	for _, row := range rows {
+		require.Equal(t, "check", row.Mode)
+		require.Zero(t, row.Revision)
+		require.Empty(t, row.TargetIdentity)
+	}
+	row, err := f.s.GetImagePolicy(t.Context(), "0", "first", "stack")
+	require.NoError(t, err)
+	require.Equal(t, f.baseline.TargetIdentity, row.TargetIdentity)
+	require.Equal(t, 1, baselines)
+}
+
 func TestRemoveMissingScheduledPolicyPreservesPruningClock(t *testing.T) {
 	f := newPolicyFixture(t)
 	one := f.save(t, "missing", "scheduled")

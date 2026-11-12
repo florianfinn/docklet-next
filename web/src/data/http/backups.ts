@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original live volume backup transport with host ownership and asynchronous admission. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391 #398: host read tags, maintenance decoding, discarded answers release their admission slot.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
@@ -14,6 +14,8 @@ import type { BackupOverview } from "@/domain/volumes";
 import type { CsrfClient } from "./csrf-client";
 import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { backupCron, mapBackup, mapBackupOverview } from "./backup-mapping";
+import { READ_TAG_HEADER, type ReadTag } from "./host-read-policy";
+import { MAINTENANCE_CODE, problemCode } from "./problem-code";
 
 type Schema = components["schemas"];
 export const BACKUP_OPERATIONS = [
@@ -52,6 +54,9 @@ interface Options {
   admit?: () => Promise<void>;
 }
 
+/** How long a completed automatic overview read serves other automatic consumers of the same host. */
+export const SHARE_MS = 2_000;
+
 export function createBackups(options: Options) {
   const { baseUrl, client } = options;
   const versions = new Map<string, number>();
@@ -75,6 +80,7 @@ export function createBackups(options: Options) {
   function problem(body: unknown, status: number, write = false): AdapterOutcomeError {
     const value = body && typeof body === "object" ? (body as Schema["BackupProblem"]) : undefined;
     // Access refusals keep their code; an unreachable agent leaves a write's outcome open.
+    if (problemCode(body) === MAINTENANCE_CODE) return new AdapterOutcomeError({ kind: "error", code: MAINTENANCE_CODE, status });
     if (value && ACCESS_CODES.has(value.code) && !(write && (value.code as string) === "agent.unavailable"))
       return new AdapterOutcomeError({ kind: "error", code: value.code, status });
     if (value && backupCodeKey(value.code))
@@ -111,7 +117,9 @@ export function createBackups(options: Options) {
         code: init.method && init.method !== "GET" ? "volume.outcome-unknown" : "http.error",
       });
     }
-    check();
+    // A discarded answer is read to its end, not cancelled: an unread body keeps its host admission slot, and a
+    // cancelled one shows as an aborted request.
+    try { check(); } catch (error) { await result.arrayBuffer().catch(() => undefined); throw error; }
     if (!result.ok) {
       const body: unknown = await result.json().catch(() => null);
       check();
@@ -119,10 +127,10 @@ export function createBackups(options: Options) {
     }
     return { result, check };
   }
-  async function request<T>(host: string, route: string, method = "GET", value?: object, signal?: AbortSignal): Promise<T> {
+  async function request<T>(host: string, route: string, method = "GET", value?: object, signal?: AbortSignal, tag?: ReadTag): Promise<T> {
     const { result, check } = await response(host, route, {
       method, signal,
-      ...(value ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) } : {}),
+      ...(value ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) } : tag ? { headers: { [READ_TAG_HEADER]: tag } } : {}),
     });
     let body: { success?: boolean; data: T };
     try {
@@ -142,11 +150,45 @@ export function createBackups(options: Options) {
       });
     return body.data;
   }
-  async function overview(host: string, signal?: AbortSignal) {
+  async function physicalOverview(host: string, signal?: AbortSignal, tag?: ReadTag) {
     return mapBackupOverview(
-      await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`, "GET", undefined, signal),
+      await request<Schema["VolumeBackupOverview"]>(host, `${path(host)}/backups/overview`, "GET", undefined, signal, tag),
       host,
     );
+  }
+  // Automatic background reads of one host share one physical read per identity and backup version: joined while in
+  // flight, reused for SHARE_MS after it (AUTO-10). Polls and untagged (deliberate) reads always read on their own.
+  // The physical read keeps each consumer's budget: it is aborted once every waiting consumer has aborted.
+  type Shared = { identity: number; version: number; promise: Promise<BackupOverview>; settledAt?: number; waiting: number; controller: AbortController };
+  const shared = new Map<string, Shared>();
+  async function overview(host: string, signal?: AbortSignal, tag?: ReadTag) {
+    if (tag !== "background") return physicalOverview(host, signal, tag);
+    signal?.throwIfAborted();
+    const identity = options.generation(), version = versions.get(host) ?? 0;
+    let entry = shared.get(host);
+    if (!entry || entry.identity !== identity || entry.version !== version || (entry.settledAt !== undefined && Date.now() - entry.settledAt > SHARE_MS)) {
+      const controller = new AbortController();
+      const own: Shared = { identity, version, promise: physicalOverview(host, controller.signal, tag), waiting: 0, controller };
+      shared.set(host, own);
+      // A failure is not shared once it settled.
+      own.promise.then(() => { own.settledAt = Date.now(); }, () => { if (shared.get(host) === own) shared.delete(host); });
+      entry = own;
+    }
+    const own = entry;
+    if (own.settledAt !== undefined) return structuredClone(await own.promise);
+    // A consumer without a signal never gives up, so the read then runs to its end.
+    own.waiting += signal ? 1 : Number.POSITIVE_INFINITY;
+    if (!signal) return structuredClone(await own.promise);
+    return structuredClone(await new Promise<BackupOverview>((resolve, reject) => {
+      const abort = () => {
+        reject(signal.reason);
+        if (--own.waiting > 0 || own.settledAt !== undefined) return;
+        if (shared.get(host) === own) shared.delete(host);
+        own.controller.abort(signal.reason);
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      own.promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    }));
   }
   function context(id: string) {
     const [host, name] = splitInventoryId(id);
@@ -186,11 +228,11 @@ export function createBackups(options: Options) {
     return id;
   }
   const api: Pick<DockletAdapter, Operation | "testBackupTargetDraft"> = {
-    async getBackupOverview(host) {
+    async getBackupOverview(host, tag) {
       await require("getBackupOverview", { kind: "host", id: host });
-      return overview(host);
+      return overview(host, undefined, tag);
     },
-    async listBackupOverviews(onPartial) {
+    async listBackupOverviews(onPartial, tag = "background") {
       const check = begin("");
       await require("listBackupOverviews", { kind: "hub", id: "0" });
       const hosts = await options.hosts();
@@ -204,7 +246,7 @@ export function createBackups(options: Options) {
         hosts.map(async (host) => {
           const hostCheck = begin(host.id);
           try {
-            const row = await api.getBackupOverview(host.id);
+            const row = await api.getBackupOverview(host.id, tag);
             check();
             hostCheck();
             retained.set(host.id, row);
@@ -358,9 +400,9 @@ export function createBackups(options: Options) {
         throw error;
       }
     },
-    async getBackupRepository(host) {
+    async getBackupRepository(host, tag) {
       await require("getBackupRepository", { kind: "host", id: host });
-      return request(host, `${path(host)}/backups/repository`);
+      return request(host, `${path(host)}/backups/repository`, "GET", undefined, undefined, tag);
     },
     async checkBackupRepository(host) {
       await require("checkBackupRepository", { kind: "host", id: host });
@@ -460,7 +502,7 @@ export function createBackups(options: Options) {
       }
     },
     async decorate(host: string, volumes: Awaited<ReturnType<DockletAdapter["listVolumes"]>>, signal?: AbortSignal) {
-      const ov = await (async () => { await require("getBackupOverview", { kind: "host", id: host }); signal?.throwIfAborted(); return overview(host, signal); })().catch((error) => {
+      const ov = await (async () => { await require("getBackupOverview", { kind: "host", id: host }); signal?.throwIfAborted(); return overview(host, signal, "background"); })().catch((error) => {
         if (error instanceof CancelledError) throw error;
         return undefined;
       });

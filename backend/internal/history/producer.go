@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original one-shot Docker and host history sampling.
+// Deviations: Original one-shot Docker and host history sampling; disk source fallback and suppression of repeated warnings.
 
 package history
 
@@ -25,7 +25,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/shirou/gopsutil/v4/cpu"
-	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 	gnet "github.com/shirou/gopsutil/v4/net"
 	"go.getarcane.app/streams/stats"
@@ -60,6 +59,10 @@ func (p *Producer) SetDockerHostMemoryProvider(provider func(context.Context) (u
 	p.dockerHostMemory = provider
 }
 func sampleHost(ctx context.Context, path string) (dto.HostSample, error) {
+	return sampleHostWithDisk(ctx, path, &localHistoryDisk)
+}
+
+func sampleHostWithDisk(ctx context.Context, path string, sampler *diskSampler) (dto.HostSample, error) {
 	var h dto.HostSample
 	times, err := cpu.TimesWithContext(ctx, false)
 	if err != nil {
@@ -76,11 +79,7 @@ func sampleHost(ctx context.Context, path string) (dto.HostSample, error) {
 	used := memory.Used
 	used -= min(used, cgroup.ZFSARCReclaimable())
 	h.MemoryUsed, h.MemoryTotal = float64(used), float64(memory.Total)
-	// The disk path is an optional capacity setting: when it is missing the minute is still
-	// recorded without a disk source, and capacity has no data for this host.
-	if usage, diskErr := disk.UsageWithContext(ctx, path); diskErr == nil {
-		h.DiskSource, h.DiskUsed, h.DiskTotal = path, float64(usage.Used), float64(usage.Total)
-	}
+	sampler.sample(ctx, path, &h)
 	interfaces, err := gnet.InterfacesWithContext(ctx)
 	if err != nil {
 		return h, err

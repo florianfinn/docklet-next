@@ -56,6 +56,9 @@ export function demoHistory(key: string, range: HistoryRange, now = Date.now()):
 }
 
 export function demoCapacity(hostIds: readonly string[], now = Date.now()): HostCapacity[] {
+  const stepMs = HISTORY_BUCKETS["30d"].minutes * 60_000;
+  const buckets = HISTORY_BUCKETS["30d"].count;
+  const first = Math.floor(now / stepMs) * stepMs - (buckets - 1) * stepMs;
   return hostIds.map((hostId) => {
     const rnd = seeded(`capacity:${hostId}`);
     const diskTotal = (500 + Math.round(rnd() * 3) * 500) * 1e9;
@@ -67,7 +70,9 @@ export function demoCapacity(hostIds: readonly string[], now = Date.now()): Host
       diskUsed,
       growthPerDay,
       daysUntilFull: (diskTotal - diskUsed) / growthPerDay,
-      series: Array.from({ length: 30 }, (_, i) => ({ at: new Date(now - (29 - i) * 86_400_000).toISOString(), used: Math.max(0, diskUsed - (29 - i) * growthPerDay) })),
+      // The hub's 30-day shape: 90 buckets of 8 hours, stamped at their end like the HTTP mapper, and their domain.
+      series: Array.from({ length: buckets }, (_, i) => ({ at: new Date(first + (i + 1) * stepMs).toISOString(), used: Math.max(0, diskUsed - ((buckets - 1 - i) * growthPerDay) / 3) })),
+      domain: { start: new Date(first).toISOString(), end: new Date(first + buckets * stepMs).toISOString() },
     };
   });
 }

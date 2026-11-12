@@ -2,7 +2,9 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission; the hub's unavailable answer keeps a host held.
+// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission; the hub's unavailable answer keeps a host held; gate-produced skips leave the mark unchanged.
+
+import { activeNow } from "./deadline-pause";
 
 const BODY_METHODS = new Set(["json", "text", "arrayBuffer", "blob", "formData", "bytes"]);
 
@@ -79,11 +81,12 @@ export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api",
       const entry: WaitingRead = { order: order++, start: () => {
         signal?.removeEventListener("abort", abort);
         ++active; ++state.active;
-        const startedAt = Date.now();
+        // Active time only: a read waiting in a hub maintenance hold below admission has no headers yet.
+        const startedAt = activeNow();
         let released = false;
         const abortActive = () => {
           // Ten seconds without headers distinguishes held transport from ordinary short cancellation.
-          if (!released && !receivedHeaders && Date.now() - startedAt >= 10_000) state.held = true;
+          if (!released && !receivedHeaders && activeNow() - startedAt >= 10_000) state.held = true;
           release();
         };
         release = () => {
@@ -111,7 +114,8 @@ export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api",
       receivedHeaders = true;
       const current = hosts.get(key);
       // The hub bounds a paused agent's read and answers with a host reason or 502; only a fresh answer clears the mark.
-      if (current) { current.held = response.headers.has("X-Docklet-Host-Reason") || response.status === 502; cleanup(key, current); drain(); }
+      // A skip produced by the dispatch gate says nothing about the host's transport.
+      if (current && !response.headers.has("X-Docklet-Skipped")) { current.held = response.headers.has("X-Docklet-Host-Reason") || response.status === 502; cleanup(key, current); drain(); }
       if (!response.body || response.headers.get("Content-Type")?.includes("text/event-stream")) { release(); return response; }
       return admitted(response, release);
     } catch (error) { release(); throw error; }

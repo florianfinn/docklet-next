@@ -51,6 +51,8 @@ export interface AgentReport {
 }
 
 export interface InventoryObservation {
+  recovery?: string;
+  scopeStale?: boolean;
   observedAt?: string;
   stale: boolean;
   reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required" | "inventory.read-error" | "inventory.mapping-error";
@@ -417,6 +419,8 @@ export interface MetricsSnapshot {
   hosts: Record<string, HostMetrics>;
   /** Keyed by container id. */
   containers: Record<string, ContainerMetrics>;
+  /** Online hosts whose stats socket failed, or sent nothing in time, before their first sample. */
+  unavailable?: readonly string[];
 }
 
 export type Severity = "critical" | "high" | "medium" | "low" | "unknown";
@@ -473,6 +477,27 @@ export interface SecurityOverview {
   images: ScannedImage[];
   findings: Finding[];
   history: ScanRun[];
+}
+
+/** Active finding counts of one scanned local image (Dashboard); names and usage come from the container inventory. */
+export interface ActiveScannedImage {
+  /** Docker image id on its host. */
+  id: string;
+  hostId: string;
+  /** Known only where the source names the image (demo); otherwise taken from containers using it. */
+  ref?: string;
+  inUse: boolean;
+  counts: SecurityCounts;
+  /** Last completed scan; empty when the image has no completed scan yet. */
+  scannedAt: string;
+  /** The host could not be read; the counts are the last ones shown. */
+  unavailable?: boolean;
+}
+
+export interface ActiveSecurity {
+  enabled: boolean;
+  images: ActiveScannedImage[];
+  unavailable: { hostId: string; code: string }[];
 }
 
 /** Built-in Docker drivers; plugins remain displayable as arbitrary strings. */
