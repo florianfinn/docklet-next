@@ -164,7 +164,9 @@ never counts twice. No schema, migration or DTO change was needed.
 
 "Check all" checks every reference a non-opted-out container uses, including live references missing from the
 image's tags, and skips images used only by containers that opted out of update checks (the same rule as the batch
-check). A digest container whose tag has since moved locally to another image (pulled, not recreated) shows its own
-scoped `unknown` instead of the older image-level row, as tag-policy consumers already do. For a consumer on a
+check). A digest container whose image no longer matches the checked identity (for example its tag moved locally to another
+image, pulled but not recreated) gets a non-actionable scoped row instead of the older image-level row, with the
+contract tag-policy consumers already have: the immediate check response is `unknown`, the stored row reads as a
+failed check (`error`). For a consumer on a
 non-default platform the stored row is `unknown` (no native evidence at the default platform); the immediate check
 response may still carry the default-platform result, as before #412.

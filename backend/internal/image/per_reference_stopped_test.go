@@ -7,6 +7,7 @@
 package image_test
 
 import (
+	"strings"
 	"testing"
 
 	imageService "github.com/florianfinn/docklet-next/backend/internal/image"
@@ -51,4 +52,50 @@ func TestPerReferenceStoppedDigestRowFollowsRechecks(t *testing.T) {
 	require.Equal(t, "version", updates["first"].State)
 	require.Equal(t, updates["first"].State, updates["replica"].State)
 	require.Equal(t, updates["first"].HasUpdate, updates["replica"].HasUpdate)
+}
+
+// An identity-fenced consumer is never actionable, whether it was never checked
+// or had an earlier success. States follow the consumer contract shared with
+// tag-policy consumers: the response is unknown, the stored row a failed check.
+func TestPerReferenceStoppedIdentityFence(t *testing.T) {
+	for _, after := range []bool{false, true} {
+		t.Run(map[bool]string{false: "initial", true: "changed-after-success"}[after], func(t *testing.T) {
+			f := newReferenceFixture(t)
+			f.containers[2].State = "exited"
+			if after {
+				_, err := f.checker().ReadUpdateInfo(t.Context(), f.refs[0])
+				require.NoError(t, err)
+			}
+			f.containers[2].ImageID = "sha256:" + strings.Repeat("c", 64)
+			result, err := f.checker().ReadUpdateInfo(t.Context(), f.refs[0])
+			require.NoError(t, err)
+			require.Equal(t, "unknown", result.ContainerUpdates["replica"].State)
+			require.False(t, result.ContainerUpdates["replica"].HasUpdate)
+			updates, err := f.reader().GetUpdateInfoByContainers(t.Context(), f.containers)
+			require.NoError(t, err)
+			require.Equal(t, "error", updates["replica"].State)
+			require.False(t, updates["replica"].HasUpdate)
+			svc := imageService.NewImageService(f.db, f.docker, registry.NewContainerRegistryService(f.db, nil, nil, nil), f.checker(), nil, nil, nil, nil)
+			stopped := f.containers[2]
+			checked, err := svc.CheckContainerImage(t.Context(), container.InspectResponse{ID: stopped.ID, Image: stopped.ImageID, Config: &container.Config{Image: stopped.Image, Labels: stopped.Labels}})
+			require.NoError(t, err)
+			require.Equal(t, "unknown", checked.State)
+			require.False(t, checked.HasUpdate)
+		})
+	}
+}
+
+// A stopped consumer's initial failure survives a later check of another
+// reference that rewrites the shared image-level row.
+func TestPerReferenceStoppedInitialFailureAcrossReferences(t *testing.T) {
+	f := newReferenceFixture(t)
+	f.containers[2].State = "exited"
+	f.denied.Store(true)
+	_, err := f.checker().ReadMultiple(t.Context(), f.refs)
+	require.NoError(t, err)
+	updates, err := f.reader().GetUpdateInfoByContainers(t.Context(), f.containers)
+	require.NoError(t, err)
+	require.NotNil(t, updates["replica"])
+	require.Equal(t, "error", updates["replica"].State)
+	require.False(t, updates["replica"].HasUpdate)
 }
