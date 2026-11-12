@@ -53,6 +53,12 @@ func SettleChildTx(tx *gorm.DB, child Child, checked CheckedChildResult) error {
 				return err
 			}
 		}
+		// A binding carries at most MaxSuppressedCandidates tuples; the oldest records go first.
+		keep := tx.Model(&FailedCandidate{}).Select("rowid").Where("policy_id = ? AND target_identity = ?", current.PolicyID, checked.TargetIdentity).
+			Order("created_at DESC, service, repository, platform, manifest").Limit(dto.MaxSuppressedCandidates)
+		if err := tx.Where("policy_id = ? AND target_identity = ? AND rowid NOT IN (?)", current.PolicyID, checked.TargetIdentity, keep).Delete(&FailedCandidate{}).Error; err != nil {
+			return err
+		}
 	}
 	changed := tx.Model(&Child{}).Where("id = ? AND status = ?", current.ID, "admitted").Updates(map[string]any{"status": "settled", "code": checked.Code, "settled_at": checked.SettledAt})
 	if changed.Error != nil {

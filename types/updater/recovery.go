@@ -13,7 +13,8 @@ import (
 
 const MaxSuppressedCandidates = 64
 const MaxAppliedCandidates = 256
-const MaxRecoveryEvidenceBytes = 4096
+// Evidence holds up to MaxAppliedCandidates applied tuples of realistic length.
+const MaxRecoveryEvidenceBytes = 64 << 10
 
 // Candidate identities use pullable platform manifests, never native image IDs.
 type AppliedCandidate struct {

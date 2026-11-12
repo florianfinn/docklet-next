@@ -101,12 +101,14 @@ func TestObservedEvidenceByteBoundary(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, f.svc.db.Create(&RuntimeObservedRun{RunID: row.RunID, Kind: "stack", Mode: "scheduled", CreatedAt: f.now}).Error)
 			result := dto.LifecycleResult{RunID: row.RunID, Code: "update.unstable", HTTPStatus: 500, Recovery: &dto.RecoveryResult{Outcome: "restored"}}
-			for i := 0; i < 4; i++ {
-				result.Applied = append(result.Applied, dto.AppliedCandidate{Service: strings.Repeat("s", 128), Repository: strings.Repeat("r", 600), Platform: "linux/amd64", Manifest: "sha256:" + strings.Repeat("a", 64)})
-			}
 			body, err := json.Marshal(result)
 			require.NoError(t, err)
-			padding := 4096 - len(body)
+			for len(body) < dto.MaxRecoveryEvidenceBytes-1200 {
+				result.Applied = append(result.Applied, dto.AppliedCandidate{Service: strings.Repeat("s", 128), Repository: strings.Repeat("r", 600), Platform: "linux/amd64", Manifest: "sha256:" + strings.Repeat("a", 64)})
+				body, err = json.Marshal(result)
+				require.NoError(t, err)
+			}
+			padding := dto.MaxRecoveryEvidenceBytes - len(body)
 			for i := range result.Applied {
 				add := min(1024-len(result.Applied[i].Repository), padding+extra)
 				result.Applied[i].Repository += strings.Repeat("x", add)
@@ -120,7 +122,7 @@ func TestObservedEvidenceByteBoundary(t *testing.T) {
 			}
 			body, err = json.Marshal(result)
 			require.NoError(t, err)
-			require.Equal(t, 4096+extra, len(body))
+			require.Equal(t, dto.MaxRecoveryEvidenceBytes+extra, len(body))
 			checked, err := runtimeCheckedTerminalTx(f.svc.db.DB, row, "failed", "runtime.failed", &result)
 			require.NoError(t, err)
 			require.NoError(t, runtimeWriteObservedTx(f.svc.db.DB, f.now, row, checked), "oversize is normalized before the CHECK")

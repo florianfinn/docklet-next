@@ -52,9 +52,9 @@ func TestRecoveryFreshAndSequentialMigration(t *testing.T) {
 			for _, field := range []string{"kind", "mode", "outcome"} {
 				require.Error(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update(field, "invalid").Error)
 			}
-			require.NoError(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update("evidence", strings.Repeat("a", 4096)).Error)
-			require.Error(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update("evidence", strings.Repeat("a", 4097)).Error)
-			require.Error(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update("evidence", strings.Repeat("ä", 2049)).Error)
+			require.NoError(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update("evidence", strings.Repeat("a", 65536)).Error)
+			require.Error(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update("evidence", strings.Repeat("a", 65537)).Error)
+			require.Error(t, db.Model(&activity.RuntimeObservedRun{}).Where("run_id = ?", row.RunID).Update("evidence", strings.Repeat("ä", 32769)).Error)
 			failed := policy.FailedCandidate{PolicyID: "policy", TargetIdentity: "identity", Service: "app", Repository: "registry.example.com/app", Platform: "linux/amd64", Manifest: "sha256:" + strings.Repeat("a", 64), RunID: "run", CreatedAt: row.CreatedAt}
 			require.NoError(t, db.Create(&failed).Error)
 			require.Error(t, db.Create(&failed).Error)

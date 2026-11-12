@@ -27,6 +27,10 @@ func (s *ActivityService) AdmitPolicyContainerUpdate(ctx context.Context, env, t
 
 // S3 replaces this temporary zero-effect result on the same milestone branch.
 func unavailableContainerImage(ctx context.Context, command RuntimeCommand) error {
-	dto.RecordLifecycleResult(ctx, dto.LifecycleResult{RunID: command.ProposedRunID, Code: "runtime.target-unavailable", HTTPStatus: 503})
+	result := dto.LifecycleResult{RunID: command.ProposedRunID, Code: "runtime.target-unavailable", HTTPStatus: 503}
+	if dto.ObservedExecutionFromContext(ctx).Mode != "" {
+		result.Recovery = &dto.RecoveryResult{Outcome: "not-needed"}
+	}
+	dto.RecordLifecycleResult(ctx, result)
 	return imageDTO.Failure("runtime.target-unavailable", 503)
 }
