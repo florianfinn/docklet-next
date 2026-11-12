@@ -11,9 +11,9 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { ToneBadge } from "@/shared/components/tone";
 
 import { useProxyText } from "./use-proxy-text";
-export function TextField({ label, value, onChange, hint, type = "text", required, placeholder }: { label: string; value: string; onChange: (value: string) => void; hint?: string; type?: string; required?: boolean; placeholder?: string }) {
+export function TextField({ label, value, onChange, hint, type = "text", required, placeholder, suggestions }: { label: string; value: string; onChange: (value: string) => void; hint?: string; type?: string; required?: boolean; placeholder?: string; suggestions?: string[] }) {
   const id = useId();
-  return <Field><FieldLabel htmlFor={id}>{label}</FieldLabel><Input id={id} value={value} onChange={(e) => onChange(e.target.value)} type={type} required={required} placeholder={placeholder} />{hint && <FieldDescription>{hint}</FieldDescription>}</Field>;
+  return <Field><FieldLabel htmlFor={id}>{label}</FieldLabel><Input id={id} value={value} onChange={(e) => onChange(e.target.value)} type={type} required={required} placeholder={placeholder} list={suggestions?.length ? id + "-suggestions" : undefined} />{suggestions?.length ? <datalist id={id + "-suggestions"}>{suggestions.map((value) => <option key={value} value={value} />)}</datalist> : null}{hint && <FieldDescription>{hint}</FieldDescription>}</Field>;
 }
 export function Choice({ label, value, onChange, options, className }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[]; className?: string }) {
   return <Select value={value} onValueChange={onChange}><SelectTrigger aria-label={label} className={className}><SelectValue placeholder={label} /></SelectTrigger><SelectContent><SelectGroup>{options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent></Select>;

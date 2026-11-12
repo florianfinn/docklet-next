@@ -10,6 +10,7 @@ import { OverviewTable, OverviewRowView, type OverviewColumn } from "@/shared/co
 import type { FitView } from "@/shared/lib/fit-view";
 import { isNestedInteractive } from "@/shared/lib/row-navigation";
 import { IconTile, ToneBadge } from "@/shared/components/tone";
+import { LabRouteStatus } from "./LabStatus";
 import { RouteStatus } from "./controls";
 import type { RouteActionsProps } from "./RouteActions";
 import { useRouteMenu } from "./use-route-menu";
@@ -31,7 +32,7 @@ function ManagerRow({ route, actions, view, columns }: { route: ProxyRoute; acti
       target: <a href={route.url} target="_blank" rel="noopener noreferrer" className="group/target inline-flex max-w-full items-center gap-1.5 rounded-sm font-mono text-xs text-muted-foreground transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring" aria-label={t("openTarget") + " · " + route.url}><span className="break-all underline-offset-4 group-hover/target:underline">{route.url}</span><ExternalLink className="size-3 shrink-0 transition-transform group-hover/target:-translate-y-0.5 group-hover/target:translate-x-0.5" /></a>,
       tls: <span className="flex items-center gap-2 text-xs">{route.tls !== "off" && <LockKeyhole className="size-3.5 text-success" />}{route.tls === "off" ? t("off") : cert?.name ?? t(route.tls === "auto" ? "requestPlanned" : "noCert")}</span>,
       source: <ToneBadge tone={route.source === "file" ? "gray" : "cyan"}>{t(route.source)}</ToneBadge>,
-      status: <RouteStatus enabled={route.enabled} />,
+      status: <div><RouteStatus enabled={route.enabled} /><LabRouteStatus route={route} /></div>,
     }} />;
 }
 export function ManagerRoutes({ routes, actions }: { routes: ProxyRoute[]; actions: (route: ProxyRoute) => RouteActionsProps }) {

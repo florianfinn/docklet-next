@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original development-only proxy design concept with synthetic data; no upstream implementation copied.
 import "@xyflow/react/dist/style.css";
+import { instanceKind } from "./route-text";
 import { useProxyText } from "./use-proxy-text";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -38,7 +39,7 @@ export function RouteGraph({ routes }: { routes: ProxyRoute[] }) {
     const nodes: RouteNode[] = [];
     const edges: Edge[] = [];
     routes.filter((r) => chosen === "all" || r.id === chosen).forEach((route, row) => {
-      const titles = [route.domain, connections[route.proxy]?.container ?? "Traefik · " + route.proxy, route.middlewares.join(" → ") || t("noMiddleware"), route.url.replace(/^https?:\/\//, "")];
+      const titles = [route.domain, connections[route.proxy]?.container ?? (instanceKind(route.proxy) === "caddy" ? "Caddy" : "Traefik") + " · " + route.proxy, route.middlewares.join(" → ") || t("noMiddleware"), route.url.replace(/^https?:\/\//, "")];
       const subtitles = [route.path || "/", route.tls === "off" ? "web · :80" : "websecure · :443", route.middlewares.length ? t("middlewares") : t("target"), route.stackId ?? t("externalTarget")];
       titles.forEach((title, col) => {
         const id = route.id + "-" + col;

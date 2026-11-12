@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ProxyTabs } from "./ProxyTabs";
 import { ProxyInstances } from "./ProxyInstances";
+import { useLab } from "./lab-bridge";
 import { proxyStore, useProxy } from "./model";
 import { designStore, useProxyDesign, type ProxyDesign } from "./design";
 import { RoutesView } from "./RoutesView";
@@ -31,6 +32,7 @@ const DESIGNS = [
 export default function ProxyPage() {
   const t = useProxyText();
   const state = useProxy();
+  const { info } = useLab();
   const design = useProxyDesign();
   const [params, setParams] = useSearchParams();
   const instance = state.instances.find((p) => p.id === params.get("instance"))?.id ?? state.instance;
@@ -38,17 +40,17 @@ export default function ProxyPage() {
   const tab = requested === "setup" || requested === "configuration" ? "settings" : TABS.find((tab) => tab === requested) ?? "routes";
   const configured = !!state.connections[instance];
   function navigate(value: string) { setParams((p) => { p.set("tab", value); return p; }); }
-  function selectInstance(next: string) {
+  function selectInstance(next: string, tab?: string) {
     proxyStore.set((s) => ({ ...s, instance: next }));
-    setParams((p) => { p.set("instance", next); for (const key of ["route", "container", "stack", "cert"]) p.delete(key); return p; });
+    setParams((p) => { p.set("instance", next); if (tab) p.set("tab", tab); for (const key of ["route", "container", "stack", "cert"]) p.delete(key); return p; });
   }
   return <>
     <PageHeader title={t("title")} description={t("subtitle")} actions={<SimulationBadge />} />
     <ProxyInstances instance={instance} onSelect={selectInstance} onSettings={() => navigate("settings")} />
     <details className="mb-4"><summary className="mb-3 cursor-pointer text-xs text-muted-foreground">{t("compareDesigns")}</summary>
     <RadioGroup aria-label={t("designLabel")} value={design} onValueChange={(value) => designStore.set(value as ProxyDesign)} className="mb-4 grid gap-3 md:grid-cols-3">{DESIGNS.map((item) => <label key={item.id} htmlFor={"proxy-design-" + item.id} className="flex cursor-pointer items-center gap-3 rounded-xl border bg-card p-4 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/10"><RadioGroupItem id={"proxy-design-" + item.id} value={item.id} className="sr-only" /><item.icon className="size-5 shrink-0 text-primary-text" /><span><span className="block text-sm font-semibold">{t(item.labelKey)}</span><span className="mt-1 block text-xs text-muted-foreground">{t(item.hint)}</span></span></label>)}</RadioGroup></details>
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>{t("simulation")}</span><Button variant="ghost" size="sm" onClick={() => { proxyStore.reset(); toast.success(t("resetDone")); }}><RotateCcw data-icon="inline-start" />{t("reset")}</Button></div>
-    {!configured ? <ProxySetup key={instance} instance={instance} onConfigured={(id) => { selectInstance(id); navigate("routes"); }} /> : <Tabs value={tab} onValueChange={navigate}>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>{t(info ? "labSimulation" : "simulation")}</span><Button variant="ghost" size="sm" onClick={() => { proxyStore.reset(); toast.success(t("resetDone")); }}><RotateCcw data-icon="inline-start" />{t("reset")}</Button></div>
+    {!configured ? <ProxySetup key={instance} instance={instance} onConfigured={(id) => selectInstance(id, "routes")} /> : <Tabs value={tab} onValueChange={navigate}>
       <ProxyTabs options={TABS.map((value) => ({ value, label: t(value === "routes" && design === "manager" ? "proxyHosts" : value) }))} />
       <TabsContent value="routes"><RoutesView key={instance + design} instance={instance} /></TabsContent>
       <TabsContent value="certificates"><CertificatesView key={instance + design} instance={instance} /></TabsContent>

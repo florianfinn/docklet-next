@@ -8,6 +8,11 @@ import { parse } from "yaml";
 import { coversDomain, INITIAL_ROUTES, routeFromYaml, routeYaml, validDomain, wildcardProblem, proxyStore, routeName, migrateRouteNames, routeNameConflict, duplicateRoute } from "./model";
 
 describe("wildcard route and certificate coverage", () => {
+  it("keeps automatic TLS with the lab's empty default resolver distinct from imported TLS", () => {
+    const route = { ...INITIAL_ROUTES[0]!, resolver: "" };
+    expect(routeFromYaml(routeYaml(route), route).tls).toBe("auto");
+    expect(routeFromYaml(routeYaml({ ...route, tls: "custom" }), route).tls).toBe("custom");
+  });
   it("matches exactly one subdomain level and emits explicit ACME domains", () => {
     const route = { ...INITIAL_ROUTES[0]!, domain: "*.example.com", path: "/api" };
     const text = routeYaml(route);

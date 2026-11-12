@@ -3,6 +3,7 @@
 // Retrieved: 2026-10-31
 // License: Apache-2.0
 // Deviations: Original development-only proxy design concept with synthetic data; no upstream implementation copied.
+import { instanceKind } from "./route-text";
 import { useProxyText } from "./use-proxy-text";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -23,6 +24,7 @@ import { coversDomain, proxyStore, useProxy, validDomain, type ProxyCertificate 
 function CertificateEditor({ initial, onClose }: { initial: ProxyCertificate; onClose: () => void }) {
   const t = useProxyText();
   const { resolvers } = useProxy();
+  const caddy = instanceKind(initial.proxy) === "caddy";
   const [certificate, setCertificate] = useState(initial);
   const [domains, setDomains] = useState(initial.domains.join(", "));
   const [error, setError] = useState("");
@@ -32,7 +34,7 @@ function CertificateEditor({ initial, onClose }: { initial: ProxyCertificate; on
   const choices = resolvers.filter((r) => r.proxy === initial.proxy && (!wildcard || r.challenge === "dns"));
   function save() {
     const names = domains.split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
-    if (!certificate.name.trim() || !names.length || names.some((d) => !validDomain(d)) || (certificate.origin === "imported" && (!certificate.certFile || !certificate.keyFile)) || (certificate.origin === "automatic" && !choices.some((r) => r.name === certificate.resolver))) { setError(t("certValidation")); return; }
+    if (!certificate.name.trim() || !names.length || names.some((d) => !validDomain(d)) || (certificate.origin === "imported" && (!certificate.certFile || !certificate.keyFile)) || (certificate.origin === "automatic" && !(caddy && !wildcard && !certificate.resolver) && !choices.some((r) => r.name === certificate.resolver))) { setError(t("certValidation")); return; }
     const next = { ...certificate, domains: names, status: "valid" as const, managed: certificate.origin === "automatic", issuer: certificate.origin === "automatic" ? t("issuerAcme") : certificate.issuer || t("issuerExample") };
     proxyStore.set((s) => ({ ...s, certificates: s.certificates.some((c) => c.id === next.id) ? s.certificates.map((c) => c.id === next.id ? next : c) : [...s.certificates, next] }));
     toast.success(t("saved")); onClose();
@@ -53,8 +55,8 @@ function CertificateEditor({ initial, onClose }: { initial: ProxyCertificate; on
         </FormSection>
         <FormSection title={t("certMethod")} tone="tls">
         <OptionCards label={t("origin")} value={certificate.origin} onChange={(origin) => patch({ origin: origin as ProxyCertificate["origin"] })} options={[{ value: "automatic", label: t("automatic") }, { value: "imported", label: t("imported") }]} />
-        {certificate.origin === "automatic" && wildcard && !choices.length && <p className="text-sm text-warning">{t("dnsRequired")}</p>}
-        {certificate.origin === "automatic" ? <SelectField label={t("resolver")} value={certificate.resolver} onChange={(resolver) => patch({ resolver })} options={choices.map((r) => ({ value: r.name, label: r.name }))} /> : <>
+        {certificate.origin === "automatic" && wildcard && !choices.length && <p className="text-sm text-warning">{t(caddy ? "caddyDnsRequired" : "dnsRequired")}</p>}
+        {certificate.origin === "automatic" ? <SelectField label={t(caddy ? "acmeIssuer" : "resolver")} value={certificate.resolver || (caddy && !wildcard ? "automatic-default" : "")} onChange={(resolver) => patch({ resolver: resolver === "automatic-default" ? "" : resolver })} options={[...(caddy && !wildcard ? [{ value: "automatic-default", label: t("caddyAutomatic") }] : []), ...choices.map((r) => ({ value: r.name, label: r.name }))]} /> : <>
           <TextField label={t("issuer")} value={certificate.issuer} onChange={(issuer) => patch({ issuer })} />
           <TextField label={t("expires")} value={certificate.expires} type="date" onChange={(expires) => patch({ expires })} required />
           <TextField label={t("certificatePath")} value={certificate.certFile} onChange={(certFile) => patch({ certFile })} placeholder={t("examples.certificate")} required />
@@ -71,6 +73,7 @@ export function CertificatesView({ instance }: { instance: string }) {
   const t = useProxyText();
   const format = useFormatter();
   const design = useProxyDesign();
+  const caddy = instanceKind(instance) === "caddy";
   const [query, setQuery] = useState("");
   const [params] = useSearchParams();
   const { certificates, routes, resolvers } = useProxy();
@@ -89,7 +92,7 @@ export function CertificatesView({ instance }: { instance: string }) {
       const linked = routes.filter((r) => r.proxy === instance && r.tls !== "off" && coversDomain(cert.domains, r.domain));
       return <Card id={"certificate-" + cert.id} key={cert.id} className={"gap-0 overflow-hidden py-0 " + (params.get("certificate") === cert.id ? "ring-1 ring-primary" : "")}>
         <CardHeader className="border-b p-5"><div className="flex items-center gap-3"><IconTile tone={cert.status === "expiresSoon" ? "warn" : "ok"}><Award /></IconTile><div className="min-w-0 flex-1"><CardTitle className="break-all text-base">{cert.name}</CardTitle><CardDescription className="mt-1">{cert.issuer}</CardDescription></div><ToneBadge tone={cert.status === "expiresSoon" ? "warn" : "ok"}>{t(cert.status)}</ToneBadge></div></CardHeader>
-        <CardContent className="flex-1 p-5"><div className="flex flex-wrap gap-2">{cert.domains.map((domain) => <ToneBadge key={domain} tone={domain.startsWith("*.") ? "violet" : "gray"}>{domain}</ToneBadge>)}</div><dl className="mt-3"><Detail label={t("expires")}>{format.dateTime(new Date(cert.expires + "T12:00:00Z"), { dateStyle: "medium" })}</Detail><Detail label={t("origin")}>{t(cert.origin)}{cert.origin === "automatic" && !cert.managed && <p className="text-xs text-warning">{t("automationStopped")}</p>}</Detail><Detail label={t(cert.origin === "automatic" ? "resolver" : "certificatePath")}><span className="font-mono text-xs">{cert.origin === "automatic" ? cert.resolver : cert.certFile}</span></Detail></dl>
+        <CardContent className="flex-1 p-5"><div className="flex flex-wrap gap-2">{cert.domains.map((domain) => <ToneBadge key={domain} tone={domain.startsWith("*.") ? "violet" : "gray"}>{domain}</ToneBadge>)}</div><dl className="mt-3"><Detail label={t("expires")}>{format.dateTime(new Date(cert.expires + "T12:00:00Z"), { dateStyle: "medium" })}</Detail><Detail label={t("origin")}>{t(cert.origin)}{cert.origin === "automatic" && !cert.managed && <p className="text-xs text-warning">{t("automationStopped")}</p>}</Detail><Detail label={t(cert.origin === "automatic" ? caddy ? "acmeIssuer" : "resolver" : "certificatePath")}><span className="font-mono text-xs">{cert.origin === "automatic" ? cert.resolver : cert.certFile}</span></Detail></dl>
         <p className="mb-2 mt-4 text-xs font-medium text-muted-foreground">{t("usedBy")}</p><div className="flex flex-col gap-1">{linked.map((r) => <Link key={r.id} className="truncate text-sm text-primary-text hover:underline" to={"/proxy?route=" + r.id + "&instance=" + instance}>{r.domain}</Link>)}{!linked.length && <span className="text-sm text-muted-foreground">{t("noUsage")}</span>}</div></CardContent>
         <CardFooter className="flex-wrap gap-2 border-t p-4">
           <Button size="sm" variant="outline" onClick={() => setEditing(cert)}><FileKey2 data-icon="inline-start" />{t(cert.origin === "imported" ? "replace" : "edit")}</Button>

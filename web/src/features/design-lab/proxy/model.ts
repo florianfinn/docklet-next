@@ -11,7 +11,8 @@ export interface ProxyRoute {
   id: string; name?: string; proxy: string; domain: string; path: string; url: string; backends: string[];
   containerId?: string; stackId?: string; hostId: string; source: "file" | "labels";
   tls: "off" | "auto" | "custom"; resolver: string; middlewares: string[];
-  enabled: boolean; redirect: boolean; certificateDomain?: string;
+  enabled: boolean; redirect: boolean; certificateDomain?: string; labNames?: string[];
+  caddyTls?: { provider?: string; credential?: string; certFile?: string; keyFile?: string };
 }
 export interface ProxyCertificate {
   id: string; proxy: string; name: string; domains: string[]; issuer: string; expires: string;
@@ -22,11 +23,20 @@ export interface Resolver {
   id: string; proxy: string; name: string; email: string;
   challenge: "dns" | "http"; provider: string; credential: string;
 }
-export interface ProxyInstance { id: string; name: string; hostId: string }
+export type ProxyKind = "traefik" | "caddy";
+export interface ProxyInstance { id: string; name: string; hostId: string; kind: ProxyKind }
+export function proxyKindFromImage(image: string): ProxyKind | undefined {
+  return /(?:^|\/)caddy(?=[:@]|$)/i.test(image) ? "caddy" : /(?:^|\/)traefik(?=[:@]|$)/i.test(image) ? "traefik" : undefined;
+}
+export const proxyKindLabel = (kind: ProxyKind) => kind === "caddy" ? "Caddy" : "Traefik";
+export function migrateInstances(instances: (Omit<ProxyInstance, "kind"> & { kind?: ProxyKind })[]): ProxyInstance[] {
+  return instances.map((instance) => ({ ...instance, kind: instance.kind ?? "traefik" }));
+}
 export const INSTANCES: ProxyInstance[] = [
-  { id: "atlas", name: "Traefik · Atlas", hostId: "atlas" },
-  { id: "boreal", name: "Traefik · Boreal", hostId: "boreal" },
+  { id: "atlas", name: "Traefik · Atlas", hostId: "atlas", kind: "traefik" },
+  { id: "boreal", name: "Traefik · Boreal", hostId: "boreal", kind: "traefik" },
 ];
+INSTANCES.push({ id: "caddy-example", name: "Caddy · Example", hostId: "atlas", kind: "caddy" });
 export const MIDDLEWARES = ["compress", "strip-api", "custom-headers"];
 const base = { proxy: "atlas", path: "", backends: [], source: "file" as const, tls: "auto" as const, resolver: "dns-primary", middlewares: ["compress"], enabled: true, redirect: true };
 export const INITIAL_ROUTES: ProxyRoute[] = [
@@ -39,6 +49,10 @@ export const INITIAL_ROUTES: ProxyRoute[] = [
   { ...base, proxy: "boreal", id: "cloud", domain: "files.example.net", url: "http://nextcloud:80", hostId: "boreal", containerId: "c-cloud-nextcloud", stackId: "cloud", source: "labels", resolver: "http-primary" },
   { ...base, proxy: "boreal", id: "status", domain: "status.example.net", url: "http://uptime-kuma:3001", hostId: "boreal", containerId: "c-uptime-kuma", resolver: "http-primary" },
 ];
+INITIAL_ROUTES.push(
+  { ...base, id: "caddy-app", proxy: "caddy-example", domain: "app.example.com", url: "http://192.0.2.50:8080", hostId: "atlas", resolver: "" },
+  { ...base, id: "caddy-archive", proxy: "caddy-example", domain: "archive.example.net", url: "http://192.0.2.51:8080", hostId: "atlas", resolver: "", tls: "custom" },
+);
 const certBase = { certFile: "", keyFile: "", managed: true, status: "valid" as const };
 export const INITIAL_CERTIFICATES: ProxyCertificate[] = [
   { ...certBase, id: "wildcard", proxy: "atlas", name: "example.com", domains: ["example.com", "*.example.com"], issuer: PROXY_ISSUERS.acme, expires: "2027-01-15", origin: "automatic", resolver: "dns-primary" },
@@ -46,14 +60,19 @@ export const INITIAL_CERTIFICATES: ProxyCertificate[] = [
   { ...certBase, id: "files-cert", proxy: "boreal", name: "Files", domains: ["files.example.net"], issuer: PROXY_ISSUERS.acme, expires: "2027-01-20", origin: "automatic", resolver: "http-primary" },
   { ...certBase, id: "status-cert", proxy: "boreal", name: "Status", domains: ["status.example.net"], issuer: PROXY_ISSUERS.acme, expires: "2027-01-20", origin: "automatic", resolver: "http-primary" },
 ];
+INITIAL_CERTIFICATES.push(
+  { ...certBase, id: "caddy-auto", proxy: "caddy-example", name: "app.example.com", domains: ["app.example.com"], issuer: PROXY_ISSUERS.acme, expires: "2027-01-20", origin: "automatic", resolver: "" },
+  { ...certBase, id: "caddy-import", proxy: "caddy-example", name: "archive.example.net", domains: ["archive.example.net"], issuer: PROXY_ISSUERS.imported, expires: "2027-01-20", origin: "imported", resolver: "", certFile: "/certs/archive.crt", keyFile: "/certs/archive.key" },
+);
 export interface ProxyConnection {
   mode: "discovered" | "manual"; container: string; host: string; image: string;
-  configPath: string; apiUrl: string;
+  configPath: string; apiUrl: string; lab?: ProxyKind;
 }
 export const DISCOVERED_PROXIES = [
   { id: "atlas-edge", host: "atlas", container: "edge-traefik-1", image: "traefik:v3.4", configPath: "/etc/traefik/dynamic", apiUrl: "http://traefik:8080", mode: "discovered" as const },
   { id: "boreal-edge", host: "boreal", container: "gateway-traefik-1", image: "traefik:v3.4", configPath: "/etc/traefik/dynamic", apiUrl: "http://gateway:8080", mode: "discovered" as const },
 ];
+DISCOVERED_PROXIES.push({ id: "atlas-caddy", host: "atlas", container: "caddy-1", image: "caddy:2.10.2", configPath: "/etc/caddy", apiUrl: "", mode: "discovered" });
 /** Config names are independent of both Docklet route IDs and Docker container IDs. */
 export function routeName(route: ProxyRoute): string {
   if (route.name !== undefined) return route.name.trim();
@@ -81,7 +100,7 @@ export function routeNameConflict(route: ProxyRoute, routes: ProxyRoute[]): bool
   return routes.some((r) => r.proxy === route.proxy && r.id !== route.id && routeName(r) === routeName(route));
 }
 export function duplicateRoute(route: ProxyRoute, routes: ProxyRoute[]): ProxyRoute {
-  return { ...route, id: crypto.randomUUID(), name: availableRouteName(routeName(route), route.proxy, routes), domain: "", source: "file" };
+  return { ...route, id: crypto.randomUUID(), name: availableRouteName(routeName(route), route.proxy, routes), domain: "", source: "file", labNames: undefined };
 }
 interface State { instances: ProxyInstance[]; connections: Record<string, ProxyConnection>; routes: ProxyRoute[]; certificates: ProxyCertificate[]; resolvers: Resolver[]; instance: string }
 export const proxyStore = createStore<State>({
@@ -90,7 +109,7 @@ export const proxyStore = createStore<State>({
     { id: "dns-primary", proxy: "atlas", name: "dns-primary", email: "admin@example.com", challenge: "dns", provider: "cloudflare", credential: "CF_DNS_API_TOKEN" },
     { id: "http-primary", proxy: "boreal", name: "http-primary", email: "admin@example.net", challenge: "http", provider: "", credential: "" },
   ],
-}, { key: "docklet.proxy-concept", version: 1, merge: (stored, defaults) => { const state = { ...defaults, ...(stored as Partial<State>) }; return { ...state, routes: migrateRouteNames(state.routes) }; } });
+}, { key: "docklet.proxy-concept", version: 1, merge: (stored, defaults) => { const state = { ...defaults, ...(stored as Partial<State>) }; return { ...state, instances: migrateInstances(state.instances), routes: migrateRouteNames(state.routes) }; } });
 export const useProxy = () => useStore(proxyStore, (state) => state);
 export function upsertRoute(route: ProxyRoute) {
   if (!validRouteName(routeName(route)) || routeNameConflict(route, proxyStore.get().routes)) throw new Error("route-name");
@@ -119,7 +138,7 @@ export function wildcardDomain(route: ProxyRoute): string | undefined {
 export function wildcardProblem(route: ProxyRoute, resolvers: Resolver[]): "dnsRequired" | "coverageMismatch" | undefined {
   const domain = wildcardDomain(route);
   if (route.tls !== "auto" || !domain) return;
-  if (!resolvers.some((r) => r.proxy === route.proxy && r.name === route.resolver && r.challenge === "dns")) return "dnsRequired";
+  if (!(proxyStore.get().instances.find((p) => p.id === route.proxy)?.kind === "caddy" && route.caddyTls?.provider) && !resolvers.some((r) => r.proxy === route.proxy && r.name === route.resolver && r.challenge === "dns")) return "dnsRequired";
   if (!coversDomain([domain, "*." + domain], route.domain)) return "coverageMismatch";
 }
 export function routeRule(route: ProxyRoute): string {
@@ -168,8 +187,10 @@ export function routeFromYaml(text: string, original: ProxyRoute): ProxyRoute {
   if (certificateDomain !== undefined && (typeof certificateDomain !== "string" || !validDomain(certificateDomain, false))) throw new Error("invalid");
   const path = router.rule.match(/PathPrefix\([\x60"]([^\x60"]+)[\x60"]\)/)?.[1] ?? "";
   const url = servers[0].url as string;
-  const route: ProxyRoute = { ...original, name, domain, path, url, certificateDomain, backends: servers.slice(1).map((s: { url: string }) => s.url), tls: router.tls ? router.tls.certResolver ? "auto" : "custom" : "off", resolver: router.tls?.certResolver ?? "", middlewares: router.middlewares ?? [] };
+  const route: ProxyRoute = { ...original, name, domain, path, url, certificateDomain, backends: servers.slice(1).map((s: { url: string }) => s.url), tls: router.tls ? Object.hasOwn(router.tls, "certResolver") ? "auto" : "custom" : "off", resolver: router.tls?.certResolver ?? "", middlewares: router.middlewares ?? [] };
   if (url !== original.url) { route.containerId = undefined; route.stackId = undefined; }
   if (!validRoute(route)) throw new Error("invalid");
   return route;
 }
+
+export { routeCaddyfile, routeFromCaddyfile } from "./caddyfile";
