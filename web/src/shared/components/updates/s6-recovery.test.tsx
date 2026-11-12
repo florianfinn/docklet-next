@@ -35,7 +35,8 @@ for (const locale of ["en-US", "de"] as const) {
     const line = view.container.querySelector(`[data-update-recovery="${outcome}"]`);
     expect(line !== null).toBe(true);
     expect(line?.textContent).toContain(t(RECOVERY_OUTCOME_KEYS[outcome as keyof typeof RECOVERY_OUTCOME_KEYS]));
-    expect(line?.textContent).toContain(t("common.stackUpdates.volumeNotRestored"));
+    // not-needed proves no workload effect: no volume warning (D-M24-4).
+    expect(line?.textContent?.includes(t("common.stackUpdates.volumeNotRestored"))).toBe(outcome !== "not-needed");
     expect(line?.textContent).toContain(t(`images.errors.${fixture[index]!.recovery.code.replace(".", "_")}` as never));
     expect(screen.queryByText("English producer fallback") === null).toBe(true);
   });
@@ -61,3 +62,4 @@ it.each(["focus", "timeline", "console"] as const)("W-1 recovery stays visible i
   expect(dialog.textContent).toContain(catalogs.de.images.errors.recovery_restored);
   expect(dialog.textContent).toContain(catalogs.de.common.stackUpdates.volumeNotRestored);
 });
+

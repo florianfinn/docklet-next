@@ -95,8 +95,8 @@ for (const locale of ["en-US", "de"] as const) it.each(targetFixture.filter((tar
   await screen.findByText(catalogs[locale].images.errors[key], { exact: false });
   if (code === "update.candidate-failed") expect(document.body.textContent).toContain(catalogs[locale].activity.jobStep.skipped);
   else {
-    expect(document.body.textContent).toContain(catalogs[locale].common.stackUpdates.volumeNotRestored);
     await waitFor(() => expect(document.querySelector(`[data-job-target="${target.id}"] [data-update-recovery="${recovery!.recovery.outcome}"]`) !== null).toBe(true));
+    expect(document.querySelector(`[data-job-target="${target.id}"]`)?.textContent?.includes(catalogs[locale].common.stackUpdates.volumeNotRestored)).toBe(true);
     if (code === "update.auto-restore-unavailable") expect(document.body.textContent).toContain(catalogs[locale].images.errors["restore_files-changed"]);
   }
 });

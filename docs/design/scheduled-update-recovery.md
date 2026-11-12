@@ -53,7 +53,7 @@ a failed update even when the previous version is restored successfully.
 | Restored | Previous workload restored and checked; update failed |
 | Restore failed | Recovery also failed; operator action is needed |
 | Unavailable | Recovery could not safely run; the reason is shown |
-| Not needed | Failure preceded a recoverable workload effect, or no recovery was necessary |
+| Not needed | The update stopped before changing the workload, or it succeeded |
 | Interrupted | Execution continuity was lost; inspect the target |
 
 Activity details show the recovery outcome and reason. Scheduled job targets use
@@ -66,8 +66,11 @@ hold alone sends no notice and never proves execution failure. Interrupted runs
 settle with an interrupted notice once executor evidence is available. Successful
 updates and skipped candidates send no failure notice. Manual **Update with check**
 keeps the existing manual notification rules; its activity carries recovery evidence.
-Failure and interruption details include: “Volume data was not restored; the app
-may already have migrated it.”
+When the run changed the workload (restored, restore failed, unavailable or
+interrupted), notices and details add: “Volume data was not restored; the app may
+already have migrated it.” A failure before any workload effect omits the sentence,
+because nothing was changed that could have migrated data. Notice subjects stay
+short (“Scheduled update failed: …”); details follow in the body.
 
 ## Limits and suppression
 

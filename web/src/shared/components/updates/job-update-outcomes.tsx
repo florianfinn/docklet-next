@@ -23,8 +23,8 @@ export function JobUpdateOutcomes({ run }: { run: ActionRun }) {
   return <>{query.isError && <QueryError compact error={query.error} />}{query.data?.map((target) => <div key={target.id} className="rounded-lg border p-3 text-sm" data-job-target={target.id}>
     <p>{target.id} · {activity(`jobStep.${target.status}`)}</p>
     {target.code && <p>{errors(target.code)}</p>}
-    {(target.status === "failed" || target.status === "canceled") && <p>{t("volumeNotRestored")}</p>}
-    {target.activityId && target.environmentId && target.status !== "skipped" && <ActionDetail run={{ ...run, id: target.activityId, hostId: target.environmentId, jobRef: undefined, updateRecovery: undefined }}>{(child) => <UpdateRecovery run={child} volumeWarning={false} />}</ActionDetail>}
+    {/* The child's recovery evidence decides the volume warning; a target code alone cannot prove an effect. */}
+    {target.activityId && target.environmentId && target.status !== "skipped" && <ActionDetail run={{ ...run, id: target.activityId, hostId: target.environmentId, jobRef: undefined, updateRecovery: undefined }}>{(child) => <UpdateRecovery run={child} />}</ActionDetail>}
     {target.activityId && <Button type="button" variant="link" onClick={() => openActionDialog(target.activityId!)}>{t("openRun", { id: target.activityId })}</Button>}
   </div>)}</>;
 }
