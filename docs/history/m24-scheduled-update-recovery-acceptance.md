@@ -43,7 +43,9 @@ The candidate run failed three cells; delta run 1 found the cause of the third:
   notice delivery; the target was `update.interrupted`.
 - **Run output times used the browser clock (TZ1).** Run output lines showed the
   browser's local time, so a restricted user in another zone saw UTC instead of
-  the hub zone. They now use the hub zone that every other formatter uses.
+  the hub zone. Run output lines now use the effective hub zone supplied by the
+  app's IntlProvider. Other administrator time displays remain outside this
+  acceptance cell (#475).
 - **Matrix corrections by the maintainer.** TZ1 originally asked for "next check"
   and backup times that restricted users do not have; it now checks a time they
   do see. TAG1's absolute Dashboard count included an unrelated fixture stack
@@ -80,8 +82,11 @@ local webhook sink; UI assertions ran in English and German with Chromium.
 | `22d7a0c3` (delta 2) | **Accepted**, 3/3 | TZ1, kit, REG on H |
 | `6e7a179d` (exact main) | **Accepted**, 5/5 | Tree equals `22d7a0c3`; kit, REG on H/D/E and one healthy observed container update |
 
-The first package's other cells are carried: later changes touched only per-reference
-checks, the held-run wait and run output times, each rerun by its own cell.
+Unchanged candidate cells are carried forward. Delta 1 reran AR5 and TAG1 on
+`9a1e1f33`; delta 2 reran TZ1 on `22d7a0c3`. The later held-run correction, which
+follows a run that a refresh finds still active, was verified independently with
+Direct and Edge tests in closing review round 2, plus kit and regression checks;
+AR5 was not rerun after that correction.
 
 ## Limits
 
