@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration; #410 process zone without override, Local/Factory as UTC.
 
 package config
 
@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	kit "go.getarcane.app/kit/pkg"
@@ -412,19 +413,32 @@ func (c *Config) ListenAddr() string {
 	return net.JoinHostPort(host, port)
 }
 
-// GetLocation returns the timezone location for cron scheduling.
-// It parses the Timezone config (TZ env var) into a *time.Location.
-// Returns the system's local timezone if Timezone is "Local".
-// Defaults to UTC if not set or if the timezone cannot be loaded.
+// GetLocation returns the timezone location for cron scheduling: the hub
+// override when a zone provider is bound, else the process zone.
 func (c *Config) GetLocation() *time.Location {
 	if c != nil && c.ZoneProvider != nil {
 		return c.ZoneProvider.Location()
 	}
+	return c.ProcessLocation()
+}
+
+var unnamedZoneWarning sync.Once
+
+// ProcessLocation parses the Timezone config (TZ env var), ignoring any hub
+// override. Local and Factory name no IANA zone clients can format, so they map
+// to UTC like an unset or unknown value.
+func (c *Config) ProcessLocation() *time.Location {
 	if c == nil {
 		return time.UTC
 	}
 	tz := strings.TrimSpace(c.Timezone)
 	if tz == "" {
+		return time.UTC
+	}
+	if tz == "Local" || tz == "Factory" {
+		unnamedZoneWarning.Do(func() {
+			slog.WarnContext(context.Background(), "Timezone names no IANA zone, using UTC", "timezone", tz) //nolint:forbidigo // Timezone resolution is a process-wide setting lookup.
+		})
 		return time.UTC
 	}
 

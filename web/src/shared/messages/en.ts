@@ -12,6 +12,13 @@ export const enCommon = {
     loading: "Checking updates …", candidates: "{count, plural, one {# update candidate} other {# update candidates}}", install: "Install updates",
   },
   stackUpdates: {
+    recoveryStale: "Refresh this container before restoring its previous image; its inventory is stale.",
+    recoveryHeld: "Recovery is unavailable while this restore point is in use or its outcome is unknown.",
+    updateOptions: "Update options",
+    updateWithCheck: "Update with check",
+    updateWithCheckHelp: "Watches the new version for 2 minutes and restores the previous version if it fails. Volume data is not restored.",
+    volumeNotRestored: "Volume data was not restored; the app may already have migrated it.",
+
     deletePoint: "Delete restore point",
     deleteHelp: "Permanently release this point’s saved configuration and image references. A retention anchor can also be deleted. Volume and bind data are unchanged.",
     deleted: "Restore point deleted.",

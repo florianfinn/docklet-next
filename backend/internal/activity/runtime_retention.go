@@ -2,7 +2,7 @@
 // Revision: c641dc24b3f364ac5e4ec03bc9c5dfe2a10d5f61a6bcba825785f9dc351a9e50
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Bounded compact-evidence cleanup, independent of full history.
+// Deviations: Bounded compact-evidence cleanup, independent of full history. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -28,6 +28,7 @@ func runtimePruneTxInternal(tx *gorm.DB, now time.Time, limit int) (int64, error
 	var ids []string
 	if err := tx.Model(&RuntimeReceipt{}).
 		Where("settled_at IS NOT NULL AND final_write_at <= ?", runtimeTimeInternal(now).Add(-runtimeRetentionInternal)).
+		Where("NOT EXISTS (SELECT 1 FROM image_policy_children WHERE image_policy_children.runtime_id = runtime_receipts.run_id AND image_policy_children.status = ?)", "admitted").
 		Order("final_write_at ASC, run_id ASC").Limit(limit).Pluck("run_id", &ids).Error; err != nil {
 		return 0, err
 	}
@@ -47,6 +48,9 @@ func runtimePruneTxInternal(tx *gorm.DB, now time.Time, limit int) (int64, error
 		return 0, err
 	}
 	if err := tx.Where("run_id IN ?", ids).Delete(&RuntimeImageIntent{}).Error; err != nil {
+		return 0, err
+	}
+	if err := tx.Where("run_id IN ?", ids).Delete(&RuntimeObservedRun{}).Error; err != nil {
 		return 0, err
 	}
 	result := tx.Where("run_id IN ?", ids).Delete(&RuntimeReceipt{})

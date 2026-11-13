@@ -2,7 +2,7 @@
 // Revision: 747254e2620528ca922ef71c066f3d796fa7b856268644e2517f16edf5b0f4c5
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration. M21 #439: Compose self-update controls and capability integration.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration. M21 #439: Compose self-update controls and capability integration. M24 S6: observed recovery and update UI follow-ups.
 
 import { usersEn, keysEn } from "./users-en";
 // American English texts of hub settings and the profile page.
@@ -236,7 +236,9 @@ export const enSettings = {
     notifyHint: "Through the channels configured under Notifications.",
     checkNow: "Check all now",
     defaultMode: "The default is “Check only”. Automatic installation is turned on per stack or container.",
-    noRollback: "If an update fails, nothing is rolled back automatically. The previous image and configuration are kept for manual restore.",
+    noRollback: "Scheduled updates and “Update with check” watch the new version for 2 minutes and try to restore the previous version on failure. Plain manual updates require manual recovery. Volume data is never restored.",
+    host: "Host",
+    windowHelp: "Scheduled updates run in this window in the hub time zone. Check-only targets have no install window. Each change saves this row.",
     table: "Automatic installation",
     target: "Stack / Container",
     mode: "Mode",

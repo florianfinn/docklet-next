@@ -37,7 +37,7 @@ export const enActivity = {
   details: "Details",
   log: "Output",
   services: "Affected: {services}",
-  restoreHint: "The previous state is ready. Restore is manual only – no automatic rollback.",
+  restoreHint: "The previous state is ready. This previous state can be restored manually.",
   openRestore: "Open restore",
   openStack: "Open stack",
   filter: { label: "Filter events", all: "All", error: "Errors", warn: "Warnings", ok: "Success", info: "Info" },

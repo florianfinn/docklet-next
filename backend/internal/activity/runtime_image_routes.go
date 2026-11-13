@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Hub-only stack lifecycle admission through existing durable runtime.
+// Deviations: Hub-only stack lifecycle admission through existing durable runtime. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -48,6 +48,9 @@ func RegisterImageLifecycle(api huma.API, service *ActivityService) {
 		func(ctx context.Context, in *runtimeRestoreInput) (*huma.StreamResponse, error) {
 			if in.Kind != "project" || in.Body.PointID != "" && in.Body.PointID != in.PointID {
 				return nil, imageDTO.Failure("update.invalid-target", 400)
+			}
+			if in.Body.AutoRestore {
+				return nil, huma.Error400BadRequest("autoRestore is only valid for updates")
 			}
 			in.Body.PointID = in.PointID
 			return runtimeLegacyResponse(ctx, service, in.EnvironmentID, in.Key, in.Prefer, RuntimeRestoreProject, RuntimeTarget{Kind: "stack", ID: in.TargetID}, RuntimeOptions{Lifecycle: &updaterDTO.LifecycleIntent{Request: in.Body}})

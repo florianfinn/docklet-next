@@ -2,7 +2,7 @@
 // Revision: 6b89ee3606392c8b65c6dbd6577ffe0773e581b1
 // Retrieved: 2026-11-11
 // License: Apache-2.0
-// Deviations: Original identity-owned inventory scope retention and automatic read lifetimes. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: Original identity-owned inventory scope retention and automatic read lifetimes. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M24 S6: observed recovery and update UI follow-ups.
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { DockletAdapter } from "../adapter";
@@ -11,6 +11,7 @@ import type { Host, ScheduledJob } from "@/domain/model";
 import { isMaintenanceError } from "../maintenance-retry";
 import type { CsrfClient } from "./csrf-client";
 import { nextOccurrence } from "@/domain/schedule";
+import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { READ_TAG_HEADER, type ReadTag } from "./host-read-policy";
 
@@ -38,9 +39,10 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
       if (retained.has(decodeURIComponent(host ?? "")) || ["online", "standby"].includes(catalogue.find((h) => h.id === host)?.status ?? "")) headers.set(READ_TAG_HEADER, tag);
       return client.fetch(input, { ...init, headers });
     } } });
+    const jobs = createUpdateSettings({ baseUrl, client, capability, generation });
     const batches = await Promise.all(selected.map(async (host) => {
       const previous = retained.get(host) ?? [];
-      const [backup, updates] = await Promise.all([
+      const [backup, updates, updateCheck] = await Promise.all([
         fenced(() => overview(host, retained.has(host) || ["online", "standby"].includes(catalogue.find((h) => h.id === host)?.status ?? "") ? tag : undefined)).then((o) => o.volumes.filter((v) => v.backup?.enabled && v.backup.nextRunAt).map((v) => ({ id: `${host}~backup-${v.name}`, hostId: host, kind: "backup" as const, title: v.name, volumeId: v.id, cadence: v.backup!.schedule.mode, nextRunAt: v.backup!.nextRunAt, enabled: true })), (error: unknown) => {
           // Maintenance fails the whole read, so the query keeps its cached rows while it retries (S2 B19).
           if (isCancelledError(error) || isMaintenanceError(error)) throw error;
@@ -57,12 +59,16 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
             });
           } catch (error) {
             if (isCancelledError(error) || isMaintenanceError(error)) throw error;
-            const old = previous.filter((r) => r.kind !== "backup");
+            const old = previous.filter((r) => r.kind === "auto-update");
             return old.length ? old.map((r) => ({ ...r, unavailable: true })) : [{ id: `${host}~schedule-unavailable`, hostId: host, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
           }
         })(),
+        (host === "0" ? jobs.getUpdateCheckJob(host).then((j) => [{ id: `${host}~update-check`, hostId: host, kind: "update-check" as const, title: "", cadence: "", nextRunAt: j.nextRun, enabled: j.enabled }], (error: unknown) => {
+          if (isCancelledError(error) || isMaintenanceError(error)) throw error;
+          return previous.filter((r) => r.kind === "update-check" && r.id !== `${host}~schedule-unavailable`).map((r) => ({ ...r, unavailable: true }));
+        }) : Promise.resolve([])),
       ]);
-      check(); const rows = [...backup, ...updates]; retained.set(host, rows.map((r) => ({ ...r }))); return { backup, updates };
+      check(); const rows = [...backup, ...updates, ...updateCheck]; retained.set(host, rows.map((r) => ({ ...r }))); return { backup, updates: [...updates, ...updateCheck] };
     }));
     check(); return [...batches.flatMap<ScheduledJob>((b) => b.backup), ...batches.flatMap<ScheduledJob>((b) => b.updates)];
   };

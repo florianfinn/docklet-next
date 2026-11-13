@@ -2,9 +2,11 @@
 // Revision: ffced14e7fe77d8f283ae8eb095b4165f719ba9069086e5b073930208fda3ca0
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #126 console count and duration use existing catalogue keys. #126 R1: distinct dialog state keys and truthful permission, admission and retained outcome presentation. M9 D1: show command rejections inline, preserve dialog drafts and clear feedback on edits. List summaries and owned detail reads with bounded recovery (#225, #223). Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #126 console count and duration use existing catalogue keys. #126 R1: distinct dialog state keys and truthful permission, admission and retained outcome presentation. M9 D1: show command rejections inline, preserve dialog drafts and clear feedback on edits. M24 S6: recovery evidence in every detail design. List summaries and owned detail reads with bounded recovery (#225, #223). Simple-user management, assigned-stack access and mode-aware self-service.
 
 import { useIsUser } from "@/data/use-principal";
+import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
+import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
 import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
 import { History, Layers, ListTree, X } from "lucide-react";
 import { useState } from "react";
@@ -46,6 +48,8 @@ function TimelineBody({ run, now }: { run: ActionRun; now: number }) {
         <RunFacts run={run} now={now} className="content-start sm:grid-cols-2" />
       </div>
       <RunErrorBox run={run} />
+      <UpdateRecovery run={run} />
+      <JobUpdateOutcomes run={run} />
       <RunOutput run={run} defaultOpen fill />
     </div>
   );
@@ -67,6 +71,8 @@ function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
         <StepTrack steps={run.steps} status={run.status} labels thin />
       </div>
       <RunErrorBox run={run} />
+      <UpdateRecovery run={run} />
+      <JobUpdateOutcomes run={run} />
       <RunOutput run={run} defaultOpen fill />
     </div>
   );

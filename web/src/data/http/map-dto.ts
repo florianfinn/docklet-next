@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups.
 
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
@@ -11,7 +11,7 @@ import { DELIVERY_REASONS, isProvider } from "@/domain/notifications";
 
 import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
 import type { RuntimeView } from "@/features/activity/runtime-presentation";
-import { reason, record, bool, id, date, optionalDate } from "./update-validation";
+import { choice, reason, record, bool, id, date, optionalDate } from "./update-validation";
 import { inventoryId } from "./inventory-mapping";
 import { backupCodeKey } from "../backup-error";
 import { wireKey, scopedKey } from "../wire-catalogue";
@@ -199,6 +199,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     return job && code?.startsWith("job.") && JOB_STEPS.has(state) && text === `${run.resourceName ?? run.resourceId}: ${state}` ? { code: `activity.jobStep.${state}`, params: {} } : undefined;
   };
   const lifecycle = run.imageLifecycle;
+  const recovery = lifecycle?.recovery ? record(lifecycle.recovery) : undefined;
+  const updateRecovery = recovery ? { outcome: choice(recovery.outcome, ["restored", "restore-failed", "unavailable", "not-needed", "interrupted"]), code: reason(recovery.code) } : undefined;
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
   if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
   const coded = (code: string | undefined, source: string, field: "progress" | "error" = "progress"): MessageCode => {
@@ -235,6 +237,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   return Object.assign({
     id: run.id,
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
+    ...(updateRecovery ? { updateRecovery } : {}),
+    ...(job && typeof run.metadata?.jobId === "string" && /^update-window:/.test(run.metadata.jobId) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
     kind, sourceOperation: run.type,
     title: { code: `activity.runKind.${kind}`, params: {} },
     target: jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: target } },

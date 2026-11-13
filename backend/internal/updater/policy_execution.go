@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Serial policy children through runtime admission; receipt-only restart recovery.
+// Deviations: Serial policy children through runtime admission; receipt-only restart recovery. M24 recovery evidence, validation and reason contracts. M24 window suppression binding and all-caller transactional child settlement.
 
 package updater
 
@@ -143,6 +143,11 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
 	}
+	// Read before PrepareChild: a failed read leaves no prepared child behind.
+	suppressed, err := p.store.FailedCandidates(actorCtx, one.ID, one.TargetIdentity)
+	if err != nil {
+		return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
+	}
 	child, fresh, err := p.store.PrepareChild(actorCtx, one, jobRun)
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, policyCode(err, "update.persistence-failed")), false
@@ -150,7 +155,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if !fresh {
 		return s.reconcileImagePolicyChild(ctx, p, one.EnvironmentID, one.TargetID, child)
 	}
-	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID}
+	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID, Suppressed: suppressed}
 	var accepted activity.RuntimeAdmissionResult
 	if one.TargetKind == "container" {
 		accepted, err = p.ports.admitContainer(actorCtx, one.EnvironmentID, resolved.ContainerID, child.ID, binding)
@@ -166,7 +171,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 			return policyTarget(one.TargetID, st.Failed, "runtime.outcome-unknown"), true
 		}
 		if found {
-			return imagePolicySnapshotTarget(one.TargetID, child.ID, snapshot)
+			return s.settleImagePolicySnapshot(ctx, p, one.TargetID, child, snapshot)
 		}
 		changed := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "prepared").Updates(map[string]any{"status": "refused", "code": code, "settled_at": policyNow()})
 		if changed.Error != nil {
@@ -181,13 +186,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if err != nil {
 		return policyTargetWithActivity(one.TargetID, accepted.ActivityID, st.Failed, "runtime.outcome-unknown"), true
 	}
-	target, uncertain := imagePolicySnapshotTarget(one.TargetID, accepted.ActivityID, snapshot)
-	if !uncertain {
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Updates(map[string]any{"status": "settled", "settled_at": policyNow()}).Error; err != nil {
-			return policyTargetWithActivity(one.TargetID, accepted.ActivityID, st.Failed, "update.persistence-failed"), true
-		}
-	}
-	return target, uncertain
+	return s.settleImagePolicySnapshot(ctx, p, one.TargetID, child, snapshot)
 }
 
 // A failed wrapper cannot release another runtime child's host-wide sequencing
@@ -208,9 +207,6 @@ func (s *UpdaterService) imagePolicyHostHold(ctx context.Context, p *imagePolicy
 			target = qualifyUpdateTarget(env, child.TargetKind, child.TargetID, target)
 			return &target, nil
 		}
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Updates(map[string]any{"status": "settled", "settled_at": policyNow()}).Error; err != nil {
-			return nil, err
-		}
 	}
 	return nil, nil
 }
@@ -220,26 +216,49 @@ func policyTargetWithActivity(target, id string, status st.RunStatus, code strin
 	return out
 }
 func imagePolicySnapshotTarget(target, id string, snapshot activityDTO.RuntimeSnapshot) (st.TargetOutcome, bool) {
+
 	code := ""
-	if snapshot.ImageLifecycle != nil {
-		code = snapshot.ImageLifecycle.Code
-		if imageDTO.ValidateReason(code) != nil || code == "runtime.outcome-unknown" {
-			return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
-		}
+	unknown := func() (st.TargetOutcome, bool) {
+		return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
 	}
 	if snapshot.OutcomeState == activityDTO.RuntimeOutcomeUnknown || snapshot.Status != activityDTO.StatusSuccess && snapshot.Status != activityDTO.StatusFailed && snapshot.Status != activityDTO.StatusCancelled {
-		return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
+		return unknown()
+	}
+	lifecycle := snapshot.ImageLifecycle
+	if lifecycle != nil {
+		code = lifecycle.Code
+		if imageDTO.ValidateReason(code) != nil || code == "runtime.outcome-unknown" {
+			return unknown()
+		}
+	}
+	if snapshot.MessageCode == "runtime.interrupted" || lifecycle != nil && lifecycle.Recovery != nil && lifecycle.Recovery.Outcome == "interrupted" {
+		return policyTargetWithActivity(target, id, st.Failed, "update.interrupted"), false
+	}
+	if snapshot.Status == activityDTO.StatusCancelled {
+		return policyTargetWithActivity(target, id, st.Canceled, code), false
+	}
+	if lifecycle == nil {
+		return unknown()
 	}
 	status := st.Failed
 	if snapshot.Status == activityDTO.StatusSuccess {
 		status = st.Succeeded
+		code = ""
 	}
-	if snapshot.Status == activityDTO.StatusCancelled {
-		status = st.Canceled
+	if lifecycle.Recovery != nil {
+		switch lifecycle.Recovery.Outcome {
+		case "restored":
+			code = "update.auto-restored"
+		case "restore-failed":
+			code = "update.auto-restore-failed"
+		case "unavailable":
+			code = "update.auto-restore-unavailable"
+		}
 	}
-	if code == "image.busy" {
+	if code == "image.busy" || code == "update.candidate-failed" {
 		status = st.Skipped
 	}
+
 	return policyTargetWithActivity(target, id, status, code), false
 }
 func (s *UpdaterService) reconcileImagePolicyChild(ctx context.Context, p *imagePolicyService, env, target string, child policy.Child) (st.TargetOutcome, bool) {
@@ -260,7 +279,7 @@ func (s *UpdaterService) reconcileImagePolicyChild(ctx context.Context, p *image
 		}
 		return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
 	}
-	return imagePolicySnapshotTarget(target, id, snapshot)
+	return s.settleImagePolicySnapshot(ctx, p, target, child, snapshot)
 }
 func (s *UpdaterService) ReconcileImagePolicyHost(ctx context.Context, env string, previous st.Run) (st.Outcome, error) {
 	p, err := s.hubPolicies()

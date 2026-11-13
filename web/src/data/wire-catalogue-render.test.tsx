@@ -2,8 +2,10 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates.
+// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups.
 
+import recoveryFixture from "./http/testdata/update-recovery.json";
+import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { renderWithApp } from "@/test/render";
 import { CandidateState, CandidateRunStatus } from "@/features/security/CandidateChecks";
 import { readFileSync } from "node:fs";
@@ -32,6 +34,7 @@ function activityMessage(code: "runtime.wait-timeout" | "runtime.waiter-disconne
 
 // Each row names a representative property of one distinct guarded union and its real consumer.
 const proofs = [
+  { property: "UpdaterRecoveryResult.outcome", member: "restored", key: "images.errors.recovery_restored", render: () => renderWithApp(<UpdateRecovery run={renderRun(mapActivityDetail({ activity: { id: "example", type: "project_update", environmentId: "example", status: "failed", startedAt: at, createdAt: at, imageLifecycle: recoveryFixture[0] as never }, messages: [], output: [], stepTrace: [], outputTruncated: false }), "de")} />).container.textContent ?? "" },
   { property: "VulnerabilityCandidateResult.state", member: "queued", key: "security.candidates.states.queued", render: () => renderWithApp(<CandidateState state="queued" />).container.textContent ?? "" },
   { property: "VulnerabilityCandidateRun.status", member: "running", key: "security.historyStatus.running", render: () => renderWithApp(<CandidateRunStatus status="running" />).container.textContent ?? "" },
   { property: "VulnerabilityScanResult.errorCode", member: "candidate.unavailable", key: "images.errors.candidate_unavailable", render: () => imageError("candidate.unavailable") },

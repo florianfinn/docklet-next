@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
 
 package schema
 
@@ -45,7 +45,9 @@ import (
 )
 
 // Models includes the release baseline and models added by later forward migrations.
-func Models() []any { return append(BaselineModels(), candidates.Models()...) }
+func Models() []any {
+	return append(append(BaselineModels(), candidates.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{})
+}
 
 // BaselineModels freezes the model list used to generate release migration 001.
 // Add later models to Models, leaving this list and the baseline proof unchanged.

@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: M21 #438 includes current schema 2 before the synthetic forward 003. Original prerelease archive refusal and forward migration through the real restore receiver.
+// Deviations: M21 #438 includes candidate schema before a synthetic forward migration; M24 derives its version from every current migration. Original prerelease archive refusal and forward migration through the real restore receiver.
 
 package backup
 
@@ -14,10 +14,13 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -126,23 +129,35 @@ func TestPrereleaseArchiveRefusedByUploadAndOfflineRestore(t *testing.T) {
 	}
 }
 
-func forwardRestoreSource(t *testing.T) fs.FS {
+func forwardRestoreSource(t *testing.T) (fs.FS, int64) {
 	t.Helper()
 	files := fstest.MapFS{}
-	for _, name := range []string{"001_baseline.sql", "002_candidate_scans.sql"} {
+	entries, err := fs.ReadDir(resources.FS, "migrations/sqlite")
+	require.NoError(t, err)
+	var latest int64
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".sql") {
+			continue
+		}
+		version, err := strconv.ParseInt(strings.SplitN(name, "_", 2)[0], 10, 64)
+		require.NoError(t, err)
+		latest = max(latest, version)
 		data, err := resources.FS.ReadFile("migrations/sqlite/" + name)
 		require.NoError(t, err)
 		files[name] = &fstest.MapFile{Data: data}
 	}
-	files["003_fixture.sql"] = &fstest.MapFile{Data: []byte("-- +goose Up\nCREATE TABLE forward_restore_witness(value TEXT);\nINSERT INTO forward_restore_witness SELECT value FROM settings WHERE key='forward-restore';\n")}
-	return files
+	nextVersion := latest + 1
+	files[fmt.Sprintf("%03d_fixture.sql", nextVersion)] = &fstest.MapFile{Data: []byte("-- +goose Up\nCREATE TABLE forward_restore_witness(value TEXT);\nINSERT INTO forward_restore_witness SELECT value FROM settings WHERE key='forward-restore';\n")}
+	return files, nextVersion
 }
 
 func TestRestoreAppliesForwardMigrationFromProcessSource(t *testing.T) {
 	source := restoreArchiveNew(t)
 	require.NoError(t, source.db.Exec("INSERT INTO settings(key,value) VALUES('forward-restore','saved-from-archive')").Error)
 	record := restoreArchiveMetadata(t, source)
-	options := database.MigrationOptions{Source: forwardRestoreSource(t)}
+	migrationSource, nextVersion := forwardRestoreSource(t)
+	options := database.MigrationOptions{Source: migrationSource}
 	target := restoreArchiveNew(t, options)
 	target.cfg.BackupDir = source.cfg.BackupDir
 	saved := false
@@ -164,7 +179,7 @@ func TestRestoreAppliesForwardMigrationFromProcessSource(t *testing.T) {
 	require.Equal(t, "saved-from-archive", value)
 	var version int64
 	require.NoError(t, target.db.Raw("SELECT max(version_id) FROM goose_db_version").Scan(&version).Error)
-	require.EqualValues(t, 3, version)
+	require.EqualValues(t, nextVersion, version)
 	// Newer supported archives must use the process source at the upload receiver too.
 	name, _, err := fixtureArchive(t, target.db, target.cfg, "forward", 2<<30)
 	require.NoError(t, err)
@@ -173,7 +188,7 @@ func TestRestoreAppliesForwardMigrationFromProcessSource(t *testing.T) {
 	defer file.Close()
 	_, info, err := service.receiveArchive(t.Context(), "forward-upload", file)
 	require.NoError(t, err)
-	require.EqualValues(t, 3, info.migration)
+	require.EqualValues(t, nextVersion, info.migration)
 }
 
 func TestOfflineRestoreRefusesPrereleaseDestinationWithoutWrites(t *testing.T) {

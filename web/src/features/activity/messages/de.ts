@@ -38,7 +38,7 @@ export const deActivity: typeof enActivity = {
   details: "Details",
   log: "Ausgabe",
   services: "Betroffen: {services}",
-  restoreHint: "Vorheriger Stand liegt bereit. Wiederherstellung nur manuell – keine automatische Rückkehr.",
+  restoreHint: "Vorheriger Stand liegt bereit. Dieser vorherige Stand kann manuell wiederhergestellt werden.",
   openRestore: "Wiederherstellung öffnen",
   openStack: "Stack öffnen",
   filter: { label: "Ereignisse filtern", all: "Alle", error: "Fehler", warn: "Warnungen", ok: "Erfolg", info: "Info" },

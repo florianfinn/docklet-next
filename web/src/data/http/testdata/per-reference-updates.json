@@ -1,0 +1,84 @@
+[
+  {
+    "origin": "standalone",
+    "originSource": "detected",
+    "imagePlatform": "unknown",
+    "id": "first",
+    "names": [
+      "first"
+    ],
+    "image": "registry.example.com/app:stable",
+    "imageId": "sha256:5635e4d48fef7948b2133b313ec0be005f1604c852cf0ee5c298859212b176ec",
+    "command": "",
+    "created": 0,
+    "ports": [],
+    "labels": {},
+    "state": "running",
+    "status": "Up",
+    "hostConfig": {},
+    "networkSettings": {
+      "networks": {}
+    },
+    "mounts": [],
+    "updateStrategy": "digest",
+    "updateInfo": {
+      "state": "version",
+      "checkedAt": "2026-11-12T00:00:00Z",
+      "imageRef": "registry.example.com/app:stable",
+      "platform": "linux/amd64",
+      "authState": "anonymous",
+      "checkTime": "2026-11-12T00:00:00Z",
+      "updateType": "minor",
+      "currentVersion": "1.0.0",
+      "latestVersion": "1.1.0",
+      "currentDigest": "sha256:5635e4d48fef7948b2133b313ec0be005f1604c852cf0ee5c298859212b176ec",
+      "latestDigest": "sha256:a442159e19635ac674d1a59eb2cc5e181e21470eb0da18e6af7a3c9a781efb0d",
+      "error": "",
+      "authMethod": "anonymous",
+      "responseTimeMs": 0,
+      "hasUpdate": true
+    },
+    "autoUpdateEnabled": true
+  },
+  {
+    "origin": "standalone",
+    "originSource": "detected",
+    "imagePlatform": "unknown",
+    "id": "second",
+    "names": [
+      "second"
+    ],
+    "image": "registry.example.com/app:edge",
+    "imageId": "sha256:5635e4d48fef7948b2133b313ec0be005f1604c852cf0ee5c298859212b176ec",
+    "command": "",
+    "created": 0,
+    "ports": [],
+    "labels": {},
+    "state": "running",
+    "status": "Up",
+    "hostConfig": {},
+    "networkSettings": {
+      "networks": {}
+    },
+    "mounts": [],
+    "updateStrategy": "digest",
+    "updateInfo": {
+      "state": "version",
+      "checkedAt": "2026-11-12T00:00:00Z",
+      "imageRef": "registry.example.com/app:edge",
+      "platform": "linux/amd64",
+      "authState": "anonymous",
+      "checkTime": "2026-11-12T00:00:00Z",
+      "updateType": "minor",
+      "currentVersion": "1.0.0",
+      "latestVersion": "1.1.0",
+      "currentDigest": "sha256:5635e4d48fef7948b2133b313ec0be005f1604c852cf0ee5c298859212b176ec",
+      "latestDigest": "sha256:a442159e19635ac674d1a59eb2cc5e181e21470eb0da18e6af7a3c9a781efb0d",
+      "error": "",
+      "authMethod": "anonymous",
+      "responseTimeMs": 0,
+      "hasUpdate": true
+    },
+    "autoUpdateEnabled": true
+  }
+]

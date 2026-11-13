@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Producer-shaped HTTP fixtures and behavioural guards for issue #231.
+// Deviations: Producer-shaped HTTP fixtures and behavioural guards for issue #231. M24 S6: observed recovery and update UI follow-ups.
 
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -70,7 +70,7 @@ it("policy aggregation preserves healthy hosts and missing next run", async () =
   const f = updateFixture(); f.state.hostFailure = "other";
   f.state.policy.mode = "scheduled"; f.state.policy.window = { kind: "daily", time: "04:00" };
   const rows = await f.adapter.listSchedule(["direct", "other"]);
-  expect(rows.filter((r) => r.hostId === "direct")).toHaveLength(1);
+  expect(rows.filter((r) => r.hostId === "direct" && r.kind === "auto-update")).toHaveLength(1);
   expect(rows.find((r) => r.hostId === "direct")).toMatchObject({ enabled: true, cadence: "daily" });
   expect(rows.find((r) => r.hostId === "other")).toMatchObject({ unavailable: true });
   expect(f.calls.filter((c) => c.path.endsWith("/policies"))).toHaveLength(2);
@@ -203,4 +203,17 @@ it("decodes every policy identity the hub produces and still rejects a malformed
   expect(listed.map((p) => [p.targetKind, p.targetId, p.targetIdentity])).toEqual([["stack", "project", targetIdentity], ["stack", "unbound", ""], ["container", "app", "app"], ["container", "fresh", ""]]);
   f.state.policyList = [row("stack", "project", "not-a-hash", 1)];
   await expect(f.adapter.listUpdatePolicies!("direct")).rejects.toBeTruthy();
+});
+
+it("F5 dashboard keeps policy windows and adds only the hub update-check job with its backend NextRun", async () => {
+  const f = updateFixture();
+  f.state.policy.mode = "scheduled"; f.state.policy.window = { kind: "weekly", day: 0, time: "04:00" };
+  const rows = await f.adapter.listSchedule(["0", "direct"]);
+  const checks = rows.filter((r) => r.kind === "update-check");
+  expect(checks).toHaveLength(1);
+  expect(checks[0]).toMatchObject({ id: "0~update-check", hostId: "0", nextRunAt: f.state.job.nextRun, enabled: true });
+  // The backend cron expression is a wire value, never UI text.
+  expect(checks[0]!.cadence).toBe("");
+  expect(rows.filter((r) => r.kind === "auto-update")).toHaveLength(2);
+  expect(f.calls.filter((c) => c.path.endsWith("/jobs")).every((c) => c.path === "/api/environments/0/jobs")).toBe(true);
 });

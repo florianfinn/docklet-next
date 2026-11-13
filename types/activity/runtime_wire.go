@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Bounded remote runtime implementation, active in production since #125.
+// Deviations: Bounded remote runtime implementation, active in production since #125. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -22,6 +22,10 @@ import (
 
 const RuntimeMaxBodyBytes = 1 << 20
 const RuntimeMaxOutputBytes = 256 << 10
+
+// RuntimeMaxMetadataBytes bounds stored activity metadata; it holds checked
+// recovery evidence (at most 64 KiB) beside a few small routing keys.
+const RuntimeMaxMetadataBytes = 128 << 10
 
 var ErrRuntimeWire = errors.New("invalid runtime response")
 
@@ -240,7 +244,12 @@ func ValidateRuntimeOutcome(o RuntimeExecutionOutcome, identity RuntimeRunIdenti
 	}
 	if o.Detail.Activity.Result != nil {
 		result := o.Detail.Activity.Result
-		if o.Detail.Activity.Status != StatusSuccess || o.Detail.Activity.ResourceID == nil || result.OldID != *o.Detail.Activity.ResourceID || len(result.NewID) != 64 || result.NewID == result.OldID || result.OldName == "" || len(result.OldName) > 256 || result.NewName == "" || len(result.NewName) > 256 {
+		allowed := o.Detail.Activity.Status == StatusSuccess
+		if o.Detail.Activity.Status == StatusFailed && o.Detail.Activity.Type == TypeContainerRedeploy && o.Detail.Activity.Operation == RuntimeUpdateContainer {
+			item := o.Detail.Activity
+			allowed = (item.MessageCode == string(CodeRuntimeInterrupted) || (item.MessageCode == string(CodeRuntimeFailed) && item.ImageLifecycle != nil && item.ImageLifecycle.Code == "update.target-changed")) && (item.ImageLifecycle == nil || !item.ImageLifecycle.Verified)
+		}
+		if !allowed || o.Detail.Activity.ResourceID == nil || result.OldID != *o.Detail.Activity.ResourceID || len(result.NewID) != 64 || result.NewID == result.OldID || result.OldName == "" || len(result.OldName) > 256 || result.NewName == "" || len(result.NewName) > 256 {
 			return ErrRuntimeWire
 		}
 	}

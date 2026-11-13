@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Trusted command normalization shared by active HTTP admission and executor intake. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Trusted command normalization shared by active HTTP admission and executor intake. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -154,14 +154,22 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 		}
 		owned := updaterDTO.ContainerImageRequest{}
 		if command.Options.ContainerImage != nil {
+			owned.AutoRestore = command.Options.ContainerImage.AutoRestore
+			if owned.AutoRestore && (command.Operation != RuntimeUpdateContainer || command.Options.ContainerImage.Policy != nil) {
+				return invalid()
+			}
 			owned.ExpectedManifest = command.Options.ContainerImage.ExpectedManifest
 			if owned.ExpectedManifest != "" && (command.Operation != RuntimeUpdateContainer || !updaterDTO.ValidManifest(owned.ExpectedManifest)) {
 				return invalid()
 			}
 		}
 		if command.Options.ContainerImage != nil && command.Options.ContainerImage.Policy != nil {
+			if command.Operation != RuntimeUpdateContainer {
+				return invalid()
+			}
 			binding := *command.Options.ContainerImage.Policy
-			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+			binding.Suppressed = slices.Clone(binding.Suppressed)
+			if !runtimeSuppressedValid(binding.Suppressed) || binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
 				return invalid()
 			}
 			if _, err := runtimeUUIDInternal(binding.ChildID); err != nil {
@@ -192,6 +200,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		var owned = *command.Options.Lifecycle
+		if owned.Request.AutoRestore && (command.Operation != RuntimeUpdateProject || owned.Policy != nil) {
+			return invalid()
+		}
 		if !owned.Request.VerifiedService() {
 			return invalid()
 		}
@@ -205,8 +216,12 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 		}
 		owned.Request = owned.Request.Clone()
 		if owned.Policy != nil {
+			if command.Operation != RuntimeUpdateProject {
+				return invalid()
+			}
 			binding := *owned.Policy
-			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+			binding.Suppressed = slices.Clone(binding.Suppressed)
+			if !runtimeSuppressedValid(binding.Suppressed) || binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
 				return invalid()
 			}
 			if _, e := runtimeUUIDInternal(binding.ChildID); e != nil {
@@ -340,4 +355,16 @@ func (c runtimeCanonicalCommandInternal) identity(runID string) runtimeIdentityI
 
 func (c runtimeCanonicalCommandInternal) binding() runtimeBindingInternal {
 	return runtimeBindingInternal{Key: c.command.Key, CallerID: c.command.Actor.ID, CallerName: new(c.command.Actor.Username)}
+}
+
+func runtimeSuppressedValid(values []updaterDTO.SuppressedCandidate) bool {
+	if len(values) > updaterDTO.MaxSuppressedCandidates {
+		return false
+	}
+	for _, value := range values {
+		if (value.Service != "" && !runtimeTextInternal(value.Service, 256)) || !runtimeTextInternal(value.Repository, 1024) || !runtimeTextInternal(value.Platform, 256) || !updaterDTO.ValidManifest(value.Manifest) {
+			return false
+		}
+	}
+	return true
 }

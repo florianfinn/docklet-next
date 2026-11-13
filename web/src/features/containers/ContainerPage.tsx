@@ -134,7 +134,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   );
 }
 
-function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void; onUpdate: (restore: boolean) => void }) {
+function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void; onUpdate: (restore: boolean, autoRestore?: boolean) => void }) {
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
@@ -222,9 +222,9 @@ export default function ContainerPage() {
   const c = containers.data?.find((x) => x.id === containerId);
   // The page owns the recreate run at a stable position: the old ID leaves the
   // list before the run settles, and the run must survive that to navigate.
-  const [updating, setUpdating] = useState<{ container: ContainerInfo; restore: boolean }>();
+  const [updating, setUpdating] = useState<{ container: ContainerInfo; restore: boolean; autoRestore?: boolean }>();
   const [recreating, setRecreating] = useState<ContainerInfo>();
-  return <>{content()}{updating && <ContainerUpdateDialog key={updating.container.id} container={updating.container} restore={updating.restore} close={() => setUpdating(undefined)} />}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
+  return <>{content()}{updating && <ContainerUpdateDialog key={`${updating.container.id}:${updating.restore}:${updating.autoRestore === true}`} container={updating.container} restore={updating.restore} autoRestore={updating.autoRestore} close={() => setUpdating(undefined)} />}<RecreateDialog container={recreating} open={!!recreating} onOpenChange={(open) => { if (!open) setRecreating(undefined); }} /></>;
 
   function content() {
     if (containers.isPending || hosts.isPending)
@@ -247,6 +247,6 @@ export default function ContainerPage() {
           }
         />
       );
-    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onUpdate={(restore) => setUpdating({ container: c, restore })} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
+    return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body key={c.id} c={c} host={hosts.byId.get(c.hostId)} onUpdate={(restore, autoRestore) => setUpdating({ container: c, restore, autoRestore })} onEdit={() => { if (c.origin === "standalone") setRecreating(c); }} /></>;
   }
 }

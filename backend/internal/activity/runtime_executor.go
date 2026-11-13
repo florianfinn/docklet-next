@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -119,6 +119,17 @@ func runtimeFullContainerID(id string) bool {
 // scope cannot be silently executed; Docker/Compose changes after this read
 // remain outside the application's atomic control.
 func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command RuntimeCommand, output io.Writer) error {
+	observed, isObserved := runtimeObservedExecution(command)
+	if isObserved {
+		ctx = updaterDTO.WithObservedExecution(ctx, observed)
+	}
+	// An observed run's zero-effect refusal is checked evidence, not an unknown outcome.
+	refuse := func(code string, status int, cause error) error {
+		if isObserved {
+			updaterDTO.RecordLifecycleResult(ctx, updaterDTO.LifecycleResult{RunID: command.ProposedRunID, Code: code, HTTPStatus: status, Recovery: &updaterDTO.RecoveryResult{Outcome: "not-needed"}})
+		}
+		return &RuntimeTargetError{Code: code, Cause: cause}
+	}
 	if runtimeContainerImageOperation(command.Operation) {
 		if command.Options.ContainerImage != nil {
 			ctx = updaterDTO.WithExpectedManifest(ctx, command.Options.ContainerImage.ExpectedManifest)
@@ -132,26 +143,26 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 			return unavailableContainerImage(ctx, command)
 		}
 		if command.Target.Name == nil {
-			return &RuntimeTargetError{Code: "update.target-changed"}
+			return refuse("update.target-changed", 409, nil)
 		}
 		return port.ExecuteContainerImage(ctx, command.Target.ID, *command.Target.Name, command.Operation == RuntimeRestoreContainerImage, command.Actor)
 	}
 	resolved, err := a.ResolveRuntimeTarget(ctx, command.Target)
 	if err != nil {
-		return &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
+		return refuse("runtime.target-unavailable", 503, err)
 	}
 	if resolved.ComposeManaged && resolved.Target.ParentProjectID == nil {
-		return &RuntimeTargetError{Code: "runtime.parent-unresolved"}
+		return refuse("runtime.parent-unresolved", 409, nil)
 	}
 	if resolved.Target.Kind != command.Target.Kind || resolved.Target.ID != command.Target.ID ||
 		!runtimeEqualInternal(resolved.Target.ParentProjectID, command.Target.ParentProjectID) {
-		return &RuntimeTargetError{Code: "runtime.target-changed"}
+		return refuse("runtime.target-changed", 409, nil)
 	}
 	if command.Target.Kind == "container" && command.Target.Name != nil && (resolved.Target.Name == nil || *command.Target.Name != *resolved.Target.Name) {
-		return &RuntimeTargetError{Code: "runtime.target-changed"}
+		return refuse("runtime.target-changed", 409, nil)
 	}
 	if command.Target.Kind == "stack" && (command.Target.Name == nil || resolved.Target.Name == nil || *resolved.Target.Name != *command.Target.Name) {
-		return &RuntimeTargetError{Code: "runtime.target-changed"}
+		return refuse("runtime.target-changed", 409, nil)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -162,7 +173,7 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 	case RuntimeUpdateProject, RuntimeRestoreProject:
 		port, ok := a.projects.(runtimeImageLifecyclePort)
 		if !ok {
-			return &RuntimeTargetError{Code: "update.invalid-target"}
+			return refuse("update.invalid-target", 409, nil)
 		}
 		_, err := port.ExecuteImageLifecycle(ctx, command.Target.ID, command.ProposedRunID, command.Store.RegistrationID, command.Options.Lifecycle, command.Actor)
 		return err

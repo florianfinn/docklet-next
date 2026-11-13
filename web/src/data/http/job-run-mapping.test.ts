@@ -92,3 +92,13 @@ it.each(["project_update", "project_restore"])("keeps activity.message and event
     expect(errors).not.toHaveBeenCalled();
   } finally { errors.mockRestore(); }
 });
+
+// Q-R1S6-A (a): target outcomes are read for update-window jobs only.
+it("only update-window jobs request target-outcome detail", () => {
+  for (const jobId of ["update-check", "update-window:direct:stack:app", "volume-backup", "example-job"]) {
+    const detail = job(jobId, "Example job");
+    detail.activity.metadata = { jobId, runId: "example-run" };
+    const run = mapActivityDetail(detail);
+    expect(run.jobRef !== undefined).toBe(jobId.startsWith("update-window:"));
+  }
+});

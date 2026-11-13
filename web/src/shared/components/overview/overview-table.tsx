@@ -226,7 +226,7 @@ export function OverviewView<K extends string>({ view, dense, children, sortBar 
     );
   }
   return (
-    <BareTable ref={innerRef as Ref<HTMLTableElement>} data-view={view} className={dense ? "border-separate border-spacing-y-1" : "border-separate border-spacing-y-1.5"}>
+    <BareTable ref={innerRef as Ref<HTMLTableElement>} aria-label={listLabel} data-view={view} className={dense ? "border-separate border-spacing-y-1" : "border-separate border-spacing-y-1.5"}>
       <OverviewHead {...head} />
       <TableBody>{children}</TableBody>
     </BareTable>

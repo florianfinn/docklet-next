@@ -213,3 +213,15 @@ test("#254 every lifecycle and activity code field declares its vocabulary",()=>
  const unknown=structuredClone(spec);unknown.components.schemas.ActivityRuntimeAdmission.properties.code.enum.push("synthetic.undeclared");
  assert.throws(()=>assertCodeEnums(unknown),/undeclared reason synthetic.undeclared/);
 });
+
+test("M24 nested recovery and manifest tuple schemas participate in v18", () => {
+ const spec=JSON.parse(readFileSync(new URL("../api/openapi.json",import.meta.url)));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v18.json",import.meta.url));
+ const original=agentFixture(Buffer.from(JSON.stringify(spec)),fixture);
+ const manifest=JSON.parse(original);
+ for (const name of ["UpdaterRecoveryResult","UpdaterAppliedCandidate","UpdaterVerifiedImageRequest"]) {
+  assert.ok(manifest.imageLifecycle.schemas[name],name);
+  const changed=structuredClone(spec);changed.components.schemas[name].description="changed recovery contract";
+  assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)),fixture),original,name);
+ }
+});

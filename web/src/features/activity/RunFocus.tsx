@@ -1,3 +1,5 @@
+import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
+import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { DeployRecovery } from "@/shared/components/updates/deploy-recovery";
 import { useTranslations } from "use-intl";
 
@@ -85,6 +87,8 @@ export function RunFocusBody({ run, now, fill = false, outputOpen = false, class
       </div>
       <RunFacts run={run} now={now} className="shrink-0 rounded-xl border bg-background/40 p-3" />
       <RunErrorBox run={run} />
+      <UpdateRecovery run={run} />
+      <JobUpdateOutcomes run={run} />
       <DeployRecovery run={run} />
       <RunOutput run={run} defaultOpen={outputOpen} fill={fill} className={cn(fill && "min-h-0")} />
     </div>

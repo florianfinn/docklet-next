@@ -2,7 +2,7 @@
 // Revision: 4023414fcf620a9ea4be2429ee70fa8fd8230f9c
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Policy execution guard sweep uses receipts, errors and persisted checkpoints.
+// Deviations: Policy execution guard sweep uses receipts, errors and persisted checkpoints. M24 recovery evidence, validation and reason contracts; admitted reconciliation fixtures include their runtime identity.
 
 package updater
 
@@ -62,7 +62,7 @@ func TestPolicySnapshotDispositionMapping(t *testing.T) {
 		{"unknown-success", a.StatusSuccess, a.RuntimeOutcomeUnknown, st.Failed, true},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			target, unknown := imagePolicySnapshotTarget("stack", "child", a.RuntimeSnapshot{Activity: a.Activity{Status: row.status}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: row.knowledge}})
+			target, unknown := imagePolicySnapshotTarget("stack", "child", a.RuntimeSnapshot{Activity: a.Activity{Status: row.status, ImageLifecycle: &dto.LifecycleResult{Verified: row.status == a.StatusSuccess}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: row.knowledge}})
 			require.Equal(t, row.expected, target.Status)
 			require.Equal(t, row.uncertain, unknown)
 			require.Equal(t, "child", target.ActivityID)
@@ -214,11 +214,13 @@ func TestPolicyReconcileUsesRecordedRuntimeIDAndNoReplay(t *testing.T) {
 	p := f.save(t, "stack", "scheduled")
 	child, _, err := f.p.store.PrepareChild(t.Context(), p, "wrapper")
 	require.NoError(t, err)
-	require.NoError(t, f.db.Model(&policy.Child{}).Where("id = ?", child.ID).Update("status", "admitted").Error)
-	f.receipts[child.ID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusCancelled}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
+	runtimeID := "example-recorded-runtime"
+	require.NoError(t, policy.AdmitChild(f.db.DB, &dto.PolicyBinding{PolicyID: p.ID, Revision: p.Revision, JobRunID: child.JobRunID, ChildID: child.ID}, runtimeID))
+	f.receipts[runtimeID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusCancelled}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
 	out := f.run(t, "auto-update", st.Run{ID: "wrapper", AttemptCount: 2, CreatedAt: time.Now()})
 	require.Len(t, out.Targets, 1)
 	require.Equal(t, st.Canceled, out.Targets[0].Status)
+	require.Equal(t, runtimeID, out.Targets[0].ActivityID)
 	require.Zero(t, f.admissions)
 }
 
@@ -245,7 +247,7 @@ func TestPolicyReconcileReadFailureNeverDispatches(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, policy.AdmitChild(f.db.DB, &dto.PolicyBinding{ChildID: child.ID}, child.ID))
 	f.p.ports.snapshot = func(context.Context, string, string) (a.RuntimeSnapshot, bool, error) {
-		return a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}, true, errors.New("synthetic receipt read failure")
+		return a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess, ImageLifecycle: &dto.LifecycleResult{Verified: true}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}, true, errors.New("synthetic receipt read failure")
 	}
 	out := f.run(t, "auto-update", st.Run{ID: "wrapper", AttemptCount: 2})
 	require.Len(t, out.Targets, 1)

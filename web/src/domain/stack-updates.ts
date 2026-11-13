@@ -2,13 +2,13 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original phase 2a stack update consumer for issue #231. M21 #438: candidate checks and verified updates.
+// Deviations: Original phase 2a stack update consumer for issue #231. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups.
 
 export interface UpdateBaseline {
   targetIdentity: string; savedRevision: string; observedRevision: string;
   available: boolean; autoExcluded: boolean; code?: string; sourceRunId?: string;
 }
-export interface LifecycleInput { expectedRevision: string; pointId?: string; replaceConfiguration?: boolean; services?: string[]; service?: string; expectedManifest?: string }
+export interface LifecycleInput { autoRestore?: boolean; expectedRevision: string; pointId?: string; replaceConfiguration?: boolean; services?: string[]; service?: string; expectedManifest?: string }
 export interface UpdatePoint {
   id: string; registrationId: string; targetId: string; targetIdentity: string;
   sourceRunId: string; createdAt: string; sourceState: "settled" | "partial-source";
@@ -38,7 +38,10 @@ export interface SystemHints {
     compatibleReference?: string; state: "current" | "available" | "pinned" | "unknown";
     requiresHubUpdate: boolean; manualOnly: true; code?: string }[];
 }
+export interface UpdateJobTarget { id: string; status: UpdateRunStatus; code?: string; activityId?: string; environmentId?: string; targetId?: string }
 export interface UpdatesApi {
+  getUpdateCheckJob?(hostId: string): Promise<{ enabled: boolean; schedule: string; nextRun?: string }>;
+  getUpdateJobTargets?(hostId: string, jobId: string, runId: string): Promise<UpdateJobTarget[]>;
   getUpdateBaseline?(stackId: string): Promise<UpdateBaseline>;
   listHostRestorePoints?(hostId: string): Promise<UpdatePoint[]>;
   listRestorePoints?(stackId: string): Promise<UpdatePoint[]>;

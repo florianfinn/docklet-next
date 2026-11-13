@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Bounded remote runtime implementation, active in production since #125.
+// Deviations: Bounded remote runtime implementation, active in production since #125. M24 recovery evidence, validation and reason contracts. M24 checked incoming notice ordering, suppression clearing and atomic disposition settlement.
 
 package activity
 
@@ -44,13 +44,41 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		}
 		d := outcome.Detail
 		kind, ok := runtimeActivityTypeInternal(*row.OperationID, *row.TargetKind)
-		if !ok || d.Activity.Type != kind || d.Activity.ResourceID == nil || *d.Activity.ResourceID != *row.TargetID || d.Activity.ResourceType == nil || *d.Activity.ResourceType != *row.TargetKind || d.Activity.StartedBy == nil || d.Activity.StartedBy.UserID != *row.CallerID {
+		if !ok || d.Activity.Operation != "" && string(d.Activity.Operation) != *row.OperationID || d.Activity.Type != kind || d.Activity.ResourceID == nil || *d.Activity.ResourceID != *row.TargetID || d.Activity.ResourceType == nil || *d.Activity.ResourceType != *row.TargetKind || d.Activity.StartedBy == nil || d.Activity.StartedBy.UserID != *row.CallerID {
 			return &runtimeConflictInternal{}
 		}
 		terminal := outcome.State == activitytypes.RuntimeAnswerTerminal
 		if row.ExecutorSettledAt != nil || (!fromQuery && row.LastReconciledAt != nil && !terminal) {
 			snapshot, err = runtimeSnapshotTxInternal(tx, row)
 			return err
+		}
+
+		if terminal {
+			checked, err := runtimeCheckedTerminalTx(tx, row, string(d.Activity.Status), d.Activity.MessageCode, d.Activity.ImageLifecycle)
+			if err != nil {
+				return err
+			}
+			if checked != nil {
+				d.Activity.ImageLifecycle = checked
+				if d.Activity.Metadata == nil {
+					d.Activity.Metadata = map[string]any{}
+				}
+				d.Activity.Metadata["imageLifecycle"] = *checked
+			}
+			if err := runtimeWriteObservedTx(tx, now, row, checked); err != nil {
+				return err
+			}
+			if checked != nil && checked.Code == "runtime.outcome-unknown" {
+				if err := runtimeImageResultTx(tx, row.RunID, checked); err != nil {
+					return err
+				}
+				row, err = runtimeEvidenceTxInternal(tx, now, id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: row.ExecutorStartedAt})
+				if err != nil {
+					return err
+				}
+				snapshot, err = runtimeSnapshotTxInternal(tx, row)
+				return err
+			}
 		}
 		// Active is authoritative receipt acceptance, not proof that effects
 		// started. The carrier does not supply a separate executing timestamp.
@@ -127,9 +155,6 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		}
 		updates := map[string]any{"status": d.Activity.Status, "progress": d.Activity.Progress, "step": d.Activity.Step, "latest_message": d.Activity.LatestMessage, "message_code": d.Activity.MessageCode, "affected_services": servicesJSONInternal(d.Activity.AffectedServices), "metadata": database.JSON(d.Activity.Metadata), "runtime_step_trace": RuntimeStepTrace(d.StepTrace), "output": legacy, "runtime_output": RuntimeOutputLines(d.Output), "output_truncated": model.OutputTruncated || d.OutputTruncated, "updated_at": now, "error": d.Activity.Error}
 		if terminal {
-			if err := runtimeNotifyFailureTx(tx, now, row, d.Activity.MessageCode, false, false); err != nil {
-				return err
-			}
 			updates["ended_at"], updates["duration_ms"] = now, now.Sub(model.StartedAt).Milliseconds()
 			level := activitytypes.MessageLevelSuccess
 			if d.Activity.Status == activitytypes.StatusFailed {
@@ -149,6 +174,16 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		}
 		if result.RowsAffected != 1 {
 			return &runtimeConflictInternal{}
+		}
+		if terminal {
+			if d.Activity.Status == activitytypes.StatusSuccess {
+				if err := runtimeClearFailedTargetTx(tx, row); err != nil {
+					return err
+				}
+			}
+			if err := runtimeNotifyFailureTx(tx, now, row, d.Activity.MessageCode, false, false, d.Activity.ImageLifecycle); err != nil {
+				return err
+			}
 		}
 		// Replace only this bounded remote window, preserving hub audit/final rows.
 		if err := tx.Where("activity_id = ? AND runtime_remote = 1", row.RunID).Delete(&ActivityMessage{}).Error; err != nil {
@@ -227,11 +262,17 @@ func runtimeHubDispositionTxInternal(tx *gorm.DB, now time.Time, row *RuntimeRec
 		return empty, nil, err
 	}
 	if disposition.Disposition == "released" && disposition.ReleaseAcknowledged {
-		if err := tx.Model(&policies.Child{}).Where("runtime_id = ? AND status = ?", row.RunID, "admitted").Update("status", "settled").Error; err != nil {
+		var children []policies.Child
+		if err := tx.Where("runtime_id = ? AND status = ?", row.RunID, "admitted").Find(&children).Error; err != nil {
 			return empty, nil, err
 		}
+		for _, child := range children {
+			if err := policies.SettleChildTx(tx, child, policies.CheckedChildResult{Code: string(code), SettledAt: now}); err != nil {
+				return empty, nil, err
+			}
+		}
 	}
-	if err := runtimeNotifyFailureTx(tx, now, row, string(code), false, true); err != nil {
+	if err := runtimeNotifyFailureTx(tx, now, row, string(code), false, true, nil); err != nil {
 		return empty, nil, err
 	}
 	snapshot, err := runtimeSnapshotTxInternal(tx, row)

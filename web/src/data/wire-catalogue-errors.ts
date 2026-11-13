@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail.
+// Deviations: Original total catalogue maps for rendered contract enums. M24 recovery reason catalogue entries. M21 #437: advisory detail.
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -16,6 +16,15 @@ export const REQUEST_CODE_KEYS = {
 } satisfies Record<Schema["RequestProblem"]["code"], CatalogueKey>;
 
 export const IMAGE_ERROR_KEYS = {
+  "update.unstable": "images.errors.update_unstable",
+  "update.auto-restored": "images.errors.update_auto-restored",
+  "update.auto-restore-failed": "images.errors.update_auto-restore-failed",
+  "update.auto-restore-unavailable": "images.errors.update_auto-restore-unavailable",
+  "update.interrupted": "images.errors.update_interrupted",
+  "update.candidate-failed": "images.errors.update_candidate-failed",
+  "restore.files-changed": "images.errors.restore_files-changed",
+  "container.auto-remove": "images.errors.container_auto-remove",
+
   "candidate.unavailable": "images.errors.candidate_unavailable",
   "candidate.deferred": "images.errors.candidate_deferred",
   "update.candidate-changed": "images.errors.update_candidate-changed",
@@ -140,6 +149,7 @@ export const IMAGE_ERROR_KEYS = {
   | Schema["UpdaterLifecycleResult"]["baselineCode"]
   | Schema["UpdaterLifecycleResult"]["code"]
   | Schema["UpdaterLifecycleResult"]["pointCode"]
+  | Schema["UpdaterRecoveryResult"]["code"]
   | Schema["UpdaterRestorePoint"]["code"]
   | Schema["UpdaterSystemImageHint"]["code"]
   | Schema["ImageProblem"]["code"]

@@ -80,7 +80,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
         </Card>
 
         <Card className="gap-0 overflow-hidden py-0">
-          <StackUpdatePanel services={stack.services} times={updateTimes} actions={{ onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), busy }} />
+          <StackUpdatePanel services={stack.services} times={updateTimes} actions={{ onUpdate: () => void cmd.installUpdates(stack.id), onUpdateChecked: () => void cmd.installUpdates(stack.id, undefined, true), onRecheck: () => void cmd.checkUpdates(stack.id), busy }} />
           <div ref={autoRef} id={AUTO_UPDATE_ANCHOR} tabIndex={-1} className="flex scroll-mt-24 flex-col gap-2 border-t p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset">
             <div className="flex items-center gap-2 text-sm font-medium">
               <CalendarClock className="size-4 text-muted-foreground" aria-hidden />

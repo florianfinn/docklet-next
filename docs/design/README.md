@@ -24,6 +24,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [In-app updates](app-updates.md) | Narrow Compose helper, correlated hub/agent operations, frozen recovery contract and manual failure recovery |
 | [Images and updates](images-updates.md) | Host image guards, safe registry credentials, update policies, scheduled apply, restore points and lifecycle prerequisites |
 | [Image identity and initial update reads](images-updates-identity.md) | Classic/containerd identity, initial policy/schedule/baseline DTOs, producer fixtures and candidate regression proofs |
+| [Observed updates and recovery](scheduled-update-recovery.md) | Two-minute observation, opt-in manual checks, container/stack recovery, outcomes, limits and failed-candidate suppression |
 | [Stack updates UI contract](updates-ui.md) | Production update/restore dialogs, policy and notification states, contract gaps and behavioural proofs |
 | [Hub-owned stack update policies](update-policies.md) | Policy trigger state table, scheduler authority, frozen runtime admission and durable candidate notifications |
 | [Update policy model](update-policy-model.md) | M18 decision: check-only default for stacks and containers, global interval, install windows, migration 018, pruning and agent v14 |

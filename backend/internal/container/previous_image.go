@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original transactional previous-image slot and conditional ownership; offer compensated failed-update recovery.
+// Deviations: Original transactional previous-image slot and conditional ownership; offer compensated failed-update recovery; M24 #409 release on delete.
 
 package container
 
@@ -45,6 +45,21 @@ func (s *ContainerService) replacePreviousImage(ctx context.Context, name, id, r
 		}
 		slot := PreviousImage{ContainerName: name, ImageID: id, ImageRef: ref, OwnerContainerID: owner, RunID: run, CreatedAt: time.Now().UTC()}
 		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "container_name"}}, UpdateAll: true}).Create(&slot).Error
+	})
+}
+
+// releasePreviousImage drops the slot and its pin together once the owning
+// container is deleted; another owner's slot under the same name stays.
+func (s *ContainerService) releasePreviousImage(ctx context.Context, name, owner string) error {
+	if s.operations == nil || s.operations.db == nil || name == "" || owner == "" {
+		return nil
+	}
+	return s.operations.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		deleted := tx.Where("container_name=? AND owner_container_id=?", name, owner).Delete(&PreviousImage{})
+		if deleted.Error != nil || deleted.RowsAffected == 0 {
+			return deleted.Error
+		}
+		return tx.Where("reason=? AND owner_id=?", "container-previous", name).Delete(&guard.Protection{}).Error
 	})
 }
 func (s *ContainerService) advancePreviousImage(ctx context.Context, j *RecreateJournal) error {

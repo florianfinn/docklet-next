@@ -119,7 +119,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 		_, owner.err = s.settleOwnerInternal(owner)
 		return
 	}
-	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, recreateResult != nil, runtimeTimeInternal(s.activity.nowInternal()))
+	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, recreateResult != nil || runtimeJoinedRecovery(imageResult), runtimeTimeInternal(s.activity.nowInternal()))
 	owner.result.imageLifecycle = imageResult
 	owner.result.recreate = recreateResult
 	_, owner.err = s.settleOwnerInternal(owner)
@@ -193,13 +193,15 @@ func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executi
 }
 
 // A recreate past its first journal write runs detached; its own outcome (result
-// or recreate problem) wins over a later cancellation or run deadline.
-func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, recreated bool, now time.Time) *runtimeLocalResultInternal {
+// or recreate problem) wins over a later cancellation or run deadline. joined
+// marks such an outcome: a replacement result or a checked recovery outcome.
+func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, joined bool, now time.Time) *runtimeLocalResultInternal {
 	result := &runtimeLocalResultInternal{state: "success", code: activitytypes.CodeActivitySuccess,
 		outputLost: outputErr != nil, message: "Runtime workflow completed", settledAt: now, startedAt: copyPtrInternal(owner.startedAt)}
 	var problem *containerDTO.Problem
 	recreateProblem := errors.As(workflowErr, &problem) && (problem.Code == "container.recreate-recovered" || problem.Code == "container.recreate-ambiguous")
-	detached := (recreated && workflowErr == nil) || recreateProblem
+	var joinedErr interface{ RuntimeJoined() bool }
+	detached := joined || recreateProblem || (errors.As(workflowErr, &joinedErr) && joinedErr.RuntimeJoined())
 	switch {
 	case owner.cancelRequested && !detached:
 		result.state, result.code, result.message = "cancelled", activitytypes.CodeRuntimeCancelled, "Runtime workflow cancelled; effects unverified"
@@ -220,6 +222,22 @@ func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr e
 		result.errorText = new(result.message)
 	}
 	return result
+}
+
+// runtimeJoinedRecovery reports an observed update that settled its workload
+// after the first effect; cancellation cannot have prevented that outcome.
+func runtimeJoinedRecovery(result *updaterDTO.LifecycleResult) bool {
+	if result == nil || result.Recovery == nil {
+		return false
+	}
+	switch result.Recovery.Outcome {
+	case "restored", "restore-failed", "unavailable":
+		return true
+	case "not-needed":
+		// A verified result passed its observation; only a refusal is unverified.
+		return result.Verified
+	}
+	return false
 }
 
 // WaitLocal requires current activity-read grants for the referenced run.

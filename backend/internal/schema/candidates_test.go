@@ -2,7 +2,7 @@
 // Revision: 57e835f7cce5778fd3d164298e5b488e11abb71d
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original fresh and forward candidate migration constraint proofs.
+// Deviations: Original fresh and forward candidate migration constraint proofs. M24 recovery evidence, validation and reason contracts.
 
 package schema
 
@@ -43,7 +43,7 @@ func TestCandidateFreshAndForwardMigrationConstraints(t *testing.T) {
 			defer db.Close()
 			pool, err := db.SQLDB()
 			require.NoError(t, err)
-			require.Equal(t, [][]string{{"0"}, {"1"}, {"2"}}, sqlRows(t, pool, "SELECT version_id FROM goose_db_version WHERE is_applied=1 ORDER BY version_id"))
+			require.Equal(t, [][]string{{"0"}, {"1"}, {"2"}, {"3"}}, sqlRows(t, pool, "SELECT version_id FROM goose_db_version WHERE is_applied=1 ORDER BY version_id"))
 			now := time.Now().UTC()
 			run := candidates.Run{CandidateRun: dto.CandidateRun{ID: "run", ActivityID: "activity", Trigger: "manual", Status: "running", StartedAt: now, Intelligence: "available"}}
 			require.NoError(t, db.Create(&run).Error)
