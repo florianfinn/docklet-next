@@ -46,13 +46,7 @@ it.each(["direct", "edge"])("%s real hub refusal reaches activity/run consumers 
     const coded = await adapter.getRuntimeRun!(host, detail.activity.id);
     for (const locale of ["en-US", "de"] as const) {
       const expected = catalogs[locale].activity.runtime.busy;
-      expect(runtimeState(renderRun(coded, locale))).toBe("busy");
-      expect(renderRun(coded, locale).error).toBe(expected);
-      expect(renderRun(mapActivityDetail(activity), locale).error).toBe(expected);
-      const summary = mapActivitySummary(detail.activity);
-      expect(runtimeState(renderRun(summary, locale))).toBe("busy");
       const run = renderRun(coded, locale);
-      expect(run.log.some((line) => line.includes(locale === "de" ? "ungeprüft" : "unverified"))).toBe(false);
       uiStyleStore.set((s) => ({ ...s, actionDialogDesign: "console" }));
       openActionDialog(detail.activity.id);
       const displayed = { ...adapter, listActions: async () => [coded], subscribeActions: (push: (runs: CodedActionRun[]) => void) => { push([coded]); return () => {}; } };
@@ -65,11 +59,17 @@ it.each(["direct", "edge"])("%s real hub refusal reaches activity/run consumers 
       </AdapterContext.Provider></QueryClientProvider>);
       try {
         const dialog = await screen.findByRole("dialog");
-        expect(within(dialog).getAllByText(expected).length).toBeGreaterThan(0);
+        expect(within(dialog).queryAllByText(expected).length, "refused dialog must show the busy wording").toBeGreaterThan(0);
         expect(dialog.textContent).not.toContain(locale === "de" ? "ungeprüft" : "unverified");
         const toast = view.container.querySelector('[data-slot="action-toast"]');
         expect(toast?.textContent).toContain(expected);
         expect(toast?.textContent).not.toContain(locale === "de" ? "ungeprüft" : "unverified");
+        expect(runtimeState(renderRun(coded, locale))).toBe("busy");
+        expect(renderRun(coded, locale).error).toBe(expected);
+        expect(renderRun(mapActivityDetail(activity), locale).error).toBe(expected);
+        const summary = mapActivitySummary(detail.activity);
+        expect(runtimeState(renderRun(summary, locale))).toBe("busy");
+        expect(run.log.some((line) => line.includes(locale === "de" ? "ungeprüft" : "unverified"))).toBe(false);
       } finally { view.unmount(); client.clear(); actionDialogStore.reset(); }
     }
     // The same consumer must keep true interruptions and administrator releases.
