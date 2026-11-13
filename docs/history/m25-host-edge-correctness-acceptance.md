@@ -23,7 +23,7 @@ was implemented by the main thread and reviewed by Codex.
 | --- | --- | --- |
 | #372 | S1 host verdict rule (migration 004, one owned status write path, registration fence) | R1 failed (registration revision fence, proof boundaries); the verify round passed. |
 | #370 #429 | S2 latest agent restart after a reload, including a busy agent's refusal | R1 failed (three blockers: stale known run, older run masking a newer one, followed seed taken as history); the verify round failed once (reopen after the follow budget). The fix was checked by the closing review. |
-| #366 #369 | S3 replacement exclusion and Docklet protected-self | R1 passed; the non-blockers went to #479. |
+| #366 #369 | S3 replacement exclusion and Docklet protected-self | R1 passed; N3 was checked by integrated lint, and N1, N2, N4 and N5 went to #479. |
 | #416 | S4 ordered Edge tunnel delivery | R1 passed; one non-blocker went to #479, one was accepted, and an Activity fixture race went to #480. |
 | #379 | S5 Edge container log download | R1 passed; all three non-blockers were corrected and checked by the closing review. |
 | #477 | S6 container page by name and tab | R1 failed (same-name recreate lost the address); the verify round failed once (encoded names). The fix was checked by the closing review. |
@@ -56,9 +56,10 @@ was implemented by the main thread and reviewed by Codex.
 
 The sandbox had the hub-local host H, one Direct agent D and one Edge agent E.
 UI assertions ran in English and German in Chromium. Latency cells were measured
-on the hub origin. The candidate run pruned kit-owned fixtures first, because a
-dense sandbox daemon had made an inventory read exceed its budget in the early
-smoke.
+on the hub origin. After an inventory read exceeded its budget in the early
+smoke, the candidate run first ran the ownership-checked retention and fixture
+prune. It found no eligible objects to remove; image counts were unchanged, and
+REG-H passed.
 
 | Cell | Behaviour |
 | --- | --- |
