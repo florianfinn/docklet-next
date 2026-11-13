@@ -24,6 +24,8 @@ interface Options {
 const phases = ["reserved", "sent", "awaiting", "connected"] as const;
 const terminal = (row: Restart) => ["connected", "failed", "unknown"].includes(row.state);
 const message = (code: string): MessageCode => ({ code, params: {} });
+// Local follow budget: the producer deadline span plus grace, from now on the active clock.
+const budget = (row: Restart) => activeNow() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
 const isoDate = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value));
 // Progress order within one run: the phases, then any terminal state.
 const rank = (row: Restart) => terminal(row) ? phases.length : phases.indexOf(row.state as typeof phases[number]);
@@ -63,7 +65,7 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
     const prior = rows.get(row.runId);
     const reached = Math.max(prior?.reached ?? 0, phases.indexOf(row.state as typeof phases[number]));
     // The follow budget runs on the active clock: a hub maintenance hold does not use it up.
-    const until = prior?.until ?? activeNow() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
+    const until = prior?.until ?? budget(row);
     const run = build(host, row, reached);
     rows.set(row.runId, { host, row, run, reached, until });
     if (rows.size > 128) { const old = [...rows.values()].find(item => terminal(item.row) && item.row.runId !== row.runId); if (old) rows.delete(old.row.runId); }
@@ -133,10 +135,15 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
         return run === undefined ? undefined : validRun(run);
       });
       if (!row) return undefined;
-      // Within one run the further observation wins; a reopen resumes a follow that stopped.
+      // Within one run the further observation wins. A reopen of a still active run grants a fresh
+      // follow budget, so a follow that stopped resumes; background following stays bounded.
       const known = rows.get(row.runId);
-      if (known?.host === host && rank(row) <= rank(known.row)) { schedule(host, row.runId); return known.run; }
-      if (known?.host === host) { const run = retain(host, row); schedule(host, row.runId); return run; }
+      if (known?.host === host) {
+        const run = rank(row) <= rank(known.row) ? known.run : retain(host, row);
+        const current = rows.get(row.runId);
+        if (current && !terminal(current.row)) { current.until = budget(row); schedule(host, row.runId); }
+        return run;
+      }
       if (terminal(row)) return build(host, row, settledReach(row));
       const run = retain(host, row); schedule(host, row.runId);
       return run;

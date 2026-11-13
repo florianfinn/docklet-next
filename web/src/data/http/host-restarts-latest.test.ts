@@ -122,3 +122,25 @@ it("applies a further observation of a known run after its follow stopped", asyn
   expect(f.runs.filter((run) => run.status === "succeeded")).toHaveLength(1);
   f.api.reset();
 });
+
+// A reopen of a still active run after its follow budget ran out follows it again to the outcome.
+it("resumes following an active run reopened after its follow budget ran out", async () => {
+  let recover = false, reads = 0;
+  const f = hub(() => ({ run: active }));
+  f.fetcher.mockImplementation(async (url) => {
+    if (String(url).endsWith("/agent/restarts/latest")) return new Response(JSON.stringify({ success: true, data: { run: active } }));
+    if (!recover) return new Response(JSON.stringify({ code: "agent.unavailable" }), { status: 503 });
+    return new Response(JSON.stringify({ success: true, data: ++reads < 2 ? active : { ...active, state: "connected", settledAt: settled } }));
+  });
+  await f.api.latest("example");
+  await vi.advanceTimersByTimeAsync(300_000);
+  const stopped = f.fetcher.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(100_000);
+  expect(f.fetcher.mock.calls.length).toBe(stopped);
+  recover = true;
+  expect((await f.api.latest("example"))?.status).toBe("running");
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(reads).toBe(2);
+  expect(f.api.retained().at(-1)).toMatchObject({ status: "succeeded", finishedAt: settled });
+  f.api.reset();
+});
