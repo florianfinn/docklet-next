@@ -40,6 +40,7 @@ const laterOperations = new Map([
   ["PUT /users/{userId}/app-assignments", "set-user-app-assignments"],
   ["POST /environments/{id}/agent/restart", "restartEnvironmentAgent"],
   ["GET /environments/{id}/agent/restarts/{runId}", "getEnvironmentAgentRestart"],
+  ["GET /environments/{id}/agent/restarts/latest", "getEnvironmentLatestAgentRestart"],
   ["PUT /environments/{id}/containers/{containerId}/origin", "assign-container-origin"],
   ["DELETE /environments/{id}/containers/{containerId}/origin", "reset-container-origin"],
   ["POST /environments/{id}/containers/{containerId}/recreate", "recreate-container"],

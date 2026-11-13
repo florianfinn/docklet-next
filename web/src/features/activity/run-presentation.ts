@@ -62,6 +62,14 @@ export function isCovered(run: Pick<ActionRun, "id" | "kind" | "stackId">, dialo
   return state.byRun[run.id] === "inline" && !!run.stackId && (state.surfaces[run.stackId] ?? 0) > 0 && DEPLOY_KINDS.has(run.kind);
 }
 
+/**
+ * Agent restarts reach the action store only from an in-session start or a followed unsettled read
+ * (settled history is never published), so they are never initial history and always notify.
+ */
+export function notifiesOnFirstObservation(run: Pick<ActionRun, "kind">): boolean {
+  return run.kind === "agent-restart";
+}
+
 /** A current browser intent is identifiable without comparing server/device clocks. */
 export function hasPresentationIntent(run: ActionRun, state: PresentationState): boolean {
   return runtimePresentation(run)?.currentIntent === true || state.byRun[run.id] !== undefined ||
@@ -183,7 +191,7 @@ export class RunToastCoordinator {
 
   private pass(): void {
     if (!this.seen) {
-      this.seen = new Map(this.runs.filter((r) => !hasPresentationIntent(r, this.ctx.state())).map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
+      this.seen = new Map(this.runs.filter((r) => !hasPresentationIntent(r, this.ctx.state()) && !notifiesOnFirstObservation(r)).map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
       this.history.clear();
       this.visit();
       return;

@@ -96,6 +96,7 @@ export const deActivity: typeof enActivity = {
     refresh: "Lauf aktualisieren", cancel: "Abbruch anfordern", release: "Gesperrtes Ziel freigeben", reason: "Grund der Wiederherstellung",
     acknowledge: "Ich habe den betroffenen Executor gestoppt, seine alten Handler und Verbindungen beendet, den tatsächlichen Docker-Zustand geprüft und bestätige, dass der vorherige Ablauf keine weiteren Befehle ausführen kann.",
     releaseReason: "Grund der Wiederherstellung: {reason}", lateEvidence: "Spätere Executor-Nachweise wurden separat aufgezeichnet. Die administrative Entscheidung bleibt unverändert.",
+    busyBody: "Ein anderer Befehl sperrt dieses Ziel oder seinen übergeordneten Stack. Es wurde nichts Neues gestartet.", cancellingConflictBody: "Ein Befehl auf diesem Ziel wird noch beendet. Auf das aufgezeichnete Ergebnis warten.",
     busy: "Ein anderer Befehl sperrt dieses Ziel oder seinen übergeordneten Stack. Es wurde nichts Neues gestartet.", cancellingConflict: "Ein Befehl auf diesem Ziel wird noch beendet. Auf das aufgezeichnete Ergebnis warten.",
     mismatch: "Der Anfrageschlüssel passt nicht zu diesem Aufrufer oder Vorhaben. Es wurde kein Ersatzbefehl gesendet.",
     ambiguous: "Die Befehlsantwort ging verloren oder war ungültig. Die Ausführung kann begonnen haben. Dieses Ziel bleibt in diesem Browser gesperrt; Aktivitäten und tatsächlichen Zustand prüfen. Es wird kein Ersatzbefehl gesendet.",

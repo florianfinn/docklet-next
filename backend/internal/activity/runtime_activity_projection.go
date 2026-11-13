@@ -24,6 +24,11 @@ func runtimeProjectModelInternal(model *Activity, row *RuntimeReceipt) {
 	model.Status = status
 	if row.HubDisposition != nil {
 		model.MessageCode = string(activitytypes.CodeRuntimeInterrupted)
+		if row.HubDispositionReason != nil {
+			if code := runtimeRefusedGateCode(*row.HubDisposition, *row.HubDispositionReason); code != "" {
+				model.MessageCode = string(code)
+			}
+		}
 		model.Error = row.HubDispositionReason
 	} else if row.ExecutorResultCode != nil {
 		model.MessageCode = *row.ExecutorResultCode
@@ -117,4 +122,12 @@ func (s *ActivityService) deduplicateRuntimeRemoteInternal(ctx context.Context, 
 		out = append(out, item)
 	}
 	return out, duplicates, nil
+}
+
+// Only an executor's explicit gate refusal certifies that no effect was admitted.
+func runtimeRefusedGateCode(disposition, reason string) activitytypes.Code {
+	if disposition == "refused" && (reason == string(activitytypes.CodeRunBusy) || reason == string(activitytypes.CodeRunCancelling)) {
+		return activitytypes.Code(reason)
+	}
+	return ""
 }

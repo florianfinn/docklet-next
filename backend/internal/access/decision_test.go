@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M25 latest restart read rule.
 
 package access
 
@@ -107,4 +107,14 @@ func TestSupportingFullPermissions(t *testing.T) {
 	}
 	require.False(t, ps.Allows("containers:create", "0"))
 	require.False(t, ps.IsGlobalAdmin())
+}
+
+// Host maintenance reads stay administrator-only for simple users, including the
+// latest restart read added for the host panel after a reload (#370).
+func TestLatestAgentRestartReadIsAdminOnly(t *testing.T) {
+	operation, env, params := Match("GET", "/api/environments/0/agent/restarts/latest")
+	require.Equal(t, "getEnvironmentLatestAgentRestart", operation)
+	for _, level := range []string{"restricted", "full"} {
+		require.Equal(t, AdminRequired, Decide(t.Context(), testPrincipal(level), operation, env, params), level)
+	}
 }

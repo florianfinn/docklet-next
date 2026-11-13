@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original M14 container and host operations foundation. M23 #435: active summaries contract coverage.
+// Deviations: Original M14 container and host operations foundation. M23 #435: active summaries contract coverage. M25 #379 log download refusal declarations.
 
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
@@ -56,4 +56,14 @@ test("typed host refusals are declared on every affected hub operation",()=>{
  for(const id of expected) assert.ok(Object.values(spec.paths).some(item=>Object.values(item).some(op=>op?.operationId===id)),id);
  assert.ok(spec.components.schemas.EnvironmentHostProblem.properties.code.enum.includes("agent.restart-interrupted"));
  assert.ok(spec.components.schemas.UpdaterAutoUpdatePolicy.properties.code.enum.includes("host.restarting"));
+});
+
+// #379: the log download declares its 413/503 without registering AgentAccessError for Huma's
+// $schema link (which would change every host refusal body) and keeps the generic error response.
+test("Edge log download refusals leave shared error bodies unchanged",()=>{
+ const spec=JSON.parse(read("api/openapi.json"));
+ assert.equal(spec.components.schemas.AgentAccessError.properties.$schema,undefined);
+ const responses=spec.paths["/environments/{id}/containers/{containerId}/logs/download"].get.responses;
+ assert.deepEqual(Object.keys(responses).sort(),["200","400","413","503","default"]);
+ assert.equal(responses["413"].content["application/json"].schema.$ref,"#/components/schemas/ContainerLogsDownloadProblem");
 });

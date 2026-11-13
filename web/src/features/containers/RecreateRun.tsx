@@ -2,12 +2,12 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original receipt-driven recreate progress, catalogued step names and replacement navigation. M24 S6: observed recovery and update UI follow-ups.
+// Deviations: Original receipt-driven recreate progress, catalogued step names and replacement navigation. M24 S6: observed recovery and update UI follow-ups. #477 a name address survives a same-name replacement.
 
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { useLocale, useTranslations } from "use-intl";
 import type { ActionDetailState } from "@/data/adapter";
 import { identityLifetime } from "@/data/identity-lifetime";
@@ -32,6 +32,8 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
   const navigated = useRef(onNavigated);
   useEffect(() => { navigated.current = onNavigated; });
   const navigate = useNavigate();
+  // The router's decoded page reference, so an encoded name bookmark matches too.
+  const { containerId } = useParams();
   const lifetime = identityLifetime(adapter);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
   const key = `${hostId}:${runId}:${generation}`;
@@ -49,17 +51,19 @@ export function RecreateRun({ hostId, runId, onNavigated }: { hostId: string; ru
   const coded = state.status === "ready" || state.status === "error" ? state.run : undefined;
   const run = coded ? renderRun(coded, locale) : undefined;
   const target = run?.status === "succeeded" && run.recreateResult?.newId ? (run.containerId?.includes("~") ? inventoryId(hostId, run.recreateResult.newId) : run.recreateResult.newId) : undefined;
+  // A page opened by the replacement's name keeps its address, so the name bookmark stays stable (#477).
+  const keepAddress = !!run?.recreateResult?.newName && containerId === `${hostId}~${run.recreateResult.newName}`;
   useEffect(() => {
     if (!target || !lifetime.active() || generation !== lifetime.version()) return;
     let current = true;
     // Refresh the inventory first so the replacement page finds its new ID.
     void client.invalidateQueries({ queryKey: queryKeys.containers }).finally(() => {
       if (!current || generation !== lifetime.version()) return;
-      void navigate(containerHref(target));
+      if (!keepAddress) void navigate(containerHref(target));
       navigated.current?.();
     });
     return () => { current = false; };
-  }, [target, navigate, lifetime, generation, client]);
+  }, [target, keepAddress, navigate, lifetime, generation, client]);
   return <div role="status" className="flex flex-col gap-2 text-sm">
     <p>{run ? ta(`status.${run.status}`) : t("following")}</p>
     {run?.steps.map((step, index) => <p key={`${step.key}:${index}`}>{step.label} · {ta(`step.${step.state}`)}</p>)}

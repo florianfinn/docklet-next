@@ -245,6 +245,9 @@ func runtimeHubDispositionTxInternal(tx *gorm.DB, now time.Time, row *RuntimeRec
 		return empty, nil, &runtimeConflictInternal{}
 	}
 	code := activitytypes.CodeRuntimeInterrupted
+	if refused := runtimeRefusedGateCode(disposition.Disposition, disposition.Reason); refused != "" {
+		code = refused
+	}
 	status := activitytypes.StatusFailed
 	if disposition.Disposition == "cancelled" {
 		code = activitytypes.CodeRuntimeCancelled

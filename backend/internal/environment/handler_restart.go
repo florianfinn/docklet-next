@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original hub restart intake and durable observation API.
+// Deviations: Original hub restart intake and durable observation API; M25 latest restart read.
 
 package environment
 
@@ -29,6 +29,8 @@ type restartAgentRunInput struct {
 func registerHostRestart(api huma.API, h *EnvironmentHandler) {
 	huma.Register(api, huma.Operation{OperationID: "restartEnvironmentAgent", Method: "POST", Path: "/environments/{id}/agent/restart", Summary: "Restart a remote agent once", DefaultStatus: 202, Tags: []string{"Environments"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: middleware.RequireGlobalAdmin(api)}, h.RestartAgent)
 	handlerutil.HostProblemResponses(api, api.OpenAPI().Paths["/environments/{id}/agent/restart"].Post, "409", "502")
+	// The static latest route wins over {runId}; both stay hub-local (management path rule).
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "getEnvironmentLatestAgentRestart", Method: "GET", Path: "/environments/{id}/agent/restarts/latest", Summary: "Read the active or newest agent restart run of a host", Tags: []string{"Environments"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermEnvironmentsRead, h.LatestAgentRestart)
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "getEnvironmentAgentRestart", Method: "GET", Path: "/environments/{id}/agent/restarts/{runId}", Summary: "Read a durable agent restart run", Tags: []string{"Environments"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermEnvironmentsRead, h.AgentRestartRun)
 }
 func restartRunDTO(row AgentRestartRequest) dto.AgentRestartRun {
@@ -61,6 +63,23 @@ func (h *EnvironmentHandler) RestartAgent(ctx context.Context, in *restartAgentI
 		return nil, err
 	}
 	return &handlerutil.Out[dto.AgentRestartRun]{Body: base.ApiResponse[dto.AgentRestartRun]{Success: true, Data: restartRunDTO(row)}}, nil
+}
+func (h *EnvironmentHandler) LatestAgentRestart(ctx context.Context, in *restartAgentInput) (*handlerutil.Out[dto.LatestAgentRestart], error) {
+	if h.environmentService == nil {
+		return nil, huma.Error503ServiceUnavailable("Agent restart store unavailable")
+	}
+	var rows []AgentRestartRequest
+	// At most one row is active per host (unique partial index); it wins over settled history.
+	if err := h.environmentService.db.WithContext(ctx).Where("environment_id = ?", in.ID).
+		Order("settled_at IS NULL DESC").Order("created_at DESC").Order("run_id DESC").Limit(1).Find(&rows).Error; err != nil {
+		return nil, huma.Error503ServiceUnavailable("Agent restart store unavailable")
+	}
+	out := dto.LatestAgentRestart{}
+	if len(rows) == 1 {
+		run := restartRunDTO(rows[0])
+		out.Run = &run
+	}
+	return &handlerutil.Out[dto.LatestAgentRestart]{Body: base.ApiResponse[dto.LatestAgentRestart]{Success: true, Data: out}}, nil
 }
 func (h *EnvironmentHandler) AgentRestartRun(ctx context.Context, in *restartAgentRunInput) (*handlerutil.Out[dto.AgentRestartRun], error) {
 	var row AgentRestartRequest

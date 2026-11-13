@@ -3,6 +3,7 @@ import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
 import { isHostAvailable } from "@/domain/hosts";
 import { useActionRuns } from "@/data/live";
+import { useLatestAgentRestart } from "@/data/host-restart-latest";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { useCapability } from "@/data/use-capability";
 import { Bot, Cable, Check, RotateCw } from "lucide-react";
@@ -12,8 +13,8 @@ import { useTranslations } from "use-intl";
 
 import { useHostError } from "./use-host-error";
 import { useAdapter } from "@/data/use-adapter";
-import { formatMem, formatPorts, formatRelative, formatTime } from "@/domain/format";
-import type { Host } from "@/domain/model";
+import { formatDateTime, formatMem, formatPorts, formatRelative, formatTime } from "@/domain/format";
+import type { ActionRun, Host } from "@/domain/model";
 import { SYSTEM_LABEL, type SystemComponent } from "@/domain/system";
 import { versionLabel } from "@/domain/updates";
 import { BusyButton } from "@/shared/components/busy-button";
@@ -39,6 +40,16 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
   );
 }
 
+/**
+ * The run the panel describes: of two different runs a running session run, else the later start;
+ * of the same run the session run, which the adapter keeps following after the read.
+ */
+function currentRestart(session: ActionRun | undefined, stored: ActionRun | undefined): ActionRun | undefined {
+  if (!session || !stored || session.id === stored.id) return session ?? stored;
+  if (session.status === "running") return session;
+  return Date.parse(session.startedAt) > Date.parse(stored.startedAt) ? session : stored;
+}
+
 function AgentPanel({ host, component, feedback }: { host: Host; component: SystemComponent | undefined; feedback: DialogCommand }) {
   const t = useTranslations("hosts.settings");
   const ts = useTranslations("common.status");
@@ -49,7 +60,10 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
   const adapter = useAdapter(), formatError = useHostError();
   const check = useHostAction(host.id, "reconnect", async () => await feedback.run(() => cmd.reconnect(host.id)));
   const [confirmRestart, setConfirmRestart] = useState(false);
-  const latestRestart = useActionRuns().find(run => run.hostId === host.id && run.kind === "agent-restart");
+  const sessionRestart = useActionRuns().find(run => run.hostId === host.id && run.kind === "agent-restart");
+  // After a reload only the hub knows the outcome.
+  const storedRestart = useLatestAgentRestart(host.id);
+  const latestRestart = currentRestart(sessionRestart, storedRestart);
   const online = isHostAvailable(host);
   return (
     <div className="flex flex-col gap-4" data-slot="agent-container">
@@ -126,6 +140,7 @@ function AgentPanel({ host, component, feedback }: { host: Host; component: Syst
       {latestRestart && <section aria-label={t("restartProgress")}>
         <ol className="flex flex-col gap-1 text-sm">{latestRestart.steps.map(step => <li key={step.key} data-state={step.state}>{step.label} · {stage(step.state === "skipped" ? "pending" : step.state)}</li>)}</ol>
         {latestRestart.error && <p role="alert" className="text-sm text-destructive">{latestRestart.error}</p>}
+        {latestRestart.finishedAt && <p className="text-xs text-muted-foreground">{t("restartFinished", { time: formatDateTime(latestRestart.finishedAt) })}</p>}
       </section>}
       <ConfirmDialog open={confirmRestart} onOpenChange={setConfirmRestart} title={t("restartTitle", { name: host.name })} description={t("restartBody")} confirmLabel={t("restart")} formatError={formatError} onConfirm={() => adapter.restartAgent(host.id)} />
     </div>

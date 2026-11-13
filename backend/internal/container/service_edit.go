@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M18 standalone image update and restore safety; M24 #409 previous-image release on delete.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M18 standalone image update and restore safety; M24 #409 previous-image release on delete. M25 system workload protection.
 
 package container
 
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/florianfinn/docklet-next/backend/internal/systemlabel"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
@@ -323,7 +324,7 @@ func (s *ContainerService) GetContainerEditConfig(ctx context.Context, container
 
 	isCompose := docker.ComposeProjectLabel(containerLabels) != ""
 	currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
-	editDisabled := labels.ShouldDisableArcaneServerRedeploy(containerLabels, containerInfo.ID, currentContainerID, currentContainerErr)
+	editDisabled := systemlabel.SelfProtected(containerLabels, labels.ShouldDisableArcaneServerRedeploy(containerLabels, containerInfo.ID, currentContainerID, currentContainerErr))
 
 	return containertypes.NewEditConfigFromInspect(&containerInfo, isCompose, editDisabled), nil
 }
@@ -365,7 +366,7 @@ func (s *ContainerService) EditContainer(ctx context.Context, containerID string
 	}
 
 	currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
-	if labels.ShouldDisableArcaneServerRedeploy(containerInfo.Config.Labels, containerInfo.ID, currentContainerID, currentContainerErr) {
+	if systemlabel.SelfProtected(containerInfo.Config.Labels, labels.ShouldDisableArcaneServerRedeploy(containerInfo.Config.Labels, containerInfo.ID, currentContainerID, currentContainerErr)) {
 		err = errors.New("arcane cannot edit itself; use the system upgrade flow (Settings -> Updates) instead")
 		s.eventService.LogErrorEvent(ctx, event.EventTypeContainerError, "container", containerID, containerName, user.ID, user.Username, "0", err, database.JSON{
 			"action": "edit",
@@ -447,7 +448,7 @@ func (s *ContainerService) GetContainerDetails(ctx context.Context, id string) (
 	details.OriginFields = origin.Detect(details.Labels)
 	details.Ports = mergePortBindings(details.Ports)
 	currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
-	details.RedeployDisabled = labels.ShouldDisableArcaneServerRedeploy(details.Labels, details.ID, currentContainerID, currentContainerErr)
+	details.RedeployDisabled = systemlabel.SelfProtected(details.Labels, labels.ShouldDisableArcaneServerRedeploy(details.Labels, details.ID, currentContainerID, currentContainerErr))
 	var excluded map[string]bool
 	if s.settingsService != nil {
 		excluded = docker.ExcludedContainerNameSet(s.settingsService.GetStringSetting(ctx, "autoUpdateExcludedContainers", ""))

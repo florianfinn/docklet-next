@@ -4,6 +4,10 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups.
 
+import { renderHook } from "@testing-library/react";
+import { IntlProvider } from "use-intl";
+import { catalogs } from "@/app/i18n/catalog";
+import { useCommandError } from "./use-command-error";
 import recoveryFixture from "./http/testdata/update-recovery.json";
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { renderWithApp } from "@/test/render";
@@ -55,6 +59,7 @@ const proofs = [
   { property: "VolumeRestoreRun.reason", member: "link", key: "volumes.uploadReasons.link", render: () => backupErrorMessage(new BackupError({ code: "volume.backup.upload-invalid", reason: "link" }), de) },
   { property: "VolumeHelperIncompatibleError.code", member: "volume.helper-incompatible", key: "volumes.errors.helper-incompatible", render: () => volumeOrNetworkError("volume", "volume.helper-incompatible") },
   { property: "VolumeHelperUnavailableError.code", member: "volume.helper-unavailable", key: "volumes.errors.helper-unavailable", render: () => volumeOrNetworkError("volume", "volume.helper-unavailable") },
+  { property: "ContainerLogsDownloadProblem.code", member: "container.logs-too-large", key: "runMessages.codes.container.logs-too-large", render: () => commandError("container.logs-too-large") },
   { property: "ContainerProblem.code", member: "container.shell-invalid", key: "runMessages.codes.container.shell-invalid", render: () => commandError("container.shell-invalid") },
   { property: "EnvironmentHostProblem.code", member: "host.name-invalid", key: "runMessages.codes.host.name-invalid", render: () => commandError("host.name-invalid") },
   { property: "UserAccessProblem.code", member: "access.admin-required", key: "containers.operationReasons.accessAdminRequired", render: () => commandError("access.admin-required") },
@@ -108,4 +113,13 @@ it.each(["runtime.wait-timeout", "runtime.waiter-disconnected", "runtime.target-
 it("renders a declared update reason through the actual lifecycle DTO consumer", () => {
   const run = mapActivityDetail({ activity: { id: "example", type: "project_update", environmentId: "example", status: "failed", startedAt: at, createdAt: at, error: "English producer fallback", imageLifecycle: { runId: "example", verified: false, volumeDataIncluded: false, code: "registry.unavailable" } }, messages: [], output: [], stepTrace: [], outputTruncated: false });
   expect(renderRun(run, "de").error).toBe(de("images.errors.registry_unavailable"));
+});
+
+
+it.each(["en-US", "de"] as const)("renders the Edge log download refusal in %s", (locale) => {
+  const { result } = renderHook(() => useCommandError(), {
+    wrapper: ({ children }) => <IntlProvider locale={locale} messages={catalogs[locale]}>{children}</IntlProvider>,
+  });
+  const expected = catalogs[locale].runMessages.codes.container["logs-too-large"];
+  expect(result.current(new AdapterOutcomeError({ kind: "error", code: "container.logs-too-large", status: 413 }))).toBe(expected);
 });

@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation. M23 #435: active summaries contract coverage.
+// Deviations: Original host registration implementation. M23 #435: active summaries contract coverage. M25 probe failure hook.
 
 package environment
 
@@ -63,6 +63,11 @@ type agentFixture struct {
 	mu      sync.Mutex
 	calls   []string
 	info    version.Info
+	// failPath answers failCode (503 when zero) for that path, for probe failure tests.
+	failPath string
+	failCode int
+	// beforeRespond runs before each agent answer, for writes that race a probe.
+	beforeRespond func(method, path string)
 }
 
 func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture {
@@ -70,8 +75,8 @@ func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture
 	f := &agentFixture{token: "example", id: "example-host", info: info}
 	db := setupEnvironmentServiceTestDB(t)
 	httpClient := &http.Client{Transport: agentRoundTrip(func(r *http.Request) (*http.Response, error) {
-		body := f.respond(r.Method, r.URL.Path, r.Header)
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{"Content-Type": {"application/json"}}, Request: r}, nil
+		code, body := f.answer(r)
+		return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{"Content-Type": {"application/json"}}, Request: r}, nil
 	})}
 	f.service = NewEnvironmentService(db, httpClient, nil, nil, nil, nil)
 	t.Cleanup(func() {
@@ -123,6 +128,43 @@ func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture
 	}
 	return f
 }
+
+// answer runs the race hook, then answers like the agent (or with the configured failure).
+func (f *agentFixture) answer(r *http.Request) (int, []byte) {
+	f.mu.Lock()
+	hook := f.beforeRespond
+	f.mu.Unlock()
+	if hook != nil {
+		hook(r.Method, r.URL.Path)
+	}
+	body := f.respond(r.Method, r.URL.Path, r.Header)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failPath != "" && f.failPath == r.URL.Path {
+		if f.failCode != 0 {
+			return f.failCode, body
+		}
+		return http.StatusServiceUnavailable, body
+	}
+	return http.StatusOK, body
+}
+
+// serveHTTP moves a Direct fixture onto a real HTTP agent endpoint before its first session.
+func (f *agentFixture) serveHTTP(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		code, body := f.answer(r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(server.Close)
+	f.service.httpClient.Transport = http.DefaultTransport
+	require.NoError(t, f.service.db.Exec("UPDATE environments SET api_url = ? WHERE id = ?", server.URL, f.id).Error)
+	f.service.invalidateEnvironmentCacheInternal(f.id)
+	return server.URL
+}
+
 func (f *agentFixture) respond(method, path string, headers http.Header) []byte {
 	f.mu.Lock()
 	defer f.mu.Unlock()

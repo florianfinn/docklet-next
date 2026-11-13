@@ -262,6 +262,7 @@ export const deHosts: typeof enHosts = {
     restartTitle: "Agent auf {name} neu starten?",
     restartBody: "Der Agent-Container wird neu gestartet. Laufzeitaktionen dieses Hosts bleiben gesperrt, bis eine neue Agent-Instanz verbunden ist. Agent-lokale Sicherungen können unterbrochen werden.",
     restartProgress: "Fortschritt des Agent-Neustarts",
+    restartFinished: "Beendet {time}",
     restarting: "Startet neu …",
     restartHint: (import.meta.env.DEV ? "Simuliert: stoppt und startet den Agent-Container; der Host ist währenddessen kurz nicht erreichbar." : "Stoppt und startet den Agent-Container; der Host ist kurz nicht erreichbar."),
     restartBlocked: "Nur bei verbundenem Host möglich.",

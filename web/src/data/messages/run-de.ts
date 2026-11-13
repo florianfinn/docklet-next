@@ -243,6 +243,7 @@ export const deRunMessages = {
       "origin-locked": "Die Container-Herkunft verhindert diese Aktion",
       "recreate-recovered": "Neuerstellung unterbrochen; Original wiederhergestellt",
       "recreate-ambiguous": "Neuerstellung erfordert manuelle Bereinigung",
+      "logs-too-large": "Die Container-Logs überschreiten das Edge-Downloadlimit von 64 MiB.",
       "shell-invalid": "Ungültige Shell oder Terminalgröße",
       "shell-protocol": "Ungültige Terminal-Steuernachricht",
       "shell-unavailable": "Shell nicht verfügbar",

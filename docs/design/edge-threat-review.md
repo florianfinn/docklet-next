@@ -424,3 +424,46 @@ this record on 2026-10-17. Items that name an issue are new work there.
   (`runHealthCheckInternal` in `internal/environment/service.go`). Until then
   only health, version and agent self-upgrade are forwarded, as D1 states. D1's
   version read after registration and the unchanged tunnel protocol stay.
+
+## Ordered hub delivery
+
+The hub receives tunnel messages independently of each request's consumer. A
+pending request owns its response channel, ordered overflow and the head being
+delivered. Direct sends are non-blocking and allowed only while no drainer owns
+that request. One drainer waits up to five seconds for each overflow message;
+other requests, events and heartbeats continue on the same tunnel.
+
+Overflow accounting charges each message's body length plus 512 bytes, including
+an in-flight head. Overflow is capped at 16 MiB per request and 64 MiB per tunnel.
+These limits bound overflow only, not total memory: the unchanged response channels
+hold 256 command or 512 stream messages, individual tunnel messages can reach
+16 MiB, and command collectors assemble response bodies separately. A timeout or
+an overflow ends only that request and logs its request ID and cause. Consumer
+cleanup sends the agent cancel or stream close at most once. Explicit release
+reclaims overflow and prevents later delivery failure for a finished consumer.
+Already-received command messages continue draining after tunnel close so a
+received completion in overflow remains valid terminal evidence.
+
+The wire protocol, channel capacities and agent receive loop are unchanged.
+Browser-to-container input can still block that agent loop for up to five seconds
+per message; hub-side output isolation does not remove this input-side limit.
+
+## Finite container log downloads
+
+The compiled Edge command table advertises `container.logs.download`. The hub
+checks that capability before dispatch and returns 503 `agent.update-required`
+for an older agent missing it, without changing the agent contract or Edge
+protocol version. Existing hub permissions still decide access before forwarding.
+
+The hub assembles Edge downloads and enforces a 64 MiB body cap before returning
+any file bytes. Exactly 64 MiB succeeds with the attachment filename; a larger
+response returns JSON 413 `container.logs-too-large` using the hub-only
+`ContainerLogsDownloadProblem` schema. Cap rejection and browser abort cancel
+the agent's Docker log read through the shared request lifecycle. The hub logs
+the request path and cap when it rejects a download.
+
+Direct downloads retain unbounded streaming. Both transports retain the existing
+behavior where a Docker read error after streaming starts truncates the file;
+the download does not certify that Docker reached the end of its retained logs.
+The cap bounds the assembled Edge body, while command channels, delivery overflow
+and transport buffers consume additional memory.

@@ -43,7 +43,7 @@ func TestCandidateFreshAndForwardMigrationConstraints(t *testing.T) {
 			defer db.Close()
 			pool, err := db.SQLDB()
 			require.NoError(t, err)
-			require.Equal(t, [][]string{{"0"}, {"1"}, {"2"}, {"3"}}, sqlRows(t, pool, "SELECT version_id FROM goose_db_version WHERE is_applied=1 ORDER BY version_id"))
+			require.Equal(t, [][]string{{"0"}, {"1"}, {"2"}, {"3"}, {"4"}}, sqlRows(t, pool, "SELECT version_id FROM goose_db_version WHERE is_applied=1 ORDER BY version_id"))
 			now := time.Now().UTC()
 			run := candidates.Run{CandidateRun: dto.CandidateRun{ID: "run", ActivityID: "activity", Trigger: "manual", Status: "running", StartedAt: now, Intelligence: "available"}}
 			require.NoError(t, db.Create(&run).Error)

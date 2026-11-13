@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original source baseline lifecycle and genuine-notification consumer regressions.
 
-import { act } from "@testing-library/react";
+import { act, waitFor as testingWaitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/data/query-keys";
@@ -12,6 +12,7 @@ import { uiStyleStore } from "@/shared/preferences/ui-style-store";
 import { actionDialogStore } from "./action-dialog-store";
 import { activityStore } from "./activity-store";
 import { presentationStore } from "./run-presentation";
+import { json } from "@/data/http/activity-reader.test-support";
 import { sourceFixture, toastCount, waitFor } from "./source-notification.test-support";
 
 afterEach(() => act(() => { toast.dismiss(); actionDialogStore.reset(); presentationStore.reset(); uiStyleStore.reset(); activityStore.reset(); vi.restoreAllMocks(); }));
@@ -156,5 +157,28 @@ it("initial global401 cannot complete a source baseline for a later same-user lo
     await f.load(); f.faults.delete("bad"); await f.load();
     expect(f.shows).not.toHaveBeenCalled(); f.put("bad", "after-initial401"); await f.load();
     expect(f.ids()).toEqual(["after-initial401"]);
+  } finally { view.stop(); f.client.clear(); }
+});
+
+// An agent restart followed on a host whose activity source was initially incomplete is a live
+// observation, not that source's initial history, so it still notifies (#370).
+it("a followed agent restart on an initially incomplete source notifies", async () => {
+  const f = sourceFixture(); f.faults.set("bad", "partial"); await f.discover();
+  const run = { runId: "run-followed", createdAt: "2026-11-13T10:00:00Z", deadline: "2026-11-13T10:03:00Z", state: "sent" };
+  let settled = false;
+  const base = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (input, init) => {
+    const path = new URL(String(input), "https://hub.example.com").pathname;
+    if (path.endsWith("/environments/bad/agent/restarts/latest")) return json({ run });
+    if (path.endsWith("/environments/bad/agent/restarts/run-followed")) return json(settled ? { ...run, state: "connected", settledAt: "2026-11-13T10:00:30Z" } : run);
+    return base(input, init);
+  });
+  const view = f.mount();
+  try {
+    await f.load();
+    await act(async () => { await f.adapter.latestAgentRestart!("bad"); });
+    await waitFor(() => expect(f.ids()).toContain("run-followed"));
+    settled = true;
+    await testingWaitFor(() => expect(f.observed.mock.lastCall?.[0].some((r: { id: string; status: string }) => r.id === "run-followed" && r.status === "succeeded")).toBe(true), { timeout: 3000 });
   } finally { view.stop(); f.client.clear(); }
 });

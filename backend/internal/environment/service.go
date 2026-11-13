@@ -54,8 +54,10 @@ type EnvironmentService struct {
 	settingsService       *settings.SettingsService
 	edgeTokens            *edgeTokenCacheInternal
 	remoteEnvs            *remoteEnvSnapshotCacheInternal
-	environmentCache      *hot.HotCache[environmentCacheKeyInternal, Environment]
-	environmentGens       [environmentCacheStripes]atomic.Uint64
+	// statusWriteObserver lets tests observe owned status write outcomes; nil in production.
+	statusWriteObserver func(hostStatusTransition, hostStatusOutcome)
+	environmentCache    *hot.HotCache[environmentCacheKeyInternal, Environment]
+	environmentGens     [environmentCacheStripes]atomic.Uint64
 
 	// jobs carries the scheduler and app lifecycle context, injected
 	// post-construction via SetScheduler (manager-only). Each enabled environment
@@ -576,16 +578,15 @@ func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, n
 	}
 
 	fenceCredentialUpdate(updates)
-	result := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", envID).Updates(updates)
-	if result.Error != nil {
-		return fmt.Errorf("failed to update environment with new API key: %w", result.Error)
+	outcome, err := s.writeHostStatusInternal(ctx, hostStatusWrite{Transition: statusRegistrationLinked, ID: envID, Updates: updates})
+	if err != nil {
+		return fmt.Errorf("failed to update environment with new API key: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if outcome == hostStatusNoop {
 		// A zero-row update would otherwise report a successful rotation while
 		// the new key was never linked to anything.
 		return ErrEnvironmentNotFound
 	}
-	s.invalidateEnvironmentCacheInternal(envID)
 	s.NotifyRuntimeStateChanged()
 
 	s.revokeAgentSessionsInternal(envID, true)

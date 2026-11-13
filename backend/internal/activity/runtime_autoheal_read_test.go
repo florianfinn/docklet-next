@@ -25,7 +25,7 @@ func TestAutoHealRuntimeOwnershipResolvesParentAndReadsLocalGates(t *testing.T) 
 				}
 				return RuntimeResolvedTarget{Target: v, ComposeManaged: v.Kind == "container"}, nil
 			}
-			held, e := f.service.HeldForContainer(t.Context(), "container", "compose-label")
+			held, e := f.service.HeldForContainer(t.Context(), "container", "compose-label", nil)
 			require.NoError(t, e)
 			require.False(t, held)
 			command := f.command()
@@ -33,7 +33,7 @@ func TestAutoHealRuntimeOwnershipResolvesParentAndReadsLocalGates(t *testing.T) 
 			require.NoError(t, e)
 			// Only the receipt remains active: no gate shortcut may mask parent resolution.
 			require.NoError(t, f.store.svc.db.Model(&Activity{}).Where("1=1").Update("status", dto.StatusSuccess).Error)
-			held, e = f.service.HeldForContainer(t.Context(), "container", "compose-label")
+			held, e = f.service.HeldForContainer(t.Context(), "container", "compose-label", nil)
 			require.NoError(t, e)
 			require.True(t, held)
 			require.NoError(t, f.store.svc.db.Where("1=1").Delete(&RuntimeKeyBinding{}).Error)
@@ -42,7 +42,7 @@ func TestAutoHealRuntimeOwnershipResolvesParentAndReadsLocalGates(t *testing.T) 
 				for _, status := range []dto.Status{dto.StatusQueued, dto.StatusRunning} {
 					a := Activity{ID: "policy-child", EnvironmentID: "0", Type: dto.TypeProjectDeploy, Status: status, GateScope: scope, GateKey: "policy-child"}
 					require.NoError(t, f.store.svc.db.Create(&a).Error)
-					held, e = f.service.HeldForContainer(t.Context(), "container", "compose-label")
+					held, e = f.service.HeldForContainer(t.Context(), "container", "compose-label", nil)
 					require.NoError(t, e)
 					require.True(t, held)
 					require.NoError(t, f.store.svc.db.Delete(&a).Error)
@@ -51,14 +51,14 @@ func TestAutoHealRuntimeOwnershipResolvesParentAndReadsLocalGates(t *testing.T) 
 			f.resolver.resolve = func(context.Context, RuntimeTarget) (RuntimeResolvedTarget, error) {
 				return RuntimeResolvedTarget{}, errors.New("read failed")
 			}
-			held, e = f.service.HeldForContainer(t.Context(), "container", "")
+			held, e = f.service.HeldForContainer(t.Context(), "container", "", nil)
 			require.True(t, held)
 			require.Error(t, e)
 			f.resolver.resolve = func(_ context.Context, v RuntimeTarget) (RuntimeResolvedTarget, error) {
 				return RuntimeResolvedTarget{Target: v}, nil
 			}
 			require.NoError(t, f.store.svc.db.Migrator().DropTable(&RuntimeReceipt{}))
-			held, e = f.service.HeldForContainer(t.Context(), "container", "")
+			held, e = f.service.HeldForContainer(t.Context(), "container", "", nil)
 			require.True(t, held)
 			require.Error(t, e)
 		})

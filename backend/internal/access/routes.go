@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read.
 
 package access
 
@@ -69,6 +69,7 @@ var Routes = []Route{
 	{"GET", "/environments/{id}", "getEnvironment"},
 	{"GET", "/environments/{id}/activities", "list-activities"},
 	{"GET", "/environments/{id}/activities/{activityId}", "get-activity"},
+	{"GET", "/environments/{id}/agent/restarts/latest", "getEnvironmentLatestAgentRestart"},
 	{"GET", "/environments/{id}/agent/restarts/{runId}", "getEnvironmentAgentRestart"},
 	{"GET", "/environments/{id}/auto-heal", "get-auto-heal-settings"},
 	{"GET", "/environments/{id}/containers", "list-containers"},

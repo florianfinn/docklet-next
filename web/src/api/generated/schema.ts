@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 517392759587308f9fc4756866b07766ec8d82ac3c78aefd12684518c9dfdea6
+// Revision: 645865a1ad34ed404a6c4e9018379acf4b12d39c9a3d6b9a4ce4c9fa4bb35869
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1146,6 +1146,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/agent/restarts/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the active or newest agent restart run of a host */
+        get: operations["getEnvironmentLatestAgentRestart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/agent/restarts/{runId}": {
         parameters: {
             query?: never;
@@ -1382,7 +1399,7 @@ export interface paths {
         };
         /**
          * Download container logs
-         * @description Download every log line Docker retains for the container as a text file
+         * @description Download every log line Docker retains for the container as a text file. Edge buffers up to 64 MiB and refuses larger logs with JSON 413 before returning any file bytes; older Edge agents without this command return 503 agent.update-required. Direct streams without a size cap. A Docker read error after streaming starts can truncate the file.
          */
         get: operations["download-container-logs"];
         put?: never;
@@ -6591,6 +6608,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseEnvironmentLatestAgentRestart: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseEnvironmentLatestAgentRestart.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["EnvironmentLatestAgentRestart"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseEnvironmentTest: {
             /**
              * Format: uri
@@ -8345,6 +8374,18 @@ export interface components {
             readonlyRootfs?: boolean;
             restartPolicy?: components["schemas"]["ContainerRestartPolicyCreate"];
         };
+        ContainerLogsDownloadProblem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerLogsDownloadProblem.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            code: "container.logs-too-large";
+            /** Format: int64 */
+            status: number;
+        };
         ContainerMount: {
             destination: string;
             driver?: string;
@@ -9622,6 +9663,9 @@ export interface components {
             candidates: components["schemas"]["EnvironmentHubAddressCandidate"][] | null;
             /** Format: date-time */
             detectedAt: string;
+        };
+        EnvironmentLatestAgentRestart: {
+            run?: components["schemas"]["EnvironmentAgentRestartRun"];
         };
         EnvironmentStreamEvent: {
             environments?: components["schemas"]["EnvironmentEnvironment"][] | null;
@@ -18271,6 +18315,46 @@ export interface operations {
             };
         };
     };
+    getEnvironmentLatestAgentRestart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentLatestAgentRestart"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getEnvironmentAgentRestart: {
         parameters: {
             query?: never;
@@ -19055,6 +19139,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Edge log download exceeds 64 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerLogsDownloadProblem"];
+                };
+            };
+            /** @description Edge agent requires an update for log downloads */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */

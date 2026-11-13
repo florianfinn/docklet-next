@@ -22,7 +22,7 @@ export const GUARDED_WIRE_ENUMS = [
   { name: "IMAGE_ERROR_KEYS", keys: IMAGE_ERROR_KEYS, properties: ["JobscheduleJobStatus.code", "ProjectUpdateInfo.policyCode", "SchedulerOutcome.code", "SchedulerTargetOutcome.code", "UpdaterAutoUpdatePolicy.code", "UpdaterBaselineStatus.code", "UpdaterLifecycleResult.baselineCode", "UpdaterLifecycleResult.code", "UpdaterLifecycleResult.pointCode", "UpdaterRecoveryResult.code", "UpdaterRestorePoint.code", "UpdaterSystemImageHint.code", "ImageProblem.code", "ImagePruneItem.code", "VulnerabilityProblem.code", "VulnerabilityScanResult.errorCode", "VulnerabilityScanRun.errorCode", "VulnerabilityScanSummary.errorCode", "HistoryProblem.code", "PreferencesProblem.code"] },
   { name: "BACKUP_CODE_KEYS", keys: BACKUP_CODE_KEYS, properties: ["BackupProblem.code"] },
   { name: "BACKUP_REASON_KEYS", keys: BACKUP_REASON_KEYS, properties: ["BackupProblem.reason", "VolumeRestoreRun.reason"] },
-  { name: "CONTAINER_CODE_KEYS", keys: CONTAINER_CODE_KEYS, properties: ["ContainerProblem.code"] },
+  { name: "CONTAINER_CODE_KEYS", keys: CONTAINER_CODE_KEYS, properties: ["ContainerProblem.code", "ContainerLogsDownloadProblem.code"] },
   { name: "HOST_CODE_KEYS", keys: HOST_CODE_KEYS, properties: ["EnvironmentHostProblem.code", "EnvironmentAgentRestartRun.code"] },
   { name: "ACCESS_CODE_KEYS", keys: ACCESS_CODE_KEYS, properties: ["UserAccessProblem.code"] },
   { name: "NETWORK_CODE_KEYS", keys: NETWORK_CODE_KEYS, properties: ["NetworkError.code"] },
