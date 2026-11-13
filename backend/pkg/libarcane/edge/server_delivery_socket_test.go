@@ -89,7 +89,8 @@ func TestDeliveryRawSocketLogBound(t *testing.T) {
 			p.deliveryMu.Unlock()
 		}
 	}()
-	payload := bytes.Repeat([]byte("x"), 64<<10)
+	saturationFrame := bytes.Repeat([]byte("x"), 256)
+	overflowFrame := bytes.Repeat([]byte("x"), 256<<10)
 	started := time.Now()
 	producerDone := make(chan error, 1)
 	overflowGo := make(chan struct{})
@@ -97,9 +98,13 @@ func TestDeliveryRawSocketLogBound(t *testing.T) {
 	allowOverflow := func() { overflowOnce.Do(func() { close(overflowGo) }) }
 	defer allowOverflow()
 	go func() {
-		for i := range 850 {
+		for i := range 730 {
+			payload := saturationFrame
 			if i == 650 {
 				<-overflowGo
+			}
+			if i >= 650 {
+				payload = overflowFrame
 			}
 			if err := h.agent.Send(&TunnelMessage{ID: id, Type: MessageTypeStreamData, Body: payload, WSMessageType: int(websocket.MessageBinary)}); err != nil {
 				producerDone <- err
@@ -124,8 +129,16 @@ func TestDeliveryRawSocketLogBound(t *testing.T) {
 	_, err = DefaultCommandClient.Execute(probeCtx, h.tunnel, &CommandRequest{Method: "GET", Path: "/api/health"})
 	cancel()
 	require.NoError(t, err, "concurrent request completes while raw log socket stalls")
+	p.deliveryMu.Lock()
+	ended := p.done
+	p.deliveryMu.Unlock()
 	allowOverflow()
-	require.Eventually(t, p.deliveryFailed, time.Second, time.Millisecond, "slow stream ends at delivery overflow bound")
+	select {
+	case <-ended:
+	case <-time.After(streamDeliveryTimeout):
+		t.Fatal("slow stream must end at the delivery bound")
+	}
+	require.True(t, p.deliveryFailed(), "delivery overflow must win over browser write failure")
 	require.Contains(t, logs.text(), "requestId="+id, "failure log names request")
 	require.Contains(t, logs.text(), `cause=overflow`, "close cause is delivery overflow, not browser write deadline")
 	require.Less(t, time.Since(started), streamDeliveryTimeout, "overflow wins before the relay five-second write deadline")
