@@ -164,6 +164,7 @@ func (r *RuntimeReceiver) Execute(ctx context.Context, envelope activitytypes.Ru
 	if !runtimeContainerImageOperation(c.command.Operation) {
 		c.command.Target.Name = copyPtrInternal(resolved.Target.Name)
 	}
+	c.replacementRunID = resolved.ReplacementRunID
 	result, _, err = r.receivePassInternal(ctx, c, true)
 	return result, err
 }

@@ -29,6 +29,11 @@ func runtimeReceiveTxInternal(tx *gorm.DB, now time.Time, c runtimeCanonicalComm
 	if conflict != nil {
 		return nil, &GateConflict{RunID: conflict.RunID, Code: string(activitytypes.CodeRunBusy)}
 	}
+	if c.command.Target.Kind == "container" {
+		if err := replacementHoldTxInternal(tx, "0", c.replacementRunID, id.RunID); err != nil {
+			return nil, err
+		}
+	}
 	target, actor := c.command.Target, c.command.Actor
 	row := &RuntimeReceipt{RunID: id.RunID, Kind: "receipt", StoreGeneration: id.StoreGeneration,
 		ManagerID: id.ManagerID, RegistrationID: id.RegistrationID, EnvironmentID: id.EnvironmentID,

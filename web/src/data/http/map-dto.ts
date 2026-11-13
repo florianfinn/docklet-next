@@ -209,6 +209,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       if (key) return { code: key, params: {} };
       return { code: field === "error" ? "common.commandErrors.failed" : `activity.runKind.${kind}`, params: {} };
     }
+    if (code === "run.busy") return { code: "activity.runtime.busy", params: {} };
+    if (code === "run.cancelling") return { code: "activity.runtime.cancellingConflict", params: {} };
     const operationReason = operationReasonKey(code ?? source);
     if (operationReason) return { code: `containers.operationReasons.${operationReason}`, params: {} };
     const carried = (field === "progress" || !m10) ? carrierText(code, source) : undefined;
@@ -256,7 +258,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     error: run.error
       ? jobSummary(run.error) ?? (backup ? coded(run.error, "", "error") : knownBackupError(run.error) ?? vulnerabilityError(run.error))
         ?? coded(
-          lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") || run.messageCode?.startsWith("container.recreate-") ? run.messageCode : undefined),
+          lifecycle?.code ?? (run.messageCode === "run.busy" || run.messageCode === "run.cancelling" ? run.messageCode : undefined) ?? (run.messageCode?.startsWith("runtime.") || run.messageCode?.startsWith("container.recreate-") ? run.messageCode : undefined),
           run.error,
           "error",
         )

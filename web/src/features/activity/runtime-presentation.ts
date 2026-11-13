@@ -23,9 +23,11 @@ export interface RuntimePresentation {
 export type RuntimeView<T> = T & { runtime?: RuntimePresentation };
 export const runtimePresentation = (run: ActionRun): RuntimePresentation | undefined => (run as RuntimeView<ActionRun>).runtime;
 
-export function runtimeState(run: ActionRun): "unconfirmed" | "unverified" | "unknown" | "released" | "interrupted" | "cancelling" | undefined {
+export function runtimeState(run: ActionRun): "unconfirmed" | "unverified" | "unknown" | "released" | "interrupted" | "cancelling" | "busy" | "cancellingConflict" | undefined {
   const evidence = runtimePresentation(run);
   if (evidence?.released) return "released";
+  if (evidence?.resultCode === "run.busy") return "busy";
+  if (evidence?.resultCode === "run.cancelling" && run.status === "failed") return "cancellingConflict";
   if (run.outcomeState === "unknown") {
     if (run.status !== "running" && run.status !== "queued") return "unverified";
     return evidence?.unknownReason ? "unknown" : "unconfirmed";

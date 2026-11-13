@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts. M25 system workload protection.
 
 package container
 
@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/florianfinn/docklet-next/backend/internal/systemlabel"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	imagetypes "github.com/florianfinn/docklet-next/types/image"
 	"github.com/moby/moby/api/types/container"
@@ -285,7 +286,7 @@ func (
 			summary.UpdateStrategy = cmp.Or(policy.Strategy, "auto")
 		}
 		summary.UpdateInfo = updateInfoMap[dc.ID]
-		summary.RedeployDisabled = labels.ShouldDisableArcaneServerRedeploy(summary.Labels, summary.ID, currentContainerID, currentContainerErr)
+		summary.RedeployDisabled = systemlabel.SelfProtected(summary.Labels, labels.ShouldDisableArcaneServerRedeploy(summary.Labels, summary.ID, currentContainerID, currentContainerErr))
 		summary.AutoUpdateEnabled = !labels.IsUpdateDisabled(dc.Labels) && !docker.ContainerNameExcluded(dc.Names, excluded)
 		summary.Hidden, _ = kit.ParseBool(dc.Labels[libarcane.HiddenResourceLabel])
 		items = append(items, summary)
