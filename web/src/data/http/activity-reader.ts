@@ -238,8 +238,9 @@ export function createActivityReader(reads: Reads) {
       const batch = await sourceRead;
       if (version !== generation) throw new CancelledError();
       if (!batch) return current;
-      // A scoped read cannot stand in for the sources an aggregate has not yet observed.
-      if (observedGeneration !== generation) await flight.request();
+      // A scoped read cannot stand in for the sources an aggregate has not yet observed. Once that
+      // aggregate has published, the batch still applies if another source then timed out.
+      if (observedGeneration !== generation) await flight.request().catch((error: unknown) => { if (observedGeneration !== generation) throw error; });
       if (version !== generation) throw new CancelledError();
       return performLoad(new AbortController().signal, host, [batch]);
     })();
