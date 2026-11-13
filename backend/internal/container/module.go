@@ -242,7 +242,9 @@ func RegisterContainers(
 		Description: "Download every log line Docker retains for the container as a text file. Edge buffers up to 64 MiB and refuses larger logs with JSON 413 before returning any file bytes; older Edge agents without this command return 503 agent.update-required. Direct streams without a size cap. A Docker read error after streaming starts can truncate the file.",
 		Responses: map[string]*huma.Response{
 			"413": {Description: "Edge log download exceeds 64 MiB", Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerDTO.LogsDownloadProblem](), true, "")}}},
-			"503": {Description: "Edge agent requires an update for log downloads", Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[handlerutil.AgentAccessError](), true, "")}}},
+			// anyOf keeps the shared AgentAccessError body free of Huma's $schema link on every route.
+			"503":     {Description: "Edge agent requires an update for log downloads", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{AnyOf: []*huma.Schema{api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[handlerutil.AgentAccessError](), true, "")}}}}},
+			"default": {Description: "Error", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}},
 		},
 		Tags:     []string{"Containers"},
 		Security: handlerutil.DefaultOperationSecurity(),

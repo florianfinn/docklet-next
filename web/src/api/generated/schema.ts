@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 76b087c6d8fc465777ddc07bc5ae04aabeb7ca375a1747098c5a7aa23339106b
+// Revision: 645865a1ad34ed404a6c4e9018379acf4b12d39c9a3d6b9a4ce4c9fa4bb35869
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5564,12 +5564,6 @@ export interface components {
             type: string;
         };
         AgentAccessError: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/AgentAccessError.json
-             */
-            readonly $schema?: string;
             code: string;
             success: boolean;
         };
@@ -19163,6 +19157,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
         };

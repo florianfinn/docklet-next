@@ -293,19 +293,20 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 
 	status, respHeaders, respBody, err := ProxyRequest(proxyCtx, tunnel, req.Method, targetPath, req.URL.RawQuery, headers, body)
 	if err != nil {
+		// Expected refusals log one warning with the environment; other failures stay errors.
+		var logsProblem *containerDTO.LogsDownloadProblem
+		if errors.As(err, &logsProblem) {
+			slog.WarnContext(ctx, "Edge container log download exceeds cap", "environmentId", tunnel.EnvironmentID, "method", req.Method, "path", targetPath, "capBytes", containerDTO.MaxEdgeLogsDownloadBytes)
+			return c.JSON(http.StatusRequestEntityTooLarge, logsProblem)
+		}
+		if errors.Is(err, remenv.ErrAgentUpdateRequired) {
+			slog.WarnContext(ctx, "Edge agent requires an update for this request", "environmentId", tunnel.EnvironmentID, "method", req.Method, "path", targetPath)
+			return c.JSON(http.StatusServiceUnavailable, map[string]any{"success": false, "code": "agent.update-required"})
+		}
 		slog.ErrorContext(ctx, "Edge tunnel proxy failed",
 			"environmentId", tunnel.EnvironmentID,
 			"error", err,
 		)
-
-		var logsProblem *containerDTO.LogsDownloadProblem
-		if errors.As(err, &logsProblem) {
-			slog.WarnContext(ctx, "Edge container log download exceeds cap", "method", req.Method, "path", targetPath, "capBytes", containerDTO.MaxEdgeLogsDownloadBytes)
-			return c.JSON(http.StatusRequestEntityTooLarge, logsProblem)
-		}
-		if errors.Is(err, remenv.ErrAgentUpdateRequired) {
-			return c.JSON(http.StatusServiceUnavailable, map[string]any{"success": false, "code": "agent.update-required"})
-		}
 		if proxyCtx.Err() != nil {
 			return c.JSON(http.StatusGatewayTimeout, map[string]any{"success": false, "code": "agent.unavailable", "error": "request timed out"})
 		}
