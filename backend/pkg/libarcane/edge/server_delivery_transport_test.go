@@ -27,12 +27,16 @@ import (
 type deliveryObservedConn struct {
 	TunnelConnection
 	controls chan *TunnelMessage
+	acks     atomic.Int64
 }
 
 func (c *deliveryObservedConn) Receive() (*TunnelMessage, error) {
 	msg, err := c.TunnelConnection.Receive()
 	if err == nil {
 		c.controls <- msg
+		if msg.Type == MessageTypeHeartbeatAck {
+			c.acks.Add(1)
+		}
 	}
 	return msg, err
 }
@@ -126,9 +130,11 @@ func (h *deliveryHarness) send(t *testing.T, msg *TunnelMessage) {
 }
 func (h *deliveryHarness) heartbeat(t *testing.T, id string) {
 	t.Helper()
+	before := h.agent.acks.Load()
 	h.clock.Add(int64(time.Second))
 	h.send(t, &TunnelMessage{ID: id, Type: MessageTypeHeartbeat})
 	require.Eventually(t, func() bool { return h.tunnel.GetLastHeartbeat().UnixNano() == h.clock.Load() }, time.Second, time.Millisecond, "heartbeat handled before stalled request deadline")
+	require.Eventually(t, func() bool { return h.agent.acks.Load() > before }, time.Second, time.Millisecond, "agent receives heartbeat ACK after prior cleanup frames")
 }
 
 // A context barrier holds the actual command collector before its select. This
@@ -160,7 +166,7 @@ func TestDeliveryRealTunnelIsolation(t *testing.T) {
 			defer unblock()
 			commandDone := make(chan error, 1)
 			go func() {
-				_, err := DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: "finite", Method: "GET", Path: "/api/health", Query: "hold=1"})
+				_, err := DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: "finite", Method: "GET", Path: "/api/environments/0/vulnerabilities/all", Query: "hold=1"})
 				commandDone <- err
 			}()
 			<-gate.entered
@@ -286,7 +292,7 @@ func TestDeliveryRealConsumerRelease(t *testing.T) {
 			if kind == "command" {
 				go func() {
 					defer close(done)
-					_, _ = DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: kind, Method: "GET", Path: "/api/health", Query: "hold=1"})
+					_, _ = DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: kind, Method: "GET", Path: "/api/environments/0/vulnerabilities/all", Query: "hold=1"})
 				}()
 				<-gate.entered
 				entry, _ := h.tunnel.Pending.Load(kind)
