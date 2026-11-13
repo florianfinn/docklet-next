@@ -26,3 +26,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M21 first release readiness acceptance](m21-first-release-readiness-acceptance.md) | Merged package, sandbox-found defects, two acceptance fix packages, method and limits on 2026-11-10 |
 | [M22 publication readiness acceptance](m22-publication-readiness-acceptance.md) | Merged package, review rounds, unchanged-artifact package acceptance, method and limits on 2026-11-10 |
 | [M23 dashboard performance and request hygiene acceptance](m23-dashboard-performance-acceptance.md) | Merged package, sandbox-found defects, maintainer counting decisions, method and limits on 2026-11-12 |
+| [M24 scheduled update recovery acceptance](m24-scheduled-update-recovery-acceptance.md) | Merged package, sandbox-found defects, maintainer matrix decisions, method and limits on 2026-11-13 |
