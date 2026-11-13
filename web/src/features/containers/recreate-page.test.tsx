@@ -39,6 +39,8 @@ it.each([
   ["list", "/containers", openFromList, "renamed", "/containers/0~replacement"],
   ["name page", "/containers/0~app", openFromDetail, "app", "/containers/0~app"],
   ["name page with a rename", "/containers/0~app", openFromDetail, "renamed", "/containers/0~replacement"],
+  ["encoded name page", "/containers/0~%61pp", openFromDetail, "app", "/containers/0~%61pp"],
+  ["name page with an encoded separator", "/containers/0%7Eapp", openFromDetail, "app", "/containers/0%7Eapp"],
 ] as const)("W3 follows the accepted run from the %s after the old capability becomes unavailable", async (_where, start, openDialog, newName, address) => {
   let rows: ContainerInfo[] = [old];
   let receive: ((state: ActionDetailState) => void) | undefined;
