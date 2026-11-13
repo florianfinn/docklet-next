@@ -10,20 +10,21 @@ import (
 	"context"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func deliverBurstInternal(tunnel *AgentTunnel, chunks int) <-chan struct{} {
-	timer := time.NewTimer(streamDeliveryTimeout)
-	timer.Stop()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		server := &TunnelServer{}
-		for range chunks {
-			server.deliverResponse(context.Background(), tunnel, &TunnelMessage{ID: "burst", Type: MessageTypeCommandOutput, Body: []byte("x")}, timer)
+		for i := range chunks {
+			kind := MessageTypeCommandOutput
+			if i == chunks-1 {
+				kind = MessageTypeCommandComplete
+			}
+			server.deliverResponse(context.Background(), tunnel, &TunnelMessage{ID: "burst", Type: kind, Body: []byte("x"), Sequence: int64(i)})
 		}
 	}()
 	return done
@@ -41,8 +42,10 @@ func TestResponseBurstWaitsForTheConsumer(t *testing.T) {
 		synctest.Wait()
 		require.Len(t, pending.ResponseCh, cap(pending.ResponseCh), "the buffer is full and the next delivery waits")
 		require.Empty(t, pending.failureCh, "a full buffer does not fail the request")
-		for range chunks {
-			<-pending.ResponseCh
+		for i := range chunks {
+			msg := <-pending.ResponseCh
+			require.Equal(t, int64(i), msg.Sequence, "chunks stay in order")
+			require.Equal(t, i == chunks-1, msg.Type == MessageTypeCommandComplete, "terminal last")
 		}
 		<-done
 		require.Empty(t, pending.failureCh)
@@ -59,7 +62,10 @@ func TestResponseBurstFailsAStuckConsumer(t *testing.T) {
 		require.NoError(t, err)
 		done := deliverBurstInternal(tunnel, cap(pending.ResponseCh)+1)
 		<-done
+		<-pending.done
+		synctest.Wait()
 		require.Len(t, pending.failureCh, 1)
+		require.True(t, pending.deliveryFailed())
 		_, still := tunnel.Pending.Load("burst")
 		require.False(t, still, "a timed-out request is removed")
 	})

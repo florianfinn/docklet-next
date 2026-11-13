@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
+// Deviations: Flush-aware terminal collection across tunnel close (#416); Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
 
 package edge
 
@@ -91,12 +91,12 @@ func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTun
 		case <-ctx.Done():
 			return 0, nil, nil, ctx.Err()
 		case <-tunnel.done:
-			if done, status, headers, body, err := state.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
+			if done, status, headers, body, err := state.drainPendingTerminal(ctx, pending, method, limit); done {
 				return status, headers, body, err
 			}
 			return 0, nil, nil, fmt.Errorf("edge tunnel closed while waiting for response: %w", ErrTunnelConnectionClosed)
 		case err := <-pending.failureCh:
-			if done, status, headers, body, drainTerminalResponseErr := state.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
+			if done, status, headers, body, drainTerminalResponseErr := state.drainPendingTerminal(ctx, pending, method, limit); done {
 				return status, headers, body, drainTerminalResponseErr
 			}
 			return 0, nil, nil, err
@@ -109,6 +109,34 @@ func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTun
 			}
 			if done, status, headers, body, err := state.handleTunnelMessageInternal(method, incoming); done {
 				return status, headers, body, err
+			}
+		}
+	}
+}
+
+// Once the receive loop ends, overflow may still contain the terminal frame.
+// Wait for that owner's flush as well as reading the channel; the drainer's
+// per-message deadline bounds stalled delivery, and ctx still bounds collection.
+func (s *grpcResponseState) drainPendingTerminal(ctx context.Context, pending *PendingRequest, method string, limit int) (bool, int, map[string]string, []byte, error) {
+	flush := pending.flushed()
+	for {
+		if done, status, headers, body, err := s.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
+			return done, status, headers, body, err
+		}
+		select {
+		case <-ctx.Done():
+			return true, 0, nil, nil, ctx.Err()
+		case <-flush:
+			return s.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit)
+		case incoming, ok := <-pending.ResponseCh:
+			if !ok {
+				return true, 0, nil, nil, ErrTunnelConnectionClosed
+			}
+			if limit > 0 && incoming != nil && s.respBody.Len()+len(incoming.Body) > limit {
+				return true, 0, nil, nil, ErrCommandResponseTooLarge
+			}
+			if done, status, headers, body, err := s.handleTunnelMessageInternal(method, incoming); done {
+				return done, status, headers, body, err
 			}
 		}
 	}

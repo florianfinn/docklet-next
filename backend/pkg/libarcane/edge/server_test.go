@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None; notification and Auto Heal contracts and delivery for #296; register ACK publication ordering for #347.
+// Deviations: Per-request delivery no longer uses a loop-owned timer (#416); None; notification and Auto Heal contracts and delivery for #296; register ACK publication ordering for #347.
 
 package edge
 
@@ -572,16 +572,13 @@ func TestTunnelServer_HandleEventCallback(t *testing.T) {
 	})
 
 	tunnel := NewAgentTunnelWithConn("env-edge", &fakeServerTunnelConn{})
-	deliveryTimer := time.NewTimer(streamDeliveryTimeout)
-	deliveryTimer.Stop()
-	defer deliveryTimer.Stop()
 	server.handleTunnelMessage(t.Context(), tunnel, &TunnelMessage{
 		Type: MessageTypeEvent,
 		Event: &TunnelEvent{
 			Type:  "container.start",
 			Title: "Container started",
 		},
-	}, deliveryTimer)
+	})
 
 	select {
 	case <-called:

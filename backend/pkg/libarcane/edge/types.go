@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery; register ACK publication ordering for #347; Edge protocol fields (#362).
+// Deviations: Per-request ordered hub delivery ownership (#416); Local module namespace; runtime ingress ownership fields; injectable heartbeat sweep delivery; register ACK publication ordering for #347; Edge protocol fields (#362).
 
 package edge
 
@@ -233,6 +233,7 @@ type AgentTunnel struct {
 	done          chan struct{}
 	closeOnce     sync.Once
 
+	overflowBytes   atomic.Int64
 	registerPending atomic.Bool
 }
 
@@ -372,6 +373,22 @@ type TunnelEvent struct {
 type PendingRequest struct {
 	ResponseCh chan *TunnelMessage
 	failureCh  chan error
+
+	deliveryMu     sync.Mutex
+	queue          []*TunnelMessage // The sending head stays here and charged until delivered.
+	charged        int64
+	draining       bool
+	released       bool
+	failed         bool
+	done           chan struct{}
+	flushCh        chan struct{}
+	drainerDone    chan struct{}
+	endOnce        sync.Once
+	cleanupOnce    sync.Once
+	onFailure      func()
+	deliveryTunnel *AgentTunnel
+	// beforeDelivery is nil outside deterministic drainer interleaving tests.
+	beforeDelivery func()
 }
 
 // TunnelConn wraps a WebSocket connection with send/receive helpers.
