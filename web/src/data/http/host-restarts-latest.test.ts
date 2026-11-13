@@ -63,6 +63,7 @@ it.each([
   ["terminal without settledAt", { run: { ...active, state: "connected" } }, "invalid"],
   ["settledAt on an active run", { run: { ...active, settledAt: settled } }, "invalid"],
   ["array", [], "invalid"],
+  ["numeric dates", { run: { ...active, createdAt: 2026, deadline: 2027 } }, "invalid"],
 ])("reads %s", async (_name, data, outcome) => {
   const f = hub(() => data);
   if (outcome === undefined) await expect(f.api.latest("example")).resolves.toBeUndefined();
@@ -99,5 +100,25 @@ it("prefers the in-session observation over an older seed", async () => {
   await vi.advanceTimersByTimeAsync(1000);
   expect(f.api.retained().at(-1)?.status).toBe("succeeded");
   expect((await f.api.latest("example"))?.status).toBe("succeeded");
+  f.api.reset();
+});
+
+// Row 9 counterpart: a reopen after the follow stopped applies the hub's further observation of
+// the same run instead of keeping the stale active one.
+it("applies a further observation of a known run after its follow stopped", async () => {
+  let latest: Restart = active;
+  const f = hub(() => ({ run: latest }));
+  f.fetcher.mockImplementation(async (url) => String(url).endsWith("/agent/restarts/latest")
+    ? new Response(JSON.stringify({ success: true, data: { run: latest } }))
+    : new Response(JSON.stringify({ code: "agent.unavailable" }), { status: 503 }));
+  await f.api.latest("example");
+  await vi.advanceTimersByTimeAsync(300_000);
+  const reads = f.fetcher.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(100_000);
+  expect(f.fetcher.mock.calls.length).toBe(reads);
+  latest = { ...active, state: "connected", settledAt: settled };
+  const fresh = await f.api.latest("example");
+  expect(fresh).toMatchObject({ status: "succeeded", finishedAt: settled });
+  expect(f.runs.filter((run) => run.status === "succeeded")).toHaveLength(1);
   f.api.reset();
 });

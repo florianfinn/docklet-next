@@ -126,7 +126,10 @@ hosts stays in [host onboarding](host-onboarding.md).
     opens and always shows the latest outcome with its finish time, without an
     expiry. A settled run read this way is shown in the panel only; it never
     appears as a new action or toast. An active run continues to be followed
-    like an in-session run. A refusal by a busy agent settles a durable
+    like an in-session run and notifies when it settles. Within one run the
+    further observation wins, so a reopen also applies an outcome that a
+    stopped follow missed; of two different runs the panel shows a running one,
+    else the later start. A refusal by a busy agent settles a durable
     `failed`/`host.busy` row and is therefore shown after a reload. A `host.busy`
     answer at hub intake creates no run and stays visible only in the session
     that asked.

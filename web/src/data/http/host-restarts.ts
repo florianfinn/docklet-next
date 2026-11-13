@@ -24,11 +24,14 @@ interface Options {
 const phases = ["reserved", "sent", "awaiting", "connected"] as const;
 const terminal = (row: Restart) => ["connected", "failed", "unknown"].includes(row.state);
 const message = (code: string): MessageCode => ({ code, params: {} });
+const isoDate = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value));
+// Progress order within one run: the phases, then any terminal state.
+const rank = (row: Restart) => terminal(row) ? phases.length : phases.indexOf(row.state as typeof phases[number]);
 // A run read without its in-session history marks done only the phases its code proves.
 const settledReach = (row: Restart) => row.state === "connected" ? 3 : row.code === "agent.restart-timeout" ? 2 : ["host.busy", "agent.restart-unsupported", "agent.restart-unconfirmed"].includes(row.code ?? "") ? 1 : 0;
 function validRun(row: Restart | undefined): Restart {
   const done = row !== undefined && terminal(row);
-  if (!row || typeof row.runId !== "string" || !row.runId || ![...phases, "failed", "unknown"].includes(row.state) || !Number.isFinite(Date.parse(row.createdAt)) || !Number.isFinite(Date.parse(row.deadline)) || ((row.state === "failed" || row.state === "unknown") && !row.code) || (row.state === "connected" && row.code) || done !== (typeof row.settledAt === "string" && Number.isFinite(Date.parse(row.settledAt)))) throw runtimeError("hosts.invalid-restart");
+  if (!row || typeof row.runId !== "string" || !row.runId || ![...phases, "failed", "unknown"].includes(row.state) || !isoDate(row.createdAt) || !isoDate(row.deadline) || ((row.state === "failed" || row.state === "unknown") && !row.code) || (row.state === "connected" && row.code) || done !== isoDate(row.settledAt)) throw runtimeError("hosts.invalid-restart");
   return row;
 }
 export function createHostRestarts({ baseUrl, client, capability, generation, publish, changed }: Options) {
@@ -130,9 +133,10 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
         return run === undefined ? undefined : validRun(run);
       });
       if (!row) return undefined;
-      // An in-session observation of the same run is at least as new as this read.
+      // Within one run the further observation wins; a reopen resumes a follow that stopped.
       const known = rows.get(row.runId);
-      if (known?.host === host) return known.run;
+      if (known?.host === host && rank(row) <= rank(known.row)) { schedule(host, row.runId); return known.run; }
+      if (known?.host === host) { const run = retain(host, row); schedule(host, row.runId); return run; }
       if (terminal(row)) return build(host, row, settledReach(row));
       const run = retain(host, row); schedule(host, row.runId);
       return run;
