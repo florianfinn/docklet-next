@@ -62,6 +62,7 @@ const sorted = (runs: Iterable<CodedActionRun>) => [...runs].sort((a, b) => Date
 export function createActivityReader(reads: Reads) {
   let current: CodedActionRun[] = [];
   let initialized = false;
+  let observedGeneration = -1;
   let health: ActionReadHealth = { failures: [] };
   let sequence = 0;
   let generation = 0;
@@ -188,9 +189,13 @@ export function createActivityReader(reads: Reads) {
         if (!observed.has(run.id) && (run.kind === "agent-restart" || run.status === "running" || run.status === "queued")) observed.set(run.id, summaryOnly(run));
       }
       initialized = true;
+      observedGeneration = generation;
       const previous = current;
-      current = sorted(merged.values()).map((run) => run.outcomeState === undefined ? run :
-        { ...run, runtime: { ...(run as RuntimeView<CodedActionRun>).runtime, sourceObserved: true } });
+      // An aggregate observation also clears the targeted mark of a retained non-runtime run.
+      current = sorted(merged.values()).map((run) => {
+        const presentation = (run as RuntimeView<CodedActionRun>).runtime;
+        return run.outcomeState === undefined && presentation?.sourceObserved !== false ? run : { ...run, runtime: { ...presentation, sourceObserved: true } };
+      });
       if (started > globalHealthSequence) { globalHealthSequence = started; globalFailure = undefined; }
       publishHealth();
       reads.changed?.(previous, current, recovered);
@@ -233,7 +238,9 @@ export function createActivityReader(reads: Reads) {
       const batch = await sourceRead;
       if (version !== generation) throw new CancelledError();
       if (!batch) return current;
-      if (!initialized) await flight.request();
+      // A scoped read cannot stand in for the sources an aggregate has not yet observed. Once that
+      // aggregate has published, the batch still applies if another source then timed out.
+      if (observedGeneration !== generation) await flight.request().catch((error: unknown) => { if (observedGeneration !== generation) throw error; });
       if (version !== generation) throw new CancelledError();
       return performLoad(new AbortController().signal, host, [batch]);
     })();
@@ -293,7 +300,10 @@ export function createActivityReader(reads: Reads) {
       const existing = current.find((row) => row.id === run.id);
       if (existing && existing.hostId !== run.hostId) return;
       runSequences.set(run.id, ++sequence);
-      current = sorted([...current.filter((row) => row.id !== run.id), summaryOnly(run)]);
+      // A targeted run published before any aggregate observation cannot seed notification history.
+      const presentation = (run as RuntimeView<CodedActionRun>).runtime;
+      const targeted = observedGeneration === generation || presentation?.sourceObserved !== undefined ? run : { ...run, runtime: { ...presentation, sourceObserved: false } };
+      current = sorted([...current.filter((row) => row.id !== run.id), summaryOnly(targeted)]);
       initialized = true;
       publish();
     },
