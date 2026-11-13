@@ -129,7 +129,9 @@ hosts stays in [host onboarding](host-onboarding.md).
     like an in-session run and notifies when it settles. Within one run the
     further observation wins, so a reopen also applies an outcome that a
     stopped follow missed; of two different runs the panel shows a running one,
-    else the later start. A refusal by a busy agent settles a durable
+    else the later start. In the browser the restart reads have their own
+    HTTP/1.1 admission key, so they do not wait behind slow reads of a host
+    whose agent is restarting. A refusal by a busy agent settles a durable
     `failed`/`host.busy` row and is therefore shown after a reload. A `host.busy`
     answer at hub intake creates no run and stays visible only in the session
     that asked.
