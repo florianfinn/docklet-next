@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original page-level recreate ownership across the replacement's identity change.
+// Deviations: Original page-level recreate ownership across the replacement's identity change. #477 name addresses.
 
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,7 +21,7 @@ import { RecreateRun } from "./RecreateRun";
 const old: ContainerInfo = { ...STANDALONE.find((item) => item.origin === "standalone")!, id: "0~old", hostId: "0", name: "app" };
 const config = { id: "old", name: "app", image: "example/app:1", running: true, environment: [], hostConfig: { restartPolicy: { name: "always" }, portBindings: {} } };
 
-const runState = (status: "running" | "succeeded"): ActionDetailState => ({ status: "ready", run: { id: "run", kind: "recreate", title: { code: "runMessages.value", params: { value: "Recreate" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status, steps: [], progress: status === "running" ? 50 : 100, startedAt: "2026-10-31T00:00:00Z", log: [], output: [], ...(status === "succeeded" ? { recreateResult: { oldId: "old", newId: "replacement", oldName: "app", newName: "renamed" } } : {}) } });
+const runState = (status: "running" | "succeeded", newName = "renamed"): ActionDetailState => ({ status: "ready", run: { id: "run", kind: "recreate", title: { code: "runMessages.value", params: { value: "Recreate" } }, target: { code: "runMessages.value", params: { value: "app" } }, hostId: "0", containerId: "0~old", services: [], status, steps: [], progress: status === "running" ? 50 : 100, startedAt: "2026-10-31T00:00:00Z", log: [], output: [], ...(status === "succeeded" ? { recreateResult: { oldId: "old", newId: "replacement", oldName: "app", newName } } : {}) } });
 
 const openFromDetail = async () => { await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten & neu erstellen" })); };
 const openFromList = async () => {
@@ -33,10 +33,13 @@ const openFromList = async () => {
 // descriptor turns unavailable, as the backend reader refuses a removed ID; the
 // dialog still follows the accepted run through refreshes, refreshes the
 // inventory and opens the replacement with the form closed.
+// A page opened by name keeps that address when the replacement keeps the name (#477).
 it.each([
-  ["detail page", "/containers/0~old", openFromDetail],
-  ["list", "/containers", openFromList],
-] as const)("W3 follows the accepted run from the %s after the old capability becomes unavailable", async (_where, start, openDialog) => {
+  ["detail page", "/containers/0~old", openFromDetail, "renamed", "/containers/0~replacement"],
+  ["list", "/containers", openFromList, "renamed", "/containers/0~replacement"],
+  ["name page", "/containers/0~app", openFromDetail, "app", "/containers/0~app"],
+  ["name page with a rename", "/containers/0~app", openFromDetail, "renamed", "/containers/0~replacement"],
+] as const)("W3 follows the accepted run from the %s after the old capability becomes unavailable", async (_where, start, openDialog, newName, address) => {
   let rows: ContainerInfo[] = [old];
   let receive: ((state: ActionDetailState) => void) | undefined;
   const changes = new Set<(topics: Topic[]) => void>();
@@ -63,11 +66,11 @@ it.each([
   // A refresh while following re-reads the now unavailable descriptor.
   act(() => changes.forEach((listener) => listener(["hosts", "containers"])));
   await waitFor(() => expect(screen.queryByText("Läuft") !== null).toBe(true));
-  rows = [{ ...old, id: "0~replacement", name: "renamed" }];
-  act(() => receive?.(runState("succeeded")));
-  await waitFor(() => expect(router.state.location.pathname).toBe("/containers/0~replacement"));
-  expect(await screen.findByRole("heading", { name: "renamed" }) !== null).toBe(true);
-  expect(screen.queryByRole("dialog") === null).toBe(true);
+  rows = [{ ...old, id: "0~replacement", name: newName }];
+  act(() => receive?.(runState("succeeded", newName)));
+  await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+  expect(router.state.location.pathname).toBe(address);
+  expect(await screen.findByRole("heading", { name: newName }) !== null).toBe(true);
 });
 
 it("W3 shows recreate run steps from the catalogue in German", async () => {

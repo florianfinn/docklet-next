@@ -96,7 +96,8 @@ https://docklet.example.com/containers/<host>~<container-name>?tab=terminal
 
 The page matches the inventory ID first and otherwise the exact container name
 on that host; Docker names are unique per daemon, so the link survives a
-recreate with a new ID. The address is not rewritten to the ID. `?tab=terminal`
+recreate with a new ID. The address is not rewritten to the ID, also not when a
+recreate or update from that page keeps the name. `?tab=terminal`
 opens the terminal once a shell is available; any other value, or an
 unavailable shell, shows the logs.
 
