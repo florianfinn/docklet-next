@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original reload tests of the host restart panel through the HTTP adapter.
 
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -15,6 +15,7 @@ import type { CodedActionRun } from "@/data/message-code";
 import { usePrincipal } from "@/data/use-principal";
 import { ActionToasts } from "@/features/activity/ActionToasts";
 import { mapHost } from "@/data/http/hosts";
+import { ActivitySource, json as listJson } from "@/data/http/activity-reader.test-support";
 import { renderWithApp } from "@/test/render";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 
@@ -192,5 +193,77 @@ it("keeps older failed runs silent when the restart read precedes the activity h
   await waitFor(() => expect(snapshots.flat().some((run) => run.id === older.id)).toBe(true));
   expect(shows.mock.calls.filter(([, options]) => options?.id === older.id)).toHaveLength(0);
   expect(shows.mock.calls.filter(([, options]) => options?.id === followed.runId)).toHaveLength(1);
+  view.unmount(); off();
+});
+
+// The restarted host is in the catalogue, so its targeted row stays in the merged history.
+function catalogueHub(activities: Record<string, () => Promise<unknown[]> | unknown[]>) {
+  const f = appHub(() => followed, () => followed);
+  const source = new ActivitySource();
+  const fetcher = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input), "https://hub.example.com");
+    if (url.pathname === "/api/environments") return listJson([{ id: host.id, name: "Example", color: null, registrationRevision: 1, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false }]);
+    const listed = /^\/api\/environments\/([^/]+)\/activities$/.exec(url.pathname);
+    if (listed) return listJson(await (activities[listed[1]!] ?? (() => []))());
+    return (f.fetcher as unknown as typeof fetch)(input, init);
+  };
+  return { adapter: createHttpAdapter({ fetch: fetcher, eventSource: () => source as unknown as EventSource }), source };
+}
+const failedRun = (environmentId: string, id: string, at: string) => ({ id, environmentId, status: "failed", type: "project_redeploy", startedAt: at, createdAt: at, endedAt: at, resourceName: "Example app" });
+const toastsFor = (shows: { mock: { calls: unknown[][] } }, id: string) => shows.mock.calls.filter(([, options]) => (options as { id?: string } | undefined)?.id === id);
+
+// Row 1s: a hub snapshot frame read while the restarted host's history is still pending cannot
+// seed that host's history.
+it("keeps a pending host's older failures silent after a scoped snapshot", async () => {
+  setAppLocale("en-US");
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  let requested = false;
+  const { adapter, source } = catalogueHub({
+    "0": () => [failedRun("0", "run-old-hub", "2026-11-13T09:00:00Z")],
+    [host.id]: async () => { requested = true; await held; return [failedRun(host.id, "run-old-remote", "2026-11-13T09:00:00Z")]; },
+  });
+  await adapter.getCurrentUser();
+  const snapshots: CodedActionRun[][] = [];
+  const off = adapter.subscribeActions((runs) => snapshots.push(runs));
+  const shows = vi.spyOn(toast, "custom");
+  const view = renderWithApp(<SignedInToasts />, adapter);
+  await screen.findByTestId("toasts-ready");
+  const aggregate = adapter.listActions();
+  await waitFor(() => expect(requested).toBe(true));
+  await act(async () => { await adapter.latestAgentRestart!(host.id); });
+  await waitFor(() => expect(toastsFor(shows, followed.runId)).toHaveLength(1));
+  act(() => source.send(undefined, "0", "snapshot"));
+  await act(async () => { release(); await aggregate; });
+  await waitFor(() => expect(snapshots.at(-1)?.some((run) => run.id === "run-old-remote")).toBe(true));
+  expect(toastsFor(shows, "run-old-hub")).toHaveLength(0);
+  expect(toastsFor(shows, "run-old-remote")).toHaveLength(0);
+  expect(toastsFor(shows, followed.runId)).toHaveLength(1);
+  view.unmount(); off();
+});
+
+// Row 1e: an empty first history completes the observation, so a later new failure still notifies.
+it("notifies a new failure after an empty first history that retained the restart", async () => {
+  setAppLocale("en-US");
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  let requested = false;
+  let hub: unknown[] = [];
+  const { adapter } = catalogueHub({ "0": () => hub, [host.id]: async () => { requested = true; await held; return []; } });
+  await adapter.getCurrentUser();
+  const snapshots: CodedActionRun[][] = [];
+  const off = adapter.subscribeActions((runs) => snapshots.push(runs));
+  const shows = vi.spyOn(toast, "custom");
+  const view = renderWithApp(<SignedInToasts />, adapter);
+  await screen.findByTestId("toasts-ready");
+  const aggregate = adapter.listActions();
+  await waitFor(() => expect(requested).toBe(true));
+  await act(async () => { await adapter.latestAgentRestart!(host.id); });
+  await act(async () => { release(); await aggregate; });
+  hub = [failedRun("0", "run-new-failure", "2026-11-13T11:00:00Z")];
+  await act(async () => { await adapter.listActions(); });
+  expect(snapshots.at(-1)?.some((run) => run.id === "run-new-failure")).toBe(true);
+  await waitFor(() => expect(toastsFor(shows, "run-new-failure")).toHaveLength(1));
+  expect(toastsFor(shows, followed.runId)).toHaveLength(1);
   view.unmount(); off();
 });

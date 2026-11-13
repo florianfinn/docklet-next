@@ -191,8 +191,11 @@ export function createActivityReader(reads: Reads) {
       initialized = true;
       observedGeneration = generation;
       const previous = current;
-      current = sorted(merged.values()).map((run) => run.outcomeState === undefined ? run :
-        { ...run, runtime: { ...(run as RuntimeView<CodedActionRun>).runtime, sourceObserved: true } });
+      // An aggregate observation also clears the targeted mark of a retained non-runtime run.
+      current = sorted(merged.values()).map((run) => {
+        const presentation = (run as RuntimeView<CodedActionRun>).runtime;
+        return run.outcomeState === undefined && presentation?.sourceObserved !== false ? run : { ...run, runtime: { ...presentation, sourceObserved: true } };
+      });
       if (started > globalHealthSequence) { globalHealthSequence = started; globalFailure = undefined; }
       publishHealth();
       reads.changed?.(previous, current, recovered);
@@ -235,7 +238,8 @@ export function createActivityReader(reads: Reads) {
       const batch = await sourceRead;
       if (version !== generation) throw new CancelledError();
       if (!batch) return current;
-      if (!initialized) await flight.request();
+      // A scoped read cannot stand in for the sources an aggregate has not yet observed.
+      if (observedGeneration !== generation) await flight.request();
       if (version !== generation) throw new CancelledError();
       return performLoad(new AbortController().signal, host, [batch]);
     })();

@@ -133,10 +133,12 @@ hosts stays in [host onboarding](host-onboarding.md).
     HTTP/1.1 admission key, so they do not wait behind slow reads of a host
     whose agent is restarting. An active run read before the first activity
     history counts as a targeted publication, so it cannot seed that history:
-    older settled activities that arrive later stay silent. A refusal by a busy
-    agent settles a durable `failed`/`host.busy` row and is therefore shown
-    after a reload. A `host.busy` answer at hub intake creates no run and stays
-    visible only in the session that asked.
+    older settled activities that arrive later stay silent. A single host's
+    refresh waits for that first history, and the first history clears the
+    targeted mark even when it is empty, so a later new failure still
+    notifies. A refusal by a busy agent settles a durable `failed`/`host.busy`
+    row and is therefore shown after a reload. A `host.busy` answer at hub
+    intake creates no run and stays visible only in the session that asked.
 
 ## Persistence and check transport constraints
 
