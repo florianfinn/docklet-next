@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Flush-aware terminal collection across tunnel close (#416); Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
+// Deviations: Public log-download size and capability refusals (#379); Flush-aware terminal collection across tunnel close (#416); Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
 
 package edge
 
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/mo"
 )
@@ -297,6 +298,14 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 			"error", err,
 		)
 
+		var logsProblem *containerDTO.LogsDownloadProblem
+		if errors.As(err, &logsProblem) {
+			slog.WarnContext(ctx, "Edge container log download exceeds cap", "method", req.Method, "path", targetPath, "capBytes", containerDTO.MaxEdgeLogsDownloadBytes)
+			return c.JSON(http.StatusRequestEntityTooLarge, logsProblem)
+		}
+		if errors.Is(err, remenv.ErrAgentUpdateRequired) {
+			return c.JSON(http.StatusServiceUnavailable, map[string]any{"success": false, "code": "agent.update-required"})
+		}
 		if proxyCtx.Err() != nil {
 			return c.JSON(http.StatusGatewayTimeout, map[string]any{"success": false, "code": "agent.unavailable", "error": "request timed out"})
 		}

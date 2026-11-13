@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3271b8747927a490bf8f5ed830c85568c2da9a9b74fe22e5d0b5af9db3719a92
+// Revision: 76b087c6d8fc465777ddc07bc5ae04aabeb7ca375a1747098c5a7aa23339106b
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1399,7 +1399,7 @@ export interface paths {
         };
         /**
          * Download container logs
-         * @description Download every log line Docker retains for the container as a text file
+         * @description Download every log line Docker retains for the container as a text file. Edge buffers up to 64 MiB and refuses larger logs with JSON 413 before returning any file bytes; older Edge agents without this command return 503 agent.update-required. Direct streams without a size cap. A Docker read error after streaming starts can truncate the file.
          */
         get: operations["download-container-logs"];
         put?: never;
@@ -5564,6 +5564,12 @@ export interface components {
             type: string;
         };
         AgentAccessError: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/AgentAccessError.json
+             */
+            readonly $schema?: string;
             code: string;
             success: boolean;
         };
@@ -8373,6 +8379,18 @@ export interface components {
             privileged?: boolean;
             readonlyRootfs?: boolean;
             restartPolicy?: components["schemas"]["ContainerRestartPolicyCreate"];
+        };
+        ContainerLogsDownloadProblem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerLogsDownloadProblem.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            code: "container.logs-too-large";
+            /** Format: int64 */
+            status: number;
         };
         ContainerMount: {
             destination: string;
@@ -19129,13 +19147,22 @@ export interface operations {
                     "application/json": components["schemas"]["RequestProblem"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description Edge log download exceeds 64 MiB */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["ContainerLogsDownloadProblem"];
+                };
+            };
+            /** @description Edge agent requires an update for log downloads */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessError"];
                 };
             };
         };

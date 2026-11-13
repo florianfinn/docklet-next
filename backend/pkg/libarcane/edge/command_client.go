@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Explicit pending release and once-only delivery-failure cancellation (#416); M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences.
+// Deviations: Capability-gated, bounded and cancelable log downloads (#379); Explicit pending release and once-only delivery-failure cancellation (#416); M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences.
 
 package edge
 
@@ -10,7 +10,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	historyDTO "github.com/florianfinn/docklet-next/types/history"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
@@ -64,6 +66,10 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		commandName = resolved
 	}
 
+	if containerLogsDownloadRequest(req.Method, req.Path) && !slices.Contains(tunnel.Capabilities, "container.logs.download") {
+		return nil, remenv.ErrAgentUpdateRequired
+	}
+
 	requestID := req.ID
 	if requestID == "" {
 		requestID = uuid.New().String()
@@ -103,7 +109,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	defer func() {
 		pending.Release()
 		tunnel.Pending.CompareAndDelete(requestID, pending)
-		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path) || historyDTO.IsSampleRoute(req.Method, req.Path) || volumeBackupCancelableRequest(req.Method, req.Path)) {
+		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path) || historyDTO.IsSampleRoute(req.Method, req.Path) || volumeBackupCancelableRequest(req.Method, req.Path) || containerLogsDownloadRequest(req.Method, req.Path)) {
 			pending.closeAgent(tunnel, requestID, MessageTypeCancelRequest)
 		}
 	}()
@@ -154,8 +160,14 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	if backupLimit := backuptypes.VolumeRouteResponseLimit(req.Method, req.Path); backupLimit > 0 {
 		limit = backupLimit
 	}
+	if containerLogsDownloadRequest(req.Method, req.Path) {
+		limit = containerDTO.MaxEdgeLogsDownloadBytes
+	}
 	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)
 	if err != nil {
+		if errors.Is(err, ErrCommandResponseTooLarge) && containerLogsDownloadRequest(req.Method, req.Path) {
+			return nil, &containerDTO.LogsDownloadProblem{Code: "container.logs-too-large", Status: http.StatusRequestEntityTooLarge}
+		}
 		if errors.Is(err, ErrCommandResponseTooLarge) && backuptypes.VolumeRouteResponseLimit(req.Method, req.Path) > 0 {
 			return nil, backuptypes.NewProblem(413, "volume.backup.listing-too-large", err)
 		}

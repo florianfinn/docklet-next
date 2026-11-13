@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M14 container and host operation contracts.
+// Deviations: Hub-only log-download limit and capability response schemas (#379); Local module namespace; M14 container and host operation contracts.
 
 // Package container owns Docker container lifecycle, inspection, listing and
 // stats, plus the HTTP surface that exposes them.
@@ -10,7 +10,9 @@ package container
 
 import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -237,9 +239,13 @@ func RegisterContainers(
 		Method:      http.MethodGet,
 		Path:        "/environments/{id}/containers/{containerId}/logs/download",
 		Summary:     "Download container logs",
-		Description: "Download every log line Docker retains for the container as a text file",
-		Tags:        []string{"Containers"},
-		Security:    handlerutil.DefaultOperationSecurity(),
+		Description: "Download every log line Docker retains for the container as a text file. Edge buffers up to 64 MiB and refuses larger logs with JSON 413 before returning any file bytes; older Edge agents without this command return 503 agent.update-required. Direct streams without a size cap. A Docker read error after streaming starts can truncate the file.",
+		Responses: map[string]*huma.Response{
+			"413": {Description: "Edge log download exceeds 64 MiB", Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerDTO.LogsDownloadProblem](), true, "")}}},
+			"503": {Description: "Edge agent requires an update for log downloads", Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[handlerutil.AgentAccessError](), true, "")}}},
+		},
+		Tags:     []string{"Containers"},
+		Security: handlerutil.DefaultOperationSecurity(),
 	}, authz.PermContainersLogs, h.DownloadContainerLogs)
 
 	middleware.RegisterWithPermission(api, huma.Operation{

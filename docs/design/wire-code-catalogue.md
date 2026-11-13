@@ -96,3 +96,11 @@ not at missing keys, for enum-coded text.
 
 No route, DTO, error code, migration or agent contract change. The only product change is catalogue
 text (EN and DE) for the four message codes above and any further gap the compiler reports.
+
+## Container log download refusal
+
+`ContainerLogsDownloadProblem.code` is a hub-only singleton enum containing
+`container.logs-too-large`. `CONTAINER_CODE_KEYS` classifies it alongside the
+existing container problems, with English and German text in the run catalogue
+and render proofs through the command-error consumer. The fingerprinted
+`ContainerProblem` vocabulary remains unchanged.

@@ -163,6 +163,7 @@ export const IMAGE_ERROR_KEYS = {
 >, CatalogueKey>;
 
 export const CONTAINER_CODE_KEYS = {
+  "container.logs-too-large": "runMessages.codes.container.logs-too-large",
   "container.origin-locked": "runMessages.codes.container.origin-locked",
   "container.recreate-recovered": "runMessages.codes.container.recreate-recovered",
   "container.recreate-ambiguous": "runMessages.codes.container.recreate-ambiguous",
@@ -175,6 +176,7 @@ export const CONTAINER_CODE_KEYS = {
   "container.shell-not-running": "runMessages.codes.container.shell-not-running",
 } satisfies Record<NonNullable<
   | Schema["ContainerProblem"]["code"]
+  | Schema["ContainerLogsDownloadProblem"]["code"]
 >, CatalogueKey>;
 
 export const HOST_CODE_KEYS = {

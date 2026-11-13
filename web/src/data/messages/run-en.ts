@@ -243,6 +243,7 @@ export const enRunMessages = {
       "origin-locked": "Container origin prevents this operation",
       "recreate-recovered": "Recreate interrupted; original restored",
       "recreate-ambiguous": "Recreate needs manual cleanup",
+      "logs-too-large": "The container logs exceed the 64 MiB Edge download limit.",
       "shell-invalid": "Invalid shell or terminal size",
       "shell-protocol": "Invalid terminal control message",
       "shell-unavailable": "Shell unavailable",
