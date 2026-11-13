@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original one-shot restart intake and identity-owned durable phase following. M14 host maintenance and availability. M19: total contract-code catalogue maps.
+// Deviations: Original one-shot restart intake and identity-owned durable phase following. M14 host maintenance and availability. M19: total contract-code catalogue maps. M25 latest restart read after a reload.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
@@ -15,6 +15,7 @@ import { runtimeError, runtimeResponseError } from "./runtime-mapping";
 import { activeNow, pausableTimeout } from "./deadline-pause";
 
 type Restart = components["schemas"]["EnvironmentAgentRestartRun"];
+type Latest = components["schemas"]["EnvironmentLatestAgentRestart"];
 interface Options {
   baseUrl: string; client: CsrfClient;
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
@@ -23,6 +24,13 @@ interface Options {
 const phases = ["reserved", "sent", "awaiting", "connected"] as const;
 const terminal = (row: Restart) => ["connected", "failed", "unknown"].includes(row.state);
 const message = (code: string): MessageCode => ({ code, params: {} });
+// A run read without its in-session history marks done only the phases its code proves.
+const settledReach = (row: Restart) => row.state === "connected" ? 3 : row.code === "agent.restart-timeout" ? 2 : ["host.busy", "agent.restart-unsupported", "agent.restart-unconfirmed"].includes(row.code ?? "") ? 1 : 0;
+function validRun(row: Restart | undefined): Restart {
+  const done = row !== undefined && terminal(row);
+  if (!row || typeof row.runId !== "string" || !row.runId || ![...phases, "failed", "unknown"].includes(row.state) || !Number.isFinite(Date.parse(row.createdAt)) || !Number.isFinite(Date.parse(row.deadline)) || ((row.state === "failed" || row.state === "unknown") && !row.code) || (row.state === "connected" && row.code) || done !== (typeof row.settledAt === "string" && Number.isFinite(Date.parse(row.settledAt)))) throw runtimeError("hosts.invalid-restart");
+  return row;
+}
 export function createHostRestarts({ baseUrl, client, capability, generation, publish, changed }: Options) {
   // reached: highest observed phase; until: local follow budget (producer deadline span plus grace).
   const rows = new Map<string, { host: string; row: Restart; run: CodedActionRun; reached: number; until: number }>();
@@ -30,13 +38,9 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
   const pending = new Map<string, Promise<string>>();
   const controllers = new Set<AbortController>();
   let epoch = 0;
-  function retain(host: string, row: Restart) {
+  function build(host: string, row: Restart, reached: number): CodedActionRun {
     const phase = phases.indexOf(row.state as typeof phases[number]);
     const done = terminal(row);
-    const prior = rows.get(row.runId);
-    const reached = Math.max(prior?.reached ?? 0, phase);
-    // The follow budget runs on the active clock: a hub maintenance hold does not use it up.
-    const until = prior?.until ?? activeNow() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
     // A failed or unknown restart marks done only phases that were observed.
     const failedStep = (index: number) => index < reached ? "done" : index === reached ? "error" : "skipped";
     const reason = operationReasonKey(row.code ?? "");
@@ -50,12 +54,20 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       ...(done && row.code ? { error: message(row.code === "host.busy" ? "runMessages.restartRefused" : reason ? `containers.operationReasons.${reason}` : "hosts.errors.failed") } : {}),
       log: [], output: [],
     };
+    return run;
+  }
+  function retain(host: string, row: Restart) {
+    const prior = rows.get(row.runId);
+    const reached = Math.max(prior?.reached ?? 0, phases.indexOf(row.state as typeof phases[number]));
+    // The follow budget runs on the active clock: a hub maintenance hold does not use it up.
+    const until = prior?.until ?? activeNow() + Math.max(0, Date.parse(row.deadline) - Date.parse(row.createdAt)) + 60_000;
+    const run = build(host, row, reached);
     rows.set(row.runId, { host, row, run, reached, until });
     if (rows.size > 128) { const old = [...rows.values()].find(item => terminal(item.row) && item.row.runId !== row.runId); if (old) rows.delete(old.row.runId); }
     publish(run); changed();
     return run;
   }
-  async function request(host: string, suffix: string, method = "GET", signal?: AbortSignal): Promise<Restart> {
+  async function request<T = Restart>(host: string, suffix: string, method = "GET", signal?: AbortSignal, parse: (data: unknown) => T = (data) => validRun(data as Restart) as T): Promise<T> {
     const owner = generation(), version = epoch;
     const current = () => { if (owner !== generation() || version !== epoch || signal?.aborted) throw new CancelledError(); };
     const controller = new AbortController(); controllers.add(controller);
@@ -65,9 +77,8 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       const response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/agent/${suffix}`, { method, credentials: "same-origin", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } });
       current(); const body = await response.json(); current();
       if (!response.ok) throw runtimeResponseError(body, response.status);
-      const row = body.data as Restart;
-      if (body.success !== true || !row?.runId || ![...phases, "failed", "unknown"].includes(row.state) || !Number.isFinite(Date.parse(row.createdAt)) || !Number.isFinite(Date.parse(row.deadline)) || ((row.state === "failed" || row.state === "unknown") && !row.code) || (row.state === "connected" && row.code)) throw runtimeError("hosts.invalid-restart");
-      return row;
+      if (body.success !== true) throw runtimeError("hosts.invalid-restart");
+      return parse(body.data);
     } finally { stopTimer(); controllers.delete(controller); signal?.removeEventListener("abort", abort); }
   }
   function schedule(host: string, id: string) {
@@ -110,6 +121,22 @@ export function createHostRestarts({ baseUrl, client, capability, generation, pu
       return task;
     },
     detail,
+    /** The host's active or newest restart; history is returned unpublished, an active run is followed. */
+    async latest(host: string, signal?: AbortSignal): Promise<CodedActionRun | undefined> {
+      if (host === "0" || !host || host.includes("~")) return undefined;
+      const row = await request(host, "restarts/latest", "GET", signal, (data) => {
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw runtimeError("hosts.invalid-restart");
+        const run = (data as Latest).run;
+        return run === undefined ? undefined : validRun(run);
+      });
+      if (!row) return undefined;
+      // An in-session observation of the same run is at least as new as this read.
+      const known = rows.get(row.runId);
+      if (known?.host === host) return known.run;
+      if (terminal(row)) return build(host, row, settledReach(row));
+      const run = retain(host, row); schedule(host, row.runId);
+      return run;
+    },
     has: (host: string, id: string) => rows.get(id)?.host === host,
     retained: () => [...rows.values()].map(item => item.run),
     reset() { ++epoch; timers.forEach(clearTimeout); timers.clear(); controllers.forEach(c => c.abort()); controllers.clear(); pending.clear(); rows.clear(); },

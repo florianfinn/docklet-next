@@ -262,6 +262,7 @@ export const enHosts = {
     restartBody: "The agent container restarts. Runtime actions on this host are locked until a new agent instance connects. Agent-local backups may be interrupted.",
     restartProgress: "Agent restart progress",
     restarting: "Restarting …",
+    restartFinished: "Finished {time}",
     restartHint: (import.meta.env.DEV ? "Simulated: stops and starts the agent container; the host is briefly unreachable meanwhile." : "Stops and starts the agent container; the host is briefly unreachable."),
     restartBlocked: "Only possible while the host is connected.",
     check: "Check connection",

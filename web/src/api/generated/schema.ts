@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 517392759587308f9fc4756866b07766ec8d82ac3c78aefd12684518c9dfdea6
+// Revision: 3271b8747927a490bf8f5ed830c85568c2da9a9b74fe22e5d0b5af9db3719a92
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1140,6 +1140,23 @@ export interface paths {
         put?: never;
         /** Restart a remote agent once */
         post: operations["restartEnvironmentAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/agent/restarts/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the active or newest agent restart run of a host */
+        get: operations["getEnvironmentLatestAgentRestart"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6591,6 +6608,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseEnvironmentLatestAgentRestart: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseEnvironmentLatestAgentRestart.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["EnvironmentLatestAgentRestart"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseEnvironmentTest: {
             /**
              * Format: uri
@@ -9622,6 +9651,9 @@ export interface components {
             candidates: components["schemas"]["EnvironmentHubAddressCandidate"][] | null;
             /** Format: date-time */
             detectedAt: string;
+        };
+        EnvironmentLatestAgentRestart: {
+            run?: components["schemas"]["EnvironmentAgentRestartRun"];
         };
         EnvironmentStreamEvent: {
             environments?: components["schemas"]["EnvironmentEnvironment"][] | null;
@@ -18258,6 +18290,46 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getEnvironmentLatestAgentRestart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentLatestAgentRestart"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
                 };
             };
             /** @description Error */
