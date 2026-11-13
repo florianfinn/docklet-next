@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Edge protocol marker exchange (#362).
+// Deviations: Non-blocking per-request hub delivery (#416); Local module namespace; notification and Auto Heal contracts and delivery for #296; 90-second heartbeat window and deterministic 15-second sweeps; register ACK publication ordering for #347; bounded wait for response chunk delivery; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Edge protocol marker exchange (#362).
 
 package edge
 
@@ -10,7 +10,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/florianfinn/docklet-next/types/notification"
 	"io"
@@ -484,13 +483,6 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 
 // messageLoop processes incoming messages from the agent.
 func (s *TunnelServer) messageLoop(ctx context.Context, tunnel *AgentTunnel) {
-	// One reusable timer for stream delivery deadlines. time.After per message
-	// left a live 5s runtime timer for every frame, so a chatty log tail through
-	// a tunnel accumulated thousands of them. This loop is the only user, so the
-	// timer is never touched concurrently.
-	deliveryTimer := time.NewTimer(streamDeliveryTimeout)
-	deliveryTimer.Stop()
-	defer deliveryTimer.Stop()
 
 	for {
 		select {
@@ -505,23 +497,23 @@ func (s *TunnelServer) messageLoop(ctx context.Context, tunnel *AgentTunnel) {
 				return
 			}
 
-			s.handleTunnelMessage(ctx, tunnel, msg, deliveryTimer)
+			s.handleTunnelMessage(ctx, tunnel, msg)
 		}
 	}
 }
 
-func (s *TunnelServer) handleTunnelMessage(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage, deliveryTimer *time.Timer) {
+func (s *TunnelServer) handleTunnelMessage(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
 	switch msg.Type {
 	case MessageTypeHeartbeat:
 		s.handleHeartbeat(ctx, tunnel, msg)
 	case MessageTypeResponse:
-		s.deliverResponse(ctx, tunnel, msg, deliveryTimer)
+		s.deliverResponse(ctx, tunnel, msg)
 	case MessageTypeCommandAck, MessageTypeCommandOutput, MessageTypeCommandComplete, MessageTypeFileChunk:
-		s.deliverResponse(ctx, tunnel, msg, deliveryTimer)
+		s.deliverResponse(ctx, tunnel, msg)
 	case MessageTypeEvent:
 		s.handleEvent(ctx, tunnel, msg)
 	case MessageTypeStreamData, MessageTypeStreamEnd, MessageTypeWebSocketData, MessageTypeWebSocketClose, MessageTypeStreamClose:
-		s.deliverStream(ctx, tunnel, msg, deliveryTimer)
+		s.deliverStream(ctx, tunnel, msg)
 	case MessageTypeRequest, MessageTypeHeartbeatAck, MessageTypeWebSocketStart, MessageTypeRegisterResponse, MessageTypeCommandRequest, MessageTypeStreamOpen, MessageTypeCancelRequest:
 		slog.DebugContext(ctx, "Ignoring message type from agent", "type", msg.Type, "environmentId", tunnel.EnvironmentID)
 	case MessageTypeRegister:
@@ -546,63 +538,12 @@ func (s *TunnelServer) handleHeartbeat(ctx context.Context, tunnel *AgentTunnel,
 	}
 }
 
-// A burst of response chunks can outrun the consumer for a moment; like stream
-// data, delivery waits up to streamDeliveryTimeout before failing the request.
-func (s *TunnelServer) deliverResponse(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage, deliveryTimer *time.Timer) {
-	if req, ok := tunnel.Pending.Load(msg.ID); ok {
-		pending, isPending := req.(*PendingRequest)
-		if !isPending {
-			return
-		}
-		deliveryTimer.Stop()
-		deliveryTimer.Reset(streamDeliveryTimeout)
-		defer deliveryTimer.Stop()
-		select {
-		case pending.ResponseCh <- msg:
-		case <-ctx.Done():
-		case <-deliveryTimer.C:
-			err := fmt.Errorf("response delivery timed out for pending request %s", msg.ID)
-			tunnel.Pending.Delete(msg.ID)
-			pending.failureCh <- err
-			slog.WarnContext(ctx, "Failed slow pending response consumer", "id", msg.ID, "timeout", streamDeliveryTimeout)
-		}
-		return
-	}
-	slog.WarnContext(ctx, "Received response for unknown request", "id", msg.ID)
+func (s *TunnelServer) deliverResponse(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
+	s.deliverPending(ctx, tunnel, msg)
 }
 
-func (s *TunnelServer) deliverStream(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage, deliveryTimer *time.Timer) {
-	if req, ok := tunnel.Pending.Load(msg.ID); ok {
-		pending, isPending := req.(*PendingRequest)
-		if !isPending {
-			return
-		}
-
-		// Go 1.23+ timers drop any stale value on Stop/Reset, so no drain is needed.
-		deliveryTimer.Stop()
-		deliveryTimer.Reset(streamDeliveryTimeout)
-		defer deliveryTimer.Stop()
-
-		select {
-		case pending.ResponseCh <- msg:
-		case <-ctx.Done():
-			return
-		case <-deliveryTimer.C:
-			err := fmt.Errorf("stream delivery timed out for pending request %s", msg.ID)
-			tunnel.Pending.Delete(msg.ID)
-			pending.failureCh <- err
-			slog.WarnContext(ctx, "Failed slow pending stream consumer",
-				"id", msg.ID,
-				"type", msg.Type,
-				"timeout", streamDeliveryTimeout,
-			)
-			if sendErr := tunnel.Conn.Send(&TunnelMessage{ID: msg.ID, Type: MessageTypeStreamClose, Error: err.Error()}); sendErr != nil {
-				slog.DebugContext(ctx, "Failed to close slow edge stream", "id", msg.ID, "error", sendErr)
-			}
-		}
-		return
-	}
-	slog.DebugContext(ctx, "Received stream message for unknown request", "id", msg.ID, "type", msg.Type)
+func (s *TunnelServer) deliverStream(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {
+	s.deliverPending(ctx, tunnel, msg)
 }
 
 func (s *TunnelServer) handleEvent(ctx context.Context, tunnel *AgentTunnel, msg *TunnelMessage) {

@@ -424,3 +424,26 @@ this record on 2026-10-17. Items that name an issue are new work there.
   (`runHealthCheckInternal` in `internal/environment/service.go`). Until then
   only health, version and agent self-upgrade are forwarded, as D1 states. D1's
   version read after registration and the unchanged tunnel protocol stay.
+
+## Ordered hub delivery
+
+The hub receives tunnel messages independently of each request's consumer. A
+pending request owns its response channel, ordered overflow and the head being
+delivered. Direct sends are non-blocking and allowed only while no drainer owns
+that request. One drainer waits up to five seconds for each overflow message;
+other requests, events and heartbeats continue on the same tunnel.
+
+Overflow accounting charges each message's body length plus 512 bytes, including
+an in-flight head. Overflow is capped at 16 MiB per request and 64 MiB per tunnel.
+These limits bound overflow only, not total memory: the unchanged response channels
+hold 256 command or 512 stream messages, individual tunnel messages can reach
+16 MiB, and command collectors assemble response bodies separately. A timeout or
+an overflow ends only that request and logs its request ID and cause. Consumer
+cleanup sends the agent cancel or stream close at most once. Explicit release
+reclaims overflow and prevents later delivery failure for a finished consumer.
+Already-received command messages continue draining after tunnel close so a
+received completion in overflow remains valid terminal evidence.
+
+The wire protocol, channel capacities and agent receive loop are unchanged.
+Browser-to-container input can still block that agent loop for up to five seconds
+per message; hub-side output isolation does not remove this input-side limit.

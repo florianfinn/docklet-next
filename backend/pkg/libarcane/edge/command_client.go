@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences.
+// Deviations: Explicit pending release and once-only delivery-failure cancellation (#416); M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences.
 
 package edge
 
@@ -96,11 +96,15 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	if err != nil {
 		return nil, err
 	}
-	defer tunnel.Pending.Delete(requestID)
+	pending.deliveryMu.Lock()
+	pending.onFailure = func() { pending.closeAgent(tunnel, requestID, MessageTypeCancelRequest) }
+	pending.deliveryMu.Unlock()
 	completed := false
 	defer func() {
+		pending.Release()
+		tunnel.Pending.CompareAndDelete(requestID, pending)
 		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path) || historyDTO.IsSampleRoute(req.Method, req.Path) || volumeBackupCancelableRequest(req.Method, req.Path)) {
-			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
+			pending.closeAgent(tunnel, requestID, MessageTypeCancelRequest)
 		}
 	}()
 
