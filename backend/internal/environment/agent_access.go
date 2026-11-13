@@ -246,10 +246,11 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 		return nil, nil, err
 	}
 	now := time.Now()
+	// The registration revision also fences an endpoint or token changed away and back during the probe.
 	outcome, err := s.writeHostStatusInternal(checkCtx, hostStatusWrite{
 		Transition: statusCompatibilityResult, ID: id,
 		Scope: func(q *gorm.DB) *gorm.DB {
-			return q.Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID})
+			return q.Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID, "credential_revision": env.CredentialRevision})
 		},
 		Updates: map[string]any{"status": status, "last_seen": &now, "updated_at": &now},
 	})
@@ -301,7 +302,7 @@ func (s *EnvironmentService) agentCompatibilityFailure(ctx context.Context, env 
 	outcome, writeErr := s.writeHostStatusInternal(ctx, hostStatusWrite{
 		Transition: statusCredentialRejected, ID: env.ID,
 		Scope: func(q *gorm.DB) *gorm.DB {
-			return q.Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID, "enabled": true})
+			return q.Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID, "credential_revision": env.CredentialRevision, "enabled": true})
 		},
 		Updates: map[string]any{"status": string(EnvironmentStatusTokenRejected), "updated_at": time.Now()},
 	})

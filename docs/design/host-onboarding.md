@@ -332,7 +332,10 @@ recognising Go write forms in a test scan:
 All status writes in `internal/environment` go through one owned write path
 (`host_status.go`) that names the transition. That path bumps the check revision
 only for compatibility results, and updates the host caches only after a
-successful write. A failed reachability probe keeps `update-required` on Direct
+successful write. A compatibility result or credential rejection applies only
+while token, endpoint, key and registration revision still match the values
+captured before the probe, so a registration changed away and back during the
+probe also ends in a no-op. A failed reachability probe keeps `update-required` on Direct
 and Edge hosts alike, because a probe proves reachability, not a newer agent.
 A later data migration that changes host status must raise one of the revisions
 or run before the triggers exist.

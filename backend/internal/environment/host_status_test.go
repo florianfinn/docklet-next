@@ -8,6 +8,7 @@ package environment
 
 import (
 	"database/sql"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -149,22 +150,27 @@ func TestHostStatusOwnedTransitions(t *testing.T) {
 	f := newAgentFixture(t, "direct", version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
 	db := f.service.db.DB
 	require.NoError(t, db.Exec("UPDATE environments SET status = 'update-required' WHERE id = ?", f.id).Error)
+	seedHostCache(t, f)
 	_, err := f.service.CheckAgentCompatibility(t.Context(), f.id)
 	require.NoError(t, err)
 	require.Equal(t, hostRow{"online", 0, 1}, readHostRow(t, db, f.id), "compatibility result clears the verdict with a check revision")
+	require.Equal(t, "online", cachedHostStatus(t, f), "an applied write updates the host cache")
 
 	f.info.AgentContractFingerprint = "different"
 	_, err = f.service.CheckAgentCompatibility(t.Context(), f.id)
 	require.ErrorIs(t, err, ErrAgentUpdateRequired)
 	require.Equal(t, hostRow{"update-required", 0, 2}, readHostRow(t, db, f.id))
+	require.Equal(t, "update-required", cachedHostStatus(t, f))
 
 	require.NoError(t, f.service.UpdateEnvironmentConnectionState(t.Context(), f.id, true))
 	require.NoError(t, f.service.UpdateEnvironmentConnectionState(t.Context(), f.id, false))
 	require.NoError(t, f.service.ReconcileEdgeStatusesOnStartup(t.Context()))
 	require.Equal(t, hostRow{"update-required", 0, 2}, readHostRow(t, db, f.id), "transport and startup writes keep the verdict")
+	require.Equal(t, "update-required", cachedHostStatus(t, f))
 
 	require.NoError(t, f.service.linkEnvironmentApiKey(t.Context(), f.id, "replacement", "replacement-token", "", "", "Example"))
 	require.Equal(t, hostRow{"pending", 1, 2}, readHostRow(t, db, f.id), "a registration transition clears the verdict with a credential revision")
+	require.Equal(t, "pending", cachedHostStatus(t, f))
 
 	require.NoError(t, db.Exec("UPDATE environments SET status = 'update-required' WHERE id = ?", f.id).Error)
 	_, err = f.service.UpdateEnvironment(t.Context(), f.id, map[string]any{"status_check_revision": 9, "name": "Renamed"}, nil, nil)
@@ -172,21 +178,57 @@ func TestHostStatusOwnedTransitions(t *testing.T) {
 	require.Equal(t, hostRow{"update-required", 1, 2}, readHostRow(t, db, f.id))
 }
 
-// Row 3: a compatibility result for a registration whose endpoint moved during the probe
-// changes neither the stored verdict nor the check revision.
-func TestHostStatusCompatibilityResultIsCredentialFenced(t *testing.T) {
-	f := newAgentFixture(t, "direct", version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
-	db := f.service.db.DB
-	require.NoError(t, db.Exec("UPDATE environments SET status = 'update-required' WHERE id = ?", f.id).Error)
-	// The last probe answer is the latest point before the write; earlier probes re-resolve the target.
-	f.beforeRespond = func(method, path string) {
-		if path == "/api/environments/0/system/health" {
-			require.NoError(t, db.Exec("UPDATE environments SET api_url = 'http://moved.example.com', credential_revision = credential_revision + 1 WHERE id = ?", f.id).Error)
-		}
+// Row 3: a compatibility result or credential rejection answered over real HTTP after the
+// registration changed (moved endpoint, revision only, endpoint away and back) changes
+// neither the stored verdict, the check revision nor the host cache.
+func TestHostStatusCompatibilityResultIsRegistrationFenced(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		reject   bool
+		change   string
+		revision int64
+	}{
+		{"endpoint moved", false, "UPDATE environments SET api_url = 'http://moved.example.com', credential_revision = credential_revision + 1 WHERE id = ?", 1},
+		{"revision changed", false, "UPDATE environments SET credential_revision = credential_revision + 1 WHERE id = ?", 1},
+		{"endpoint away and back", false, "UPDATE environments SET api_url = 'http://intermediate.example.com', credential_revision = credential_revision + 1 WHERE id = ?;UPDATE environments SET api_url = ?, credential_revision = credential_revision + 1 WHERE id = ?", 2},
+		{"rejection after revision change", true, "UPDATE environments SET credential_revision = credential_revision + 1 WHERE id = ?", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAgentFixture(t, "direct", version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
+			db := f.service.db.DB
+			endpoint := f.serveHTTP(t)
+			require.NoError(t, db.Exec("UPDATE environments SET status = 'update-required' WHERE id = ?", f.id).Error)
+			seedHostCache(t, f)
+			var outcomes []hostStatusOutcome
+			f.service.statusWriteObserver = func(_ hostStatusTransition, outcome hostStatusOutcome) { outcomes = append(outcomes, outcome) }
+			const probe = "/api/environments/0/system/health"
+			if tc.reject {
+				f.failPath, f.failCode = probe, http.StatusUnauthorized
+			}
+			changed := false
+			// The last probe answer is the latest point before the write; earlier probes re-resolve the target.
+			f.beforeRespond = func(_, path string) {
+				if path != probe || changed {
+					return
+				}
+				changed = true
+				for i, statement := range strings.Split(tc.change, ";") {
+					args := []any{f.id}
+					if i == 1 {
+						args = []any{endpoint, f.id}
+					}
+					if err := db.Exec(statement, args...).Error; err != nil {
+						t.Error(err)
+					}
+				}
+			}
+			_, err := f.service.CheckAgentCompatibility(t.Context(), f.id)
+			require.ErrorIs(t, err, ErrInvalidEnvironmentAccessToken)
+			require.Equal(t, hostRow{"update-required", tc.revision, 0}, readHostRow(t, db, f.id))
+			require.Equal(t, []hostStatusOutcome{hostStatusNoop}, outcomes)
+			require.Equal(t, "update-required", cachedHostStatus(t, f))
+		})
 	}
-	_, err := f.service.CheckAgentCompatibility(t.Context(), f.id)
-	require.ErrorIs(t, err, ErrInvalidEnvironmentAccessToken)
-	require.Equal(t, hostRow{"update-required", 1, 0}, readHostRow(t, db, f.id))
 }
 
 // Row 6: a refused write leaves the host snapshot cache untouched.
@@ -204,10 +246,11 @@ func TestHostStatusRefusedWriteKeepsCache(t *testing.T) {
 	require.Equal(t, "update-required", cached.Status)
 }
 
-// Row 7: a failed Direct probe keeps update-required (Q-372-PROBE b) through the owned
-// write's explicit no-op, and still marks a reachable-then-failing online host offline.
+// Row 7: a failed Direct probe from a real HTTP agent keeps update-required (Q-372-PROBE b)
+// through the owned write's explicit no-op, and still marks a failing online host offline.
 func TestDirectProbeFailureKeepsVerdict(t *testing.T) {
 	f := newAgentFixture(t, "direct", version.Info{})
+	f.serveHTTP(t)
 	var outcomes []hostStatusOutcome
 	f.service.statusWriteObserver = func(transition hostStatusTransition, outcome hostStatusOutcome) {
 		if transition == statusProbe {
@@ -310,4 +353,44 @@ func TestGenericHostUpdateRefusesStatus(t *testing.T) {
 		require.NoError(t, err, step.label)
 		require.True(t, step.check(stored(step.label)), step.label)
 	}
+}
+
+// Row 4 (agent): a fresh agent database carries the rule; the local heartbeat on id 0 applies
+// once per throttle window and cannot bypass a verdict.
+func TestAgentLocalHeartbeatCarriesVerdictRule(t *testing.T) {
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "agent.db")), database.MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	service := NewEnvironmentService(db, nil, nil, nil, nil, nil)
+	var outcomes []hostStatusOutcome
+	service.statusWriteObserver = func(transition hostStatusTransition, outcome hostStatusOutcome) {
+		if transition == statusLocalHeartbeat {
+			outcomes = append(outcomes, outcome)
+		}
+	}
+	require.NoError(t, service.EnsureLocalEnvironment(t.Context(), "http://agent.example.com"))
+	require.NoError(t, service.UpdateEnvironmentHeartbeat(t.Context(), LocalEnvironmentID))
+	require.NoError(t, service.UpdateEnvironmentHeartbeat(t.Context(), LocalEnvironmentID))
+	require.Equal(t, []hostStatusOutcome{hostStatusApplied, hostStatusNoop}, outcomes)
+	require.Equal(t, "online", readHostRow(t, db.DB, LocalEnvironmentID).Status)
+	var triggers []string
+	require.NoError(t, db.Raw("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'environments' ORDER BY name").Scan(&triggers).Error)
+	require.Equal(t, []string{"environments_no_reinsert", "environments_revision_monotonic", "environments_verdict_update"}, triggers)
+	require.NoError(t, db.Exec("UPDATE environments SET status = 'update-required', last_seen = NULL WHERE id = ?", LocalEnvironmentID).Error)
+	require.ErrorIs(t, service.UpdateEnvironmentHeartbeat(t.Context(), LocalEnvironmentID), ErrHostStatusVerdict)
+	require.Equal(t, "update-required", readHostRow(t, db.DB, LocalEnvironmentID).Status)
+}
+
+func seedHostCache(t *testing.T, f *agentFixture) {
+	t.Helper()
+	env, err := f.service.GetEnvironmentByID(t.Context(), f.id)
+	require.NoError(t, err)
+	f.service.remoteEnvs.put(*env)
+}
+
+func cachedHostStatus(t *testing.T, f *agentFixture) string {
+	t.Helper()
+	cached, ok := f.service.remoteEnvs.get(f.id).Get()
+	require.True(t, ok)
+	return cached.Status
 }
