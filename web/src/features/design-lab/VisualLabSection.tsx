@@ -5,7 +5,7 @@ import { BrandLogo } from "@/shared/brand/BrandLogo";
 import { replayBrandEntrance } from "@/shared/brand/brand-entrance";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { useUiStyle } from "@/shared/preferences/ui-style-store";
-import { DEFAULT_VISUAL_STYLE, LOGO_MOTIONS, LOGO_VARIANTS, setVisualStyle, useVisualStyle, VISUAL_RANGES, type VisualStyle } from "@/shared/preferences/visual-style-store";
+import { DEFAULT_VISUAL_STYLE, DOT_PATTERNS, LOGO_MOTIONS, LOGO_VARIANTS, setVisualStyle, useVisualStyle, VISUAL_RANGES, type VisualStyle } from "@/shared/preferences/visual-style-store";
 import { Button } from "@/shared/ui/button";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/shared/ui/field";
 import { Slider } from "@/shared/ui/slider";
@@ -53,6 +53,7 @@ export function VisualLabSection() {
   const motionStyle = useVisualStyle("logoMotion");
   const entrance = useVisualStyle("logoEntrance");
   const wave = useVisualStyle("dotWave");
+  const pattern = useVisualStyle("dotPattern");
   const glow = useUiStyle("pointerGlow");
   const motion = useMotionEnabled();
   const resetGlow = () => setVisualStyle({ glowInside: DEFAULT_VISUAL_STYLE.glowInside, glowOutside: DEFAULT_VISUAL_STYLE.glowOutside, glowSize: DEFAULT_VISUAL_STYLE.glowSize, glowLine: DEFAULT_VISUAL_STYLE.glowLine });
@@ -110,8 +111,14 @@ export function VisualLabSection() {
             <FieldDescription>{t("waveHint")}</FieldDescription>
           </FieldContent>
         </Field>
+        <Field>
+          <FieldLabel>{t("pattern")}</FieldLabel>
+          <SegmentedToggle label={t("pattern")} value={pattern} onChange={(dotPattern) => setVisualStyle({ dotPattern })} options={DOT_PATTERNS.map((p) => ({ value: p, label: t(`patterns.${p}`) }))} fit="content" wrap />
+          <FieldDescription>{t("patternHint")}</FieldDescription>
+        </Field>
         <RangeField field="dotWaveStrength" label={t("waveStrength")} unit="percent" disabled={!wave} />
         <RangeField field="dotWavePeriod" label={t("wavePeriod")} unit="seconds" disabled={!wave} />
+        {pattern === "deepwave" && <p className="-mt-2 text-xs text-muted-foreground">{t("wavePeriodHint")}</p>}
         <RangeField field="dotDepth" label={t("depth")} unit="percent" disabled={!wave} />
         <p className="-mt-2 text-xs text-muted-foreground">{t("depthHint")}</p>
         <div className="dot-grid relative h-24 overflow-hidden rounded-xl border bg-card" data-slot="wave-preview" aria-hidden>

@@ -10,6 +10,9 @@ export const LOGO_VARIANTS = ["dropcap", "initial", "full"] as const;
 export const LOGO_MOTIONS = ["relay", "assembly", "layers", "dock", "blueprint"] as const;
 export type BrandVariant = (typeof LOGO_VARIANTS)[number];
 export type BrandMotion = (typeof LOGO_MOTIONS)[number];
+/** Geometry of the dotted backgrounds: the perspective deepwave (default) or the flat lattice. */
+export const DOT_PATTERNS = ["deepwave", "lattice"] as const;
+export type DotPattern = (typeof DOT_PATTERNS)[number];
 
 /**
  * Brand, edge light and background effects, tuned in the design lab and kept
@@ -31,9 +34,11 @@ export interface VisualStyle {
   glowLine: number;
   /** Gentle wave over dotted backgrounds (dashboard summary, setup, login): colour and point surface. */
   dotWave: boolean;
+  /** Geometry of the dotted backgrounds; both use the primary/secondary colour fade. */
+  dotPattern: DotPattern;
   /** Primary/secondary colour of the wave, 0 … 1. */
   dotWaveStrength: number;
-  /** Seconds per wave cycle. */
+  /** Seconds per wave cycle; for the deepwave a relative speed (32 = as designed). */
   dotWavePeriod: number;
   /** Height of the 3D point surface, 0 … 1; 0 keeps the points flat while the colour still moves. */
   dotDepth: number;
@@ -61,6 +66,7 @@ const FACTORY_VISUAL_STYLE: VisualStyle = {
   glowSize: 104,
   glowLine: 2,
   dotWave: true,
+  dotPattern: "deepwave",
   dotWaveStrength: 0.55,
   dotWavePeriod: 28,
   dotDepth: 0.6,
@@ -90,6 +96,7 @@ export function mergeVisualStyle(stored: unknown, defaults: VisualStyle = DEFAUL
     glowSize: num("glowSize", s.glowSize, defaults.glowSize),
     glowLine: num("glowLine", s.glowLine, defaults.glowLine),
     dotWave: bool(s.dotWave, defaults.dotWave),
+    dotPattern: pick(DOT_PATTERNS, s.dotPattern, defaults.dotPattern),
     dotWaveStrength: num("dotWaveStrength", s.dotWaveStrength, defaults.dotWaveStrength),
     dotWavePeriod: num("dotWavePeriod", s.dotWavePeriod, defaults.dotWavePeriod),
     dotDepth: num("dotDepth", s.dotDepth, defaults.dotDepth),
