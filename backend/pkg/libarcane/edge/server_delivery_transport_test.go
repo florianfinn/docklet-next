@@ -74,6 +74,10 @@ func newDeliveryHarness(t *testing.T, transport string) *deliveryHarness {
 	_, port, err := net.SplitHostPort(local.Listener.Addr().String())
 	require.NoError(t, err)
 	client := NewTunnelClient(&Config{AgentToken: "example", ManagerApiUrl: managerURL, EdgeTransport: transport, Port: port}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("hold") == "1" {
+			<-r.Context().Done()
+			return
+		}
 		_, _ = w.Write([]byte("complete"))
 	}))
 	client.heartbeatInterval = time.Hour
@@ -156,16 +160,18 @@ func TestDeliveryRealTunnelIsolation(t *testing.T) {
 			defer unblock()
 			commandDone := make(chan error, 1)
 			go func() {
-				_, err := DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: "finite", Method: "GET", Path: "/api/health"})
+				_, err := DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: "finite", Method: "GET", Path: "/api/health", Query: "hold=1"})
 				commandDone <- err
 			}()
 			<-gate.entered
 			entry, _ := h.tunnel.Pending.Load("finite")
 			finite := entry.(*PendingRequest)
-			// The agent's real command response occupies one slot; fill the rest and overflow.
+			// Hold the automatic HTTP reply while the fixture sends ordered finite
+			// command chunks and a terminal frame through the real agent connection.
 			for range cap(finite.ResponseCh) + 1 {
-				h.send(t, &TunnelMessage{ID: "finite", Type: MessageTypeCommandOutput})
+				h.send(t, &TunnelMessage{ID: "finite", Type: MessageTypeCommandOutput, Body: []byte("x")})
 			}
+			h.send(t, &TunnelMessage{ID: "finite", Type: MessageTypeCommandComplete, Status: 200})
 			stream := blockedDelivery(t, h.tunnel, "stream")
 			stream.deliveryMu.Lock()
 			stream.onFailure = func() { stream.closeAgent(h.tunnel, "stream", MessageTypeStreamClose) }
@@ -198,7 +204,7 @@ func TestDeliveryRealTunnelIsolation(t *testing.T) {
 				}
 			}, time.Second, time.Millisecond, "agent receives one cancel and one close")
 			unblock()
-			<-commandDone
+			require.Error(t, <-commandDone, "timed-out finite collector returns its delivery failure")
 			h.heartbeat(t, "after-cleanup")
 			for {
 				select {
@@ -280,13 +286,13 @@ func TestDeliveryRealConsumerRelease(t *testing.T) {
 			if kind == "command" {
 				go func() {
 					defer close(done)
-					_, _ = DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: kind, Method: "GET", Path: "/api/health"})
+					_, _ = DefaultCommandClient.Execute(gate, h.tunnel, &CommandRequest{ID: kind, Method: "GET", Path: "/api/health", Query: "hold=1"})
 				}()
 				<-gate.entered
 				entry, _ := h.tunnel.Pending.Load(kind)
 				p = entry.(*PendingRequest)
 				for range cap(p.ResponseCh) + 1 {
-					h.send(t, &TunnelMessage{ID: kind, Type: MessageTypeCommandAck})
+					h.send(t, &TunnelMessage{ID: kind, Type: MessageTypeCommandOutput, Body: []byte("x")})
 				}
 			} else {
 				p = blockedDelivery(t, h.tunnel, kind)
