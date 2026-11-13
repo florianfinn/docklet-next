@@ -62,6 +62,7 @@ const sorted = (runs: Iterable<CodedActionRun>) => [...runs].sort((a, b) => Date
 export function createActivityReader(reads: Reads) {
   let current: CodedActionRun[] = [];
   let initialized = false;
+  let observedGeneration = -1;
   let health: ActionReadHealth = { failures: [] };
   let sequence = 0;
   let generation = 0;
@@ -188,6 +189,7 @@ export function createActivityReader(reads: Reads) {
         if (!observed.has(run.id) && (run.kind === "agent-restart" || run.status === "running" || run.status === "queued")) observed.set(run.id, summaryOnly(run));
       }
       initialized = true;
+      observedGeneration = generation;
       const previous = current;
       current = sorted(merged.values()).map((run) => run.outcomeState === undefined ? run :
         { ...run, runtime: { ...(run as RuntimeView<CodedActionRun>).runtime, sourceObserved: true } });
@@ -293,7 +295,10 @@ export function createActivityReader(reads: Reads) {
       const existing = current.find((row) => row.id === run.id);
       if (existing && existing.hostId !== run.hostId) return;
       runSequences.set(run.id, ++sequence);
-      current = sorted([...current.filter((row) => row.id !== run.id), summaryOnly(run)]);
+      // A targeted run published before any aggregate observation cannot seed notification history.
+      const presentation = (run as RuntimeView<CodedActionRun>).runtime;
+      const targeted = observedGeneration === generation || presentation?.sourceObserved !== undefined ? run : { ...run, runtime: { ...presentation, sourceObserved: false } };
+      current = sorted([...current.filter((row) => row.id !== run.id), summaryOnly(targeted)]);
       initialized = true;
       publish();
     },

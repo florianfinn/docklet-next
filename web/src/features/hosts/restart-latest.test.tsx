@@ -95,8 +95,9 @@ it("reads again when the agent panel is reopened", async () => {
 });
 
 const followed: Restart = { runId: "run-followed", createdAt: "2026-11-13T10:00:00Z", deadline: "2026-11-13T10:03:00Z", state: "sent" };
-// A signed-in hub for the real toast consumer: `latest` answers the latest read, `detail` the follow reads.
-function appHub(latest: () => Restart, detail: () => Restart) {
+// A signed-in hub for the real toast consumer: `latest` answers the latest read, `detail` the follow
+// reads and `activities` the host's activity history.
+function appHub(latest: () => Restart, detail: () => Restart, activities: () => Promise<unknown[]> | unknown[] = () => []) {
   const rest = stubHub(() => answer(latest()));
   const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), "https://hub.example.com");
@@ -104,7 +105,7 @@ function appHub(latest: () => Restart, detail: () => Restart) {
     if (url.pathname === "/api/auth/me") return json({ id: "example-operator", username: "operator", requiresPasswordChange: false, locale: "en-US", isAdmin: true });
     if (url.pathname === "/api/settings/timezone") return json({ timezone: "UTC" });
     if (url.pathname === "/api/capabilities") return json(["listActions", "listHosts", "restartAgent", "reconnectHost"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
-    if (url.pathname.endsWith("/activities")) return json([]);
+    if (url.pathname.endsWith("/activities")) return json(await activities());
     if (/\/agent\/restarts\/(?!latest)[^/]+$/.test(url.pathname)) return json(detail());
     return (rest as unknown as typeof fetch)(input, init);
   });
@@ -166,5 +167,30 @@ it("shows a newer stored run instead of an older session run", async () => {
   current = { ...refused, runId: "run-newer", createdAt: "2026-11-13T11:00:00Z", settledAt: "2026-11-13T11:00:02Z" };
   const view = await openAgentPanel(f.fetcher as unknown as typeof fetch, "Agent container", adapter);
   expect((await screen.findByRole("alert")).textContent).toBe("Restart refused: a backup or restore is running on this host.");
+  view.unmount(); off();
+});
+
+// Row 1h: a restart read published before the first activity history cannot seed that history;
+// older failed runs arriving afterwards stay silent while the restart still notifies.
+it("keeps older failed runs silent when the restart read precedes the activity history", async () => {
+  setAppLocale("en-US");
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  const older = { id: "run-older", environmentId: "0", status: "failed", type: "project_redeploy", startedAt: "2026-11-13T09:00:00Z", createdAt: "2026-11-13T09:00:00Z", endedAt: "2026-11-13T09:00:05Z", resourceName: "Example app" };
+  const f = appHub(() => followed, () => followed, async () => { await held; return [older]; });
+  const adapter = createHttpAdapter({ fetch: f.fetcher as unknown as typeof fetch });
+  await adapter.getCurrentUser();
+  const snapshots: CodedActionRun[][] = [];
+  const off = adapter.subscribeActions((runs) => snapshots.push(runs));
+  const shows = vi.spyOn(toast, "custom");
+  const view = renderWithApp(<><SignedInToasts /><HostSettingsDialog host={host} component={undefined} open onOpenChange={() => {}} /></>, adapter);
+  await screen.findByTestId("toasts-ready");
+  await userEvent.click(screen.getByRole("tab", { name: "Agent container" }));
+  await waitFor(() => expect(snapshots.flat().some((run) => run.id === followed.runId)).toBe(true));
+  expect(snapshots.flat().some((run) => run.id === older.id)).toBe(false);
+  release();
+  await waitFor(() => expect(snapshots.flat().some((run) => run.id === older.id)).toBe(true));
+  expect(shows.mock.calls.filter(([, options]) => options?.id === older.id)).toHaveLength(0);
+  expect(shows.mock.calls.filter(([, options]) => options?.id === followed.runId)).toHaveLength(1);
   view.unmount(); off();
 });
