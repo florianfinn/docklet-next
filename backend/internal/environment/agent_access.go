@@ -18,6 +18,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/contract"
 	environmenttypes "github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/version"
+	"gorm.io/gorm"
 )
 
 var ErrAgentUpdateRequired = remenv.ErrAgentUpdateRequired
@@ -245,14 +246,19 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 		return nil, nil, err
 	}
 	now := time.Now()
-	result := s.db.WithContext(checkCtx).Model(&Environment{}).Where("id = ?", id).Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID}).Updates(map[string]any{"status": status, "last_seen": &now, "updated_at": &now})
-	if result.Error != nil {
-		return nil, nil, result.Error
+	outcome, err := s.writeHostStatusInternal(checkCtx, hostStatusWrite{
+		Transition: statusCompatibilityResult, ID: id,
+		Scope: func(q *gorm.DB) *gorm.DB {
+			return q.Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID})
+		},
+		Updates: map[string]any{"status": status, "last_seen": &now, "updated_at": &now},
+	})
+	if err != nil {
+		return nil, nil, err
 	}
-	if result.RowsAffected == 0 {
+	if outcome == hostStatusNoop {
 		return nil, nil, ErrInvalidEnvironmentAccessToken
 	}
-	s.invalidateEnvironmentCacheInternal(id)
 	// Every authenticated online write passes here (health job, manual test, Edge heartbeat), so an
 	// agent seen coming back by any of them gets the synced settings again.
 	if compatible && env.Status != status {
@@ -292,16 +298,19 @@ func (s *EnvironmentService) agentCompatibilityFailure(ctx context.Context, env 
 	if env.IsEdge || !errors.As(err, &status) || (status.StatusCode != http.StatusUnauthorized && status.StatusCode != http.StatusForbidden) {
 		return err
 	}
-	result := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", env.ID).
-		Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID, "enabled": true}).
-		Updates(map[string]any{"status": string(EnvironmentStatusTokenRejected), "updated_at": time.Now()})
-	if result.Error != nil {
-		return errors.Join(err, result.Error)
+	outcome, writeErr := s.writeHostStatusInternal(ctx, hostStatusWrite{
+		Transition: statusCredentialRejected, ID: env.ID,
+		Scope: func(q *gorm.DB) *gorm.DB {
+			return q.Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID, "enabled": true})
+		},
+		Updates: map[string]any{"status": string(EnvironmentStatusTokenRejected), "updated_at": time.Now()},
+	})
+	if writeErr != nil {
+		return errors.Join(err, writeErr)
 	}
-	if result.RowsAffected == 0 {
+	if outcome == hostStatusNoop {
 		return ErrInvalidEnvironmentAccessToken
 	}
-	s.invalidateEnvironmentCacheInternal(env.ID)
 	s.NotifyRuntimeStateChanged()
 	return errors.Join(remenv.ErrAgentInvalidToken, err)
 }

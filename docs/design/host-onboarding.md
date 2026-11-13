@@ -310,6 +310,33 @@ agent HTTP 401 responses; ordinary agent HTTP 403 remains an authorization respo
 `agent.unavailable` (HTTP 502, or 504 for a timed-out Edge request). An update-required health job reports a partial
 result with "Agent update required", rather than offline, and sends no sync.
 
+### Host verdict rule (#372)
+
+Only the compatibility check of the current registration or a registration
+transition (a new credential) may move a host out of `update-required`. The
+database enforces this rule since migration 004; it no longer depends on
+recognising Go write forms in a test scan:
+
+- `environments.status_check_revision` rises with every compatibility result,
+  including a Direct credential rejection. It is internal and not part of the API.
+- A trigger refuses any update that leaves `update-required` unless
+  `credential_revision` or `status_check_revision` strictly increases.
+- A second trigger refuses any update that lowers either revision, so an older
+  full-row save cannot roll a revision back and then clear a newer verdict.
+- A third trigger ignores an insert for an ID that already exists, so `REPLACE`
+  and upserts cannot rewrite a row around the update triggers, while
+  `INSERT OR IGNORE` keeps its meaning.
+- A refused statement aborts as a whole (`host.status-verdict`), so multi-row
+  writes fail closed.
+
+All status writes in `internal/environment` go through one owned write path
+(`host_status.go`) that names the transition. That path bumps the check revision
+only for compatibility results, and updates the host caches only after a
+successful write. A failed reachability probe keeps `update-required` on Direct
+and Edge hosts alike, because a probe proves reachability, not a newer agent.
+A later data migration that changes host status must raise one of the revisions
+or run before the triggers exist.
+
 `Environment.agentReport` contains the last successful process-local version
 report and its observation time. Only agent version requests authenticated with the
 configured manager credential add nullable

@@ -270,11 +270,6 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 		}
 		slog.InfoContext(ctx, "promoted pending direct environment to online via reachability check", "environmentId", id)
 	}
-	// A failed Edge probe proves no newer agent; only a completed compatibility check replaces the verdict.
-	if currentEnv.IsEdge && currentEnv.Status == string(EnvironmentStatusUpdateRequired) && status != string(EnvironmentStatusOnline) {
-		return nil
-	}
-
 	now := time.Now()
 	updates := map[string]any{
 		"status": status,
@@ -285,15 +280,16 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 		updates["last_seen"] = &now
 	}
 	// The write re-checks the protected states itself: a probe that read the row earlier must not
-	// replace a pending registration or an Edge verdict stored since.
-	write := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id)
-	if status == string(EnvironmentStatusOnline) {
-		write = write.Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusPending))
-	} else {
-		write = write.Where("status <> ?", string(EnvironmentStatusPending)).
-			Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusUpdateRequired))
+	// replace a pending registration or a verdict stored since. A probe proves reachability, never
+	// a newer agent, so it keeps update-required on Direct and Edge hosts alike.
+	scope := func(q *gorm.DB) *gorm.DB {
+		q = q.Where("status <> ?", string(EnvironmentStatusUpdateRequired))
+		if status == string(EnvironmentStatusOnline) {
+			return q.Where("NOT (is_edge = ? AND status = ?)", true, string(EnvironmentStatusPending))
+		}
+		return q.Where("status <> ?", string(EnvironmentStatusPending))
 	}
-	if err := write.Updates(updates).Error; err != nil {
+	if _, err := s.writeHostStatusInternal(ctx, hostStatusWrite{Transition: statusProbe, ID: id, Scope: scope, Updates: updates}); err != nil {
 		return fmt.Errorf("failed to update environment status: %w", err)
 	}
 	// Direct environments have no tunnel callback, so this health-check write is
@@ -309,22 +305,21 @@ func (s *EnvironmentService) UpdateEnvironmentHeartbeat(ctx context.Context, id 
 	}
 	now := time.Now()
 
-	// Use Exec with raw SQL for better performance
 	// Only update if last_seen is NULL or older than 30 seconds to reduce write frequency
-	result := s.db.WithContext(ctx).Exec(`
-		UPDATE environments
-		SET last_seen = ?, status = ?, updated_at = ?
-		WHERE id = ?
-		AND (last_seen IS NULL OR last_seen < ?)
-	`, new(now), string(EnvironmentStatusOnline), new(now), id, now.Add(-30*time.Second))
-
-	if result.Error != nil {
-		// The 30s throttle above doubles as the notify throttle: a no-op heartbeat
-		// changed nothing worth waking a stream for.
-		return fmt.Errorf("failed to update environment heartbeat: %w", result.Error)
+	outcome, err := s.writeHostStatusInternal(ctx, hostStatusWrite{
+		Transition: statusLocalHeartbeat, ID: id,
+		Scope: func(q *gorm.DB) *gorm.DB {
+			return q.Where("last_seen IS NULL OR last_seen < ?", now.Add(-30*time.Second))
+		},
+		Updates: map[string]any{"last_seen": new(now), "status": string(EnvironmentStatusOnline), "updated_at": new(now)},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update environment heartbeat: %w", err)
 	}
 
-	if result.RowsAffected > 0 {
+	// The 30s throttle above doubles as the notify throttle: a no-op heartbeat
+	// changed nothing worth waking a stream for.
+	if outcome == hostStatusApplied {
 		s.NotifyRuntimeStateChanged()
 	}
 
@@ -357,7 +352,11 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 			string(EnvironmentStatusPending), string(EnvironmentStatusUpdateRequired), string(EnvironmentStatusOffline))
 	}
 
-	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+	transition := statusTransportLost
+	if connected {
+		transition = statusTransportConnected
+	}
+	if _, err := s.writeHostStatusInternal(ctx, hostStatusWrite{Transition: transition, ID: id, Updates: updates}); err != nil {
 		return fmt.Errorf("failed to update environment connection state: %w", err)
 	}
 

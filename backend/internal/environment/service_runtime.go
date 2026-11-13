@@ -12,6 +12,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/types/environment"
+	"gorm.io/gorm"
 	"log/slog"
 	"time"
 )
@@ -96,21 +97,22 @@ func applyEnvironmentRuntimeStateAt(env *environment.Environment, now time.Time,
 // after a restart until agents reconnect. Pending environments and the update-required verdict,
 // which belongs to the registration until the next probe, are left untouched.
 func (s *EnvironmentService) ReconcileEdgeStatusesOnStartup(ctx context.Context) error {
-	result := s.db.WithContext(ctx).Model(&Environment{}).
-		Where("is_edge = ?", true).
-		Where("status <> ?", string(EnvironmentStatusPending)).
-		Where("status <> ?", string(EnvironmentStatusOffline)).
-		Where("status <> ?", string(EnvironmentStatusUpdateRequired)).
-		Updates(map[string]any{
-			"status":     string(EnvironmentStatusOffline),
-			"updated_at": new(time.Now()),
-		})
-	if result.Error != nil {
-		return fmt.Errorf("failed to reconcile edge environment statuses: %w", result.Error)
+	outcome, err := s.writeHostStatusInternal(ctx, hostStatusWrite{
+		Transition: statusStartupReconcile,
+		Scope: func(q *gorm.DB) *gorm.DB {
+			return q.Where("is_edge = ?", true).
+				Where("status <> ?", string(EnvironmentStatusPending)).
+				Where("status <> ?", string(EnvironmentStatusOffline)).
+				Where("status <> ?", string(EnvironmentStatusUpdateRequired))
+		},
+		Updates: map[string]any{"status": string(EnvironmentStatusOffline), "updated_at": new(time.Now())},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reconcile edge environment statuses: %w", err)
 	}
 
-	if result.RowsAffected > 0 {
-		slog.InfoContext(ctx, "Reconciled stale edge environment statuses on startup", "count", result.RowsAffected)
+	if outcome == hostStatusApplied {
+		slog.InfoContext(ctx, "Reconciled stale edge environment statuses on startup")
 	}
 
 	return nil

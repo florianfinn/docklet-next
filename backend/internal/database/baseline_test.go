@@ -61,7 +61,7 @@ func TestReleaseFreshStartHistoryIdentityAndSQLSeeds(t *testing.T) {
 			defer db.Close()
 			var versions []int64
 			require.NoError(t, db.Raw("SELECT version_id FROM goose_db_version ORDER BY id").Scan(&versions).Error)
-			require.Equal(t, []int64{0, 1, 2, 3}, versions)
+			require.Equal(t, []int64{0, 1, 2, 3, 4}, versions)
 			var owner string
 			require.NoError(t, db.Raw("SELECT identity FROM docklet_database_metadata").Scan(&owner).Error)
 			require.Equal(t, "docklet-next:sqlite:2", owner)
@@ -153,7 +153,7 @@ func TestInitialMigrationFailureIsRestartable(t *testing.T) {
 	require.True(t, db.Migrator().HasTable("settings"))
 	var version int64
 	require.NoError(t, db.Raw("SELECT max(version_id) FROM goose_db_version").Scan(&version).Error)
-	require.EqualValues(t, 3, version)
+	require.EqualValues(t, 4, version)
 }
 
 func TestMigrationSourceSurvivesReopenAndMigrate(t *testing.T) {

@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation. M23 #435: active summaries contract coverage.
+// Deviations: Original host registration implementation. M23 #435: active summaries contract coverage. M25 probe failure hook.
 
 package environment
 
@@ -63,6 +63,10 @@ type agentFixture struct {
 	mu      sync.Mutex
 	calls   []string
 	info    version.Info
+	// failPath answers 503 for that path, for probe failure tests.
+	failPath string
+	// beforeRespond runs before each agent answer, for writes that race a probe.
+	beforeRespond func(method, path string)
 }
 
 func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture {
@@ -70,8 +74,20 @@ func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture
 	f := &agentFixture{token: "example", id: "example-host", info: info}
 	db := setupEnvironmentServiceTestDB(t)
 	httpClient := &http.Client{Transport: agentRoundTrip(func(r *http.Request) (*http.Response, error) {
+		f.mu.Lock()
+		hook := f.beforeRespond
+		f.mu.Unlock()
+		if hook != nil {
+			hook(r.Method, r.URL.Path)
+		}
 		body := f.respond(r.Method, r.URL.Path, r.Header)
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{"Content-Type": {"application/json"}}, Request: r}, nil
+		f.mu.Lock()
+		code := http.StatusOK
+		if f.failPath != "" && f.failPath == r.URL.Path {
+			code = http.StatusServiceUnavailable
+		}
+		f.mu.Unlock()
+		return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{"Content-Type": {"application/json"}}, Request: r}, nil
 	})}
 	f.service = NewEnvironmentService(db, httpClient, nil, nil, nil, nil)
 	t.Cleanup(func() {
