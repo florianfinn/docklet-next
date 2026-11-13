@@ -85,6 +85,21 @@ Codes: `container.shell-invalid`, `container.shell-protocol`,
 `container.shell-unavailable`, `container.shell-orphaned`,
 `container.shell-not-running`.
 
+## Page links (#477)
+
+External pages and bookmarks can link a container page by name and choose its
+tab, like the stack page address `/stacks/<host>~<project>?tab=logs&service=<service>`:
+
+```text
+https://docklet.example.com/containers/<host>~<container-name>?tab=terminal
+```
+
+The page matches the inventory ID first and otherwise the exact container name
+on that host; Docker names are unique per daemon, so the link survives a
+recreate with a new ID. The address is not rewritten to the ID. `?tab=terminal`
+opens the terminal once a shell is available; any other value, or an
+unavailable shell, shows the logs.
+
 ## Break map
 
 | # | Row | Decision | Entry boundary | Test (red mutation) |

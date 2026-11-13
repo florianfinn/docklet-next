@@ -2,10 +2,11 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original container stream tabs with authoritative shell availability.
+// Deviations: Original container stream tabs with authoritative shell availability. #477 tab selection from the address.
 
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useId, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import type { ContainerInfo, Host } from "@/domain/model";
@@ -29,8 +30,12 @@ export function ContainerTerminalTabs({ c, host, children }: { c: ContainerInfo;
   const code = c.state !== "running" ? "container.shell-not-running" : capability.data?.disabledReasonCode;
   const disabled = c.state !== "running" || capability.data?.available !== true;
   const reason = capability.isPending && c.state === "running" ? t("checking") : t(shellMessage(code ?? "capability.unavailable"));
+  // `?tab=terminal` opens the terminal once a shell is available; anything else shows the logs.
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "terminal" && !disabled ? "terminal" : "logs";
+  const select = (next: string) => setParams((current) => { const query = new URLSearchParams(current); query.set("tab", next); return query; }, { replace: true });
   return (
-    <Tabs defaultValue="logs">
+    <Tabs value={tab} onValueChange={select}>
       <TabsList aria-label={tp("details")}>
         <TabsTrigger value="logs">{tp("logs")}</TabsTrigger>
         <TabsTrigger value="terminal" disabled={disabled} title={disabled ? reason : undefined} aria-describedby={disabled ? reasonId : undefined}>{t("title")}</TabsTrigger>

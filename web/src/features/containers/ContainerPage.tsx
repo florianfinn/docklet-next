@@ -31,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Toggle } from "@/shared/ui/toggle";
 
+import { findRouteContainer } from "./container-route";
 import { ContainerTerminalTabs } from "./ContainerTerminalTabs";
 import { ContainerFacts, ContainerProvenance } from "./ContainerFacts";
 import { useContainerRestart } from "./container-restart";
@@ -219,7 +220,8 @@ export default function ContainerPage() {
   const { containerId = "" } = useParams();
   const containers = useContainers();
   const hosts = useHostScope();
-  const c = containers.data?.find((x) => x.id === containerId);
+  // The address stays as given, so a name bookmark keeps working after the next recreate.
+  const c = findRouteContainer(containers.data, containerId);
   // The page owns the recreate run at a stable position: the old ID leaves the
   // list before the run settles, and the run must survive that to navigate.
   const [updating, setUpdating] = useState<{ container: ContainerInfo; restore: boolean; autoRestore?: boolean }>();
