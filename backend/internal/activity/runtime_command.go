@@ -63,6 +63,7 @@ type RuntimeCommand struct {
 
 type runtimeCanonicalCommandInternal struct {
 	command                                   RuntimeCommand
+	replacementRunID                          string
 	digest, optionsDigest, gateScope, gateKey string
 }
 

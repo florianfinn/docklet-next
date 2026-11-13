@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
+// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight. M18 prepare deploy points before deploy/redeploy and preserve point hints through baseline capture; standalone image update and restore safety. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M25 system workload protection.
 
 package activity
 
@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
+	"github.com/florianfinn/docklet-next/backend/internal/systemlabel"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"go.getarcane.app/sys/cgroup"
 	"go.getarcane.app/updater/labels"
@@ -85,7 +86,7 @@ func (a *RuntimeServiceAdapter) ResolveRuntimeTarget(ctx context.Context, target
 		fields := origin.Detect(inspect.Config.Labels)
 		currentID, currentErr := cgroup.CurrentContainerID()
 		_, hasProject := inspect.Config.Labels["com.docker.compose.project"]
-		resolved := RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "container", ID: inspect.ID}, Origin: &fields, ComposeProjectLabel: hasProject, Protected: labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, currentID, currentErr)}
+		resolved := RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "container", ID: inspect.ID}, Origin: &fields, ReplacementRunID: inspect.Config.Labels["io.docklet.run"], ComposeProjectLabel: hasProject, Protected: systemlabel.SelfProtected(inspect.Config.Labels, labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, currentID, currentErr))}
 		if name := strings.TrimPrefix(inspect.Name, "/"); name != "" {
 			resolved.Target.Name = &name
 		}

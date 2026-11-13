@@ -95,6 +95,7 @@ export const enActivity = {
     refresh: "Refresh run", cancel: "Request cancellation", release: "Release blocked target", reason: "Recovery reason",
     acknowledge: "I stopped the affected executor, ended its old handlers and connections, checked actual Docker state, and confirm that the prior workflow can issue no further commands.",
     releaseReason: "Recovery reason: {reason}", lateEvidence: "Later executor evidence was recorded separately. The administrator disposition remains unchanged.",
+    busyBody: "Another command holds this target or its parent. Nothing new was started.", cancellingConflictBody: "A command is still stopping on this target. Wait for its recorded outcome.",
     busy: "Another command holds this target or its parent. Nothing new was started.", cancellingConflict: "A command is still stopping on this target. Wait for its recorded outcome.",
     mismatch: "The request key does not match this caller or intent. No replacement command was sent.",
     ambiguous: "The command response was lost or invalid. Execution may have started. This target remains blocked in this browser; inspect activities and actual state. No replacement command will be sent.",

@@ -67,6 +67,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "runtime.target-changed"}
 	}
 	canonical.command.Target.Name = copyPtrInternal(resolved.Target.Name)
+	canonical.replacementRunID = resolved.ReplacementRunID
 	result, _, err = s.admissionPassInternal(ctx, canonical, true)
 	return result, err
 }
@@ -133,6 +134,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				runID := c.command.ProposedRunID
 				if runID == "" {
 					runID = uuid.NewString()
+				}
+				if c.command.Target.Kind == "container" {
+					if err := replacementHoldTxInternal(tx, c.command.Store.EnvironmentID, c.replacementRunID, runID); err != nil {
+						return err
+					}
 				}
 				target := c.command.Target
 				row, err = runtimeAdmitTxInternal(tx, now, runtimeAdmissionInternal{Identity: c.identity(runID), Binding: c.binding(),

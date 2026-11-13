@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original stateful Docker HTTP producer for recreate transport and crash tests.
+// Deviations: Original stateful Docker HTTP producer for recreate transport and crash tests; per-ID holds and restart effects.
 
 package activity_test
 
@@ -29,6 +29,7 @@ type recreateHTTP struct {
 	effects          map[string]int
 	fail             map[string]bool
 	hold             string
+	holdID           string
 	entered, release chan struct{}
 	once             sync.Once
 	// inspectOutage fails this many inspects after the first failed effect.
@@ -123,7 +124,7 @@ func (d *recreateHTTP) serve(w http.ResponseWriter, r *http.Request) bool {
 	d.mu.Lock()
 	d.effects[operation]++
 	fail := d.fail[operation]
-	hold := d.hold == operation
+	hold := d.hold == operation && (d.holdID == "" || d.holdID == parts[0])
 	d.mu.Unlock()
 	if hold {
 		d.once.Do(func() { close(d.entered) })
@@ -165,7 +166,7 @@ func (d *recreateHTTP) serve(w http.ResponseWriter, r *http.Request) bool {
 	case "rename":
 		value.Name = r.URL.Query().Get("name")
 		d.containers[value.ID] = value
-	case "start":
+	case "start", "restart":
 		value.Running = true
 		d.containers[value.ID] = value
 	case "stop":

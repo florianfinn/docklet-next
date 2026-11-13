@@ -14,7 +14,7 @@ import (
 
 // HeldForContainer resolves the persisted parent before applying the admission predicate.
 // It reads receipts and gates on this executing host, including agent-local stores.
-func (s *RuntimeService) HeldForContainer(ctx context.Context, containerID, projectID string) (bool, error) {
+func (s *RuntimeService) HeldForContainer(ctx context.Context, containerID, projectID string, labels map[string]string) (bool, error) {
 	if s == nil || s.activity == nil || s.activity.db == nil || s.resolver == nil {
 		return true, errors.New("runtime snapshot unavailable")
 	}
@@ -30,6 +30,13 @@ func (s *RuntimeService) HeldForContainer(ctx context.Context, containerID, proj
 	}
 	if resolved.Target.ParentProjectID != nil {
 		projectID = *resolved.Target.ParentProjectID
+	}
+	if err := replacementHoldTxInternal(s.activity.db.WithContext(ctx), "0", labels["io.docklet.run"], ""); err != nil {
+		var gate *GateConflict
+		if errors.As(err, &gate) {
+			return true, nil
+		}
+		return true, err
 	}
 	scopes := []string{"container:" + containerID}
 	predicate := "gate_scope = ?"
