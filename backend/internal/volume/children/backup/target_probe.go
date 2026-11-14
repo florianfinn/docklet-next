@@ -2,13 +2,14 @@
 // Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion.
+// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; role-specific draft identity admission.
 
 package backup
 
 import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
@@ -16,7 +17,7 @@ import (
 	"time"
 )
 
-func (s *Service) configureDraftProbe(h *backuptarget.Handler, environments *environment.EnvironmentService) {
+func (s *Service) configureDraftProbe(h *backuptarget.Handler, environments *environment.EnvironmentService, cfg *config.Config) {
 	h.Probe = func(ctx context.Context, request dto.TargetProbeRequest) (dto.TargetProbeResult, error) {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
@@ -24,9 +25,17 @@ func (s *Service) configureDraftProbe(h *backuptarget.Handler, environments *env
 		if err != nil {
 			return dto.TargetProbeResult{}, err
 		}
-		host, err := s.hostID(ctx)
+		var identity struct{ Value string }
+		err = s.deps.DB.WithContext(ctx).Table("settings").Where("key = ?", "hubHostId").Scan(&identity).Error
 		if err != nil {
 			return dto.TargetProbeResult{}, err
+		}
+		if identity.Value == "" && cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			return dto.TargetProbeResult{}, dto.NewProblem(503, "backup.target.identity-unavailable", nil)
+		}
+		host := identity.Value
+		if host == "" {
+			host = "0"
 		}
 		if host != request.ProbeHostID || input.HostID != nil && *input.HostID != host {
 			return dto.TargetProbeResult{}, dto.NewProblem(422, "backup.target.probe-host-mismatch", nil)

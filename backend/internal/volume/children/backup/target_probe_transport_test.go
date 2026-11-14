@@ -24,6 +24,7 @@ func TestDraftProbeThroughDirectAndEdge(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newRuntimePlan(t)
+			require.NoError(t, f.service.deps.DB.Exec("INSERT INTO settings(key,value) VALUES ('hubHostId','0')").Error)
 			require.NoError(t, f.service.deps.DB.AutoMigrate(&backuptarget.Target{}, &backuptarget.Check{}))
 			router, raw := humatest.New(t)
 			api := huma.NewGroup(raw, "/api")
