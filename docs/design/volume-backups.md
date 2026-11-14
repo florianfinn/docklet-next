@@ -156,8 +156,9 @@ engine:
   `volume.backup.engine-timeout`. The transfer uses the request lifetime, bounded end to
   end by the Direct proxy's 30-minute client limit.
 - **Failure after the `200`:** a restore, `tar` or copy failure aborts the response. The
-  transfer is complete only when `tar` exited with status 0 and the archive ends with its
-  end-of-archive blocks.
+  transfer is complete only when `tar` exited with status 0 and the stream, read entry by
+  entry with each declared length, reaches its end-of-archive blocks; only zero padding may
+  follow them.
   HTTP/1.1 clients get a truncated chunked body, HTTP/2 clients a reset stream. The
   browser marks the download failed and the activity records the reason. The hub's
   Direct forwarding aborts the same way when the agent's body ends with an error. The end

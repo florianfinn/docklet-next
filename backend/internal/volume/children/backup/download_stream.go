@@ -7,6 +7,7 @@
 package backup
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -183,10 +184,21 @@ func (d *StreamingDownload) Stream(w io.Writer, flush func()) (err error) {
 	return d.ctx.Err()
 }
 
-// execStream passes the helper's stdout through unbuffered and keeps at most 64 KiB of stderr for the error.
-// The attach stream can end before the process does, so success needs a terminated exec with exit 0 and a
-// stream that ends with the tar end-of-archive blocks.
+// execStream passes the helper's stdout through unbuffered and parses it as a tar stream on the way: the
+// archive is complete only when the tar reader itself reaches the end-of-archive blocks.
 func (d *StreamingDownload) execStream(helper string, cmd []string, stdout io.Writer) error {
+	check := newArchiveCheck()
+	err := d.execOutput(helper, cmd, io.MultiWriter(stdout, check))
+	complete := check.Close()
+	if err != nil {
+		return err
+	}
+	return complete
+}
+
+// execOutput keeps at most 64 KiB of stderr for the error. The attach stream can end before the process does,
+// so success needs a terminated exec with exit 0.
+func (d *StreamingDownload) execOutput(helper string, cmd []string, stdout io.Writer) error {
 	if d.s.deps.ExecStream != nil {
 		return d.s.deps.ExecStream(d.ctx, helper, cmd, stdout)
 	}
@@ -202,8 +214,7 @@ func (d *StreamingDownload) execStream(helper string, cmd []string, stdout io.Wr
 	stop := context.AfterFunc(d.ctx, attach.Close)
 	defer stop()
 	stderr := &boundedBuffer{limit: 64 << 10}
-	tail := &archiveTail{}
-	if err := docker.WaitStdCopy(docker.StartStdCopy(attach.Reader, io.MultiWriter(stdout, tail), stderr)); err != nil {
+	if err := docker.WaitStdCopy(docker.StartStdCopy(attach.Reader, stdout, stderr)); err != nil {
 		return err
 	}
 	if err := d.ctx.Err(); err != nil {
@@ -215,9 +226,6 @@ func (d *StreamingDownload) execStream(helper string, cmd []string, stdout io.Wr
 	}
 	if exitCode != 0 {
 		return fmt.Errorf("%s exited with status %d: %s", cmd[0], exitCode, strings.TrimSpace(stderr.String()))
-	}
-	if !tail.complete() {
-		return errors.New("archive stream ended before the tar end-of-archive blocks")
 	}
 	return nil
 }
@@ -247,26 +255,90 @@ func (d *StreamingDownload) awaitExecExit(id string) (int, error) {
 
 var execExitWait = 5 * time.Second
 
-// archiveTail tracks the stream length and its last 1024 bytes: a complete tar stream is a whole number of
-// 512-byte blocks ending with two zero blocks.
-type archiveTail struct {
-	size int64
-	last [1024]byte
+var errIncompleteArchive = errors.New("archive stream ended before the tar end-of-archive blocks")
+
+// archiveCheck reads the stream through archive/tar, which follows header and declared entry lengths, so zero
+// bytes inside file content are never taken for the end-of-archive blocks.
+type archiveCheck struct {
+	writer *io.PipeWriter
+	result chan error
+	once   sync.Once
+	err    error
 }
 
-func (t *archiveTail) Write(p []byte) (int, error) {
-	t.size += int64(len(p))
-	if len(p) >= len(t.last) {
-		copy(t.last[:], p[len(p)-len(t.last):])
-	} else {
-		copy(t.last[:], t.last[len(p):])
-		copy(t.last[len(t.last)-len(p):], p)
+func newArchiveCheck() *archiveCheck {
+	reader, writer := io.Pipe()
+	c := &archiveCheck{writer: writer, result: make(chan error, 1)}
+	go func() {
+		err := verifyArchiveEnd(reader)
+		if err != nil {
+			_, _ = io.Copy(io.Discard, reader)
+		}
+		c.result <- err
+	}()
+	return c
+}
+
+func (c *archiveCheck) Write(p []byte) (int, error) { return c.writer.Write(p) }
+
+// Close ends the stream and reports whether it was one complete archive.
+func (c *archiveCheck) Close() error {
+	c.once.Do(func() {
+		_ = c.writer.Close()
+		c.err = <-c.result
+	})
+	return c.err
+}
+
+// verifyArchiveEnd accepts the stream when the tar reader stops at its end-of-archive blocks before the
+// stream ends; only zero record padding may follow them.
+func verifyArchiveEnd(r io.Reader) error {
+	source := &endAwareReader{r: r}
+	archive := tar.NewReader(source)
+	for {
+		_, err := archive.Next()
+		if err == nil {
+			_, err = io.Copy(io.Discard, archive)
+		}
+		switch {
+		case err == io.EOF && !source.ended:
+			return zeroPadding(r)
+		case err == io.EOF || errors.Is(err, io.ErrUnexpectedEOF):
+			return errIncompleteArchive
+		case err != nil:
+			return err
+		}
 	}
-	return len(p), nil
 }
 
-func (t *archiveTail) complete() bool {
-	return t.size >= int64(len(t.last)) && t.size%512 == 0 && t.last == [1024]byte{}
+type endAwareReader struct {
+	r     io.Reader
+	ended bool
+}
+
+func (e *endAwareReader) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if err == io.EOF {
+		e.ended = true
+	}
+	return n, err
+}
+
+func zeroPadding(r io.Reader) error {
+	buffer, zero := make([]byte, 32<<10), make([]byte, 32<<10)
+	var err error
+	for {
+		n, readErr := r.Read(buffer)
+		if err == nil && !bytes.Equal(buffer[:n], zero[:n]) {
+			err = errors.New("archive stream carries data after the tar end-of-archive blocks")
+		}
+		if readErr == io.EOF {
+			return err
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
 }
 
 type boundedBuffer struct {

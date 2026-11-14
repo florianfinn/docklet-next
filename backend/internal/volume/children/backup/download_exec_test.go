@@ -2,16 +2,22 @@
 // Revision: dda7c807a3cdd6a46d2d3735c43f57447dedaa61
 // Retrieved: 2026-11-14
 // License: Apache-2.0
-// Deviations: Original default exec boundary proofs for the streamed download (#386 review R1 B4).
+// Deviations: Original default exec boundary proofs for the streamed download (#386 review R1 B4, R2 zero-content cut and owner cancellation).
 
 package backup
 
 import (
+	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -61,13 +67,32 @@ func execDocker(t *testing.T, stdout []byte, running int32, exitCode int) *clien
 	return cli
 }
 
-// Only a terminated exec with exit 0 whose output ends with the tar end-of-archive blocks is a complete archive.
+// zeroArchive is one regular file of zero bytes, so a cut inside its content ends in zero blocks.
+func zeroArchive(t *testing.T) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	writer := tar.NewWriter(&buffer)
+	require.NoError(t, writer.WriteHeader(&tar.Header{Name: "zero.bin", Mode: 0o600, Size: 8192}))
+	_, err := writer.Write(make([]byte, 8192))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return buffer.Bytes()
+}
+
+// Only a terminated exec with exit 0 whose output the tar reader follows to its end-of-archive blocks is a
+// complete archive; Go's tar writer ends with exactly two zero blocks, like BusyBox tar.
 func TestStreamedDownloadExecRequiresTerminatedCompleteArchive(t *testing.T) {
 	previous := execExitWait
 	execExitWait = 300 * time.Millisecond
 	t.Cleanup(func() { execExitWait = previous })
 	archive := sampleArchive(t)
 	cut := archive[:len(archive)/2/512*512]
+	zeros := zeroArchive(t)
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "zero.bin"), make([]byte, 8192), 0o600))
+	gnu, err := exec.CommandContext(t.Context(), "tar", "-cf", "-", "-C", root, ".").Output()
+	require.NoError(t, err, "the GNU padding row runs the system tar")
+	require.Zero(t, len(gnu)%10240, "GNU tar pads to its default record size")
 	for _, row := range []struct {
 		name     string
 		stdout   []byte
@@ -81,6 +106,12 @@ func TestStreamedDownloadExecRequiresTerminatedCompleteArchive(t *testing.T) {
 		{"output-cut-still-running", cut, 1000, 0, false},
 		{"complete-output-still-running", archive, 1000, 0, false},
 		{"output-cut-then-zero", cut, 1, 0, false},
+		{"zero-content-complete", zeros, 0, 0, true},
+		{"gnu-record-padding", gnu, 0, 0, true},
+		{"zero-content-cut-then-zero", zeros[:2048], 1, 0, false},
+		{"cut-before-end-blocks-then-zero", archive[:len(archive)-1024], 1, 0, false},
+		{"one-end-block-then-zero", archive[:len(archive)-512], 1, 0, false},
+		{"data-after-end-blocks", append(append([]byte{}, archive...), bytes.Repeat([]byte("x"), 512)...), 0, 0, false},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			d := &StreamingDownload{s: &Service{}, ctx: t.Context(), cli: execDocker(t, row.stdout, row.running, row.exitCode)}
@@ -93,5 +124,57 @@ func TestStreamedDownloadExecRequiresTerminatedCompleteArchive(t *testing.T) {
 				require.Error(t, err, "an incomplete or failed producer must not finish the archive")
 			}
 		})
+	}
+}
+
+// Owner cancellation during the tar copy closes the attach connection and joins the copy.
+func TestStreamedDownloadExecOwnerCancellationClosesAttach(t *testing.T) {
+	attached, closed := make(chan struct{}), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/containers/helper/exec"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"Id":"tar-exec"}`)
+		case strings.HasSuffix(r.URL.Path, "/exec/tar-exec/start"):
+			conn, rw, err := w.(http.Hijacker).Hijack()
+			require.NoError(t, err)
+			defer conn.Close()
+			_, _ = fmt.Fprint(rw, "HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+			_ = rw.Flush()
+			close(attached)
+			_, _ = rw.ReadByte()
+			close(closed)
+		default:
+			t.Errorf("unexpected Docker request %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(500)
+		}
+	}))
+	t.Cleanup(server.Close)
+	cli, err := client.New(client.WithHost("tcp://"+strings.TrimPrefix(server.URL, "http://")), client.WithAPIVersion("1.41"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cli.Close() })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	d := &StreamingDownload{s: &Service{}, ctx: ctx, cli: cli}
+	done := make(chan error, 1)
+	go func() {
+		done <- d.execStream("helper", []string{"tar", "-cf", "-", "-C", "/scratch/data", "."}, io.Discard)
+	}()
+	select {
+	case <-attached:
+	case <-time.After(2 * time.Second):
+		t.Fatal("attach did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		t.Fatal("copy did not join on owner cancellation")
+	}
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("attach connection did not close")
 	}
 }

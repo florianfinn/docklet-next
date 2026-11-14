@@ -70,7 +70,7 @@ func TestDownloadLimitsThroughHubDirectAndActualEdgeRoutes(t *testing.T) {
 						require.Equal(t, "packed", string(body))
 						require.Equal(t, "6", headers.Get("Content-Length"), "Edge keeps the fully prepared, sized response")
 					} else {
-						require.Equal(t, "packed", string(gunzip(t, body)))
+						require.Equal(t, packedTar(t), gunzip(t, body))
 						require.Empty(t, headers.Get("Content-Length"), "hub-local and Direct stream without a length")
 					}
 					require.Contains(t, f.removed, "scratch")

@@ -88,10 +88,22 @@ func newRuntimePlan(t *testing.T) *runtimePlan {
 	}
 	f.service.deps.ExecStream = func(_ context.Context, _ string, command []string, stdout io.Writer) error {
 		f.steps = append(f.steps, strings.Join(command, " "))
-		_, err := io.WriteString(stdout, "packed")
+		_, err := stdout.Write(packedTar(f.t))
 		return err
 	}
 	return f
+}
+
+// packedTar is the complete archive the fixture's helper tar writes: one small file.
+func packedTar(t testing.TB) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	writer := tar.NewWriter(&buffer)
+	require.NoError(t, writer.WriteHeader(&tar.Header{Name: "./packed", Mode: 0o644, Size: 6}))
+	_, err := writer.Write([]byte("packed"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return buffer.Bytes()
 }
 
 // effects returns copies of the recorded Docker effects for assertions while the fixture still serves.
