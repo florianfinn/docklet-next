@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original fair physical admission, cancellation, protocol and response lifetime proofs.
+// Deviations: Original fair physical admission, cancellation, protocol and response lifetime proofs. M26 #462: read-only POST summaries share the physical read budget.
 
 import { afterEach, expect, it, vi } from "vitest";
 import { createHostReadAdmission } from "./host-read-admission";
@@ -243,4 +243,15 @@ it.each(["restarts/latest", "restarts/example-run"])("admits the hub-owned %s re
   for (let round = 0; round < 20 && sent.length < 9; round++) { for (const gate of gates.values()) gate.resolve(Response.json({ ok: true })); await flush(); }
   for (const gate of gates.values()) gate.resolve(Response.json({ ok: true }));
   await Promise.all(rest);
+});
+
+it.each(["active-summaries", "summaries"])("admits read-only %s POSTs within the physical host read budget", async (suffix) => {
+  const physical = vi.fn(async () => Response.json({ ok: true }));
+  const fetch = createHostReadAdmission(physical, "/api", () => "http/1.1");
+  const held = await Promise.all([1, 2, 3, 4, 5].map((i) => fetch(path(i))));
+  const read = fetch(`/api/environments/direct/images/vulnerabilities/${suffix}`, { method: "POST", body: "{}" });
+  await flush(); expect(physical.mock.calls.length).toBe(5);
+  await held[0]!.text();
+  await (await read).text(); await consume(held.slice(1));
+  expect(physical.mock.calls.length).toBe(6);
 });

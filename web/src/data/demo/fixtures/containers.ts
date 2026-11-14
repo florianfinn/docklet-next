@@ -1,3 +1,9 @@
+// Source: approved Docklet design prototype (maintainer's own work)/react-opus/src/data/demo/fixtures/containers.ts
+// Revision: 18638c941fcdf97383db376c1611362873a9d1d8358b727e9b43d58c413659d3
+// Retrieved: 2026-10-13
+// License: Apache-2.0
+// Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. M26 #462: bounded shell counts and raw inventory ownership.
+
 import type { ContainerInfo } from "@/domain/model";
 
 import { img } from "./stacks";
@@ -10,7 +16,7 @@ const kuma = img("louislam/uptime-kuma", "1.23.16", "1.23.16", 80);
 const whoami = img("traefik/whoami", "v1.11", "1.11.0", 120);
 
 /** Containers outside Compose stacks: Unraid templates, plain docker run, unclear origin. */
-export const STANDALONE: ContainerInfo[] = [
+export const STANDALONE: (ContainerInfo & { bindSources: string[]; volumeNames?: string[] })[] = [
   {
     id: "c-duplicati",
     name: "duplicati",
@@ -23,6 +29,7 @@ export const STANDALONE: ContainerInfo[] = [
     ports: [{ host: "8200", container: "8200" }],
     networks: ["bridge"],
     mounts: ["/mnt/user/appdata/duplicati:/config", "/mnt/user/backups:/backups"],
+    bindSources: ["/mnt/user/appdata/duplicati", "/mnt/user/backups"],
     env: { PUID: "99", PGID: "100", TZ: "Europe/Berlin" },
     restartPolicy: "unless-stopped",
     memLimitMb: 1024,
@@ -41,6 +48,7 @@ export const STANDALONE: ContainerInfo[] = [
     ports: [{ host: "6080", container: "6080" }],
     networks: ["bridge"],
     mounts: ["/mnt/user:/media"],
+    bindSources: ["/mnt/user"],
     env: { PUID: "99", PGID: "100" },
     restartPolicy: "unless-stopped",
     memLimitMb: 512,
@@ -65,6 +73,7 @@ export const STANDALONE: ContainerInfo[] = [
     ports: [{ host: "19999", container: "19999" }],
     networks: ["bridge"],
     mounts: ["netdata_config:/etc/netdata"],
+    bindSources: [], volumeNames: ["netdata_config"],
     env: {},
     restartPolicy: "always",
     memLimitMb: 512,
@@ -83,6 +92,7 @@ export const STANDALONE: ContainerInfo[] = [
     ports: [{ host: "3005", container: "3001" }],
     networks: ["bridge"],
     mounts: ["kuma_data:/app/data"],
+    bindSources: [], volumeNames: ["kuma_data"],
     env: { TZ: "Europe/Berlin" },
     restartPolicy: "unless-stopped",
     memLimitMb: 512,
@@ -107,7 +117,7 @@ export const STANDALONE: ContainerInfo[] = [
     health: "none",
     ports: [{ host: "8082", container: "80" }],
     networks: ["bridge"],
-    mounts: [],
+    mounts: [], bindSources: [],
     env: { WHOAMI_NAME: "test" },
     restartPolicy: "no",
     memLimitMb: 64,

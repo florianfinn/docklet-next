@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: Original multi-host inventory reader using existing agent forwarding. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M26 #462: bounded volume counts.
 
 import { mergeInventoryObservations } from "./inventory-observations";
 import type { operations } from "@/api/generated/schema";
@@ -10,7 +10,7 @@ import { AdapterOutcomeError } from "@/data/capability";
 import type { InventoryObservation } from "@/domain/model";
 
 type ListOperation = "list-projects" | "list-containers" | "list-images" | "list-volumes" | "list-networks";
-type ReadOperation = ListOperation | "get-project" | "get-project-compose" | "get-project-runtime" | "get-project-updates" | "get-network" | "get-dashboard";
+type ReadOperation = ListOperation | "get-volume-usage-counts" | "get-project" | "get-project-compose" | "get-project-runtime" | "get-project-updates" | "get-network" | "get-dashboard";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 const reasons = new Set(["agent.unavailable", "agent.invalid-token", "agent.update-required"]);
 
