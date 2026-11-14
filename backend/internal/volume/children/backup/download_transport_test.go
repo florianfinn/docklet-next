@@ -2,12 +2,15 @@
 // Revision: dda7c807a3cdd6a46d2d3735c43f57447dedaa61
 // Retrieved: 2026-11-14
 // License: Apache-2.0
-// Deviations: Original transport proofs for the streamed download: preparation deadline, hub forwarding, idle proxies (#386 review R1 B3).
+// Deviations: Original transport proofs for the streamed download: preparation deadline, hub forwarding, idle proxies (#386 review R1 B3), abort under backpressure (acceptance V4 diagnosis).
 
 package backup
 
 import (
+	"context"
+	"errors"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"strings"
@@ -151,4 +154,75 @@ func TestStreamedDownloadSurvivesAnIdleBudgetProxy(t *testing.T) {
 			require.Equal(t, activitytypes.StatusSuccess, r.activityStatus())
 		})
 	}
+}
+
+// throttledProxy forwards TCP to target and passes the response direction on at rate bytes per second, so the
+// hub and the agent see real backpressure once the socket buffers are full.
+func throttledProxy(t *testing.T, target string, rate int) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			downstream, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			upstream, err := net.Dial("tcp", target)
+			if err != nil {
+				_ = downstream.Close()
+				continue
+			}
+			go func() { _, _ = io.Copy(upstream, downstream) }()
+			go func() {
+				defer downstream.Close()
+				defer upstream.Close()
+				buffer := make([]byte, 32<<10)
+				for {
+					n, err := upstream.Read(buffer)
+					if n > 0 {
+						if _, writeErr := downstream.Write(buffer[:n]); writeErr != nil {
+							return
+						}
+						time.Sleep(time.Duration(n) * time.Second / time.Duration(rate))
+					}
+					if err != nil {
+						return
+					}
+				}
+			}()
+		}
+	}()
+	return "http://" + listener.Addr().String()
+}
+
+// A tar failure while the client is still draining a backpressured stream ends the body as an error, not an idle
+// connection, once the client has read what was sent before the failure.
+func TestStreamedDownloadAbortReachesBackpressuredClient(t *testing.T) {
+	r := newStreamRig(t, "h1")
+	chunk := make([]byte, 64<<10)
+	_, _ = rand.NewChaCha8([32]byte{1}).Read(chunk) // incompressible, so gzip output keeps the pipes full
+	r.f.service.deps.ExecStream = func(ctx context.Context, _ string, _ []string, stdout io.Writer) error {
+		for range 512 {
+			if _, err := stdout.Write(chunk); err != nil {
+				return err
+			}
+		}
+		return errors.New("tar exited with status 137")
+	}
+	r.url = throttledProxy(t, strings.TrimPrefix(r.hub.URL, "http://"), 8<<20) + "/api/environments/example-storage/volumes/backups/row/download"
+	r.client = &http.Client{}
+	response := r.get(t.Context())
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	body := readStream(response)
+	select {
+	case <-body.done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("a failed stream left the backpressured client connection open")
+	}
+	require.Error(t, body.err, "a failed download must not end like a complete body")
+	t.Logf("received %d of %d bytes before the abort: %v", body.bytes.Load(), 512*len(chunk), body.err)
+	r.requireReleased()
+	require.Equal(t, activitytypes.StatusFailed, r.activityStatus())
 }
