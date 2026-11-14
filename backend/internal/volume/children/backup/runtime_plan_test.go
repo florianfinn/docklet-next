@@ -17,8 +17,10 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,6 +46,9 @@ type plannedContainer struct {
 	HostConfig container.HostConfig
 }
 type runtimePlan struct {
+	// mu guards the recorded Docker effects; the fake daemon writes them on its own goroutines.
+	mu             sync.Mutex
+	deleted        map[string]bool
 	cleanupHeld    *atomic.Bool
 	cleanupInspect chan struct{}
 	volumeState    map[string]map[string]string
@@ -88,7 +93,16 @@ func newRuntimePlan(t *testing.T) *runtimePlan {
 	}
 	return f
 }
+
+// effects returns copies of the recorded Docker effects for assertions while the fixture still serves.
+func (f *runtimePlan) effects() (creates []plannedContainer, scratch map[string]string, removed []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]plannedContainer(nil), f.creates...), maps.Clone(f.scratch), append([]string(nil), f.removed...)
+}
 func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	path := r.URL.Path
 	switch {
@@ -173,10 +187,15 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = w.Write(buffer.Bytes())
 	case strings.Contains(path, "/containers/") && r.Method == http.MethodDelete:
+		if f.deleted == nil {
+			f.deleted = map[string]bool{}
+		}
+		f.deleted[containerIDFromPath(path)] = true
 		f.removed = append(f.removed, "helper")
 		w.WriteHeader(204)
 	case strings.Contains(path, "/containers/") && strings.HasSuffix(path, "/json"):
-		if f.cleanupHeld != nil && f.cleanupHeld.Load() {
+		// Holding applies to removal confirmation only: an inspect of a container this fixture was asked to delete.
+		if f.cleanupHeld != nil && f.cleanupHeld.Load() && f.deleted[containerIDFromPath(path)] {
 			if f.cleanupInspect != nil {
 				select {
 				case f.cleanupInspect <- struct{}{}:
@@ -193,6 +212,10 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 		f.t.Errorf("unexpected Docker request: %s %s", r.Method, path)
 		w.WriteHeader(500)
 	}
+}
+func containerIDFromPath(path string) string {
+	rest := path[strings.Index(path, "/containers/")+len("/containers/"):]
+	return strings.Split(rest, "/")[0]
 }
 func (f *runtimePlan) targetContext(kind string) context.Context {
 	host := "0"

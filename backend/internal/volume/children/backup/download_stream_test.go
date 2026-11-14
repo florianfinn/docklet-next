@@ -48,13 +48,16 @@ type streamRig struct {
 	f         *runtimePlan
 	archive   []byte
 	mkdirHold chan struct{}
-	tarHold   chan struct{}
-	tarFail   error
-	tarStart  chan struct{}
-	mu        sync.Mutex
-	tarCmd    []string
-	client    *http.Client
-	url       string
+	// mkdirEntered and tarStart signal that the helper exists and the restore or tar phase began.
+	mkdirEntered chan struct{}
+	tarHold      chan struct{}
+	tarFail      error
+	tarStart     chan struct{}
+	mu           sync.Mutex
+	tarCmd       []string
+	client       *http.Client
+	url          string
+	hub          *httptest.Server
 }
 
 // newStreamRig serves the registered backup routes on an agent stack (Echo Recover, Huma) behind the hub's
@@ -70,9 +73,15 @@ func newStreamRig(t *testing.T, proto string) *streamRig {
 		return &volume.Backup{ID: "row", VolumeName: "data", Format: volume.BackupFormatRustic, Destination: "local", LocalSnapshotID: strings.Repeat("a", 64), Size: 1}, nil
 	}
 	f.service.deps.DownloadKeepAlive = 25 * time.Millisecond
-	r := &streamRig{t: t, f: f, archive: sampleArchive(t), tarStart: make(chan struct{}, 1)}
+	r := &streamRig{t: t, f: f, archive: sampleArchive(t), tarStart: make(chan struct{}, 1), mkdirEntered: make(chan struct{}, 1)}
 	exec := f.service.deps.Exec
 	f.service.deps.Exec = func(ctx context.Context, id, execUser string, command []string) (string, string, error) {
+		if command[0] == "mkdir" {
+			select {
+			case r.mkdirEntered <- struct{}{}:
+			default:
+			}
+		}
 		if command[0] == "mkdir" && r.mkdirHold != nil {
 			select {
 			case <-r.mkdirHold:
@@ -116,7 +125,14 @@ func newStreamRig(t *testing.T, proto string) *streamRig {
 		next(huma.WithContext(ctx, request))
 	})
 	RegisterRoutes(api, NewHandler(f.service, f.service.deps.Activity, nil, nil, t.Context(), &config.Config{AgentMode: true}))
-	agentServer := streamServer(t, agent, proto)
+	r.hub = proxyHub(t, streamServer(t, agent, proto), proto)
+	r.client, r.url = r.hub.Client(), r.hub.URL+"/api/environments/example-storage/volumes/backups/row/download"
+	return r
+}
+
+// proxyHub serves the hub's production Direct forwarding in front of agentServer.
+func proxyHub(t *testing.T, agentServer *httptest.Server, proto string) *httptest.Server {
+	t.Helper()
 	hub := echo.New()
 	hub.Use(echomiddleware.Recover())
 	hub.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id",
@@ -125,10 +141,8 @@ func newStreamRig(t *testing.T, proto string) *streamRig {
 			return agentServer.URL, &token, true, nil
 		},
 		nil, nil, edge.NewTunnelRegistry(), nil, middleware.EnvironmentProxySecurity{HTTPClient: agentServer.Client()}))
-	hub.GET("/api/environments/:id/volumes/backups/:backupId/download", func(c *echo.Context) error { return c.NoContent(500) })
-	hubServer := streamServer(t, hub, proto)
-	r.client, r.url = hubServer.Client(), hubServer.URL+"/api/environments/example-storage/volumes/backups/row/download"
-	return r
+	hub.GET("/api/environments/:id/*", func(c *echo.Context) error { return c.NoContent(500) })
+	return streamServer(t, hub, proto)
 }
 
 func streamServer(t *testing.T, handler http.Handler, proto string) *httptest.Server {
@@ -226,6 +240,14 @@ func (r *streamRig) activityStatus() activitytypes.Status {
 	return row.Status
 }
 
+func (r *streamRig) activityError() string {
+	r.t.Helper()
+	var row activity.Activity
+	require.NoError(r.t, r.f.service.deps.DB.Where("resource_type = ?", "volume_backup_download").First(&row).Error)
+	require.NotNil(r.t, row.Error)
+	return *row.Error
+}
+
 func (r *streamRig) requireReleased() {
 	r.t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -292,8 +314,9 @@ func TestStreamedDownloadCommitsEarlyAndKeepsAlive(t *testing.T) {
 			r.mu.Unlock()
 			r.requireReleased()
 			require.Equal(t, activitytypes.StatusSuccess, r.activityStatus())
-			require.Contains(t, r.f.removed, "helper")
-			require.Contains(t, r.f.removed, "scratch")
+			_, _, removed := r.f.effects()
+			require.Contains(t, removed, "helper")
+			require.Contains(t, removed, "scratch")
 		})
 	}
 }
@@ -315,7 +338,9 @@ func TestStreamedDownloadFailureAfterCommitAborts(t *testing.T) {
 				require.Error(t, err, "a failed download must not end like a complete body")
 				r.requireReleased()
 				require.Equal(t, activitytypes.StatusFailed, r.activityStatus())
-				require.Contains(t, r.f.removed, "scratch")
+				require.Equal(t, "volume.backup.repository-unavailable", r.activityError())
+				_, _, removed := r.f.effects()
+				require.Contains(t, removed, "scratch")
 			})
 		}
 	}
@@ -346,7 +371,8 @@ func TestStreamedDownloadAdmissionRefusalsStayTyped(t *testing.T) {
 				require.Equal(t, http.StatusNotFound, response.StatusCode, string(payload))
 				require.Contains(t, string(payload), "volume.backup.snapshot-not-found")
 			}
-			require.Empty(t, r.f.creates)
+			creates, _, _ := r.f.effects()
+			require.Empty(t, creates)
 			var running int64
 			require.NoError(t, r.f.service.deps.DB.Model(&activity.Activity{}).Where("status = ?", activitytypes.StatusRunning).Count(&running).Error)
 			require.Zero(t, running)
@@ -367,7 +393,7 @@ func TestStreamedDownloadCancellationConfirmsCleanupBeforeRelease(t *testing.T) 
 					r.tarHold = make(chan struct{})
 				}
 				held := &atomic.Bool{}
-				// The restore engine inspects its own containers, so the tar case holds removal only once tar runs.
+				// The restore engine removes and confirms its own containers; in the tar case only the helper is left.
 				held.Store(phase == "restore")
 				r.f.cleanupHeld = held
 				r.f.cleanupInspect = make(chan struct{}, 1)
@@ -376,16 +402,16 @@ func TestStreamedDownloadCancellationConfirmsCleanupBeforeRelease(t *testing.T) 
 				defer cancel()
 				response := r.get(ctx)
 				body := readStream(response)
-				first := body.waitBytes(t, 0)
-				require.Positive(t, first)
+				entered := r.mkdirEntered
 				if phase == "tar" {
-					select {
-					case <-r.tarStart:
-					case <-time.After(2 * time.Second):
-						t.Fatal("tar phase did not start")
-					}
-					held.Store(true)
+					entered = r.tarStart
 				}
+				select {
+				case <-entered:
+				case <-time.After(3 * time.Second):
+					t.Fatal(phase + " phase did not start")
+				}
+				held.Store(true)
 				drained := make(chan error, 1)
 				if cause == "client" {
 					cancel()
@@ -416,33 +442,49 @@ func TestStreamedDownloadCancellationConfirmsCleanupBeforeRelease(t *testing.T) 
 				}
 				r.requireReleased()
 				require.Contains(t, []activitytypes.Status{activitytypes.StatusCancelled, activitytypes.StatusFailed}, r.activityStatus())
-				require.Contains(t, r.f.removed, "scratch")
+				_, _, removed := r.f.effects()
+				require.Contains(t, removed, "scratch")
 			})
 		}
 	}
 }
 
-// A streamed download's scratch volume and helper carry the labels startup recovery removes after an engine
-// restart, so an interrupted download leaves nothing behind.
+// After an engine restart in the middle of a streamed download, startup repair settles the download activity as
+// interrupted, startup recovery removes its labelled helper and scratch volume, and nothing replays the download.
 func TestStreamedDownloadLeftoversAreRemovedByStartupRecovery(t *testing.T) {
 	r := newStreamRig(t, "h1")
 	r.mkdirHold = make(chan struct{})
 	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	body := readStream(r.get(ctx))
-	require.Positive(t, body.waitBytes(t, 0))
-	require.NotNil(t, r.f.scratch)
+	select {
+	case <-r.mkdirEntered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("restore phase did not start")
+	}
+	creates, scratchLabels, _ := r.f.effects()
 	var helperLabels map[string]string
-	for _, created := range r.f.creates {
+	for _, created := range creates {
 		if created.Cmd[0] == "sleep" {
 			helperLabels = created.Labels
 		}
 	}
 	require.NotNil(t, helperLabels)
-	scratchLabels, scratch := r.f.scratch, r.f.scratch[restore.RestoreLabel]
-	cancel()
-	_, _ = body.finish(t)
+	require.NotNil(t, scratchLabels)
+	scratch := scratchLabels[restore.RestoreLabel]
+	// A new process has no tracked workers; its startup repair closes the abandoned download activity.
+	restarted := activity.NewActivityService(r.f.service.deps.DB, nil)
+	repaired, err := restarted.RepairStartup(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, repaired)
+	var row activity.Activity
+	require.NoError(t, r.f.service.deps.DB.Where("resource_type = ?", "volume_backup_download").First(&row).Error)
+	require.Equal(t, activitytypes.StatusFailed, row.Status)
+	require.NotNil(t, row.Error)
+	require.Contains(t, *row.Error, "interrupted")
 	removed := []string{}
-	restarted := []string{}
+	consumers := []string{}
+	effects := []string{}
 	s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -457,13 +499,21 @@ func TestStreamedDownloadLeftoversAreRemovedByStartupRecovery(t *testing.T) {
 			w.WriteHeader(404)
 			_, _ = w.Write([]byte(`{"message":"not found"}`))
 		default:
-			t.Errorf("unexpected request %s", req.URL.Path)
+			effects = append(effects, req.Method+" "+req.URL.Path)
 			w.WriteHeader(500)
 		}
-	}), &restarted)
+	}), &consumers)
 	require.NoError(t, s.ReconcileStartup(t.Context(), false))
 	require.Len(t, removed, 2)
 	require.Contains(t, removed[0], "download-helper")
 	require.Contains(t, removed[1], scratch)
-	require.Empty(t, restarted)
+	require.Empty(t, consumers)
+	require.Empty(t, effects, "startup recovery must not replay the download")
+	var downloads int64
+	require.NoError(t, r.f.service.deps.DB.Model(&activity.Activity{}).Where("resource_type = ?", "volume_backup_download").Count(&downloads).Error)
+	require.EqualValues(t, 1, downloads)
+	// The original process ends its own operation before the fixture goes away.
+	cancel()
+	_, _ = body.finish(t)
+	r.requireReleased()
 }

@@ -73,8 +73,12 @@ func (s *Service) BeginStreamingDownload(ctx context.Context, id string, actor *
 		owner.Release(ctx)
 		return nil, dto.NewProblem(503, "volume.backup.engine-unavailable", nil)
 	}
-	// The preparation budget covers admission and restore; the archive transfer uses the request lifetime.
-	prepare, cancel := context.WithTimeout(workCtx, 4*time.Minute)
+	// The preparation budget covers repository resolution and restore; the archive transfer uses the request lifetime.
+	budget := s.deps.DownloadPrepareBudget
+	if budget <= 0 {
+		budget = 4 * time.Minute
+	}
+	prepare, cancel := context.WithTimeout(workCtx, budget)
 	d := &StreamingDownload{s: s, entry: entry, ctx: workCtx, prepare: prepare, cancel: cancel}
 	var once sync.Once
 	d.release = func(err error) {
@@ -180,19 +184,89 @@ func (d *StreamingDownload) Stream(w io.Writer, flush func()) (err error) {
 }
 
 // execStream passes the helper's stdout through unbuffered and keeps at most 64 KiB of stderr for the error.
+// The attach stream can end before the process does, so success needs a terminated exec with exit 0 and a
+// stream that ends with the tar end-of-archive blocks.
 func (d *StreamingDownload) execStream(helper string, cmd []string, stdout io.Writer) error {
 	if d.s.deps.ExecStream != nil {
 		return d.s.deps.ExecStream(d.ctx, helper, cmd, stdout)
 	}
+	created, err := d.cli.ExecCreate(d.ctx, helper, client.ExecCreateOptions{AttachStdout: true, AttachStderr: true, Cmd: cmd})
+	if err != nil {
+		return err
+	}
+	attach, err := d.cli.ExecAttach(d.ctx, created.ID, client.ExecAttachOptions{})
+	if err != nil {
+		return err
+	}
+	defer attach.Close()
+	stop := context.AfterFunc(d.ctx, attach.Close)
+	defer stop()
 	stderr := &boundedBuffer{limit: 64 << 10}
-	exitCode, err := docker.ExecInContainer(d.ctx, d.cli, helper, client.ExecCreateOptions{AttachStdout: true, AttachStderr: true, Cmd: cmd}, stdout, stderr)
+	tail := &archiveTail{}
+	if err := docker.WaitStdCopy(docker.StartStdCopy(attach.Reader, io.MultiWriter(stdout, tail), stderr)); err != nil {
+		return err
+	}
+	if err := d.ctx.Err(); err != nil {
+		return err
+	}
+	exitCode, err := d.awaitExecExit(created.ID)
 	if err != nil {
 		return err
 	}
 	if exitCode != 0 {
 		return fmt.Errorf("%s exited with status %d: %s", cmd[0], exitCode, strings.TrimSpace(stderr.String()))
 	}
+	if !tail.complete() {
+		return errors.New("archive stream ended before the tar end-of-archive blocks")
+	}
 	return nil
+}
+
+// awaitExecExit waits briefly for the exec to terminate after its output ended; a process still running then
+// means the output stream was cut short.
+func (d *StreamingDownload) awaitExecExit(id string) (int, error) {
+	deadline := time.Now().Add(execExitWait)
+	for {
+		inspect, err := d.cli.ExecInspect(d.ctx, id, client.ExecInspectOptions{})
+		if err != nil {
+			return 0, err
+		}
+		if !inspect.Running {
+			return inspect.ExitCode, nil
+		}
+		if time.Now().After(deadline) {
+			return 0, errors.New("archive exec still running after its output ended")
+		}
+		select {
+		case <-d.ctx.Done():
+			return 0, d.ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+var execExitWait = 5 * time.Second
+
+// archiveTail tracks the stream length and its last 1024 bytes: a complete tar stream is a whole number of
+// 512-byte blocks ending with two zero blocks.
+type archiveTail struct {
+	size int64
+	last [1024]byte
+}
+
+func (t *archiveTail) Write(p []byte) (int, error) {
+	t.size += int64(len(p))
+	if len(p) >= len(t.last) {
+		copy(t.last[:], p[len(p)-len(t.last):])
+	} else {
+		copy(t.last[:], t.last[len(p):])
+		copy(t.last[len(t.last)-len(p):], p)
+	}
+	return len(p), nil
+}
+
+func (t *archiveTail) complete() bool {
+	return t.size >= int64(len(t.last)) && t.size%512 == 0 && t.last == [1024]byte{}
 }
 
 type boundedBuffer struct {

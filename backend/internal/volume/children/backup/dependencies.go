@@ -42,8 +42,10 @@ type Dependencies struct {
 	ExecStream func(ctx context.Context, containerID string, cmd []string, stdout io.Writer) error
 	// DownloadKeepAlive is the gzip sync-flush interval while a streamed download restores; zero means 10 s.
 	DownloadKeepAlive time.Duration
-	BackupVolumeName  string
-	ZoneProvider      scheduleutil.ZoneProvider
-	Location          *time.Location
-	EncryptionKey     string
+	// DownloadPrepareBudget bounds repository and password resolution and the restore of a streamed download; zero means 4 min.
+	DownloadPrepareBudget time.Duration
+	BackupVolumeName      string
+	ZoneProvider          scheduleutil.ZoneProvider
+	Location              *time.Location
+	EncryptionKey         string
 }
