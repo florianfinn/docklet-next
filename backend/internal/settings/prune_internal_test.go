@@ -97,6 +97,7 @@ var reviewedSettingFilesInternal = map[string]string{
 	"internal/volume/children/backup/metadata_routes.go":  "reads volumeBackupRepositoryCheck",
 	"internal/volume/children/backup/repository.go":       "reads hubHostId",
 	"internal/volume/children/backup/repository_check.go": "reads hubHostId, backupTargetSetVersion; writes volumeBackupRepositoryCheck",
+	"internal/volume/children/backup/target_probe.go":     "reads hubHostId",
 }
 
 var settingSinkInternal = regexp.MustCompile(`Table\("settings"\)|(INTO|FROM|UPDATE)\s+settings\b|settings\.SettingVariable|writeSetting\(|return "settings"`)

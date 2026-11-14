@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Remove dead token-version mismatch handling; Split Echo middleware; local module namespace; removed OIDC/passkeys; startup sign-in modes and shared reserved synthetic agent identity; session-bound viewer lifetime and durable validation; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints.
+// Deviations: Split Echo middleware; local module namespace; removed OIDC/passkeys; startup sign-in modes and shared reserved synthetic agent identity; session-bound viewer lifetime and durable validation; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints; remove dead token-version mismatch handling.
 
 package auth
 

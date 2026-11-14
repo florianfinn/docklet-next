@@ -10,14 +10,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
-	"sync"
-
 	"errors"
+	"log/slog"
+	"strings"
+	"sync"
+	"testing"
+
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
@@ -135,15 +136,21 @@ func TestSingleActivityReceiptStorageFailureDoesNotDiscloseRun(t *testing.T) {
 			} else {
 				require.Contains(t, string(problem), "Runtime evidence unavailable")
 			}
-			var warning struct {
+			type record struct {
 				Level string
 				Msg   string
 				Error string
 			}
-			require.NoError(t, json.Unmarshal(bytes.TrimSpace(logs.snapshot()[before:]), &warning))
-			require.Equal(t, "WARN", warning.Level)
-			require.Equal(t, "failed to load runtime activity receipt", warning.Msg)
-			require.NotEmpty(t, warning.Error)
+			var warnings []record
+			for _, line := range strings.Split(strings.TrimSpace(string(logs.snapshot()[before:])), "\n") {
+				var entry record
+				if json.Unmarshal([]byte(line), &entry) == nil && entry.Msg == "failed to load runtime activity receipt" {
+					warnings = append(warnings, entry)
+				}
+			}
+			require.Len(t, warnings, 1)
+			require.Equal(t, "WARN", warnings[0].Level)
+			require.NotEmpty(t, warnings[0].Error)
 		})
 	}
 	// Failure before Reference establishes existence keeps its existing status.
