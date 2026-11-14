@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M26 dependencies split into dependencies.go.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M26 dependencies split into dependencies.go; retain restored reconciliation mode until settlement succeeds.
 
 package backup
 
@@ -50,26 +50,26 @@ type Store struct {
 
 // Service runs volume backups and owns their policies, file browser, and restores.
 type Service struct {
-	notifier               backupnotify.Notifier
-	deps                   Dependencies
-	inputCleaner           func(context.Context, []string) error
-	targets                *backuptarget.Service
-	targetStore            *backuptarget.Store
-	rekeyed                sync.Map
-	recoveryMu             sync.Mutex
-	sweepMu                sync.Mutex
-	sweepStarted           bool
-	writerDiscoveryPending bool
-	settledInitial         bool
-	confirmedWriters       map[string]bool
-	fenceMu                sync.Mutex
-	writerFences           map[string]bool
-	writerIDs              map[string]map[string]bool
-	writerFenceRelease     map[string]func()
-	lifecycle              *restore.Lifecycle
-	policies               *policies.Service
-	browser                *browser.Service
-	restore                *restore.Service
+	notifier                        backupnotify.Notifier
+	deps                            Dependencies
+	inputCleaner                    func(context.Context, []string) error
+	targets                         *backuptarget.Service
+	targetStore                     *backuptarget.Store
+	rekeyed                         sync.Map
+	recoveryMu                      sync.Mutex
+	sweepMu                         sync.Mutex
+	sweepStarted                    bool
+	writerDiscoveryPending          bool
+	settledInitial, restoredPending bool
+	confirmedWriters                map[string]bool
+	fenceMu                         sync.Mutex
+	writerFences                    map[string]bool
+	writerIDs                       map[string]map[string]bool
+	writerFenceRelease              map[string]func()
+	lifecycle                       *restore.Lifecycle
+	policies                        *policies.Service
+	browser                         *browser.Service
+	restore                         *restore.Service
 }
 
 // lockHeldInternal marks a context whose caller already holds the volume's workspace lock.

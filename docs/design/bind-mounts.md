@@ -52,7 +52,7 @@ below or above, compared segment-wise (`/etcetera` does not overlap `/etc`).
 | Rule | Refuses | Code |
 | --- | --- | --- |
 | R1 system | `/` and any path overlapping `/proc`, `/sys`, `/dev`, `/etc`, `/run`, `/var/run`, `/boot`, `/var/lib/docker`, `/var/lib/containerd` or the daemon's `DockerRootDir`; ancestors are refused too, so `/var/lib` or `/srv` above a Docker root under `/srv/engine` is denied | `422 volume.bind.path-denied` (`reason: system` or `docker`) |
-| R2 Docklet | a path overlapping a bind source of a Docklet hub or agent container (self labels) or the host path of a stored local or mount backup target of that host | `422 volume.bind.path-denied` (`reason: docklet`) |
+| R2 Docklet | a path overlapping a bind source of a Docklet hub or agent container (self labels) or the host path of a stored local or mount backup target of that host, including retired targets | `422 volume.bind.path-denied` (`reason: docklet`) |
 | R3 observed | a key without stored policy, backup or restore rows that no workload container on the host (any state) currently bind-mounts with exactly that source | `404 volume.bind.not-mounted` |
 | R4 type | a source that is missing, or neither a directory nor a regular file (socket, device, FIFO), found by the source witness (§2.1) | `404 volume.bind.source-missing`, `422 volume.bind.unsupported-type` |
 
@@ -62,6 +62,10 @@ below or above, compared segment-wise (`/etcetera` does not overlap `/etc`).
   existing helper or operation labels. They never count for R2, R3 or consumers, so an
   idle workspace helper for P never blocks the next operation on P. Startup orphan
   cleanup removes stale operation helpers by the same labels.
+- Stored target rows retain R2 protection after retirement, including for writes,
+  source reads, capture and restore. Retained repositories may still hold recovery
+  history; retirement does not establish that their paths are empty. By-ID recovery
+  access that does not mount the protected source stays available.
 - **Which operations check what**: source-accessing operations (file browser
   reads and manifests, capture, replace, selected-file and upload restore) apply R1, R2
   and R4; admissions of new keys (first browse, first manifest, policy create, first

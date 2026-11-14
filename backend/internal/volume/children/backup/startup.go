@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original confirmed writer sweep, whole-volume fence and no-replay settlement.
+// Deviations: Original confirmed writer sweep, whole-volume fence and no-replay settlement; retain restored mode and close admission through engine settlement.
 
 package backup
 
@@ -153,6 +153,7 @@ func (s *Service) SettleInterrupted(ctx context.Context, restored bool) error {
 		s.fenceMu.Unlock()
 		return nil
 	}
+	restored = restored || s.restoredPending
 	initial := !s.settledInitial || restored
 	eligible := map[string]bool{}
 	for name, confirmed := range s.confirmedWriters {
@@ -197,8 +198,16 @@ func (s *Service) SettleInterrupted(ctx context.Context, restored bool) error {
 			return err
 		}
 	}
+	// Engine settlement must see writer eligibility without the global admission
+	// barrier. Keep that barrier and the individual leases until every step succeeds.
+	if s.deps.Engine != nil {
+		if err := s.deps.Engine.SettleVolumeRuns(ctx, blocked); err != nil {
+			return err
+		}
+	}
 	s.fenceMu.Lock()
 	s.settledInitial = true
+	s.restoredPending = false
 	for name := range eligible {
 		delete(s.writerFences, name)
 		delete(s.writerIDs, name)
@@ -209,9 +218,6 @@ func (s *Service) SettleInterrupted(ctx context.Context, restored bool) error {
 		}
 	}
 	s.fenceMu.Unlock()
-	if s.deps.Engine != nil {
-		return s.deps.Engine.SettleVolumeRuns(ctx, s.WriterFenced)
-	}
 	return nil
 }
 func (s *Service) RetryFencedWriters(ctx context.Context) {
@@ -231,9 +237,14 @@ func (s *Service) ReconcileStartup(ctx context.Context, restored bool) error {
 		return nil
 	}
 	defer s.recoveryMu.Unlock()
+	s.fenceMu.Lock()
 	if restored {
 		s.sweepStarted = false
+		s.settledInitial = false
+		s.restoredPending = true
 	}
+	restored = restored || s.restoredPending
+	s.fenceMu.Unlock()
 	if err := s.SweepWriters(ctx); err != nil {
 		return err
 	}

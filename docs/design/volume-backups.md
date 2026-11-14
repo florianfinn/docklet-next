@@ -94,6 +94,9 @@ old engine or helper removal fences the entire volume, including settlement and
 consumer restarts, until a retry confirms the writer is gone. Restored hub database
 rows describe historical Docker state: they never authorize container restarts or
 new-volume cleanup, and all restored pending responsibilities are cleared.
+Restored reconciliation keeps admissions closed until the whole settlement,
+including the engine step, succeeds. Failed passes retain restored classification
+on admission and timer retries.
 
 Restore-as-new persists its intent before Docker creation and verifies the unique
 restore label afterward. Cleanup removes only a volume still carrying that run's
