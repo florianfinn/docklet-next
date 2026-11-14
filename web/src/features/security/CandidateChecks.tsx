@@ -2,7 +2,7 @@
 // Revision: cc93f43359147e8e128b2ac00bcd410c055eb423
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original candidate proof consumer and verified update integration. M21 R1-S12W B2 N1 N3 N5: stable refresh, single refusal text, newest runs.
+// Deviations: Original candidate proof consumer and verified update integration. M21 R1-S12W B2 N1 N3 N5: stable refresh, single refusal text, newest runs. M26 #445: stack-only baseline capability.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -68,13 +68,23 @@ export function CandidateChecks({ host, advisory, children }: { host: string; ad
   </CandidateContext>;
 }
 
-export function CandidateVerdict({ host, occurrence: o, container, update: observation }: { host: string; occurrence: AdvisoryOccurrence; container: AdvisoryOccurrence["containers"][number]; update?: AdvisoryOccurrence["updates"][number] }) {
+type VerdictProps = { host: string; occurrence: AdvisoryOccurrence; container: AdvisoryOccurrence["containers"][number]; update?: AdvisoryOccurrence["updates"][number] };
+
+export function CandidateVerdict(props: VerdictProps) {
+  return props.container.projectId ? <StackCandidateVerdict {...props} /> : <CandidateVerdictContent {...props} baselineAvailable />;
+}
+
+function StackCandidateVerdict(props: VerdictProps) {
+  const baseline = useCapability("getUpdateBaseline", { kind: "stack", id: `${props.host}~${props.container.projectId}` });
+  return <CandidateVerdictContent {...props} baselineAvailable={baseline.available} />;
+}
+
+function CandidateVerdictContent({ host, occurrence: o, container, update: observation, baselineAvailable }: VerdictProps & { baselineAvailable: boolean }) {
   const context = useCandidateContext(), adapter = useAdapter(), t = useTranslations("security.candidates"), detail = useTranslations("security.detail");
   const candidate = context?.data?.results.find((r) => r.consumer.imageId === o.imageId && r.consumer.containerId === container.id && r.consumer.projectId === container.projectId && r.consumer.service === container.service);
   const verdict = candidate?.verdicts.find((v) => v.advisory === o.vulnerabilityId && v.package === o.pkgName && v.installed === o.installedVersion && v.class === (o.class ?? "") && v.type === (o.type ?? ""))?.verdict;
   const stack = !!container.projectId, target = `${host}~${container.projectId ?? container.id}`;
   const capability = useCapability(stack ? "installStackUpdates" : "installContainerUpdate", { kind: stack ? "stack" : "container", id: target });
-  const baselineCapability = useCapability("getUpdateBaseline", { kind: "stack", id: target });
   const [dialog, setDialog] = useState<{ digest: string; revision?: string }>();
   const [busy, setBusy] = useState(false), [error, setError] = useState<string>(), [rejected, setRejected] = useState<string>();
   const [activity, setActivity] = useState<{ id: string; digest: string }>();
@@ -131,7 +141,7 @@ export function CandidateVerdict({ host, occurrence: o, container, update: obser
       : candidate?.code === "candidate.unavailable" || candidate?.state === "failed" ? <p><CandidateError code={candidate.reason ?? candidate.code} /></p>
       : currentProof(candidate) && verdict === "does-not-close" ? <p>{t("doesNotClose", { reference: candidate!.consumer.reference })}</p>
       : <p><CandidateState state={candidate && ["queued", "running", "cancelled", "interrupted", "deferred"].includes(candidate.state) ? candidate.state : "unchecked"} /></p>}
-    {verified && capability.available && (!stack || (container.service && baselineCapability.available)) && <AlertDialog open={!!dialog} onOpenChange={(open) => { if (!open) setDialog(undefined); }}>
+    {verified && capability.available && (!stack || (container.service && baselineAvailable)) && <AlertDialog open={!!dialog} onOpenChange={(open) => { if (!open) setDialog(undefined); }}>
       <AlertDialogTrigger asChild><Button size="sm" disabled={busy || !!activity} onClick={() => void prepare()}>{t("update")}</Button></AlertDialogTrigger>
       <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{t("update")}</AlertDialogTitle><AlertDialogDescription className="break-all">{t("confirm", { consumer: stack ? `${container.project ?? container.projectId} / ${container.service}` : container.name, digest: dialog?.digest ?? digest! })}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>{t("cancel")}</AlertDialogCancel><AlertDialogAction disabled={busy || !verified || !dialog || dialog.digest !== digest} onClick={() => void update()}>{t("confirmAction")}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
     </AlertDialog>}

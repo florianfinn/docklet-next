@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Container log download command (#379); functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Container log download command (#379); functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.; M26 #394 volume collection routes under _collection
 
 package edge
 
@@ -101,18 +101,18 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/archive", CommandName: "project.archive"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/unarchive", CommandName: "project.unarchive"},
 
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/counts", CommandName: "volume.counts"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/_collection/counts", CommandName: "volume.counts"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/binds", CommandName: "volume.binds.list"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/binds/size", CommandName: "volume.binds.size"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/_collection/binds", CommandName: "volume.binds.list"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/_collection/binds/size", CommandName: "volume.binds.size"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.inspect"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.create"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.delete"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/{volumeName}/rename", CommandName: "volume.rename"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/prune", CommandName: "volume.prune.plan"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/prune", CommandName: "volume.prune"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/_collection/prune", CommandName: "volume.prune.plan"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/_collection/prune", CommandName: "volume.prune"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/usage", CommandName: "volume.usage"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/sizes", CommandName: "volume.sizes"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/_collection/sizes", CommandName: "volume.sizes"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/workspace", CommandName: "volume.workspace.list"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/workspace/file", CommandName: "volume.workspace.read_file"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/workspace/file/download", CommandName: "volume.workspace.download"},

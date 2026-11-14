@@ -39,10 +39,12 @@ See [installation](../install.md) for package and sign-in settings.
 - **Forwarded headers.** Send `X-Forwarded-For` and `X-Forwarded-Proto`. List the proxy's CIDR in
   `TRUSTED_PROXIES` so the hub records the client address; this setting does not grant sign-in trust
   (see [sign-in modes](../install.md#select-a-sign-in-mode) for `AUTH_MODE=proxy`).
-- **Long downloads.** A volume or bind snapshot download prepares the whole archive before the first
-  byte. Large snapshots can take minutes. A proxy with a short first-byte or read timeout ends such a
-  download with 504. Raise the read timeout for the hub (for example to 10 minutes), or restore the
-  snapshot in place instead of downloading it.
+- **Long downloads.** On the hub and on Direct hosts a volume or bind snapshot download starts at once
+  and sends a few bytes every 10 seconds while the snapshot is prepared, so a read timeout of 60 seconds
+  or more is enough. On Edge hosts the download is prepared completely before the first byte (up to
+  three minutes, at most 512 MiB). A proxy with a shorter first-byte or read timeout ends such an Edge
+  download with 504. For Edge hosts, raise the read timeout for the hub (for example to 10 minutes), or
+  restore the snapshot in place instead of downloading it.
 - **Encoded path characters.** The hub refuses addresses under `/api/environments/` that contain encoded
   `/ ? # % \`, encoded letters, digits or `- . _ ~`, or encoded whitespace and control characters, with
   400 `request.path-encoded`. Do not let the proxy re-encode or decode request paths.
@@ -147,8 +149,9 @@ http:
           - url: http://127.0.0.1:3552
 ```
 
-For long snapshot downloads, keep the entry point's `respondingTimeouts.writeTimeout` and the servers
-transport's `responseHeaderTimeout` unset (their default) or above the snapshot preparation time.
+For long snapshot downloads, keep the entry point's `respondingTimeouts.writeTimeout` unset (its
+default) or above the whole transfer. For Edge snapshot downloads, also keep the servers transport's
+`responseHeaderTimeout` unset or above the preparation time.
 
 ## Checking the setup
 

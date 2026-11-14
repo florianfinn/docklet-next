@@ -7,9 +7,25 @@ Scanning and update watchers retain their own module contracts.
 
 Explicit UI/API volume creation refuses an existing name on the target host with HTTP 409 `volume.exists`, while Compose deployments reuse existing volumes.
 
+## Collection routes
+
+Fixed volume collection operations live under `/environments/{id}/volumes/_collection/`:
+`binds`, `binds/size`, `counts`, `sizes` and `prune` (GET plan and POST execution). Docker
+local volume names must match `^[a-zA-Z0-9][a-zA-Z0-9_.-]+$`, so `_collection` can never
+name a volume, and `GET /environments/{id}/volumes/{volumeName}` inspects every volume,
+including ones named `binds`, `counts`, `sizes` or `prune` created outside Docklet. Hub-local,
+Direct and Edge routing share the same paths; operation IDs and permissions are unchanged.
+The earlier literal paths are removed, not aliased, because an alias would keep shadowing
+the inspect route. API clients that call the earlier paths reach the inspect route and get
+the volume of that name or `404`. The backup namespace (`volumes/backups/...`) has no
+single-segment GET collection route and stays where it is.
+
+The agent contract manifest pins the six collection operations and their Edge commands,
+so moving any of them changes the fingerprint.
+
 ## Prune preview and execution
 
-`GET /environments/{id}/volumes/prune` (`plan-volume-prune`) requires
+`GET /environments/{id}/volumes/_collection/prune` (`plan-volume-prune`) requires
 `volumes:prune`. `all=false` selects only anonymous local volumes, identified by
 Docker's `com.docker.volume.anonymous` label; `all=true` also selects named local
 volumes. Volumes with mount options are excluded, as in
@@ -218,3 +234,7 @@ Before deploy, configure any former registry override as a full `toolsImage`
 reference and ensure the published tools image is available. The volume backup lifecycle and targets use forward-only migration 012 on hub
 and agents. The earlier prune-only change required no schema migration. Exact-package Direct/Edge practical acceptance remains a
 milestone release gate.
+
+The M26 collection routes keep agent contract version 18 and minimum 18 with a new
+fingerprint. Earlier version-18 builds and this build refuse each other with
+`agent.update-required`, so hub and agents upgrade together.

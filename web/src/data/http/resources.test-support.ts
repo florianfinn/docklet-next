@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Synthetic two-host Docker inventory fixtures.
+// Deviations: Synthetic two-host Docker inventory fixtures. M26 #462: lightweight volume counts match the volume inventory.
 
 import { vi } from "vitest";
 import type { components } from "@/api/generated/schema";
@@ -43,9 +43,10 @@ export function resourceFixture() {
     if (url.pathname.endsWith("/projects/project/compose")) return state.filesDown ? json("agent.unavailable", false, false, 502) : json({ ...project, composeContent: "services:\n  web:\n    image: example:1.0.0\n", envContent: "TZ=UTC\n" });
     if (url.pathname.endsWith("/containers")) return json([{ ...container, mounts: state.bind ? [{ type: "bind", name: "", source: "/srv/example~data", destination: "/data", rw: true }] : container.mounts }, { ...container, id: "db", names: ["/db"], state: "exited", labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "db" }, ports: [], mounts: [] }], true, true);
     if (url.pathname.endsWith("/images")) return json(state.malformed ? [{ id: "bad" }] : [image, { ...image, id: "unused", repoTags: ["unused:1"], usedBy: [], inUse: false }, { ...image, id: "dangling", repoTags: [], usedBy: [], inUse: false }], true, true);
+    if (url.pathname.endsWith("/volumes/_collection/counts")) return json({ total: 1, inuse: 1, unused: 0 }, false, true);
     if (url.pathname.endsWith("/volumes/data/usage")) return json({ inUse: true, containers: ["web"] });
-    if (url.pathname.endsWith("/volumes/binds") && state.binds) return json(state.binds);
-    if (url.pathname.endsWith("/volumes/sizes")) return json([{ name: "data", size: 512, refCount: 1 }]);
+    if (url.pathname.endsWith("/volumes/_collection/binds") && state.binds) return json(state.binds);
+    if (url.pathname.endsWith("/volumes/_collection/sizes")) return json([{ name: "data", size: 512, refCount: 1 }]);
     if (url.pathname.endsWith("/volumes/data")) return json(volume, false, true);
     if (url.pathname.endsWith("/volumes")) return json([volume], true, true);
     if (url.pathname.endsWith("/networks")) return json(state.networks.map((n): components["schemas"]["NetworkSummary"] => ({ id: n.id, name: n.name, created: n.created, driver: n.driver, scope: n.scope, ipam: n.ipam, labels: n.labels, options: n.options, isDefault: state.defaultNetworks.includes(n.id), inUse: false })), true, true);

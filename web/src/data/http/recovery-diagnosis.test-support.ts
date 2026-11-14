@@ -38,7 +38,7 @@ export function recoveryFixture() {
       answer = Response.json(body, { headers });
     } else if (path.endsWith("/settings/public")) answer = Response.json([{ key: "featureVulnerabilityManagementEnabled", value: "true" }], { headers });
     else if (path.endsWith("/volumes/backups/overview")) answer = ok(overview);
-    else if (path.endsWith("/volumes/binds")) answer = ok([]);
+    else if (path.endsWith("/volumes/_collection/binds")) answer = ok([]);
     else if (path.endsWith("/images/vulnerabilities/active-summaries")) answer = ok({ images: [{ imageId: "sha256:example", inUse: true, lastCompletedScanAt: at, latestAttemptStatus: "completed", summary: { critical: state.critical, high: 0, medium: 0, low: 0, unknown: 0, total: state.critical } }] });
     else if (path.endsWith("/updater/policies")) answer = ok([]);
     else if (path.endsWith("/settings")) answer = Response.json([{ key: "effectiveTimeZone", value: "UTC" }], { headers });

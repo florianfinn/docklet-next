@@ -73,6 +73,7 @@ export const BACKUP_CODE_KEYS = {
   "runtime.interrupted": "volumes.backupCodes.runtime_interrupted",
   "backup.target.probe-host-mismatch": "volumes.backupCodes.backup_target_probe-host-mismatch",
   "backup.target.location-conflict": "volumes.backupCodes.backup_target_location-conflict",
+  "backup.target.identity-unavailable": "volumes.backupCodes.backup_target_identity-unavailable",
 } satisfies Record<NonNullable<
   | Schema["BackupProblem"]["code"]
   | Schema["VolumeHelperUnavailableError"]["code"]

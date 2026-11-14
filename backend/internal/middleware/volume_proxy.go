@@ -31,7 +31,7 @@ func validateProxiedVolumeEntry(request *http.Request) error {
 	if request.Method != "POST" && request.Method != "PUT" {
 		return nil
 	}
-	relevant := strings.HasSuffix(request.URL.Path, "/volumes") || strings.HasSuffix(request.URL.Path, "/volumes/prune") || strings.HasSuffix(request.URL.Path, "/rename") || strings.HasSuffix(request.URL.Path, "/restore") || strings.HasSuffix(request.URL.Path, "/binds/size")
+	relevant := strings.HasSuffix(request.URL.Path, "/volumes") || strings.HasSuffix(request.URL.Path, "/volumes/_collection/prune") || strings.HasSuffix(request.URL.Path, "/rename") || strings.HasSuffix(request.URL.Path, "/restore") || strings.HasSuffix(request.URL.Path, "/volumes/_collection/binds/size")
 	if !relevant || request.Body == nil {
 		return nil
 	}

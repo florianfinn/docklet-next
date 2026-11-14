@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission; the hub's unavailable answer keeps a host held; gate-produced skips leave the mark unchanged. M25 #370: hub-owned restart reads use their own admission key.
+// Deviations: Original fair HTTP/1.1 physical host GET admission through response-body completion; multiplexed protocols bypass admission; the hub's unavailable answer keeps a host held; gate-produced skips leave the mark unchanged. M25 #370: hub-owned restart reads use their own admission key. M26 #462: read-only summary POSTs share the host read budget.
 
 import { activeNow } from "./deadline-pause";
 
@@ -69,7 +69,8 @@ export function createHostReadAdmission(fetcher: typeof fetch, baseUrl = "/api",
     const suffix = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : "";
     const host = suffix.includes("/") ? suffix.split("/")[0] : undefined;
     const headers = new Headers(init?.headers ?? request?.headers);
-    if (["h2", "h3"].includes(protocol()) || method !== "GET" || !host || url.pathname.endsWith("/download") || headers.get("Accept")?.includes("text/event-stream")) return fetcher(input, init);
+    const summaryRead = method === "POST" && /^[^/]+\/images\/vulnerabilities\/(active-summaries|summaries)$/.test(suffix);
+    if (["h2", "h3"].includes(protocol()) || method !== "GET" && !summaryRead || !host || url.pathname.endsWith("/download") || headers.get("Accept")?.includes("text/event-stream")) return fetcher(input, init);
     // Hub-owned restart reads answer from the hub database: they share the connection budget but never wait
     // behind, or mark held, the agent-backed reads of their host ("~" never occurs in a host ID).
     const key = /^[^/]+\/agent\/restarts(\/|$)/.test(suffix) ? `${url.origin}/~hub` : `${url.origin}/${host}`;

@@ -99,9 +99,36 @@ func NewHandler(
 	return &Handler{config: cfg, service: service, activityService: activityService, environmentService: environmentService, uploadService: uploadService, appCtx: appCtx}
 }
 
+// DownloadBackup streams hub-local and Direct downloads from the first second; Edge agents keep the bounded,
+// fully prepared response because the tunnel delivers one complete body.
 func (h *Handler) DownloadBackup(ctx context.Context, input *DownloadBackupInput) (*huma.StreamResponse, error) {
-	ctx = context.WithValue(ctx, edgeDownloadKey{}, h.config != nil && h.config.EdgeAgent)
+	edge := h.config != nil && h.config.EdgeAgent
 	user, _ := userctx.CurrentUserFromContext(ctx)
+	if !edge {
+		download, err := h.service.BeginStreamingDownload(ctx, input.BackupID, user)
+		if err != nil {
+			return nil, neutralBackupError(err, "volume.backup.repository-unavailable")
+		}
+		return &huma.StreamResponse{
+			Body: func(humaCtx huma.Context) {
+				humaCtx.SetHeader("Content-Type", "application/x-gzip")
+				humaCtx.SetHeader("Content-Disposition", "attachment; filename="+input.BackupID+".tar.gz")
+				humaCtx.SetStatus(http.StatusOK)
+				writer := humaCtx.BodyWriter()
+				flusher, _ := writer.(http.Flusher)
+				flush := func() {
+					if flusher != nil {
+						flusher.Flush()
+					}
+				}
+				if err := download.Stream(writer, flush); err != nil {
+					// After the 200 only an aborted body tells the client the archive is incomplete.
+					panic(http.ErrAbortHandler)
+				}
+			},
+		}, nil
+	}
+	ctx = context.WithValue(ctx, edgeDownloadKey{}, true)
 	reader, size, err := h.service.DownloadBackup(ctx, input.BackupID, user)
 	if err != nil {
 		return nil, neutralBackupError(err, "volume.backup.repository-unavailable")

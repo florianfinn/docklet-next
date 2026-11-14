@@ -2,7 +2,7 @@
 // Revision: cc93f43359147e8e128b2ac00bcd410c055eb423
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original candidate proof consumer and verified update integration.
+// Deviations: Original candidate proof consumer and verified update integration. M26 #445: stack-only baseline capability read regression.
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -229,4 +229,15 @@ it("localizes demo candidate activity through the existing EN and DE scan catalo
     expect(renderMessage(run.steps[0]!.label, locale)).toBe(catalogs[locale].runMessages.exact.scanImages);
   }
   expect((await adapter.getVulnerabilityCandidates(host.id, { advisory: "CVE-2026-1234" })).results).toEqual([]);
+});
+
+it.each([false, true])("SEC-4 reads baseline capability only for a real stack (stack=%s)", async (stack) => {
+  const f = setup(stack); f.show();
+  await screen.findByRole("button", { name: "Update to verified image" });
+  await act(async () => { await Promise.resolve(); });
+  const calls = vi.mocked(f.adapter.getCapability).mock.calls;
+  const baseline = calls.filter(([operation]) => operation === "getUpdateBaseline");
+  expect(baseline.length, "standalone containers make no baseline capability request").toBe(stack ? 1 : 0);
+  if (stack) expect(baseline[0]?.[1]).toEqual({ kind: "stack", id: "example~project" });
+  expect(calls.some(([, resource]) => resource?.kind === "stack" && resource.id === "example~consumer"), "a container ID is never addressed as a stack").toBe(false);
 });

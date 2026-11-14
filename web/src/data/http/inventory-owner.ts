@@ -2,7 +2,7 @@
 // Revision: 6b89ee3606392c8b65c6dbd6577ffe0773e581b1
 // Retrieved: 2026-11-11
 // License: Apache-2.0
-// Deviations: Original identity-owned inventory scope retention and automatic read lifetimes. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: Original identity-owned inventory scope retention and automatic read lifetimes. M26 #462: retained combined shell totals. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { Volume } from "@/domain/volumes";
@@ -14,7 +14,7 @@ import { READ_TAG_HEADER, SKIPPED_HEADER, skipReason, type ReadTag } from "./hos
 import { freshFrom } from "../refresh-owner";
 import { isMaintenanceError } from "../maintenance-retry";
 
-const automatic = new Set(["listStacks", "listContainers", "listImages", "listVolumes", "listNetworkSummaries", "getTopology"]);
+const automatic = new Set(["listStacks", "listContainers", "listNavInventory", "listImages", "listVolumes", "listNetworkSummaries", "getTopology"]);
 type Observe = (host: string, state: InventoryObservation) => void;
 type Catalogue = () => Promise<Host[]>;
 type Require = (operation: string) => Promise<void>;
@@ -31,8 +31,9 @@ export function createInventoryOwner(generation: () => number, hosts: Catalogue,
   async function scope(operation: string, parent: AbortSignal | undefined, version: number, attempt = parent) {
     try {
       const rows = await hostReadDeadline(30_000, "http.error")(async (signal) => {
-        await requireCapability(operation === "listNetworkSummaries" ? "getTopology" : operation); signal.throwIfAborted();
+        await requireCapability(operation === "listNetworkSummaries" ? "getTopology" : operation === "listNavInventory" ? "listVolumes" : operation); signal.throwIfAborted();
         // The catalogue read starts after every change notified so far: the attempt reads their state.
+        if (operation === "listNavInventory") await requireCapability("listContainers");
         freshFrom(attempt);
         const rows = await hosts(); signal.throwIfAborted(); return rows;
       }, parent);

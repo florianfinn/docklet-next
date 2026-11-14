@@ -77,6 +77,10 @@ check codes.
   included, exactly like its own target-set delivery. The hub proxy refuses
   client-originated requests to that agent route, like the target-set receiver. The
   agent re-validates the definition and checks that it is the named executor.
+  An agent that has not yet received its hub host identity (registration, health sync,
+  Edge connect or target change deliver it) answers `503
+  backup.target.identity-unavailable` before any Docker call; the dialog asks to try
+  again in a moment. On the hub, an absent identity still means host `"0"`.
 - The existing saved-target test stays unchanged.
 
 ## 3. Delivery state per host (#289)

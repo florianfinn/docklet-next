@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; extract ECR request from persistence for bounded read-only stack imports.
+// Deviations: Local module namespace; extract ECR request from persistence for bounded read-only stack imports; M26 #445 candidate credential revision on agent sync.
 
 package registry
 
@@ -388,7 +388,8 @@ func (s *ContainerRegistryService) browseRegistryInternal(ctx context.Context, i
 
 // SyncRegistries syncs registries from a manager to this agent instance
 // It creates, updates, or deletes registries to match the provided list
-func (s *ContainerRegistryService) SyncRegistries(ctx context.Context, items []containerregistry.Sync) error {
+func (s *ContainerRegistryService) SyncRegistries(ctx context.Context, items []containerregistry.Sync) (err error) {
+	defer s.advanceCredentialRevision(&err)
 	if err := settings.ValidateCredentialEncryption(); err != nil {
 		return err
 	}

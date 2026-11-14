@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler. C2 #271: mounted stale-success recovery through containers and Dashboard consumers. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: Original actual navigation and dense Dashboard consumers against a six-connection HTTP/1.1 scheduler. C2 #271: mounted stale-success recovery through containers and Dashboard consumers. M26 #462: explicit full-volume probe ownership after the shell switches to counts. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { act } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -17,9 +17,11 @@ const hooks = { stacks: useStacks, containers: useContainers, images: useImages,
 afterEach(() => vi.useRealTimers());
 
 function Probe() {
+  // This full-inventory probe owns its volume read; preserve its original start order after the shell stopped mounting it.
+  const volumes = useVolumes();
   const counts = useNavCounts(); useActionsQuery();
   const hosts = useHosts(); const containers = useContainers(); const security = useSecurity();
-  const stacks = useStacks(), images = useImages(), volumes = useVolumes(), networks = useNetworkSummaries();
+  const stacks = useStacks(), images = useImages(), networks = useNetworkSummaries();
   const batches = { stacks: stacks.data, containers: containers.data, images: images.data, volumes: volumes.data, networks: networks.data };
   return <>
     <p data-testid="counts">{JSON.stringify(counts)}</p>

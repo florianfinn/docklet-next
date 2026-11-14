@@ -124,7 +124,7 @@ func TestPrunePlanSelection(t *testing.T) {
 				if all {
 					query = "all=true"
 				}
-				status, body := call("GET", "/api/environments/0/volumes/prune", query, nil)
+				status, body := call("GET", "/api/environments/0/volumes/_collection/prune", query, nil)
 				require.Equal(t, 200, status, string(body))
 				var response base.ApiResponse[volumetypes.PrunePlan]
 				require.NoError(t, json.Unmarshal(body, &response))
@@ -192,11 +192,11 @@ func TestExecutePruneAllEmptyAndDockerFailures(t *testing.T) {
 		t.Run(transport, func(t *testing.T) {
 			f := &pruneDockerFixture{volumes: []volume.Volume{pruneVolume("one"), pruneVolume("two"), pruneVolume("unselected")}}
 			call := pruneTransport(t, transport, pruneRouter(t, f.service(t)))
-			status, body := call("POST", "/api/environments/0/volumes/prune", "", nil)
+			status, body := call("POST", "/api/environments/0/volumes/_collection/prune", "", nil)
 			require.Equal(t, 400, status, string(body))
 			request, err := json.Marshal(volumetypes.PruneRequest{Candidates: []volumetypes.PruneCandidate{{Name: "one", CreatedAt: pruneCreated}, {Name: "two", CreatedAt: pruneCreated}}})
 			require.NoError(t, err)
-			status, body = call("POST", "/api/environments/0/volumes/prune", "", request)
+			status, body = call("POST", "/api/environments/0/volumes/_collection/prune", "", request)
 			require.Equal(t, 200, status, string(body))
 			var response base.ApiResponse[volumetypes.PruneResult]
 			require.NoError(t, json.Unmarshal(body, &response))

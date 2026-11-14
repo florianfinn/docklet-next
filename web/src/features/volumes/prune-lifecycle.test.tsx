@@ -123,7 +123,7 @@ for (const includeNamed of [false, true]) {
     let submitted: unknown;
     f.fetcher.mockImplementation(async (input, init) => {
       const url = new URL(String(input), "https://hub.example.com");
-      if (url.pathname.endsWith("/volumes/prune")) {
+      if (url.pathname.endsWith("/volumes/_collection/prune")) {
         if (init?.method === "POST") {
           submitted = JSON.parse(String(init.body));
           return f.json({ removed: ["anonymous"], skipped: [], failed: [], spaceReclaimed: 0 });

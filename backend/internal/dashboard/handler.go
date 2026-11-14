@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M26 #394 volume collection routes under _collection
 
 package dashboard
 
@@ -337,7 +337,7 @@ func (h *DashboardHandler) fetchLegacyDashboardSnapshotInternal(ctx context.Cont
 
 	attempted++
 	var volumeCounts base.ApiResponse[volume.UsageCounts]
-	if err := h.environmentService.ProxyJSONRequestForEnvironment(ctx, localEnvironment, http.MethodGet, "/api/environments/0/volumes/counts", nil, &volumeCounts); err != nil {
+	if err := h.environmentService.ProxyJSONRequestForEnvironment(ctx, localEnvironment, http.MethodGet, "/api/environments/0/volumes/_collection/counts", nil, &volumeCounts); err != nil {
 		errs = append(errs, err)
 	} else {
 		snapshot.VolumeUsageCounts = &volumeCounts.Data
