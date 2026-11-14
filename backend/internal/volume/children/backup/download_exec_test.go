@@ -2,7 +2,7 @@
 // Revision: dda7c807a3cdd6a46d2d3735c43f57447dedaa61
 // Retrieved: 2026-11-14
 // License: Apache-2.0
-// Deviations: Original default exec boundary proofs for the streamed download (#386 review R1 B4, R2 zero-content cut and owner cancellation).
+// Deviations: Original default exec boundary proofs for the streamed download (#386 review R1 B4, R2 zero-content cut, R3 owner cancellation after observed stdout).
 
 package backup
 
@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,6 +39,7 @@ func execDocker(t *testing.T, stdout []byte, running int32, exitCode int) *clien
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprint(w, `{"Id":"tar-exec"}`)
 		case strings.HasSuffix(r.URL.Path, "/exec/tar-exec/start"):
+			_, _ = io.Copy(io.Discard, r.Body)
 			conn, rw, err := w.(http.Hijacker).Hijack()
 			require.NoError(t, err)
 			defer conn.Close()
@@ -127,23 +129,54 @@ func TestStreamedDownloadExecRequiresTerminatedCompleteArchive(t *testing.T) {
 	}
 }
 
-// Owner cancellation during the tar copy closes the attach connection and joins the copy.
+// signalWriter reports the first stdout bytes that reach the download.
+type signalWriter struct {
+	once     sync.Once
+	received chan struct{}
+}
+
+func (w *signalWriter) Write(p []byte) (int, error) {
+	w.once.Do(func() { close(w.received) })
+	return len(p), nil
+}
+
+// Owner cancellation after stdout reached the download closes the attach connection and joins the copy; the
+// attach is caller-owned in the pinned moby client.
 func TestStreamedDownloadExecOwnerCancellationClosesAttach(t *testing.T) {
-	attached, closed := make(chan struct{}), make(chan struct{})
+	release, closed := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	stopServer := func() { releaseOnce.Do(func() { close(release) }) }
+	defer stopServer()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/containers/helper/exec"):
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprint(w, `{"Id":"tar-exec"}`)
 		case strings.HasSuffix(r.URL.Path, "/exec/tar-exec/start"):
+			_, _ = io.Copy(io.Discard, r.Body)
 			conn, rw, err := w.(http.Hijacker).Hijack()
-			require.NoError(t, err)
+			if err != nil {
+				t.Error(err)
+				return
+			}
 			defer conn.Close()
 			_, _ = fmt.Fprint(rw, "HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+			frame := make([]byte, 8)
+			frame[0] = 1
+			binary.BigEndian.PutUint32(frame[4:], 512)
+			_, _ = rw.Write(frame)
+			_, _ = rw.Write(zeroArchive(t)[:512])
 			_ = rw.Flush()
-			close(attached)
-			_, _ = rw.ReadByte()
-			close(closed)
+			readDone := make(chan struct{})
+			go func() {
+				_, _ = rw.ReadByte()
+				close(closed)
+				close(readDone)
+			}()
+			select {
+			case <-readDone:
+			case <-release:
+			}
 		default:
 			t.Errorf("unexpected Docker request %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(500)
@@ -155,26 +188,30 @@ func TestStreamedDownloadExecOwnerCancellationClosesAttach(t *testing.T) {
 	t.Cleanup(func() { _ = cli.Close() })
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+	stdout := &signalWriter{received: make(chan struct{})}
 	d := &StreamingDownload{s: &Service{}, ctx: ctx, cli: cli}
 	done := make(chan error, 1)
 	go func() {
-		done <- d.execStream("helper", []string{"tar", "-cf", "-", "-C", "/scratch/data", "."}, io.Discard)
+		done <- d.execStream("helper", []string{"tar", "-cf", "-", "-C", "/scratch/data", "."}, stdout)
 	}()
 	select {
-	case <-attached:
+	case <-stdout.received:
 	case <-time.After(2 * time.Second):
-		t.Fatal("attach did not start")
+		stopServer()
+		t.Fatal("stdout did not reach the download")
 	}
 	cancel()
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, context.Canceled)
 	case <-time.After(2 * time.Second):
-		t.Fatal("copy did not join on owner cancellation")
+		t.Error("owner cancellation did not close the active attach and join the copy")
+		stopServer()
+		<-done
 	}
 	select {
 	case <-closed:
 	case <-time.After(2 * time.Second):
-		t.Fatal("attach connection did not close")
+		t.Error("attach connection was not closed")
 	}
 }
