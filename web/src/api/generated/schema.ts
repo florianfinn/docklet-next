@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 645865a1ad34ed404a6c4e9018379acf4b12d39c9a3d6b9a4ce4c9fa4bb35869
+// Revision: 30a35b71deca7b0212a65cc908da12ae91c9801b1e49fabd3e7fdfd93ad50e37
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -3798,6 +3798,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/volumes/_collection/binds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list-volume-binds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/binds/size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["measure-volume-bind"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get volume usage counts
+         * @description Get counts of volumes in use, unused, and total
+         */
+        get: operations["get-volume-usage-counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan unused volume removal
+         * @description Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.
+         */
+        get: operations["plan-volume-prune"];
+        put?: never;
+        /**
+         * Prune unused volumes
+         * @description Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.
+         */
+        post: operations["prune-volumes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get volume sizes
+         * @description Get disk usage sizes for all volumes (slow operation)
+         */
+        get: operations["get-volume-sizes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/volumes/backups/overview": {
         parameters: {
             query?: never;
@@ -3971,102 +4067,6 @@ export interface paths {
         };
         /** Check if backup contains path */
         get: operations["backup-has-path"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/binds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list-volume-binds"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/binds/size": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["measure-volume-bind"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/counts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get volume usage counts
-         * @description Get counts of volumes in use, unused, and total
-         */
-        get: operations["get-volume-usage-counts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/prune": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Plan unused volume removal
-         * @description Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.
-         */
-        get: operations["plan-volume-prune"];
-        put?: never;
-        /**
-         * Prune unused volumes
-         * @description Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.
-         */
-        post: operations["prune-volumes"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/sizes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get volume sizes
-         * @description Get disk usage sizes for all volumes (slow operation)
-         */
-        get: operations["get-volume-sizes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5901,7 +5901,7 @@ export interface components {
         BackupProblem: {
             activityId?: string;
             /** @enum {string} */
-            code: "volume.exists" | "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable" | "volume.bind.invalid-key" | "volume.bind.path-denied" | "volume.bind.not-mounted" | "volume.bind.source-missing" | "volume.bind.unsupported-type" | "volume.bind.unsupported" | "volume.bind.file-operation-unsupported" | "volume.bind.recovery-failed" | "volume.bind.snapshot-kind-mismatch" | "volume.bind.size-timeout" | "volume.helper-unavailable" | "volume.operation-failed" | "volume.workspace-busy" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "backup.copy.insufficient-space" | "runtime.interrupted" | "backup.target.probe-host-mismatch" | "backup.target.location-conflict";
+            code: "volume.exists" | "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable" | "volume.bind.invalid-key" | "volume.bind.path-denied" | "volume.bind.not-mounted" | "volume.bind.source-missing" | "volume.bind.unsupported-type" | "volume.bind.unsupported" | "volume.bind.file-operation-unsupported" | "volume.bind.recovery-failed" | "volume.bind.snapshot-kind-mismatch" | "volume.bind.size-timeout" | "volume.helper-unavailable" | "volume.operation-failed" | "volume.workspace-busy" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "backup.copy.insufficient-space" | "runtime.interrupted" | "backup.target.probe-host-mismatch" | "backup.target.location-conflict" | "backup.target.identity-unavailable";
             detail: string;
             hosts?: string[] | null;
             /** @enum {string} */
@@ -29727,6 +29727,702 @@ export interface operations {
             };
         };
     };
+    "list-volume-binds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListVolumeBind"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "measure-volume-bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeasureBindInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumeBindMeasurement"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-volume-usage-counts": {
+        parameters: {
+            query?: {
+                /** @description Include internal volumes */
+                includeInternal?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumeUsageCountsData"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "plan-volume-prune": {
+        parameters: {
+            query?: {
+                /** @description Include named volumes as well as anonymous volumes */
+                all?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "prune-volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolumePruneRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-volume-sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListVolumeSizeInfo"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-volume-backup-overview": {
         parameters: {
             query?: never;
@@ -31020,702 +31716,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseBackupHasPathResponse"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "list-volume-binds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseListVolumeBind"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "measure-volume-bind": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MeasureBindInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumeBindMeasurement"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-volume-usage-counts": {
-        parameters: {
-            query?: {
-                /** @description Include internal volumes */
-                includeInternal?: boolean;
-            };
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumeUsageCountsData"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "plan-volume-prune": {
-        parameters: {
-            query?: {
-                /** @description Include named volumes as well as anonymous volumes */
-                all?: boolean;
-            };
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "prune-volumes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VolumePruneRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-volume-sizes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseListVolumeSizeInfo"];
                 };
             };
             /** @description Volume backup operation refused */

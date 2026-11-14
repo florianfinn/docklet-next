@@ -31,7 +31,7 @@ func TestPruneEventMetadataReflectsRequestedSelection(t *testing.T) {
 				body, err := json.Marshal(volumetypes.PruneRequest{All: all, Candidates: []volumetypes.PruneCandidate{{Name: "selected", CreatedAt: pruneCreated}}})
 				require.NoError(t, err)
 				call := pruneTransport(t, transport, pruneRouter(t, svc))
-				status, response := call("POST", "/api/environments/0/volumes/prune", "", body)
+				status, response := call("POST", "/api/environments/0/volumes/_collection/prune", "", body)
 				require.Equal(t, 200, status, string(response))
 				var recorded event.Event
 				require.NoError(t, db.Where("type = ?", event.EventTypeVolumePrune).First(&recorded).Error)

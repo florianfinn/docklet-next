@@ -62,7 +62,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
   }
   /** Bind rows come from container mounts; the agent's bind list adds kind, path-rule verdict and sizes. */
   async function bindList(hostId: string, signal?: AbortSignal): Promise<Map<string, BindInfo> | undefined> {
-    const rows = await read("list-volume-binds", hostId, "binds", undefined, signal).catch((error) => {
+    const rows = await read("list-volume-binds", hostId, "_collection/binds", undefined, signal).catch((error) => {
       if (error instanceof CancelledError) throw error;
       return undefined;
     });
@@ -127,7 +127,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
       const [row, ctx, sizes] = await Promise.all([
         read("get-volume", hostId, encodeURIComponent(name), (state) => { inventory = state; }, signal),
         context(hostId, signal),
-        read("get-volume-sizes", hostId, "sizes", undefined, signal).catch(() => null),
+        read("get-volume-sizes", hostId, "_collection/sizes", undefined, signal).catch(() => null),
       ]);
       check();
       signal?.throwIfAborted();

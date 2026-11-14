@@ -76,7 +76,7 @@ export function createVolumeCommands(options: VolumeTransportOptions): Pick<Dock
       // The scan reads the source like the file browser and needs the same right.
       await require("listFiles", { kind: "volume", id });
       try {
-        const row = await request<components["schemas"]["VolumeBindMeasurement"]>(host, "/binds/size", "POST", { key });
+        const row = await request<components["schemas"]["VolumeBindMeasurement"]>(host, "/_collection/binds/size", "POST", { key });
         return { sizeBytes: row.measuredSize, measuredAt: row.measuredAt, partial: row.measuredPartial };
       } finally { options.changed(); }
     },

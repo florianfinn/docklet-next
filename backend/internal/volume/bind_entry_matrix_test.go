@@ -40,7 +40,7 @@ func TestBindEntryMatrixBeforeDocker(t *testing.T) {
 			for _, row := range []struct{ path, body string }{
 				{"/volumes", fmt.Sprintf(`{"name":%q}`, key)},
 				{"/volumes/app/rename", fmt.Sprintf(`{"name":%q}`, key)},
-				{"/volumes/prune", fmt.Sprintf(`{"candidates":[{"name":%q,"createdAt":"2026-11-01T00:00:00Z"}]}`, key)},
+				{"/volumes/_collection/prune", fmt.Sprintf(`{"candidates":[{"name":%q,"createdAt":"2026-11-01T00:00:00Z"}]}`, key)},
 				{"/volumes/app/backups/snapshot/restore", fmt.Sprintf(`{"mode":"new","newVolumeName":%q}`, key)},
 				{"/volumes/app/backups/upload", fmt.Sprintf(`{"uploadId":"upload","mode":"new","newVolumeName":%q}`, key)},
 			} {

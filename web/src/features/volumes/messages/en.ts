@@ -343,6 +343,7 @@ export const enVolumes = {
     "runtime_interrupted": "The operation was interrupted.",
     "backup_target_probe-host-mismatch": "Test local and mount targets on their owning host.",
     "backup_target_location-conflict": "The host retains another location for this target.",
+    "backup_target_identity-unavailable": "This host has not received its hub identity yet. Try again in a moment.",
 
     volume_backup_target_key_viewed: "Backup recovery key viewed.",
     volume_exists: "A volume with this name already exists.",

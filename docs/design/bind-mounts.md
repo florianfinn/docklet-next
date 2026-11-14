@@ -153,7 +153,7 @@ ACFS protocol stay unchanged.
 
 ## 3. Bind list
 
-`GET /environments/{id}/volumes/binds` (`list-volume-binds`, administrator, Edge command
+`GET /environments/{id}/volumes/_collection/binds` (`list-volume-binds`, administrator, Edge command
 `volume.binds.list`) returns one entry per distinct bind source of workload containers
 on the host:
 
@@ -172,7 +172,7 @@ on the host:
 
 ### 3.1 Size scan on demand
 
-`POST /environments/{id}/volumes/binds/size` (`measure-volume-bind`, administrator, Edge
+`POST /environments/{id}/volumes/_collection/binds/size` (`measure-volume-bind`, administrator, Edge
 command `volume.binds.size`) with `{ key }` measures one bind now.
 
 - It is a source-accessing admission: R1–R4 apply. A tools helper mounts the source

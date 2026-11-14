@@ -31,8 +31,8 @@ const laterOperations = new Map([
   ["POST /service-widgets/overseerr/requests/{requestId}/approve", "approve-service-widget-request"],
   ["POST /service-widgets/overseerr/requests/{requestId}/decline", "decline-service-widget-request"],
   ["POST /backup-targets/test", "test-backup-target-draft"],
-  ["GET /environments/{id}/volumes/binds", "list-volume-binds"],
-  ["POST /environments/{id}/volumes/binds/size", "measure-volume-bind"],
+  ["GET /environments/{id}/volumes/_collection/binds", "list-volume-binds"],
+  ["POST /environments/{id}/volumes/_collection/binds/size", "measure-volume-bind"],
   ["POST /users/{userId}/disable", "disable-user"],
   ["POST /users/{userId}/enable", "enable-user"],
   ["POST /users/{userId}/reset-password", "reset-user-password"],
@@ -78,7 +78,7 @@ const laterOperations = new Map([
   ["DELETE /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}", "delete-restore-point"],
   ["GET /environments/{id}/updater/restore-points", "list-host-restore-points"],
   ["DELETE /environments/{id}/updater/restore-points/{pointId}", "delete-host-restore-point"],
-  ["GET /environments/{id}/volumes/prune", "plan-volume-prune"],
+  ["GET /environments/{id}/volumes/_collection/prune", "plan-volume-prune"],
   ["GET /hub/discovery", "discoverHub"],
 	["GET /auth/mode", "get-sign-in-mode"],
   ["GET /capabilities", "get-capabilities"],
@@ -94,11 +94,17 @@ const laterOperations = new Map([
   ["POST /environments/0/runtime-target", "resolve-runtime-target"],
   ["POST /environments/{id}/runtime-runs/{runId}/cancel", "cancel-hub-runtime-run"],
   ["POST /environments/{id}/runtime-runs/{runId}/release", "release-runtime-run"],
+  ["GET /environments/{id}/volumes/_collection/counts", "get-volume-usage-counts"],
+  ["GET /environments/{id}/volumes/_collection/sizes", "get-volume-sizes"],
+  ["POST /environments/{id}/volumes/_collection/prune", "prune-volumes"],
 ]);
 const replacedRoutes = new Map([
   ["GET /environments/{id}/notifications/settings/{provider}", "GET /environments/{id}/notifications/settings/{targetId}"],
   ["DELETE /environments/{id}/notifications/settings/{provider}", "DELETE /environments/{id}/notifications/settings/{targetId}"],
   ["POST /environments/{id}/notifications/test/{provider}", "POST /environments/{id}/notifications/test/{targetId}"],
+  ["GET /environments/{id}/volumes/counts", "GET /environments/{id}/volumes/_collection/counts"],
+  ["GET /environments/{id}/volumes/sizes", "GET /environments/{id}/volumes/_collection/sizes"],
+  ["POST /environments/{id}/volumes/prune", "POST /environments/{id}/volumes/_collection/prune"],
 ]);
 const retiredSystemRecovery = new Map([
   ["GET /backups/volumes/config", "get-system-volume-backup-config"],

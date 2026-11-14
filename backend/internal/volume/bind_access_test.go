@@ -26,7 +26,7 @@ func TestBindRoutesAdminOnlyBeforeData(t *testing.T) {
 	})
 	api.UseMiddleware(middleware.AccessMiddleware(api))
 	registerBindRoutes(api, &VolumeService{})
-	for _, route := range []struct{ method, path, body string }{{"GET", "/volumes/binds", ""}, {"POST", "/volumes/binds/size", `{"key":"bind:2f7372762f617070"}`}} {
+	for _, route := range []struct{ method, path, body string }{{"GET", "/volumes/_collection/binds", ""}, {"POST", "/volumes/_collection/binds/size", `{"key":"bind:2f7372762f617070"}`}} {
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(route.method, "/api/environments/0"+route.path, strings.NewReader(route.body))
 		request.Header.Set("Content-Type", "application/json")

@@ -28,14 +28,14 @@ type measureBindInput struct {
 }
 
 func registerBindRoutes(api huma.API, s *VolumeService) {
-	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "list-volume-binds", Method: http.MethodGet, Path: "/environments/{id}/volumes/binds", Tags: []string{"Volumes"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermVolumesRead, func(ctx context.Context, i *listBindsInput) (*handlerutil.Out[[]volume.Bind], error) {
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "list-volume-binds", Method: http.MethodGet, Path: "/environments/{id}/volumes/_collection/binds", Tags: []string{"Volumes"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermVolumesRead, func(ctx context.Context, i *listBindsInput) (*handlerutil.Out[[]volume.Bind], error) {
 		rows, err := s.ListBinds(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return &handlerutil.Out[[]volume.Bind]{Body: base.ApiResponse[[]volume.Bind]{Success: true, Data: rows}}, nil
 	})
-	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "measure-volume-bind", Method: http.MethodPost, Path: "/environments/{id}/volumes/binds/size", Tags: []string{"Volumes"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermVolumesRead, func(ctx context.Context, i *measureBindInput) (*handlerutil.Out[volume.BindMeasurement], error) {
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "measure-volume-bind", Method: http.MethodPost, Path: "/environments/{id}/volumes/_collection/binds/size", Tags: []string{"Volumes"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermVolumesRead, func(ctx context.Context, i *measureBindInput) (*handlerutil.Out[volume.BindMeasurement], error) {
 		result, err := s.MeasureBind(ctx, i.Body.Key)
 		if err != nil {
 			return nil, err

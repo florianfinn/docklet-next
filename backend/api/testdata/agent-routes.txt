@@ -77,6 +77,10 @@ GET /environments/{id}/updater/system-image-hints
 GET /environments/{id}/updater/{kind}/{targetId}/restore-points
 GET /environments/{id}/uploads/{kind}/{uploadId}
 GET /environments/{id}/volumes
+GET /environments/{id}/volumes/_collection/binds
+GET /environments/{id}/volumes/_collection/counts
+GET /environments/{id}/volumes/_collection/prune
+GET /environments/{id}/volumes/_collection/sizes
 GET /environments/{id}/volumes/backups/overview
 GET /environments/{id}/volumes/backups/repository
 GET /environments/{id}/volumes/backups/targets/local/recovery-key
@@ -85,10 +89,6 @@ GET /environments/{id}/volumes/backups/{backupId}/download
 GET /environments/{id}/volumes/backups/{backupId}/files
 GET /environments/{id}/volumes/backups/{backupId}/files/browse
 GET /environments/{id}/volumes/backups/{backupId}/has-path
-GET /environments/{id}/volumes/binds
-GET /environments/{id}/volumes/counts
-GET /environments/{id}/volumes/prune
-GET /environments/{id}/volumes/sizes
 GET /environments/{id}/volumes/{volumeName}
 GET /environments/{id}/volumes/{volumeName}/backup-policy
 GET /environments/{id}/volumes/{volumeName}/backups
@@ -176,11 +176,11 @@ POST /environments/{id}/updater/run
 POST /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore
 POST /environments/{id}/uploads/{kind}
 POST /environments/{id}/volumes
+POST /environments/{id}/volumes/_collection/binds/size
+POST /environments/{id}/volumes/_collection/prune
 POST /environments/{id}/volumes/backups/repository/check
 POST /environments/{id}/volumes/backups/targets/probe
 POST /environments/{id}/volumes/backups/targets/{targetId}/test
-POST /environments/{id}/volumes/binds/size
-POST /environments/{id}/volumes/prune
 POST /environments/{id}/volumes/{volumeName}/backups
 POST /environments/{id}/volumes/{volumeName}/backups/upload
 POST /environments/{id}/volumes/{volumeName}/backups/{backupId}/restore

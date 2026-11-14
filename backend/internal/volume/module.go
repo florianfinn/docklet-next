@@ -106,7 +106,7 @@ func RegisterVolumes(
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "get-volume-usage-counts",
 		Method:      http.MethodGet,
-		Path:        "/environments/{id}/volumes/counts",
+		Path:        "/environments/{id}/volumes/_collection/counts",
 		Summary:     "Get volume usage counts",
 		Description: "Get counts of volumes in use, unused, and total",
 		Tags:        []string{"Volumes"},
@@ -173,7 +173,7 @@ func RegisterVolumes(
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "plan-volume-prune", Method: http.MethodGet,
-		Path: "/environments/{id}/volumes/prune", Summary: "Plan unused volume removal",
+		Path: "/environments/{id}/volumes/_collection/prune", Summary: "Plan unused volume removal",
 		Description: "Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.",
 		Tags:        []string{"Volumes"}, Security: handlerutil.DefaultOperationSecurity(),
 	}, authz.PermVolumesPrune, h.PlanVolumePrune)
@@ -181,7 +181,7 @@ func RegisterVolumes(
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "prune-volumes",
 		Method:      http.MethodPost,
-		Path:        "/environments/{id}/volumes/prune",
+		Path:        "/environments/{id}/volumes/_collection/prune",
 		Summary:     "Prune unused volumes",
 		Description: "Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.",
 		Tags:        []string{"Volumes"},
@@ -201,7 +201,7 @@ func RegisterVolumes(
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "get-volume-sizes",
 		Method:      http.MethodGet,
-		Path:        "/environments/{id}/volumes/sizes",
+		Path:        "/environments/{id}/volumes/_collection/sizes",
 		Summary:     "Get volume sizes",
 		Description: "Get disk usage sizes for all volumes (slow operation)",
 		Tags:        []string{"Volumes"},

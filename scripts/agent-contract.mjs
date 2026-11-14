@@ -207,6 +207,11 @@ export function agentFixture(spec, fixture) {
     defaultRetention: schemas.SettingsUpdate.properties.backupDefaultRetentionCount,
     sizeDeadlineSeconds: 120,
   };
+  manifest.volumeCollection = {
+    prefix: "/volumes/_collection/ (never a Docker volume name)",
+    routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["get-volume-usage-counts","get-volume-sizes","plan-volume-prune","prune-volumes"].includes(op?.operationId)).map(([method,op])=>`${method.toUpperCase()} ${path} ${op.operationId} ${createHash("sha256").update(JSON.stringify(op)).digest("hex")}`)),
+    edgeRoutes: [...commands.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)].filter((m)=>["volume.counts","volume.sizes","volume.prune.plan","volume.prune"].includes(m[3])).map(([,method,path,command])=>`${method.toUpperCase()} ${path} ${command}`),
+  };
   manifest.autoHeal = {
     routes: Object.entries(document.paths).flatMap(([path,item])=>Object.entries(item).filter(([,op])=>["get-auto-heal-settings","update-auto-heal-settings"].includes(op?.operationId)).map(([method,op])=>({method:method.toUpperCase(),path,operationId:op.operationId,sha256:createHash("sha256").update(JSON.stringify(op)).digest("hex")}))),
     settings: schemas.AutohealSettings, update: schemas.AutohealUpdate,

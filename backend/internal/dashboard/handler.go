@@ -337,7 +337,7 @@ func (h *DashboardHandler) fetchLegacyDashboardSnapshotInternal(ctx context.Cont
 
 	attempted++
 	var volumeCounts base.ApiResponse[volume.UsageCounts]
-	if err := h.environmentService.ProxyJSONRequestForEnvironment(ctx, localEnvironment, http.MethodGet, "/api/environments/0/volumes/counts", nil, &volumeCounts); err != nil {
+	if err := h.environmentService.ProxyJSONRequestForEnvironment(ctx, localEnvironment, http.MethodGet, "/api/environments/0/volumes/_collection/counts", nil, &volumeCounts); err != nil {
 		errs = append(errs, err)
 	} else {
 		snapshot.VolumeUsageCounts = &volumeCounts.Data

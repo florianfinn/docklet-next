@@ -33,7 +33,7 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &fixture))
 	api := SetupAPIForSpec()
 	for _, route := range fixture.Storage.Routes {
-		item := api.OpenAPI().Paths[route.Path]
+		item := api.OpenAPI().Paths[currentVolumeCollectionPath(route.Path)]
 		require.NotNil(t, item, route.OperationID)
 		operation := storageOperations(item)[route.Method]
 		require.NotNil(t, operation, route.OperationID)
@@ -51,7 +51,7 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 	require.Equal(t, fixture.Storage.HelperErrorCode, problem.Code)
 	require.Equal(t, fixture.Storage.HelperUnavailableCode, volumehelper.UnavailableHelper(nil).Code)
 	require.Equal(t, "toolsImage", fixture.Storage.HelperImageSetting)
-	for _, op := range storageOperations(api.OpenAPI().Paths["/environments/{id}/volumes/prune"]) {
+	for _, op := range storageOperations(api.OpenAPI().Paths["/environments/{id}/volumes/_collection/prune"]) {
 		if op != nil {
 			require.Equal(t, authz.PermVolumesPrune, op.Metadata[authz.MetaRequiredPermission])
 		}
@@ -69,4 +69,15 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 			require.Equal(t, reflect.TypeFor[volume.HelperUnavailableError](), api.OpenAPI().Components.Schemas.TypeFromRef(schemas[1].Ref))
 		}
 	}
+}
+
+// currentVolumeCollectionPath maps historical fixture paths to the M26 collection routes; a Docker volume
+// name never starts with "_", so "_collection" cannot shadow an inspect.
+func currentVolumeCollectionPath(path string) string {
+	for _, suffix := range []string{"binds", "binds/size", "counts", "sizes", "prune"} {
+		if path == "/environments/{id}/volumes/"+suffix {
+			return "/environments/{id}/volumes/_collection/" + suffix
+		}
+	}
+	return path
 }

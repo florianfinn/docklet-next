@@ -2,15 +2,15 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations.
 
 package access
 
 // Routes describes the shared exported surface for pre-forwarding decisions.
 // Huma uses the matched operation and its actual parameters.
 var Routes = []Route{
-	{"GET", "/environments/{id}/volumes/binds", "list-volume-binds"},
-	{"POST", "/environments/{id}/volumes/binds/size", "measure-volume-bind"},
+	{"GET", "/environments/{id}/volumes/_collection/binds", "list-volume-binds"},
+	{"POST", "/environments/{id}/volumes/_collection/binds/size", "measure-volume-bind"},
 	{"POST", "/backup-targets/test", "test-backup-target-draft"},
 	{"POST", "/environments/{id}/volumes/backups/targets/probe", "probe-volume-backup-target"},
 	{"DELETE", "/api-keys/{id}", "delete-api-key"},
@@ -144,9 +144,9 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/volumes/backups/{backupId}/files", "list-backup-files"},
 	{"GET", "/environments/{id}/volumes/backups/{backupId}/files/browse", "browse-volume-backup-files"},
 	{"GET", "/environments/{id}/volumes/backups/{backupId}/has-path", "backup-has-path"},
-	{"GET", "/environments/{id}/volumes/counts", "get-volume-usage-counts"},
-	{"GET", "/environments/{id}/volumes/prune", "plan-volume-prune"},
-	{"GET", "/environments/{id}/volumes/sizes", "get-volume-sizes"},
+	{"GET", "/environments/{id}/volumes/_collection/counts", "get-volume-usage-counts"},
+	{"GET", "/environments/{id}/volumes/_collection/prune", "plan-volume-prune"},
+	{"GET", "/environments/{id}/volumes/_collection/sizes", "get-volume-sizes"},
 	{"GET", "/environments/{id}/volumes/{volumeName}", "get-volume"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/backup-policy", "get-volume-backup-policy"},
 	{"GET", "/environments/{id}/volumes/{volumeName}/backups", "list-volume-backups"},
@@ -278,7 +278,7 @@ var Routes = []Route{
 	{"POST", "/environments/{id}/volumes", "create-volume"},
 	{"POST", "/environments/{id}/volumes/backups/repository/check", "check-volume-backup-repository"},
 	{"POST", "/environments/{id}/volumes/backups/targets/{targetId}/test", "test-host-backup-target"},
-	{"POST", "/environments/{id}/volumes/prune", "prune-volumes"},
+	{"POST", "/environments/{id}/volumes/_collection/prune", "prune-volumes"},
 	{"POST", "/environments/{id}/volumes/{volumeName}/backups", "create-volume-backup"},
 	{"POST", "/environments/{id}/volumes/{volumeName}/backups/upload", "upload-volume-backup"},
 	{"POST", "/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore", "restore-volume-backup"},
@@ -320,4 +320,20 @@ var Routes = []Route{
 	{"PUT", "/users/{userId}/administrator", "set-user-admin"},
 	{"PUT", "/users/{userId}/app-assignments", "set-user-app-assignments"},
 	{"PUT", "/users/{userId}/role-assignments", "set-user-role-assignments"},
+	{"GET", "/auth/me/ui-preferences", "get-my-ui-preferences"},
+	{"PUT", "/auth/me/ui-preferences/{section}", "put-my-ui-preferences"},
+	{"GET", "/environments/{id}/containers/{containerId}/history", "get-container-history"},
+	{"GET", "/environments/{id}/projects/{projectId}/history", "get-project-history"},
+	{"GET", "/environments/{id}/history/host", "get-host-history"},
+	{"GET", "/environments/{id}/history/sample", "get-history-sample"},
+	{"GET", "/history/capacity", "get-history-capacity"},
+	{"GET", "/environments/{id}/runtime-conditions", "get-runtime-conditions"},
+	{"GET", "/service-widgets", "list-service-widgets"},
+	{"GET", "/service-widgets/{kind}", "get-service-widget"},
+	{"GET", "/service-widgets/{kind}/config", "get-service-widget-config"},
+	{"PUT", "/service-widgets/{kind}/config", "put-service-widget-config"},
+	{"POST", "/service-widgets/{kind}/test", "test-service-widget"},
+	{"POST", "/service-widgets/overseerr/requests/{requestId}/approve", "approve-service-widget-request"},
+	{"POST", "/service-widgets/overseerr/requests/{requestId}/decline", "decline-service-widget-request"},
+	{"POST", "/environments/{id}/containers/{containerId}/previous-image/restore", "restore-container-image"},
 }
