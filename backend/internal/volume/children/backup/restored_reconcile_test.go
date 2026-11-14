@@ -246,3 +246,15 @@ func TestRestoredSettlementResetsCompletedStartupBarrier(t *testing.T) {
 	require.ErrorContains(t, err, "volume.backup.writer-unconfirmed", "restored discovery must reset the completed initial settlement barrier")
 	require.False(t, s.WriterFenced("unrelated"))
 }
+
+// A routine retry settles only the volumes it recovered; a live run of another volume stays running.
+func TestRoutineRetryLeavesLiveRunOfUnrecoveredVolume(t *testing.T) {
+	restarted := []string{}
+	var effects atomic.Int32
+	s := restoredService(t, &restarted, &effects)
+	require.NoError(t, s.ReconcileStartup(t.Context(), false))
+	service := attachSettlementEngine(t, s)
+	seedSettlement(t, service, "live", "data")
+	require.NoError(t, s.ReconcileStartup(t.Context(), false))
+	require.Equal(t, scheduler.Running, settlementState(t, service, "live").Status, "routine retry must not settle a live run")
+}

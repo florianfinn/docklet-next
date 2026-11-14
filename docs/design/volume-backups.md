@@ -96,7 +96,8 @@ rows describe historical Docker state: they never authorize container restarts o
 new-volume cleanup, and all restored pending responsibilities are cleared.
 Restored reconciliation keeps admissions closed until the whole settlement,
 including the engine step, succeeds. Failed passes retain restored classification
-on admission and timer retries.
+on admission and timer retries. A routine retry settles interrupted runs only for
+the volumes it recovered; queued or running backups of other volumes keep running.
 
 Restore-as-new persists its intent before Docker creation and verifies the unique
 restore label afterward. Cleanup removes only a volume still carrying that run's
