@@ -59,8 +59,9 @@ No product defect was found in the sandbox.
 
 The sandbox had the hub-local host H, one Direct agent D and one Edge agent E.
 - UI assertions ran in Chromium, in English and German where a cell names a locale.
-- Latency was measured at the hub origin unless a cell names the loopback proxy,
-  which has a 60 s read timeout with buffering off.
+- Latency was measured at the hub origin unless a cell names the loopback proxy.
+  For V3 that proxy has a 60 s read timeout with buffering off. V4's delta runs
+  used a separate rate-limited loopback proxy with a 120 s idle timeout.
 - Unit and transport cells were checked against the candidate head's CI run and
   the red-proof ledger.
 
@@ -89,6 +90,12 @@ tracked in #486.
 | `01832df0` (delta 1) | Failed, 27/28 | A2 passed under the corrected matrix; V4 stalled behind the sandbox relay |
 | `01832df0` (delta 2) | **Accepted**, 28/28 | Relay fixed; the hub ended the incomplete download 1.8 s after `tar` exited with 137 |
 | `fb081f5b` (exact main) | **Accepted**, 28/28 | Tree equals `01832df0`; deploy, REG on H/D/E in English and German (36/36 operations), a D volume named `counts` and a D snapshot download; logs clear |
+
+Unchanged passing cells carry their evidence forward, so each denominator counts
+all 28 cells, not 28 newly executed ones. Delta 1 ran V4 part (i), re-evaluated
+A2 from its unchanged API evidence and verified the added transport test. Delta 2
+repeated V4 part (i). The exact-main run rebuilt and deployed main and repeated
+REG and the listed Direct checks.
 
 Measured in the candidate run:
 
