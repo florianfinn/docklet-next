@@ -71,7 +71,7 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
     state: state(row.state), health: health(row.status),
     ports: (row.ports ?? []).filter((port, index, ports) => ports.findIndex((other) => other.publicPort === port.publicPort && other.privatePort === port.privatePort && other.type === port.type) === index).map((port) => ({ container: String(port.privatePort), ...(port.publicPort ? { host: String(port.publicPort) } : {}), ...(port.type === "tcp" || port.type === "udp" ? { protocol: port.type } : {}) })),
     networks: Object.keys(row.networkSettings?.networks ?? {}), mounts: (row.mounts ?? []).map(mountSpec), mountPoints: (row.mounts ?? []).map((m) => ({ spec: mountSpec(m), target: m.destination })),
-    bindSources: (row.mounts ?? []).filter((m) => m.type === "bind").map((m) => { if (!m.source) throw new Error("inventory.invalid-mount"); return m.source; }),
+    bindSources: (row.mounts ?? []).flatMap((m) => m.type === "bind" && m.source ? [m.source] : []),
     env: {}, restartPolicy: row.hostConfig?.restartPolicy ?? "", memLimitMb: (row.hostConfig?.memory ?? 0) / 1024 / 1024,
     update: mapUpdateInfo(row.updateInfo, image, row.image, inventory.stale), dockerLabels: labels, inventory,
   };

@@ -15,6 +15,7 @@ it("matches the demo Volumes page row count per host and exposes raw bind source
   const volumes = await adapter.listVolumes(), batches = await adapter.listNavInventory();
   for (const host of await adapter.listHosts()) expect(batches.find((h) => h.hostId === host.id)?.volumeTotal).toBe(volumes.filter((v) => v.hostId === host.id).length);
   expect((await adapter.listContainers()).every((c) => "bindSources" in c)).toBe(true);
+  expect((await adapter.listContainers()).every((c) => c.imageId === undefined)).toBe(true);
 });
 
 it("reads bind sources from source configuration including long-form colon-containing paths", () => {

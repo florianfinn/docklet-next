@@ -205,7 +205,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         }));
       }),
     listNavInventory: () => simulateRead("containers", () => empty() ? [] : clone(demoNavInventory(db))),
-    listContainers: () => simulateRead("containers", () => (empty() ? [] : clone(demoInventoryContainers(db).filter((c) => c.dockerLabels?.["io.docklet.system"] !== "agent")))),
+    listContainers: () => simulateRead("containers", () => (empty() ? [] : clone(demoInventoryContainers(db).filter((c) => c.dockerLabels?.["io.docklet.system"] !== "agent").map(({ imageId: _image, ...c }) => c)))),
     ...demoVulnerabilityCandidates(db, runner),
     ...demoVulnerabilityAdvisories(db, () => db.changed("security")),
     getSecurity: () => simulateRead("security", () => (empty() ? { ...clone(db.security), images: [], findings: [], history: [] } : clone(db.security))),

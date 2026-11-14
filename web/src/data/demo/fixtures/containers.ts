@@ -2,7 +2,7 @@
 // Revision: 18638c941fcdf97383db376c1611362873a9d1d8358b727e9b43d58c413659d3
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. M26 #462: bounded shell counts and raw inventory ownership.
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. M26 #462: bounded shell counts and raw inventory ownership.
 
 import type { ContainerInfo } from "@/domain/model";
 
