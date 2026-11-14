@@ -99,6 +99,19 @@ describe("dot field loop lifecycle", () => {
     expect(planned()).toBe(0);
   });
 
+  it("lays the field out again when the dot pattern changes", async () => {
+    // Fresh module graph per test: use the store instance the renderer imports.
+    const [{ attachDotField }, { visualStyleStore: store }] = await Promise.all([import("./dot-field"), import("@/shared/preferences/visual-style-store")]);
+    store.set((s) => ({ ...s, dotPattern: "lattice" }));
+    const el = canvas();
+    attachDotField(el);
+    const lattice = el.dataset.points;
+    store.set((s) => ({ ...s, dotPattern: "deepwave" }));
+    const deep = el.dataset.points;
+    store.set((s) => ({ ...s, dotPattern: "lattice" }));
+    expect([lattice, deep !== lattice, Number(deep) > 0, el.dataset.points]).toEqual([String(Math.floor(200 / 18) * Math.floor(100 / 18)), true, true, lattice]);
+  });
+
   it("cancels the loop when the last field unmounts", async () => {
     const [off] = await mount();
     off?.();

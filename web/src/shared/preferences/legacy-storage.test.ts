@@ -26,17 +26,21 @@ describe("stored lab preferences", () => {
       ["hidden", hiddenStore], ["dashboard", layoutStore], ["fleet-view", fleetViewStore],
     ] as const) {
       const stored = records[`docklet-react-opus.${suffix}`].data;
-      // Older records acquire the new personal toggle and drop the former per-browser widget
-      // connections (now on the hub) without rewriting the fixture.
+      // Older records acquire the new personal toggle and the default deepwave pattern, and drop
+      // the former per-browser widget connections (now on the hub) without rewriting the fixture.
       const { services: _services, ...dashboard } = stored as Record<string, unknown>;
-      expect(store.get()).toEqual(suffix === "preferences" ? { ...stored, showUnraidRing: false } : suffix === "dashboard" ? dashboard : stored);
+      const expected = suffix === "preferences" ? { ...stored, showUnraidRing: false } : suffix === "visual-style" ? { ...stored, dotPattern: "deepwave" } : suffix === "dashboard" ? dashboard : stored;
+      expect(store.get()).toEqual(expected);
     }
   });
 
-  it("restores and re-exports the pre-move favourite design code unchanged", async () => {
+  it("restores and re-exports the pre-move favourite design code, adding only the default dot pattern", async () => {
     const { favoriteStore, resetToFavorite, captureSnapshot, encodeDesignCode } = await import("./favorite-code");
+    const decode = (code: string) => JSON.parse(atob(code.slice(code.lastIndexOf(":") + 1).replace(/-/g, "+").replace(/_/g, "/"))) as { sections: { visual: Record<string, unknown> } };
+    const original = decode(records["docklet-react-opus.design-favorite"].data.code);
     expect(favoriteStore.get()).toEqual(records["docklet-react-opus.design-favorite"].data);
     expect(resetToFavorite()).toBe("favorite");
-    expect(encodeDesignCode(captureSnapshot())).toBe(records["docklet-react-opus.design-favorite"].data.code);
+    const exported = decode(encodeDesignCode(captureSnapshot()));
+    expect(exported).toEqual({ ...original, sections: { ...original.sections, visual: { ...original.sections.visual, dotPattern: "deepwave" } } });
   });
 });

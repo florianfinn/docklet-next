@@ -40,6 +40,10 @@ describe("visual style store", () => {
     expect([visualStyleStore.get().dotDepth, root.dataset.dotDrift, root.style.getPropertyValue("--dot-drift")]).toEqual([1, undefined, ""]);
   });
 
+  it("ships the deepwave pattern, keeps a stored lattice and replaces unknown patterns with the default", () => {
+    expect([DEFAULT_VISUAL_STYLE.dotPattern, mergeVisualStyle({ dotPattern: "lattice" }).dotPattern, mergeVisualStyle({ dotPattern: "hub" }).dotPattern, mergeVisualStyle({}).dotPattern]).toEqual(["deepwave", "lattice", "deepwave", "deepwave"]);
+  });
+
   it("keeps the 3D wave on for an older store or code with dotDrift: 0", () => {
     const merged = mergeVisualStyle({ dotWave: true, dotDrift: 0, dotWaveStrength: 0.9 });
     expect([merged.dotWave, merged.dotDepth > 0, "dotDrift" in merged]).toEqual([true, true, false]);

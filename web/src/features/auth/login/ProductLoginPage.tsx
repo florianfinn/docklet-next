@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Connected local login and proxy rejection screen.
+// Deviations: Connected local login and proxy rejection screen; the sign-in form sits on the shared dot background.
 
 import { useState } from "react";
 import { Navigate } from "react-router";
@@ -14,6 +14,7 @@ import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { AdapterOutcomeError } from "@/data/capability";
 import { TextField } from "@/shared/components/form-field";
+import { DotField } from "@/shared/visual/DotField";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 
@@ -31,7 +32,7 @@ export default function ProductLoginPage() {
   if (mode.isError) return <main className="p-6"><p>{t("settingsError")}</p><Button onClick={() => void mode.refetch()}>{t("retry")}</Button></main>;
   if (currentUser.data?.isAdmin === false || mode.data === "none" || (currentUser.isSuccess && !!currentUser.data && mode.data === "local")) return <Navigate to="/dashboard" replace />;
   if (mode.data === "proxy") return <main className="mx-auto max-w-md p-6" role="alert">{currentUser.isError || (currentUser.isSuccess && !currentUser.data) ? t("proxyRejected") : t("loading")}</main>;
-  return <main className="grid min-h-svh place-items-center p-4"><Card className="w-full max-w-md p-6">
+  return <main className="dot-grid grid min-h-svh place-items-center p-4" data-slot="login-page"><DotField fixed /><Card className="w-full max-w-md p-6">
     <h1 className="text-xl font-semibold">{t("title", { hub: "Docklet" })}</h1>
     <form className="flex flex-col gap-4" onSubmit={(event) => {
       event.preventDefault();
