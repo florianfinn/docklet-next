@@ -2,9 +2,9 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original bilingual security header and responsive help regressions.
+// Deviations: Original bilingual security header and responsive help regressions. M26 #449: touch popup dismissal, focus and portal isolation.
 
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ import type { Finding, ScannedImage } from "@/domain/model";
 import type { FitView } from "@/shared/lib/fit-view";
 import { renderWithApp } from "@/test/render";
 import { FindingsTab, ImagesTab } from "./SecurityTabs";
+import { SecurityTable } from "./SecurityTable";
 
 const fit = vi.hoisted(() => ({ view: "table" as FitView }));
 vi.mock("@/shared/hooks/use-fit-view", () => ({ useFitView: () => ({ view: fit.view, ref: { current: null } }) }));
@@ -95,5 +96,34 @@ for (const locale of ["en-US", "de"] as const) {
         }
       });
     }
+  });
+}
+
+for (const view of ["condensed", "cards"] as const) {
+  it(`toggles tap help, dismisses it and isolates portaled clicks in ${view}`, async () => {
+    setAppLocale("en-US"); fit.view = view;
+    const onOpen = vi.fn(), user = userEvent.setup();
+    renderWithApp(<><button>Outside</button><SecurityTable label="Findings" fitKey="tap" columns={[{ id: "risk", label: "Risk" }]} condensed={[["risk"]]} rows={[{ id: "example", color: "red", cells: { risk: "9" }, onOpen }]} filters={[]} values={{}} setValues={vi.fn()} sort={{ key: "risk", dir: "desc" }} onSort={vi.fn()} summary={{ shown: 1, total: 1, noun: "finding", nounOf: "findings" }} empty="Empty" /></>);
+    const button = screen.getByRole("button", { name: "About Risk" });
+    const tap = () => user.pointer([{ keys: "[TouchA>]", target: button }, { keys: "[/TouchA]", target: button }]);
+    await tap();
+    expect(screen.queryByRole("dialog")?.textContent).toBe(catalogs["en-US"].security.headerHelp.risk);
+    expect(screen.queryByRole("tooltip") === null).toBe(true);
+    await user.click(screen.getByRole("dialog"));
+    expect(onOpen).toHaveBeenCalledTimes(0);
+    await tap();
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    expect(document.activeElement === button).toBe(true);
+    await tap();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    expect(document.activeElement === button).toBe(true);
+    await tap();
+    await user.pointer([{ keys: "[MouseLeft>]", target: screen.getByRole("button", { name: "Outside" }) }, { keys: "[/MouseLeft]" }]);
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    expect(onOpen).toHaveBeenCalledTimes(0);
+    expect(document.activeElement === button).toBe(true);
+    act(() => button.blur());
+    expectHelp(button, catalogs["en-US"].security.headerHelp.risk);
   });
 }
