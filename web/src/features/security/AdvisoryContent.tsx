@@ -2,7 +2,7 @@
 // Revision: 2c49b8db789d39b644e27a85a09e277707b4fe12
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original shared plain-text advisory content and exact occurrence actions. M21 #437: advisory detail; R1 NB-5 instant ordering. M21 #438: candidate checks and verified updates.
+// Deviations: Original shared plain-text advisory content and exact occurrence actions. M21 #437: advisory detail; R1 NB-5 instant ordering. M21 #438: candidate checks and verified updates. M26 #445: tuple-wide duplicate selection and ordinal React keys.
 
 import { ExternalLink } from "lucide-react";
 import { useId, useState } from "react";
@@ -92,10 +92,10 @@ export function AdvisoryContent({ data, error, hosts, selected, onRetry }: { dat
       {!h.detail || h.code ? <Alert><AlertDescription>{t("detail.hostUnknown")}</AlertDescription></Alert> : <CandidateChecks key={`${data.key}:${h.hostId}`} host={h.hostId} advisory={h.detail.occurrences[0]?.vulnerabilityId ?? ""}>
         {h.detail.usage.state === "unavailable" && <Alert><AlertDescription>{t("detail.usageUnavailable")}</AlertDescription></Alert>}
         {!h.detail.occurrences.length && <p>{t("detail.noOccurrences")}</p>}
-        {h.detail.occurrences.map((o) => {
+        {h.detail.occurrences.map((o, ordinal) => {
           const key = occurrenceSelectionKey(selectionFor(h.hostId, o));
           // Unknown usage must not imply an empty set of consumers.
-          return <Occurrence key={key} hostId={h.hostId} occurrence={o} selected={selected === key} usageAvailable={h.detail!.usage.state === "ok"} />;
+          return <Occurrence key={`${key}:${ordinal}`} hostId={h.hostId} occurrence={o} selected={selected === key} usageAvailable={h.detail!.usage.state === "ok"} />;
         })}
       </CandidateChecks>}
     </section>)}

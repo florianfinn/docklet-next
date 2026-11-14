@@ -2,7 +2,7 @@
 // Revision: 2c49b8db789d39b644e27a85a09e277707b4fe12
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original detail gestures, plain-text safety and selection lifetime regressions. M21 #437: advisory detail.
+// Deviations: Original detail gestures, plain-text safety and selection lifetime regressions. M21 #437: advisory detail. M26 #445: duplicate tuple links and row identity.
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -176,4 +176,32 @@ it.each(["advisory", "scope", "close", "logout"])("discards late detail A after 
   if (change !== "logout" && change !== "close") await waitFor(() => expect(screen.getByTestId("result").textContent).toBe(change === "advisory" ? "B" : "A"));
   await act(async () => { resolveA({ key: "OLD", hosts: [] }); await held; });
   expect(screen.getByTestId("result").textContent).not.toBe("OLD");
+});
+
+it("SEC-1 Findings tuple link selects every duplicate and preserves distinct row state", async () => {
+  setAppLocale("en-US");
+  const adapter = createDemoAdapter(), data = read(), detail = data.hosts[0]!.detail!;
+  const first = detail.occurrences[1]!, duplicate = structuredClone(first);
+  duplicate.fixedVersion = "3";
+  detail.occurrences = [first, duplicate];
+  adapter.listHosts = async () => [];
+  adapter.listContainers = async () => []; adapter.listStacks = async () => [];
+  adapter.getVulnerabilityAdvisory = vi.fn(async () => structuredClone(data));
+  adapter.getSecurity = async () => ({ enabled: true, schedule: { mode: "manual" }, history: [], images: [{ ref: "example.com/app:1", hostId: "example", usage: "running", counts: { critical: 0, high: 2, medium: 0, low: 0 }, scannedAt: "2026-11-09T12:00:00Z" }], findings: [first, duplicate].map((o) => ({ id: o.vulnerabilityId, pkg: o.pkgName, imageId: o.imageId, image: "example.com/app:1", installed: o.installedVersion, class: o.class, type: o.type, hostId: "example", severity: "high", cvss: 8, title: "Example" })) });
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { router } = renderRoutes([{ path: "/security", element: <SecurityPage /> }, { path: "/security/vulnerabilities/:key", element: <VulnerabilityPage /> }], ["/security?tab=findings"], adapter);
+  const table = await screen.findByRole("table", { name: "Vulnerabilities" });
+  await userEvent.click(table.querySelector<HTMLElement>("[data-security-row]")!);
+  const dialog = await screen.findByRole("dialog");
+  await waitFor(() => expect(dialog.querySelectorAll("[data-occurrence]").length).toBe(2));
+  expect(dialog.querySelectorAll("[data-selected]").length, "the Findings tuple highlights all duplicate occurrences").toBe(2);
+  const inputs = within(dialog).getAllByRole("textbox");
+  await userEvent.type(inputs[0]!, "first row reason");
+  expect((inputs[1] as HTMLInputElement).value).toBe("");
+  expect(errors.mock.calls.some((args) => args.some((value) => String(value).includes("same key"))), "ordinal React keys must not collide").toBe(false);
+  const selection = new URLSearchParams(router.state.location.search).get("occ");
+  expect(!!selection).toBe(true);
+  await act(async () => { await router.navigate(`/security/vulnerabilities/${key}?occ=${selection}`); });
+  await waitFor(() => expect(document.querySelectorAll("[data-selected]").length).toBe(2));
+  errors.mockRestore();
 });
