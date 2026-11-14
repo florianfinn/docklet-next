@@ -135,8 +135,33 @@ Read operations have a 60-second deadline and an 8 MiB JSON/output limit. Browse
 is non-recursive and refuses more than 5,000 entries. Edge retains its buffered
 five-minute transport: downloads require a known snapshot size no greater than
 512 MiB, and the packaged archive is checked again against that cap. Preparation
-has a three-minute Edge budget; cancellation retains cleanup ownership. Hub-local
-and Direct downloads stream after scratch preparation without the Edge byte cap.
+has a three-minute Edge budget; cancellation retains cleanup ownership.
+
+Hub-local and Direct downloads have no Edge byte cap and run in two phases on the owning
+engine:
+
+- **Admission** happens before any byte: backup row, snapshot identity, volume operation,
+  download activity, repository and password. Every refusal stays a typed `BackupProblem`.
+- **Stream:** the engine then answers `200` without `Content-Length` and writes the gzip
+  header at once. While the snapshot restores into scratch, an empty gzip sync block
+  follows every 10 seconds, so proxies with a first-byte or idle timeout see a live
+  response. The helper's uncompressed `tar` of the restored tree is then compressed into
+  the same gzip member, with the entry layout of earlier archives.
+- **Budgets:** the four-minute preparation budget covers admission and restore. The
+  transfer uses the request lifetime, bounded end to end by the Direct proxy's 30-minute
+  client limit.
+- **Failure after the `200`:** a restore, `tar` or copy failure aborts the response.
+  HTTP/1.1 clients get a truncated chunked body, HTTP/2 clients a reset stream. The
+  browser marks the download failed and the activity records the reason. The hub's
+  Direct forwarding aborts the same way when the agent's body ends with an error. The end
+  of an upstream body stays a normal end for every other forwarded response.
+- **Cleanup:** client cancellation and maintenance or owner cancellation stop restore or
+  transfer. The helper is confirmed removed before the volume admission is released.
+  Scratch volumes and helpers keep the labels startup recovery removes after an engine
+  restart.
+
+Edge downloads keep the bounded, fully prepared response, because the tunnel delivers
+one complete body.
 
 Hub-local workers register with the maintenance drain and settle their durable
 state before database replacement can proceed. Hub database archives are

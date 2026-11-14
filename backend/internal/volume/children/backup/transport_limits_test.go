@@ -55,7 +55,7 @@ func TestDownloadLimitsThroughHubDirectAndActualEdgeRoutes(t *testing.T) {
 				cfg := &config.Config{AgentMode: mode == "direct", EdgeAgent: mode == "edge"}
 				RegisterRoutes(api, NewHandler(f.service, nil, nil, nil, t.Context(), cfg))
 				call := backupRouteTransport(t, mode, router)
-				status, _, body := call(t.Context(), "GET", "/api/environments/0/volumes/backups/row/download", nil)
+				status, headers, body := call(t.Context(), "GET", "/api/environments/0/volumes/backups/row/download", nil)
 				if mode == "edge" && bound != "success" && bound != "empty" {
 					require.Equal(t, 413, status, string(body))
 					require.Contains(t, string(body), "volume.backup.download-too-large")
@@ -66,7 +66,13 @@ func TestDownloadLimitsThroughHubDirectAndActualEdgeRoutes(t *testing.T) {
 					}
 				} else {
 					require.Equal(t, 200, status, string(body))
-					require.Equal(t, "packed", string(body))
+					if mode == "edge" {
+						require.Equal(t, "packed", string(body))
+						require.Equal(t, "6", headers.Get("Content-Length"), "Edge keeps the fully prepared, sized response")
+					} else {
+						require.Equal(t, "packed", string(gunzip(t, body)))
+						require.Empty(t, headers.Get("Content-Length"), "hub-local and Direct stream without a length")
+					}
 					require.Contains(t, f.removed, "scratch")
 				}
 				unlock, ok := f.service.deps.Locks.TryLock("data")

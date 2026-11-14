@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins; notification and Auto Heal contracts and delivery for #296; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M26 dependencies split into dependencies.go.
 
 package backup
 
@@ -12,12 +12,10 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/notification/backupnotify"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/browser"
@@ -26,7 +24,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -49,28 +46,6 @@ type Store struct {
 	Runs   func(ctx context.Context, backupIDs []string) ([]*volume.Backup, error)
 	Latest func(ctx context.Context, policyID string) (*volume.Backup, error)
 	List   func(ctx context.Context, volumeName string, params pagination.QueryParams) ([]volume.Backup, int64, error)
-}
-
-// Dependencies are the persistence, runtime, and helper-container operations volume backups use.
-type Dependencies struct {
-	Store            Store
-	DB               *database.DB
-	Docker           *docker.DockerClientService
-	Events           *event.EventService
-	Activity         *activity.ActivityService
-	Engine           *backup.Engine
-	RecoveryKeys     *backup.RecoveryKeyStore
-	Locks            *utils.KeyedMutex
-	AlreadyRunning   error
-	StopContainer    func(ctx context.Context, containerID string, user usertypes.Actor) error
-	StartContainer   func(ctx context.Context, containerID string, user usertypes.Actor) error
-	HelperImage      func(ctx context.Context, dockerClient *client.Client) (string, error)
-	AcquireHelper    func(ctx context.Context, volumeName string) (string, func(), error)
-	Exec             func(ctx context.Context, containerID, execUser string, cmd []string) (string, string, error)
-	BackupVolumeName string
-	ZoneProvider     scheduleutil.ZoneProvider
-	Location         *time.Location
-	EncryptionKey    string
 }
 
 // Service runs volume backups and owns their policies, file browser, and restores.

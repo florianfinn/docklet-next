@@ -81,6 +81,11 @@ func newRuntimePlan(t *testing.T) *runtimePlan {
 		}
 		return "", "", nil
 	}
+	f.service.deps.ExecStream = func(_ context.Context, _ string, command []string, stdout io.Writer) error {
+		f.steps = append(f.steps, strings.Join(command, " "))
+		_, err := io.WriteString(stdout, "packed")
+		return err
+	}
 	return f
 }
 func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
