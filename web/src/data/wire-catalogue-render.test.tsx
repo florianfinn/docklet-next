@@ -4,7 +4,6 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy outcome render proofs (#473/#474).
 
-import proxyFixtures from "../../../types/proxy/testdata/outcomes.json";
 import { decodeProxyOperation, proxyOutcome } from "./http/proxy-decoder";
 import { renderHook } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
@@ -37,6 +36,10 @@ function activityMessage(code: "runtime.wait-timeout" | "runtime.waiter-disconne
   const run = mapActivityDetail({ activity: { id: "example", type: "health", environmentId: "example", status: "running", startedAt: at, createdAt: at }, messages: [{ id: "example-message", activityId: "example", code, message: "English producer fallback", level: "info", createdAt: at }], output: [], stepTrace: [], outputTruncated: false });
   return renderMessage(run.log[0]!, "de");
 }
+
+// Read at runtime: the web image build type-checks web/ without the repository's types/ tree.
+type ProxyFixture = { state: string; reason?: string; body: unknown };
+const proxyFixtures = JSON.parse(readFileSync(resolve(process.cwd(), "../types/proxy/testdata/outcomes.json"), "utf8")) as ProxyFixture[];
 
 // Each row names a representative property of one distinct guarded union and its real consumer.
 function proxyMessage(reason: boolean) {
