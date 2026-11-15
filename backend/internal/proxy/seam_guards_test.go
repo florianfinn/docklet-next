@@ -409,3 +409,36 @@ func TestJournalDecodeErrorsAreIndependent(t *testing.T) {
 		})
 	}
 }
+
+// An engine observation outside verified and applied-unverified is not recorded as final.
+func TestObservationOutsideContractIsRecoveryRequired(t *testing.T) {
+	for _, state := range []dto.State{dto.Rejected, dto.Released, dto.Pending} {
+		t.Run(string(state), func(t *testing.T) {
+			x := newFixture(t)
+			x.e.observe = func() Observation { return Observation{State: state, Evidence: dto.Routing} }
+			o, err := x.a.Apply(t.Context(), x.request)
+			require.NoError(t, err)
+			require.Equal(t, dto.RecoveryRequired, o.State)
+			require.Equal(t, dto.InvalidInput, o.Reason)
+		})
+	}
+}
+
+// Release is refused for an inactive journal that is not recovery-required yet.
+func TestReleaseRefusesPendingJournal(t *testing.T) {
+	x := newFixture(t)
+	x.a.afterCommit = func(p dto.Phase) error {
+		if p == dto.Observing {
+			return errCrash
+		}
+		return nil
+	}
+	_, err := x.a.Apply(t.Context(), x.request)
+	require.ErrorIs(t, err, errCrash)
+	x.a.afterCommit = nil
+	_, err = x.a.Release(t.Context(), dto.ReleaseRequest{Query: x.query(), Confirmed: x.f.files["route.yml"].FileState, Actor: "example-admin"})
+	requireCode(t, err, dto.OperationConflict)
+	var j Journal
+	require.NoError(t, x.db.First(&j, "id = ?", x.request.ID).Error)
+	require.Equal(t, dto.Pending, j.State)
+}
