@@ -367,6 +367,8 @@ func TestReconcilerStopRefusesCapturedCallback(t *testing.T) {
 	before := started.Load()
 	online(t.Context(), x.request.Instance.EnvironmentID)
 	m.reconcileAsync("")
+	// Anything admitted by the late calls has finished once the group drains.
+	m.wg.Wait()
 	require.Equal(t, before, started.Load(), "no pass may start after Stop")
 	for range 200 {
 		n := &Module{Hub: m.Hub}

@@ -225,4 +225,14 @@ func TestHubFenceRefusalBecomesRecovery(t *testing.T) {
 			require.Equal(t, code, row.Reason)
 		})
 	}
+	// Any other fence failure, typed or not, leaves the record unfinished without a recovery reason.
+	t.Run("plain error", func(t *testing.T) {
+		x := newFixture(t)
+		tr := &localTransport{a: x.a, reg: x.request.Registration, drop: true, noAdmission: true, fenceErr: errors.New("example transport failure")}
+		h := &Hub{DB: x.db.DB, Modules: x.mods, Transport: tr}
+		require.NotPanics(t, func() { _, _ = h.Apply(t.Context(), x.request) })
+		var row Record
+		require.NoError(t, x.db.First(&row, "id = ?", x.request.ID).Error)
+		require.NotEqual(t, dto.RecoveryRequired, row.State)
+	})
 }

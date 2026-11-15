@@ -140,8 +140,11 @@ func TestM27ProxyReconcilerFollowsRealAgentOnline(t *testing.T) {
 					return
 				}
 				if strings.Contains(r.URL.Path, "/modules/proxy/") {
+					// The answer is decided on arrival, so a request counted while down is
+					// refused however long it takes afterwards.
+					refuse := down.Load()
 					queries.Add(1)
-					if down.Load() {
+					if refuse {
 						w.WriteHeader(503)
 						return
 					}
@@ -157,11 +160,12 @@ func TestM27ProxyReconcilerFollowsRealAgentOnline(t *testing.T) {
 			before := queries.Load()
 			require.NoError(t, m.Start(t.Context()))
 			t.Cleanup(func() { require.NoError(t, m.Stop(context.Background())) })
-			require.Eventually(t, func() bool { return queries.Load() > before }, 10*time.Second, 20*time.Millisecond, "the startup pass queries")
+			require.Eventually(t, func() bool { return queries.Load() > before }, 10*time.Second, 20*time.Millisecond, "the startup pass queries and is refused")
 			require.NotEqual(t, dto.Verified, proxyHubRecord(t, x).State)
 			down.Store(false)
-			// Each round makes the hub see the agent come back; only the notifier can trigger
-			// a pass here, because the periodic interval is longer than this test.
+			// Each round makes the hub see the agent come back. The startup query was refused,
+			// and the periodic interval is longer than this test, so only the notifier can
+			// start the pass that settles the record.
 			require.Eventually(t, func() bool {
 				require.NoError(t, x.f.db.Exec("UPDATE environments SET status = 'offline' WHERE id = ?", "example").Error)
 				_, _ = x.hosts.CheckAgentCompatibility(t.Context(), "example")
