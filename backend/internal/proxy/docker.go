@@ -404,12 +404,25 @@ func (d *DockerRuntime) cleanupWriter(ctx context.Context, i dto.Instance) (host
 	if !ok || p.Code != dto.ContainerChanged {
 		return nil, original
 	}
+	current, err := d.Rebind(ctx, i)
+	if err != nil {
+		return nil, original
+	}
+	return d.Writer(ctx, current)
+}
+
+// Rebind follows a recreated container only when the same mount target still
+// holds the same configuration source; any other change keeps the old identity refused.
+func (d *DockerRuntime) Rebind(ctx context.Context, i dto.Instance) (dto.Instance, error) {
+	if err := d.Check(ctx, i); err == nil {
+		return i, nil
+	}
 	c, err := d.inspect(ctx, i.Identity.ContainerName)
 	if err != nil {
 		c, err = d.inspect(ctx, i.Identity.ContainerID)
 	}
 	if err != nil || c.State == nil {
-		return nil, original
+		return i, dto.Fail(dto.ContainerChanged, 409)
 	}
 	for _, mount := range c.Mounts {
 		if mount.Destination != i.Source.MountTarget {
@@ -417,14 +430,14 @@ func (d *DockerRuntime) cleanupWriter(ctx context.Context, i dto.Instance) (host
 		}
 		source, err := d.Source(ctx, c, mount)
 		if err != nil {
-			return nil, err
+			return i, err
 		}
 		if source.Canonical != i.Source.Canonical || source.Kind != i.Source.Kind || source.ReadOnly != i.Source.ReadOnly {
-			return nil, original
+			return i, dto.Fail(dto.SourceReadOnly, 409)
 		}
 		current := i
 		current.Identity = dto.Identity{ContainerID: c.ID, ContainerName: strings.TrimPrefix(c.Name, "/"), StartedAt: c.State.StartedAt}
-		return d.Writer(ctx, current)
+		return current, nil
 	}
-	return nil, original
+	return i, dto.Fail(dto.SourceReadOnly, 409)
 }

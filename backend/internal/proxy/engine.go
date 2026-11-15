@@ -12,11 +12,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"path"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Bytes struct {
@@ -46,6 +48,11 @@ type Intent struct {
 	Restart       bool              `json:"restart"`
 	StartedBefore string            `json:"startedBefore"`
 	Owned         bool              `json:"owned"`
+	// PublishedAt bounds log evidence; it is persisted with the publishing commit.
+	PublishedAt time.Time `json:"publishedAt"`
+	// Engine is opaque engine state from Prepare (for example the pre-change probe),
+	// passed back unchanged to every later engine call, also after a restart.
+	Engine jsontext.Value `json:"engine,omitempty"`
 }
 
 // Runtime is the guarded host boundary. Publish rechecks the complete graph and
@@ -59,6 +66,9 @@ type Runtime interface {
 	Restore(context.Context, Intent) error
 	Cleanup(context.Context, Intent) error
 	Epoch(context.Context, dto.Instance) (running bool, startedAt string, err error)
+	// Rebind returns the instance bound to the current container when the
+	// configuration source at the same mount target is unchanged.
+	Rebind(context.Context, dto.Instance) (dto.Instance, error)
 }
 type Observation struct {
 	State       dto.State

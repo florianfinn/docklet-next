@@ -27,8 +27,13 @@ import (
 type proxyWireRuntime struct {
 	mu     sync.Mutex
 	target p.Bytes
+	// inside/resume hold Validate so a test can drop the connection after admission.
+	inside, resume chan struct{}
 }
 
+func (f *proxyWireRuntime) Rebind(_ context.Context, i dto.Instance) (dto.Instance, error) {
+	return i, nil
+}
 func (f *proxyWireRuntime) Check(context.Context, dto.Instance) error { return nil }
 func (f *proxyWireRuntime) Target(context.Context, dto.Instance, string) (p.Bytes, error) {
 	f.mu.Lock()
@@ -68,9 +73,15 @@ func (e *proxyWireEngine) Prepare(ctx context.Context, q dto.ApplyRequest) (p.In
 	b, _ := e.f.Target(ctx, q.Instance, q.Target)
 	return p.Intent{Old: b, New: p.Snapshot([]byte("new"), true), GraphHashes: map[string]string{}, Mode: 0644}, nil
 }
-func (e *proxyWireEngine) Validate(context.Context, p.Intent) error { return nil }
-func (e *proxyWireEngine) Reload(context.Context, p.Intent) error   { return nil }
-func (e *proxyWireEngine) Restart(context.Context, p.Intent) error  { return nil }
+func (e *proxyWireEngine) Validate(context.Context, p.Intent) error {
+	if e.f.inside != nil {
+		close(e.f.inside)
+		<-e.f.resume
+	}
+	return nil
+}
+func (e *proxyWireEngine) Reload(context.Context, p.Intent) error  { return nil }
+func (e *proxyWireEngine) Restart(context.Context, p.Intent) error { return nil }
 func (e *proxyWireEngine) Observe(context.Context, p.Intent, bool) (p.Observation, error) {
 	return p.Observation{State: dto.Verified, Evidence: dto.Routing}, nil
 }
@@ -259,4 +270,44 @@ func TestM27ProxyAdmissionRaceUsesHubUnknownEnvelope(t *testing.T) {
 	require.Zero(t, n)
 	require.NoError(t, a.DB.Table("proxy_journal").Count(&n).Error)
 	require.Zero(t, n)
+}
+
+// L1/L2 through the real transports: the hub caller and the agent request are both
+// cancelled after admission; the operation still settles as verified.
+func TestM27ProxyDroppedConnectionAfterAdmissionRealDirectEdge(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			x, a, tr, q := proxyWireFixture(t, mode)
+			f := a.Runtime.(*proxyWireRuntime)
+			f.inside, f.resume = make(chan struct{}), make(chan struct{})
+			caller, cancelCaller := context.WithCancel(t.Context())
+			x.agentIntercept = func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+				if !strings.HasSuffix(r.URL.Path, "/apply") {
+					next.ServeHTTP(w, r)
+					return
+				}
+				request, cancelRequest := context.WithCancel(r.Context())
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					next.ServeHTTP(httptest.NewRecorder(), r.WithContext(request))
+				}()
+				<-f.inside
+				cancelRequest()
+				cancelCaller()
+				close(f.resume)
+				<-done
+				w.WriteHeader(503)
+			}
+			h := &p.Hub{DB: x.f.db.DB, Modules: x.manager, Transport: tr}
+			_, _ = h.Apply(caller, q)
+			// The hub's own follow-up settled the record although its caller left.
+			var row p.Record
+			require.NoError(t, x.f.db.First(&row, "id = ?", q.ID).Error)
+			require.Equal(t, dto.Verified, row.State)
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.Equal(t, "new", string(f.target.Content))
+		})
+	}
 }

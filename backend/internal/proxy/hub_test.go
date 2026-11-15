@@ -11,6 +11,7 @@ import (
 	"errors"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -25,11 +26,21 @@ type localTransport struct {
 	releaseErr        error
 	fenceGeneration   string
 	staleRegistration bool
+	beforeApply       func()
+	applyErr          error
+	queries           atomic.Int32
+	block             chan struct{}
 }
 
 func (t *localTransport) Registration(context.Context, string) (string, error) { return t.reg, nil }
 func (t *localTransport) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, error) {
 	t.applyCalls++
+	if t.beforeApply != nil {
+		t.beforeApply()
+	}
+	if t.applyErr != nil {
+		return dto.Operation{}, t.applyErr
+	}
 	var o dto.Operation
 	var err error
 	if !t.noAdmission {
@@ -44,6 +55,10 @@ func (t *localTransport) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Ope
 	return o, err
 }
 func (t *localTransport) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
+	t.queries.Add(1)
+	if t.block != nil {
+		<-t.block
+	}
 	if t.queryErr != nil {
 		return dto.Operation{}, t.queryErr
 	}

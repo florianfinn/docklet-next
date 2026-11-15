@@ -32,7 +32,12 @@ type gate struct {
 type Service struct {
 	settings *settings.SettingsService
 	gates    map[features.ID]*gate
+	agent    bool
 }
+
+// SetAgentMode is startup-only. Agents follow the hub's synchronised switch-off;
+// their own unfinished journal never vetoes it, because the hub gate decided first.
+func (s *Service) SetAgentMode(agent bool) { s.agent = agent }
 
 func New(s *settings.SettingsService) *Service {
 	m := &Service{settings: s, gates: map[features.ID]*gate{}}
@@ -113,7 +118,7 @@ func (s *Service) GuardSettings(ctx context.Context, updates []libarcane.Setting
 				release()
 				return nil, err
 			}
-			if u.Value != "true" {
+			if u.Value != "true" && !s.agent {
 				if err := unfinished(ctx, d.ID, g); err != nil {
 					release()
 					return nil, err

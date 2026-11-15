@@ -162,3 +162,16 @@ func TestP17ProjectWriterMetadataAndConfinement(t *testing.T) {
 		})
 	}
 }
+
+// N7: an oversized secret payload is skipped, not counted against the read limits.
+func TestTarLimitsCountOnlyReadPayloads(t *testing.T) {
+	big := strings.Repeat("x", int(MaxFileBytes)+1)
+	b := archive(t, []*tar.Header{{Name: "routes/public.yml", Typeflag: tar.TypeReg, Size: 2}, {Name: "routes/large.secret.yml", Typeflag: tar.TypeReg, Size: int64(len(big))}}, []string{"ok", big})
+	files, names, err := ReadTar(t.Context(), bytes.NewReader(b), "/etc/routes", false)
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	require.Equal(t, []dto.OpaqueFile{{Path: "large.secret.yml"}}, names)
+	b = archive(t, []*tar.Header{{Name: "routes/large.yml", Typeflag: tar.TypeReg, Size: int64(len(big))}}, []string{big})
+	_, _, err = ReadTar(t.Context(), bytes.NewReader(b), "/etc/routes", false)
+	require.Error(t, err, "a readable oversized payload stays refused")
+}

@@ -11,6 +11,7 @@ import (
 	"errors"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"gorm.io/gorm"
+	"log/slog"
 	"time"
 )
 
@@ -133,28 +134,27 @@ func (a *Agent) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
 		a.mu.Unlock()
 		return o, dto.Fail(dto.RegistrationChanged, 409)
 	}
-	active := a.active[q.ID]
-	if !active && !o.State.Final() && o.State != dto.RecoveryRequired {
-		a.active[q.ID] = true
-	}
-	a.mu.Unlock()
-	if err = a.Check(ctx, i.Request.Instance); err != nil {
-		if !active && !o.State.Final() {
-			defer a.inactive(q.ID)
-			return a.finish(ctx, i, o, dto.RecoveryRequired, reason(err, dto.ContainerChanged), "")
-		}
-		return o, err
-	}
-	if active || o.State.Final() {
+	// Receipts and running work are reported without an identity check; identity
+	// guards only new host effects.
+	if a.active[q.ID] || o.State.Final() {
+		a.mu.Unlock()
 		return o, nil
 	}
-	defer a.inactive(q.ID)
 	if o.State == dto.RecoveryRequired {
-		b, er := a.Runtime.Target(ctx, i.Request.Instance, i.Request.Target)
-		if er == nil {
-			o.Current = &b.FileState
+		a.mu.Unlock()
+		if current, er := a.Runtime.Rebind(ctx, i.Request.Instance); er == nil {
+			if b, er := a.Runtime.Target(ctx, current, i.Request.Target); er == nil {
+				o.Current = &b.FileState
+			}
 		}
-		return o, er
+		return o, nil
+	}
+	a.active[q.ID] = true
+	a.mu.Unlock()
+	defer a.inactive(q.ID)
+	ctx = context.WithoutCancel(ctx)
+	if err = a.Check(ctx, i.Request.Instance); err != nil {
+		return a.finish(ctx, i, o, dto.RecoveryRequired, reason(err, dto.ContainerChanged), "")
 	}
 	return a.recover(ctx, i, o)
 }
@@ -229,16 +229,21 @@ func (a *Agent) Settle(ctx context.Context) error {
 	if err := a.DB.WithContext(ctx).Where("finished_at IS NULL").Find(&rows).Error; err != nil {
 		return err
 	}
+	// Journal content never fails startup: each row settles on its own, and an
+	// undecodable row stays locked until it is queried or released as journal-lost.
 	for _, j := range rows {
 		i, _, err := decodeJournal(j)
-		if err != nil {
-			return err
+		if err == nil {
+			_, err = a.Query(ctx, dto.Query{ID: j.ID, Instance: i.Request.Instance, Generation: j.Generation, Registration: j.Registration})
 		}
-		if _, err = a.Query(ctx, dto.Query{ID: j.ID, Instance: i.Request.Instance, Generation: j.Generation, Registration: j.Registration}); err != nil {
-			return err
+		if err != nil {
+			slog.WarnContext(ctx, "Proxy journal row left for recovery", "operationId", j.ID, "error", err)
 		}
 	}
-	return prune(ctx, a.DB, nowUTC())
+	if err := prune(ctx, a.DB, nowUTC()); err != nil {
+		slog.WarnContext(ctx, "Proxy journal pruning postponed", "error", err)
+	}
+	return nil
 }
 func (a *Agent) Fence(ctx context.Context, q dto.Query) (dto.FenceResult, error) {
 	a.mu.Lock()
@@ -247,9 +252,7 @@ func (a *Agent) Fence(ctx context.Context, q dto.Query) (dto.FenceResult, error)
 	if err := a.generation(q.Generation); err != nil {
 		return out, err
 	}
-	if err := a.Check(ctx, q.Instance); err != nil {
-		return out, err
-	}
+	// Fencing has no host effect, so it does not depend on the container identity.
 	err := a.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		g, err := databaseGeneration(tx, q.Generation)
 		out.Generation = g
@@ -293,26 +296,32 @@ func (a *Agent) Release(ctx context.Context, q dto.ReleaseRequest) (dto.Operatio
 		return dto.Operation{}, err
 	}
 	j, err := findJournal(ctx, a.DB, q.ID)
+	if missing(err) {
+		return dto.Operation{}, dto.Fail(dto.JournalLost, 409)
+	}
 	if err != nil {
 		return dto.Operation{}, err
 	}
 	i, o, err := decodeJournal(j)
 	if err != nil {
-		return o, err
+		return a.releaseUndecodable(ctx, j, q)
 	}
 	if q.Registration != j.Registration || q.Instance.ID != i.Request.Instance.ID {
 		return o, dto.Fail(dto.RegistrationChanged, 409)
 	}
-	if o.State == dto.Released {
+	// A final journal answers with its receipt, which the hub adopts.
+	if o.State.Final() {
 		return o, nil
 	}
 	if a.active[q.ID] || o.State != dto.RecoveryRequired {
 		return o, dto.Fail(dto.OperationConflict, 409)
 	}
-	if err = a.Check(ctx, i.Request.Instance); err != nil {
+	// A recreated container with the same configuration source can confirm the target.
+	current, err := a.Runtime.Rebind(ctx, i.Request.Instance)
+	if err != nil {
 		return o, err
 	}
-	b, err := a.Runtime.Target(ctx, i.Request.Instance, i.Request.Target)
+	b, err := a.Runtime.Target(ctx, current, i.Request.Target)
 	if err != nil {
 		return o, err
 	}
@@ -322,4 +331,29 @@ func (a *Agent) Release(ctx context.Context, q dto.ReleaseRequest) (dto.Operatio
 	o.Current = &b.FileState
 	o.ReleasedBy = q.Actor
 	return a.finish(ctx, i, o, dto.Released, "", "")
+}
+
+// releaseUndecodable finishes a journal row whose content cannot be decoded,
+// without host effects, so its source lock is freed.
+func (a *Agent) releaseUndecodable(ctx context.Context, j Journal, q dto.ReleaseRequest) (dto.Operation, error) {
+	if q.Registration != j.Registration || a.active[q.ID] {
+		return dto.Operation{}, dto.Fail(dto.OperationConflict, 409)
+	}
+	now := time.Now().UTC()
+	o := dto.Operation{ID: j.ID, InstanceID: q.Instance.ID, Generation: j.Generation, Registration: j.Registration, Digest: j.Digest, State: dto.Released, Phase: dto.Admitted, Reason: dto.JournalLost, ReleasedBy: q.Actor, Current: &q.Confirmed, CreatedAt: j.CreatedAt, FinishedAt: &now}
+	if j.Phase.Valid() {
+		o.Phase = j.Phase
+	}
+	b, err := marshal(o)
+	if err != nil {
+		return o, err
+	}
+	res := a.DB.WithContext(ctx).Model(&Journal{}).Where("id = ? AND generation = ?", j.ID, j.Generation).Updates(map[string]any{"result": b, "state": o.State, "phase": o.Phase, "finished_at": o.FinishedAt})
+	if res.Error != nil {
+		return o, res.Error
+	}
+	if res.RowsAffected != 1 {
+		return o, dto.Fail(dto.JournalLost, 409)
+	}
+	return o, nil
 }

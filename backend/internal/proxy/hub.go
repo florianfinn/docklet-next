@@ -97,10 +97,16 @@ func (h *Hub) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, err
 		return o, err
 	}
 	// This is the only Apply dispatch. Persisted records, including those created
-	// just before a hub crash, are followed exclusively by Query and Fence.
+	// just before a hub crash, are followed exclusively by Query and Fence. The
+	// dispatch and its follow-up outlive the caller; the reconciler finishes the rest.
+	ctx = context.WithoutCancel(ctx)
 	remote, err := h.Transport.Apply(ctx, q)
 	if err != nil {
-		return h.Query(ctx, q.ID)
+		refusal := dto.Reason("")
+		if p, ok := errors.AsType[*dto.Problem](err); ok {
+			refusal = p.Code
+		}
+		return h.query(ctx, q.ID, refusal)
 	}
 	return h.accept(ctx, q, o, remote)
 }
@@ -189,6 +195,12 @@ func (h *Hub) recovery(ctx context.Context, o dto.Operation, r dto.Reason) (dto.
 	return o, h.persist(ctx, o)
 }
 func (h *Hub) Query(ctx context.Context, id string) (dto.Operation, error) {
+	return h.query(ctx, id, "")
+}
+
+// query follows one record; refusal is the agent's typed answer to the lost
+// dispatch, kept as the reason when the fence proves nothing was admitted.
+func (h *Hub) query(ctx context.Context, id string, refusal dto.Reason) (dto.Operation, error) {
 	var row Record
 	if err := h.DB.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
 		return dto.Operation{}, err
@@ -247,6 +259,7 @@ func (h *Hub) Query(ctx context.Context, id string) (dto.Operation, error) {
 		return h.recovery(ctx, o, dto.RegistrationChanged)
 	}
 	o.State = dto.NotApplied
+	o.Reason = refusal
 	now := time.Now().UTC()
 	o.FinishedAt = &now
 	return o, h.persist(ctx, o)
@@ -269,8 +282,9 @@ func (h *Hub) Release(ctx context.Context, id string, confirmed dto.FileState, a
 	}
 	remote, err := h.Transport.Release(ctx, dto.ReleaseRequest{Query: dto.Query{ID: id, Instance: q.Instance, Generation: q.Generation, Registration: q.Registration}, Confirmed: confirmed, Actor: actor})
 	if err != nil {
+		// Both mean the agent holds no lock for this operation any more.
 		p, ok := errors.AsType[*dto.Problem](err)
-		if !ok || p.Code != dto.GenerationMismatch {
+		if !ok || p.Code != dto.GenerationMismatch && p.Code != dto.JournalLost {
 			return o, err
 		}
 		currentRegistration, registrationErr := h.Transport.Registration(ctx, q.Instance.EnvironmentID)
@@ -287,7 +301,9 @@ func (h *Hub) Release(ctx context.Context, id string, confirmed dto.FileState, a
 		o.FinishedAt = &now
 		return o, h.persist(ctx, o)
 	}
-	if remote.State != dto.Released {
+	// The agent answers Release with its final receipt: released, or the outcome
+	// it reached before the hub lost track; either is adopted.
+	if !remote.State.Final() {
 		return o, dto.Fail(dto.OperationConflict, 409)
 	}
 	currentRegistration, err := h.Transport.Registration(ctx, q.Instance.EnvironmentID)

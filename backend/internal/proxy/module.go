@@ -21,6 +21,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"log/slog"
+	"sync"
+	"time"
 )
 
 type Module struct {
@@ -32,7 +34,12 @@ type Module struct {
 	Transport   *HostTransport
 	AgentMode   bool
 	unsubscribe func()
+	stop        chan struct{}
+	passes      sync.Map
 }
+
+// reconcileInterval bounds how long an unfinished record waits without an agent-online event.
+const reconcileInterval = 30 * time.Second
 
 func NewModule(db *database.DB, cfg *config.Config, mods *modules.Service, s *settings.SettingsService, d *dockerinternal.DockerClientService, v *volume.VolumeService, hosts *environment.EnvironmentService) (*Module, error) {
 	engines := Engines{}
@@ -42,6 +49,7 @@ func NewModule(db *database.DB, cfg *config.Config, mods *modules.Service, s *se
 		return nil, err
 	}
 	a.Gate = mods
+	mods.SetAgentMode(cfg.AgentMode || cfg.EdgeAgent)
 	m := &Module{Agent: a, Runtime: runtime, Settings: s, Modules: mods, AgentMode: cfg.AgentMode || cfg.EdgeAgent}
 	m.Transport = &HostTransport{Hosts: hosts, Local: m}
 	m.Hub = &Hub{DB: db.DB, Modules: mods, Transport: m.Transport}
@@ -69,12 +77,37 @@ func (m *Module) Start(ctx context.Context) error {
 		return err
 	}
 	if !m.AgentMode {
+		// Reconciliation never blocks startup or the agent-online callback.
 		if m.Transport.Hosts != nil {
-			m.unsubscribe = m.Transport.Hosts.SubscribeAgentOnline(func(ctx context.Context, id string) { m.reconcile(ctx, id) })
+			m.unsubscribe = m.Transport.Hosts.SubscribeAgentOnline(func(_ context.Context, id string) { m.reconcileAsync(id) })
 		}
-		m.reconcile(ctx, "")
+		m.stop = make(chan struct{})
+		m.reconcileAsync("")
+		go func(stop <-chan struct{}) {
+			t := time.NewTicker(reconcileInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-t.C:
+					m.reconcileAsync("")
+				}
+			}
+		}(m.stop)
 	}
 	return nil
+}
+
+// reconcileAsync runs at most one pass per environment key ("" is all) at a time.
+func (m *Module) reconcileAsync(environmentID string) {
+	if _, running := m.passes.LoadOrStore(environmentID, true); running {
+		return
+	}
+	go func() {
+		defer m.passes.Delete(environmentID)
+		m.reconcile(context.Background(), environmentID)
+	}()
 }
 func (m *Module) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, error) {
 	if err := m.Agent.Check(ctx, i); err != nil {
@@ -283,6 +316,10 @@ func (m *Module) reconcile(ctx context.Context, environmentID string) {
 func (m *Module) Stop(context.Context) error {
 	if m.unsubscribe != nil {
 		m.unsubscribe()
+	}
+	if m.stop != nil {
+		close(m.stop)
+		m.stop = nil
 	}
 	return nil
 }

@@ -92,11 +92,9 @@ func marshal(v any) ([]byte, error)    { return json.Marshal(v) }
 func decodeJournal(j Journal) (Intent, dto.Operation, error) {
 	var i Intent
 	var o dto.Operation
-	if err := json.Unmarshal(j.Intent, &i); err != nil {
-		return i, o, err
-	}
-	if err := json.Unmarshal(j.Result, &o); err != nil {
-		return i, o, err
+	// Undecodable journal content is answered as journal-lost, never as a raw error.
+	if json.Unmarshal(j.Intent, &i) != nil || json.Unmarshal(j.Result, &o) != nil {
+		return i, o, dto.Fail(dto.JournalLost, 409)
 	}
 	if !j.State.Valid() || !j.Phase.Valid() || o.State != j.State || o.Phase != j.Phase || o.Digest != j.Digest {
 		return i, o, dto.Fail(dto.JournalLost, 409)

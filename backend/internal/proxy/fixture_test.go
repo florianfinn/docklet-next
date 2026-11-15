@@ -8,6 +8,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/modules"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -31,6 +32,8 @@ type fakeRuntime struct {
 	epoch                      string
 	running                    bool
 	checkErr                   error
+	rebindErr                  error
+	rebound                    bool
 	beforePublish              func()
 	publications, restorations int
 }
@@ -39,6 +42,18 @@ func (f *fakeRuntime) Check(context.Context, dto.Instance) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.checkErr
+}
+func (f *fakeRuntime) Rebind(_ context.Context, i dto.Instance) (dto.Instance, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.checkErr == nil {
+		return i, nil
+	}
+	if f.rebindErr != nil {
+		return i, f.rebindErr
+	}
+	f.rebound = true
+	return i, nil
 }
 func (f *fakeRuntime) Target(_ context.Context, _ dto.Instance, p string) (Bytes, error) {
 	f.mu.Lock()
@@ -118,6 +133,8 @@ type fakeEngine struct {
 	reloadErr                                         error
 	restartErr                                        error
 	validate                                          func() error
+	state                                             jsontext.Value
+	seen                                              []Intent
 }
 
 func (e *fakeEngine) Inventory(context.Context, dto.Instance) (dto.Inventory, error) {
@@ -129,7 +146,7 @@ func (e *fakeEngine) Read(context.Context, dto.Instance) (dto.ReadResult, error)
 func (e *fakeEngine) Prepare(ctx context.Context, q dto.ApplyRequest) (Intent, error) {
 	b, _ := e.runtime.Target(ctx, q.Instance, q.Target)
 	g, _ := e.runtime.Graph(ctx, q.Instance)
-	return Intent{Old: b, New: e.new, GraphHashes: g, Mode: 0644, Reload: q.Instance.Kind == dto.Caddy && !e.adminOff, Restart: e.adminOff, Owned: true}, nil
+	return Intent{Old: b, New: e.new, GraphHashes: g, Mode: 0644, Reload: q.Instance.Kind == dto.Caddy && !e.adminOff, Restart: e.adminOff, Owned: true, Engine: e.state}, nil
 }
 func (e *fakeEngine) Validate(context.Context, Intent) error {
 	e.validation++
@@ -150,8 +167,9 @@ func (e *fakeEngine) Restart(context.Context, Intent) error {
 	e.runtime.mu.Unlock()
 	return nil
 }
-func (e *fakeEngine) Observe(context.Context, Intent, bool) (Observation, error) {
+func (e *fakeEngine) Observe(_ context.Context, i Intent, _ bool) (Observation, error) {
 	e.observations++
+	e.seen = append(e.seen, i)
 	if e.observe != nil {
 		return e.observe(), nil
 	}

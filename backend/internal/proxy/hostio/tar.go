@@ -117,7 +117,7 @@ func ReadTarWithHeaders(ctx context.Context, r io.Reader, root string, single bo
 		if strings.Count(rel, "/")+1 > MaxDepth {
 			return nil, nil, bad(rel, dto.InputLimit)
 		}
-		if h.Size < 0 || h.Size > MaxFileBytes {
+		if h.Size < 0 {
 			return nil, nil, bad(rel, dto.InputLimit)
 		}
 		if h.Typeflag == tar.TypeDir {
@@ -127,9 +127,15 @@ func ReadTarWithHeaders(ctx context.Context, r io.Reader, root string, single bo
 		if count > MaxFiles {
 			return nil, nil, bad(rel, dto.InputLimit)
 		}
-		total += h.Size
-		if total > MaxTotalBytes {
-			return nil, nil, bad(rel, dto.InputLimit)
+		// Byte limits count only payloads that are read; secret payloads are skipped.
+		if !Secret(name) {
+			if h.Size > MaxFileBytes {
+				return nil, nil, bad(rel, dto.InputLimit)
+			}
+			total += h.Size
+			if total > MaxTotalBytes {
+				return nil, nil, bad(rel, dto.InputLimit)
+			}
 		}
 		if visit != nil {
 			if err := visit(FileHeader{Path: rel, Type: h.Typeflag, Size: h.Size, Mode: uint32(h.Mode) & 0777, ModifiedAt: h.ModTime, HasAttributes: len(h.Xattrs) > 0}); err != nil {

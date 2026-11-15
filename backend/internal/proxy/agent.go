@@ -123,6 +123,15 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		a.mu.Unlock()
 		return dto.Operation{}, err
 	}
+	// Admission rows outlive the pruned journal, so a replayed ID stays refused.
+	var admitted admissionRow
+	if err = a.DB.WithContext(ctx).First(&admitted, "id = ?", q.ID).Error; err == nil {
+		a.mu.Unlock()
+		return dto.Operation{}, dto.Fail(dto.OperationConflict, 409)
+	} else if !missing(err) {
+		a.mu.Unlock()
+		return dto.Operation{}, err
+	}
 	if err = a.Check(ctx, q.Instance); err != nil {
 		a.mu.Unlock()
 		return dto.Operation{}, err
@@ -185,6 +194,9 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		return o, err
 	}
 	defer a.inactive(q.ID)
+	// Admitted work belongs to the journal: a cancelled caller never changes its
+	// outcome, and a process exit is settled at startup by the recovery table.
+	ctx = context.WithoutCancel(ctx)
 	if err = a.faultCommit(dto.Admitted); err != nil {
 		return o, err
 	}
@@ -236,6 +248,7 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 	}); err != nil {
 		return a.effectFailure(ctx, i, o, err, false)
 	}
+	i.PublishedAt = time.Now().UTC()
 	if err = a.effect(ctx, i, &o, dto.Publishing, func() error {
 		if er := a.recheck(ctx, i); er != nil {
 			return er

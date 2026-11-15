@@ -42,7 +42,20 @@ and refuses when the identity, the mount source or its kind changed.
 
 Limits apply to file count (512), single file size (1 MiB), import depth (8),
 total read bytes (16 MiB), exec output (256 KiB) and exec time (30 s for
-validate and reload, 10 s per probe).
+validate and reload, 10 s per probe). Byte limits count only payloads that are
+read, so a large secret file does not block an instance.
+
+Known limits of the first version:
+- Host operation routes are administrator routes on the agent's API. An
+  administrator calling them directly bypasses the hub's record and reservation;
+  the agent's source lock and journal still protect the files.
+- The source lock key is the canonical mount source. Two containers mounting
+  overlapping but different sources get different keys.
+- A file with extended attributes is refused, which includes every file on hosts
+  that label files with SELinux.
+- The pinned tools image cannot prove that a file has no extended attributes,
+  ACLs or extra hard links, so sources written through the helper fail closed at
+  staging with zero effects.
 
 ## Agent operations
 
@@ -82,7 +95,13 @@ operation. If the agent answers unknown in the same generation, the hub sends
 Fence; only a fence recorded in that generation releases the reservation as
 `not-applied`. A generation mismatch, a lost journal or a changed registration
 makes the operation `recovery-required`, never `not-applied`. The hub never
-sends a second Apply.
+sends a second Apply. The dispatch and its immediate follow-up are detached from
+the HTTP request; a record that is still unfinished is followed by an
+asynchronous reconciler at startup, on agent-online and every 30 seconds, one
+pass per environment at a time. A typed agent refusal of a lost dispatch becomes
+the reason of `not-applied`. When the agent answers Release with a final receipt
+for the same operation, the hub adopts that receipt; `journal-lost` is treated
+like a generation mismatch.
 
 **Agent admission.** Apply admits atomically under one lock per configuration
 source (host and canonical mount source), shared by all instances and all target
@@ -91,7 +110,14 @@ files in that source, and held until the operation is final or
 existing ID with the same digest returns its recorded operation unchanged; a
 different digest is refused with `operation-conflict`; a fenced ID is refused.
 Admission commits the write-ahead intent before any effect: target path, old and
-new (presence, hash, bytes), mode, and the hashes of the validated graph.
+new (presence, hash, bytes), mode, the hashes of the validated graph, and an
+opaque engine value from preparation (for example the probe taken before the
+change). The publishing commit adds the publication time that bounds log
+evidence. After admission the work no longer depends on the caller: a dropped
+connection does not change the outcome, and a process exit is settled at startup.
+Receipts are returned whatever the container's current identity; identity and
+source are checked only before a new host effect. An admission ID stays refused
+after its journal row was pruned.
 
 **Agent phases.** Each phase is committed before the effect it names:
 
@@ -137,13 +163,19 @@ restart does not boot the rejected file. A timed-out exec is treated as running:
 no contradicting reload or restore runs, and the operation becomes
 `recovery-required`.
 
+Startup settlement handles each unfinished row on its own and never fails
+startup because of journal content; an undecodable row is answered as
+`journal-lost` until it is released.
+
 `recovery-required` is shown with the operation, both hashes and the manual
 steps. An administrator can release it after a confirmation that names the
 current target state. The hub sends Release in the recorded generation; the agent
 answers with the recorded final state, and the hub then frees the reservation. A
 generation mismatch means the agent holds no lock for the operation, so the hub
 releases only its reservation. An unreachable agent refuses the release, because
-its source lock cannot be confirmed free.
+its source lock cannot be confirmed free. After a container recreation with the
+same configuration source at the same mount target, Release reads the target
+through the current container; a changed source refuses it.
 
 ## Validation
 
