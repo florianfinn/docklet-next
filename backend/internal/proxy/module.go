@@ -119,7 +119,7 @@ func (m *Module) reconcileAsync(environmentID string) {
 	if life == nil {
 		life = context.Background()
 	}
-	key := passKey(environmentID)
+	key := reconcileKey(environmentID)
 	if _, running := m.passes.LoadOrStore(key, true); running {
 		return
 	}
@@ -130,7 +130,7 @@ func (m *Module) reconcileAsync(environmentID string) {
 		m.reconcile(life, environmentID)
 	}()
 }
-func passKey(environmentID string) string {
+func reconcileKey(environmentID string) string {
 	if environmentID == "" {
 		return "all"
 	}
@@ -344,7 +344,7 @@ func (m *Module) reconcile(ctx context.Context, environmentID string) {
 	for _, e := range order {
 		// The all-hosts pass skips an environment that its own pass is following.
 		if environmentID == "" {
-			if _, running := m.passes.LoadOrStore(passKey(e), true); running {
+			if _, running := m.passes.LoadOrStore(reconcileKey(e), true); running {
 				continue
 			}
 		}
@@ -357,7 +357,7 @@ func (m *Module) reconcile(ctx context.Context, environmentID string) {
 			}
 		}
 		if environmentID == "" {
-			m.passes.Delete(passKey(e))
+			m.passes.Delete(reconcileKey(e))
 		}
 		if ctx.Err() != nil {
 			return
