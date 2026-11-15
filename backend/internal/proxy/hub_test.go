@@ -30,6 +30,8 @@ type localTransport struct {
 	applyErr          error
 	queries           atomic.Int32
 	block             chan struct{}
+	releaseMutate     func(*dto.Operation)
+	afterRelease      func()
 }
 
 func (t *localTransport) Registration(context.Context, string) (string, error) { return t.reg, nil }
@@ -75,7 +77,14 @@ func (t *localTransport) Release(ctx context.Context, q dto.ReleaseRequest) (dto
 	if t.releaseErr != nil {
 		return dto.Operation{}, t.releaseErr
 	}
-	return t.a.Release(ctx, q)
+	o, err := t.a.Release(ctx, q)
+	if t.releaseMutate != nil {
+		t.releaseMutate(&o)
+	}
+	if t.afterRelease != nil {
+		t.afterRelease()
+	}
+	return o, err
 }
 func TestP11OneDispatchGenerationAndRegistration(t *testing.T) {
 	for _, mode := range []string{"lost-after-effect", "lost-before-admission", "different-generation", "lost-journal", "different-registration", "wrong-fence-generation"} {

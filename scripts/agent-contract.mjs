@@ -25,8 +25,14 @@ export function agentFixture(spec, fixture) {
   if (!include || !summary || !recovery) throw new Error("missing activity discovery producer");
   const moduleSource = readFileSync(new URL("../types/features/features.go", import.meta.url), "utf8");
   const moduleConstant = (name) => moduleSource.match(new RegExp(`\\b${name}\\s+(?:ID\\s+)?=\\s*"([^"]+)"`))?.[1];
-  const moduleDefinitions = [...moduleSource.matchAll(/\{ID: (\w+), Kind: Module, SettingKey: (\w+), HubPrefix: "([^"]+)", HostPrefix: "([^"]+)", Capability: "([^"]+)", AgentModule: "([^"]+)"(?:, DefaultEnabled: (true|false))?/g)]
-    .map(([, id, key, hubPrefix, hostPrefix, capability, agentModule, enabled]) => ({ id: moduleConstant(id), settingKey: moduleConstant(key), hubPrefix, hostPrefix, capability, agentModule, defaultEnabled: enabled === "true" }));
+  // Fields are read by name from each one-line module literal; an absent DefaultEnabled is Go's false.
+  const moduleDefinitions = [...moduleSource.matchAll(/^\s*\{(ID: [^\n]*\bKind: Module\b[^\n]*)\},?$/gm)].map(([, body]) => {
+    const field = (name) => body.match(new RegExp(`\\b${name}: ("([^"]*)"|\\w+)`))?.slice(1);
+    const text = (name) => field(name)?.[1];
+    const enabled = field("DefaultEnabled")?.[0];
+    if (enabled !== undefined && enabled !== "true" && enabled !== "false") throw new Error("unsupported module DefaultEnabled");
+    return { id: moduleConstant(field("ID")?.[0]), settingKey: moduleConstant(field("SettingKey")?.[0]), hubPrefix: text("HubPrefix"), hostPrefix: text("HostPrefix"), capability: text("Capability"), agentModule: text("AgentModule"), defaultEnabled: enabled === "true" };
+  });
   if (moduleDefinitions.length === 0 || moduleDefinitions.some((d) => !d.id || !d.settingKey)) throw new Error("missing module registry producer");
   manifest.modules = {
     definitions: moduleDefinitions,

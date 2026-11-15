@@ -59,7 +59,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         const body: unknown = await response.json().catch(() => undefined);
         const moduleError = moduleProblem(body, response.status, false);
         if (moduleError) throw moduleError;
- const problem = settingsProblem(body, response.status);
+        const problem = settingsProblem(body, response.status);
         if (problem instanceof SettingsProblemError) throw problem;
       } else discardResponse(response);
       throw new Error(`settings.write.${response.status}`);
@@ -87,7 +87,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         defaultPgid: input.hostDefaults.pgid,
         detectSocketGroup: String(input.hostDefaults.detectSocketGroup),
         setupCompleted: "true",
- ...moduleSettingValues(input.modules),
+        ...moduleSettingValues(input.modules),
       });
     },
     getStackStopMode: () => readStackStopMode(baseUrl, client),

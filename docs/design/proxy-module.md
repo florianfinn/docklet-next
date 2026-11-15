@@ -53,6 +53,11 @@ Known limits of the first version:
   overlapping but different sources get different keys.
 - A file with extended attributes is refused, which includes every file on hosts
   that label files with SELinux.
+- A `recovery-required` operation whose proxy container was removed for good, or
+  recreated under another name, cannot be released, because the target cannot be
+  read; its reservation blocks switching the module off and deleting its data.
+  Recreating a container with the same name and the same configuration mount
+  makes it releasable again.
 - The pinned tools image cannot prove that a file has no extended attributes,
   ACLs or extra hard links, so sources written through the helper fail closed at
   staging with zero effects.
@@ -100,7 +105,9 @@ the HTTP request; a record that is still unfinished is followed by an
 asynchronous reconciler at startup, on agent-online and every 30 seconds, one
 pass per environment at a time. A typed agent refusal of a lost dispatch becomes
 the reason of `not-applied`. When the agent answers Release with a final receipt
-for the same operation, the hub adopts that receipt; `journal-lost` is treated
+for the same operation, generation, registration and digest, the hub adopts that
+receipt; a dispatch answered under a changed registration stays
+`recovery-required` until such a Release; `journal-lost` is treated
 like a generation mismatch.
 
 **Agent admission.** Apply admits atomically under one lock per configuration

@@ -424,6 +424,7 @@ func (d *DockerRuntime) Rebind(ctx context.Context, i dto.Instance) (dto.Instanc
 	if err != nil || c.State == nil {
 		return i, dto.Fail(dto.ContainerChanged, 409)
 	}
+	// Every refusal means the container no longer serves the recorded source.
 	for _, mount := range c.Mounts {
 		if mount.Destination != i.Source.MountTarget {
 			continue
@@ -433,11 +434,11 @@ func (d *DockerRuntime) Rebind(ctx context.Context, i dto.Instance) (dto.Instanc
 			return i, err
 		}
 		if source.Canonical != i.Source.Canonical || source.Kind != i.Source.Kind || source.ReadOnly != i.Source.ReadOnly {
-			return i, dto.Fail(dto.SourceReadOnly, 409)
+			return i, dto.Fail(dto.ContainerChanged, 409)
 		}
 		current := i
 		current.Identity = dto.Identity{ContainerID: c.ID, ContainerName: strings.TrimPrefix(c.Name, "/"), StartedAt: c.State.StartedAt}
 		return current, nil
 	}
-	return i, dto.Fail(dto.SourceReadOnly, 409)
+	return i, dto.Fail(dto.ContainerChanged, 409)
 }

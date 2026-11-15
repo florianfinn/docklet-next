@@ -34,7 +34,9 @@ type Module struct {
 	Transport   *HostTransport
 	AgentMode   bool
 	unsubscribe func()
-	stop        chan struct{}
+	life        context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 	passes      sync.Map
 }
 
@@ -77,37 +79,62 @@ func (m *Module) Start(ctx context.Context) error {
 		return err
 	}
 	if !m.AgentMode {
-		// Reconciliation never blocks startup or the agent-online callback.
-		if m.Transport.Hosts != nil {
-			m.unsubscribe = m.Transport.Hosts.SubscribeAgentOnline(func(_ context.Context, id string) { m.reconcileAsync(id) })
+		var subscribe func(func(context.Context, string)) func()
+		if m.Transport != nil && m.Transport.Hosts != nil {
+			subscribe = m.Transport.Hosts.SubscribeAgentOnline
 		}
-		m.stop = make(chan struct{})
-		m.reconcileAsync("")
-		go func(stop <-chan struct{}) {
-			t := time.NewTicker(reconcileInterval)
-			defer t.Stop()
-			for {
-				select {
-				case <-stop:
-					return
-				case <-t.C:
-					m.reconcileAsync("")
-				}
-			}
-		}(m.stop)
+		m.startReconciler(subscribe, reconcileInterval)
 	}
 	return nil
 }
 
-// reconcileAsync runs at most one pass per environment key ("" is all) at a time.
+// startReconciler follows unfinished hub records at startup, on agent-online and
+// every interval. None of these triggers waits for a pass; Stop cancels and waits.
+func (m *Module) startReconciler(subscribe func(func(context.Context, string)) func(), interval time.Duration) {
+	m.life, m.cancel = context.WithCancel(context.Background())
+	if subscribe != nil {
+		m.unsubscribe = subscribe(func(_ context.Context, id string) { m.reconcileAsync(id) })
+	}
+	m.reconcileAsync("")
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-m.life.Done():
+				return
+			case <-t.C:
+				m.reconcileAsync("")
+			}
+		}
+	}()
+}
+
+// reconcileAsync starts a pass unless one with the same scope is running. Each
+// environment is followed by at most one pass at a time, including the all-hosts pass.
 func (m *Module) reconcileAsync(environmentID string) {
-	if _, running := m.passes.LoadOrStore(environmentID, true); running {
+	life := m.life
+	if life == nil {
+		life = context.Background()
+	}
+	key := passKey(environmentID)
+	if _, running := m.passes.LoadOrStore(key, true); running {
 		return
 	}
+	m.wg.Add(1)
 	go func() {
-		defer m.passes.Delete(environmentID)
-		m.reconcile(context.Background(), environmentID)
+		defer m.wg.Done()
+		defer m.passes.Delete(key)
+		m.reconcile(life, environmentID)
 	}()
+}
+func passKey(environmentID string) string {
+	if environmentID == "" {
+		return "all"
+	}
+	return "environment:" + environmentID
 }
 func (m *Module) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, error) {
 	if err := m.Agent.Check(ctx, i); err != nil {
@@ -297,19 +324,43 @@ func (m *Module) reconcile(ctx context.Context, environmentID string) {
 	if err := m.Hub.DB.WithContext(ctx).Where("finished_at IS NULL").Find(&rows).Error; err != nil {
 		return
 	}
+	byEnvironment := map[string][]string{}
+	var order []string
 	for _, row := range rows {
-		if ctx.Err() != nil {
-			return
-		}
 		request, _, err := decodeRecord(row)
 		if err != nil {
+			slog.WarnContext(ctx, "Proxy operation record cannot be decoded", "operationId", row.ID)
 			continue
 		}
-		if environmentID != "" && request.Instance.EnvironmentID != environmentID {
+		e := request.Instance.EnvironmentID
+		if environmentID != "" && e != environmentID {
 			continue
 		}
-		if _, err = m.Hub.Query(ctx, row.ID); err != nil {
-			slog.WarnContext(ctx, "Proxy operation settlement postponed", "operationId", row.ID, "code", dto.AgentUnavailable)
+		if _, seen := byEnvironment[e]; !seen {
+			order = append(order, e)
+		}
+		byEnvironment[e] = append(byEnvironment[e], row.ID)
+	}
+	for _, e := range order {
+		// The all-hosts pass skips an environment that its own pass is following.
+		if environmentID == "" {
+			if _, running := m.passes.LoadOrStore(passKey(e), true); running {
+				continue
+			}
+		}
+		for _, id := range byEnvironment[e] {
+			if ctx.Err() != nil {
+				break
+			}
+			if _, err := m.Hub.Query(ctx, id); err != nil {
+				slog.WarnContext(ctx, "Proxy operation settlement postponed", "operationId", id, "code", dto.AgentUnavailable)
+			}
+		}
+		if environmentID == "" {
+			m.passes.Delete(passKey(e))
+		}
+		if ctx.Err() != nil {
+			return
 		}
 	}
 }
@@ -317,10 +368,10 @@ func (m *Module) Stop(context.Context) error {
 	if m.unsubscribe != nil {
 		m.unsubscribe()
 	}
-	if m.stop != nil {
-		close(m.stop)
-		m.stop = nil
+	if m.cancel != nil {
+		m.cancel()
 	}
+	m.wg.Wait()
 	return nil
 }
 
