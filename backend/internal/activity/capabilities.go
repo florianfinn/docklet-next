@@ -2,12 +2,13 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration; M21 self-update descriptor. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284; notification and Auto Heal settings capabilities for #297; D6 origin, recreate, service restart and hub settings descriptors. M14 host maintenance and availability; M15 simple-user rights and identity contracts; M19 backend contracts and target identity integration; M21 self-update descriptor. M21 #438: candidate scans and verified manifest binding; optional-module foundation (#472).
 package activity
 
 import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/containershell"
+	"github.com/florianfinn/docklet-next/types/features"
 	"net/http"
 	"slices"
 	"strings"
@@ -63,6 +64,9 @@ func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Desc
 		}
 		result = append(result, descriptor)
 	}
+	for _, d := range features.Modules() {
+		result = append(result, capability.Descriptor{OperationID: d.Capability, ResourceRef: ref, DisabledReasonCode: "capability.unavailable"})
+	}
 	return result
 }
 
@@ -73,6 +77,20 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 	descriptors := capabilityDescriptorsInternal(capability.ResourceRef{Kind: input.Kind, ID: input.ID})
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {
+		if strings.HasPrefix(descriptors[i].OperationID, "module.") {
+			reason := "access.admin-required"
+			if permissions.IsGlobalAdmin() {
+				reason = "capability.unavailable"
+				if (input.Kind == "host" || input.Kind == "hub" && input.ID == "0") && input.ID != "" && !strings.Contains(input.ID, "~") {
+					if readers, ok := ctx.Value(operationCapabilityKey{}).(OperationCapabilityReaders); ok && readers.ModuleReason != nil {
+						reason = readers.ModuleReason(ctx, input.ID, features.ID(strings.TrimPrefix(descriptors[i].OperationID, "module.")))
+					}
+				}
+			}
+			descriptors[i].Available = reason == ""
+			descriptors[i].DisabledReasonCode = reason
+			continue
+		}
 		switch descriptors[i].OperationID {
 		case "importSource":
 			descriptors[i].Available = permissions.IsGlobalAdmin()

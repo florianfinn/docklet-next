@@ -2,8 +2,10 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration. #410 process zone and user zone reads.
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration. #410 process zone and user zone reads; optional-module foundation (#472).
 
+import { moduleSettingValues } from "./modules";
+import { moduleProblem } from "../module-error";
 import { settingsProblem, SettingsProblemError } from "../settings-error";
 import { discardResponse, drainResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
@@ -54,7 +56,9 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     });
     if (!response.ok) {
       if (/\bjson\b/i.test(response.headers.get("Content-Type") ?? "")) {
-        const problem = settingsProblem(await response.json().catch(() => undefined), response.status);
+        const body: unknown = await response.json().catch(() => undefined);
+ const moduleError = moduleProblem(body,response.status); if (moduleError) throw moduleError;
+ const problem = settingsProblem(body, response.status);
         if (problem instanceof SettingsProblemError) throw problem;
       } else discardResponse(response);
       throw new Error(`settings.write.${response.status}`);
@@ -68,7 +72,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       if (settings.setupCompleted !== "true" && settings.setupCompleted !== "false") throw new Error("settings.setup-status-missing");
       return settings.setupCompleted === "true";
     },
-    async completeSetup(input: Pick<HubSettings, "general" | "auth" | "hostDefaults">) {
+    async completeSetup(input: import("../api").SetupInput) {
       await write({
         ...(input.general.configuredTimeZone === undefined ? {} : { timeZone: input.general.configuredTimeZone }),
         hubName: input.general.hubName,
@@ -82,6 +86,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         defaultPgid: input.hostDefaults.pgid,
         detectSocketGroup: String(input.hostDefaults.detectSocketGroup),
         setupCompleted: "true",
+ ...moduleSettingValues(input.modules),
       });
     },
     getStackStopMode: () => readStackStopMode(baseUrl, client),

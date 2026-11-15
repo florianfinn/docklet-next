@@ -2,14 +2,16 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation. M19 #355 online transition announced on every authenticated online write.
+// Deviations: Original host registration implementation. M19 #355 online transition announced on every authenticated online write; optional-module foundation (#472).
 
 package environment
 
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/types/features"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -79,9 +81,16 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	cleanup := func() { stop(); cancel() }
 	if !contract.AgentRecoveryRoute(method, path) {
 		var tunnel *edge.AgentTunnel
-		if _, tunnel, err = s.checkAgentCompatibility(requestCtx, id, session, false); err != nil {
+		var info *version.Info
+		if info, tunnel, err = s.checkAgentCompatibility(requestCtx, id, session, false); err != nil {
 			cleanup()
 			return nil, nil, err
+		}
+		if module, ok := features.ForPath(path); ok {
+			if info == nil || !contract.ModuleCompatible(info.AgentContractVersion, info.AgentContractFingerprint) || (env.IsEdge && (tunnel == nil || !slices.Contains(tunnel.Capabilities, module.Capability))) {
+				cleanup()
+				return nil, nil, ErrAgentUpdateRequired
+			}
 		}
 		if tunnel != nil {
 			requestCtx = edge.WithSessionTunnel(requestCtx, tunnel)
@@ -361,4 +370,25 @@ func (s *EnvironmentService) revokeAgentSessionsInternal(id string, keepReport b
 	}
 	edge.ForgetPollState(id)
 	s.ForgetSyncState(id)
+}
+
+// ModuleReason uses the same credential and compatibility boundary as dispatch.
+func (s *EnvironmentService) ModuleReason(ctx context.Context, env string, id features.ID) string {
+	if env == "0" {
+		return ""
+	}
+	row, err := s.GetEnvironmentByID(ctx, env)
+	if err != nil {
+		return "agent.unavailable"
+	}
+	requestCtx, finish, err := s.AgentAccess(ctx, env, row.AccessToken, "GET", "/api/environments/0/modules/"+string(id))
+	if err != nil {
+		_, reason := remenv.AgentAccessFailure(err)
+		return reason
+	}
+	defer finish()
+	if requestCtx.Err() != nil {
+		return "agent.unavailable"
+	}
+	return ""
 }

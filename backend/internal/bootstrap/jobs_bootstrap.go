@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; remove fleet-upgrade resume and obsolete log cleanup; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #269 scan receipt repair wiring.
+// Deviations: Local module namespace; remove fleet-upgrade resume and obsolete log cleanup; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M19 #269 scan receipt repair wiring; optional-module foundation (#472).
 
 package bootstrap
 
@@ -13,6 +13,7 @@ import (
 	"fmt"
 	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -462,6 +463,7 @@ type settingsEffectsSchedulerInternal interface {
 }
 
 type timeoutSettingsEnvironmentInternal interface {
+	ModuleReason(context.Context, string, features.ID) string
 	ListRemoteEnvironments(ctx context.Context) ([]environment.Environment, error)
 	ProxyRequest(ctx context.Context, envID, method, path string, body []byte) ([]byte, int, error)
 }
@@ -633,15 +635,26 @@ func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment t
 		settingsMap[update.Key] = update.Value
 		keys = append(keys, update.Key)
 	}
-	body, err := json.Marshal(settingsMap)
-	if err != nil {
-		slog.WarnContext(ctx, "Failed to marshal timeout settings for sync", "error", err)
-		return
-	}
 
 	slog.InfoContext(ctx, "Syncing environment settings to remote environments", "count", len(envs), "keys", keys)
 
 	for _, env := range envs {
+		// v18 hosts still receive ordinary settings. Unsupported module keys must
+		// not make an older settings DTO reject the entire synchronisation payload.
+		values := maps.Clone(settingsMap)
+		for _, module := range features.Modules() {
+			if _, present := values[module.SettingKey]; present && localEnvironment.ModuleReason(ctx, env.ID, module.ID) != "" {
+				delete(values, module.SettingKey)
+			}
+		}
+		if len(values) == 0 {
+			continue
+		}
+		body, err := json.Marshal(values)
+		if err != nil {
+			slog.WarnContext(ctx, "Failed to marshal agent settings", "error", err)
+			continue
+		}
 		responseBody, statusCode, proxyRequestErr := localEnvironment.ProxyRequest(ctx, env.ID, http.MethodPut, "/api/environments/0/settings", body)
 		if proxyRequestErr != nil {
 			slog.WarnContext(ctx, "Failed to sync agent settings to environment", "environmentId", env.ID, "environmentName", env.Name, "error", proxyRequestErr)

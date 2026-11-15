@@ -2,11 +2,12 @@
 // Revision: 357dd6dee16118e0880ca694d222699556389d977c3d15d6148e23e2acee23d7
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #439: Compose self-update controls and capability integration. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. #410 user zone read.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected first-run identity flow. M5 #84 part 2: live host registration, credential lifecycle and admin production onboarding. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #181 live volume management and lifecycle checks. #182 shared workspace port. #183 manifest revisions returned by volume file gestures. #183 path-aware workspace entry freshness and baseline ownership. M9 #204: validate labels, driver options, auxiliary addresses and DNS aliases. M9 #204 phase 2: capability-gated network writes and typed errors. M9 #204: HTTP network write mapping M9 #204: preserve partial topology observations. M9 #204: show partial network reads and protect unknown usage. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #297 live notification targets and per-host Auto Heal settings. M14 #315 dedicated hub stack stop-mode read. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service; M19 backend contracts and target identity integration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #439: Compose self-update controls and capability integration. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. #410 user zone read; optional-module foundation (#472).
 
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
 
+import type { ModuleChoices, ModulesApi } from "@/domain/modules";
 import type { components } from "@/api/generated/schema";
 import type { DirListing, FileContent } from "@/domain/files";
 import type { DockerImage, ImagePullProgress, ImagePullResult, ImagePruneResult, PruneMode } from "@/domain/images";
@@ -299,7 +300,10 @@ export interface ImagesApi {
   pruneImages(input: { hostIds: string[]; mode: PruneMode }): Promise<ImagePruneResult>;
 }
 
-export interface SettingsApi {
+
+export type SetupInput = Pick<HubSettings, "general" | "auth" | "hostDefaults"> & { modules?: ModuleChoices };
+
+export interface SettingsApi extends ModulesApi {
   getSelfUpdate(hostId: string): Promise<import("@/domain/self-update").SelfUpdateCheck>;
   selfUpdate(hostId: string, input: import("@/domain/self-update").SelfUpdateInput): Promise<string>;
   getSetupStatus(): Promise<boolean>;
@@ -313,7 +317,7 @@ export interface SettingsApi {
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */
-  completeSetup(input: Pick<HubSettings, "general" | "auth" | "hostDefaults">): Promise<void>;
+  completeSetup(input: SetupInput): Promise<void>;
   setContainerAutoUpdate(containerId: string, policy: AutoUpdatePolicy): Promise<void>;
 }
 

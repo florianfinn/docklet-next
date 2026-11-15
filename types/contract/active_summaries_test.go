@@ -2,7 +2,7 @@
 // Revision: 5b0fee810af34673e95c76ffb8af1d49b08c56a7
 // Retrieved: 2026-11-11
 // License: Apache-2.0
-// Deviations: Original active counts agent contract boundary regression.
+// Deviations: Original active counts agent contract boundary regression; optional-module foundation (#472).
 
 package contract
 
@@ -18,7 +18,7 @@ import (
 )
 
 func TestActiveSummariesContractBoundary(t *testing.T) {
-	raw, err := os.ReadFile("testdata/agent-hub-v18.json")
+	raw, err := os.ReadFile("testdata/agent-hub-v19.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(raw)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -32,8 +32,8 @@ func TestActiveSummariesContractBoundary(t *testing.T) {
 		}
 	}
 	require.NoError(t, json.Unmarshal(raw, &manifest))
-	require.Equal(t, 18, manifest.Version)
-	require.Equal(t, manifest.Version, manifest.Minimum)
+	require.Equal(t, 19, manifest.Version)
+	require.Equal(t, 18, manifest.Minimum)
 	require.Equal(t, MinimumAgentVersion, manifest.Minimum)
 	require.False(t, AgentCompatible(17, "221ff863722bf4dab6cca4e019f5ba5a8fb66b097a7e4a150ddee1e760379450"))
 	const path = "/environments/{id}/images/vulnerabilities/active-summaries"

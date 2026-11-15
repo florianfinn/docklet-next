@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding; single activity reads defer to the owner/target check. M23 #435: active image summaries. M25 latest agent restart read.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding; single activity reads defer to the owner/target check. M23 #435: active image summaries. M25 latest agent restart read; optional-module foundation (#472).
 
 package access
 
@@ -41,6 +41,9 @@ type Rule struct {
 
 // Rules is an exact operation allowlist. Missing entries fail closed.
 var Rules = map[string]Rule{
+	"list-modules":                                 {Kind: Admin},
+	"delete-module-data":                           {Kind: Admin},
+	"delete-host-module-data":                      {Kind: Admin},
 	"get-history-sample":                           {Kind: Admin},
 	"get-container-history":                        {Kind: App, Ref: ContainerPath, Level: Restricted},
 	"get-project-history":                          {Kind: App, Ref: ProjectPath, Level: Restricted},

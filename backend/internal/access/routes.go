@@ -2,13 +2,16 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472).
 
 package access
 
 // Routes describes the shared exported surface for pre-forwarding decisions.
 // Huma uses the matched operation and its actual parameters.
 var Routes = []Route{
+	{"GET", "/modules", "list-modules"},
+	{"DELETE", "/modules/{id}/data", "delete-module-data"},
+	{"DELETE", "/environments/{id}/modules/{module}/data", "delete-host-module-data"},
 	{"GET", "/environments/{id}/volumes/_collection/binds", "list-volume-binds"},
 	{"POST", "/environments/{id}/volumes/_collection/binds/size", "measure-volume-bind"},
 	{"POST", "/backup-targets/test", "test-backup-target-draft"},

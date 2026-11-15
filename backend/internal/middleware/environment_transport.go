@@ -2,16 +2,19 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded.; M15 resource authorization and isolated transport helpers.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded.; M15 resource authorization and isolated transport helpers; optional-module foundation (#472).
 
 package middleware
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
+	"github.com/florianfinn/docklet-next/types/features"
+	moduleDTO "github.com/florianfinn/docklet-next/types/modules"
 	"github.com/labstack/echo/v5"
 	"io"
 	"log/slog"
@@ -74,6 +77,13 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 // 401 means the agent rejected the manager's credentials; passing it through
 // makes browser clients treat it as a lost session, so it becomes a 502.
 func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.Response) error {
+	if _, ok := features.ForPath(c.Request().URL.Path); ok && resp.StatusCode == 403 {
+		body := remenv.ReadAgentRefusalBody(resp.Body)
+		if moduleDTO.DisabledRefusal(resp.StatusCode, c.Request().URL.Path, body) {
+			return c.Blob(403, "application/problem+json", body)
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+	}
 	if remenv.AgentAuthRejected(resp.StatusCode) {
 		slog.WarnContext(c.Request().Context(), "Remote environment rejected the manager's credentials", "target", resp.Request.URL.Host)
 		return c.JSON(http.StatusBadGateway, map[string]any{

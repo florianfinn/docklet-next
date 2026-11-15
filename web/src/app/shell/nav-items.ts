@@ -1,3 +1,4 @@
+import type { ModuleChoices, ModuleID } from "@/domain/modules";
 import {
   Archive,
   BellRing,
@@ -37,6 +38,7 @@ export interface NavItem {
   icon: LucideIcon;
   /** Planned area with no active feature controls. */
   comingSoon?: boolean;
+  module?: ModuleID;
 }
 
 export interface NavGroup {
@@ -75,7 +77,7 @@ export const NAV: NavGroup[] = [
   {
     key: "later",
     items: [
-      { key: "proxy", to: "/proxy", icon: Waypoints, comingSoon: true },
+      { key: "proxy", to: "/proxy", icon: Waypoints, comingSoon: true, module: "proxy" },
       { key: "games", to: "/games", icon: Gamepad2, comingSoon: true },
     ],
   },
@@ -91,6 +93,6 @@ export function navigationForRoutes(routes: RouteObject[]): NavGroup[] {
   })).filter((group) => group.items.length > 0);
 }
 
-export function visibleNavItems(items: NavItem[], canReadHubBackups: boolean): NavItem[] {
-  return items.filter((item) => item.key !== "hubBackups" || canReadHubBackups);
+export function visibleNavItems(items: NavItem[], canReadHubBackups: boolean, modules?: ModuleChoices): NavItem[] {
+  return items.filter((item) => (item.key !== "hubBackups" || canReadHubBackups) && (!item.module || modules?.[item.module] === true));
 }

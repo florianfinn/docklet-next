@@ -1,3 +1,4 @@
+import { defaultModules, MODULES } from "@/domain/modules";
 import { pruneEvents, validateHistoryLimit } from "@/domain/activity-history";
 import type { HubSettings, SettingsSection } from "@/domain/settings";
 
@@ -21,7 +22,12 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
 export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
   const snapshot = (): HubSettings => ({ ...structuredClone(db.settings), security: { scanEnabled: db.security.enabled, schedule: db.security.schedule } });
 
+  let modules = defaultModules();
   return {
+ getModuleStates: async () => ({ ...modules }),
+ getModules: async () => MODULES.map((m) => ({ id:m.id, enabled:modules[m.id], kind:"module" as const })),
+ setModuleEnabled: async (id,enabled) => { modules={...modules,[id]:enabled}; },
+ deleteModuleData: async () => ({ pendingCleanup:[] }),
     getSelfUpdate: async () => ({ version: "1.0.0", eligibility: { state: "not-eligible", code: "update.self-not-compose", manual: [] } }),
     selfUpdate: async (hostId) => { throw unavailable("selfUpdate", selfUpdateRef(hostId)); },
     getSetupStatus: async () => db.settings.setupCompleted,
@@ -62,6 +68,7 @@ export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
     },
 
     async completeSetup(input) {
+ modules = input.modules ?? defaultModules();
       await wait(600);
       db.settings = { ...db.settings, ...structuredClone(input), setupCompleted: true };
       db.pushEvent({ kind: "config", level: "ok", title: `Ersteinrichtung abgeschlossen: ${input.general.hubName}` });

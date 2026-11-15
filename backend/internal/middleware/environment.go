@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; single-host upgrade routes are hub-owned before dispatch; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; single-host upgrade routes are hub-owned before dispatch; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; optional-module foundation (#472).
 
 package middleware
 
@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/access"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
+	"github.com/florianfinn/docklet-next/types/features"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
@@ -83,6 +84,7 @@ type AuthValidator func(ctx context.Context, c *echo.Context) (*authz.Permission
 
 // EnvironmentMiddleware proxies requests for remote environments to their respective agents.
 type EnvironmentMiddleware struct {
+	moduleEnabled func(context.Context, features.ID) bool
 	shellSessions *containershell.Registry
 	localID       string
 	paramName     string
@@ -133,6 +135,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.moduleEnabled = options[0].ModuleEnabled
 		m.shellSessions = options[0].ShellSessions
 		m.vulnerabilityEnabled = options[0].VulnerabilityEnabled
 		m.vulnerabilityIgnoreUnfixed = options[0].VulnerabilityIgnoreUnfixed
@@ -164,11 +167,12 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		}
 		return err
 	}
+	module, isModule := features.ForPath(c.Request().URL.Path)
 	isVulnerability := isVulnerabilityRequest(c)
 	// Refusals answer in the shape declared for the operation the hub router matched.
 	vulnerabilityShape := isVulnerability || isVulnerabilityOperation(c)
 	// Local vulnerability requests keep the Huma order: auth, permission, then the feature veto.
-	if envID == "" || envID == m.localID || (!isVulnerability && !m.hasResourcePath(c, envID)) {
+	if envID == "" || envID == m.localID || (!isModule && !isVulnerability && !m.hasResourcePath(c, envID)) {
 		return next(c)
 	}
 
@@ -217,6 +221,13 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			return genericProblem(c, d.Status(), string(d))
 		}
 		c.Set("simpleUserAuthorized", true)
+	}
+	if isModule {
+		// Cleanup is management, available only while off; the receiver checks idle state.
+		cleanup := c.Path() == "/api/environments/:id/modules/:module/data" && c.Request().Method == "DELETE" && m.buildResourceSuffix(c.Request().URL.Path, envID) == "/modules/"+string(module.ID)+"/data"
+		if !cleanup && (m.moduleEnabled == nil || !m.moduleEnabled(c.Request().Context(), module.ID)) {
+			return APINotFound(c)
+		}
 	}
 	if isVulnerability {
 		if m.proxyPermissionDenied(c, perms, envID) {

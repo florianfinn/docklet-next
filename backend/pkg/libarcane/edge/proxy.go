@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Public log-download size and capability refusals (#379); Flush-aware terminal collection across tunnel close (#416); Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
+// Deviations: Public log-download size and capability refusals (#379); Flush-aware terminal collection across tunnel close (#416); Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification; optional-module foundation (#472).
 
 package edge
 
@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	moduleDTO "github.com/florianfinn/docklet-next/types/modules"
 	"io"
 	"log/slog"
 	"net/http"
@@ -314,7 +315,7 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.unavailable", "error": "failed to proxy request through tunnel"})
 	}
 
-	if remenv.AgentAuthRejected(status) {
+	if remenv.AgentAuthRejected(status) && !moduleDTO.DisabledRefusal(status, targetPath, respBody) {
 		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": remenv.ClassifyAgentRefusal(status, respBody)})
 	}
 	responseHeaders := make(http.Header)

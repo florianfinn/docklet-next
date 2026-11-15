@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split retained hub proxy wiring options from environment.go; add the shared shell registry; M18 live scheduling, policy and contract foundation.
+// Deviations: Split retained hub proxy wiring options from environment.go; add the shared shell registry; M18 live scheduling, policy and contract foundation; optional-module foundation (#472).
 
 package middleware
 
@@ -11,11 +11,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/containershell"
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
+	"github.com/florianfinn/docklet-next/types/features"
 	"net/http"
 )
 
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
+	ModuleEnabled              func(context.Context, features.ID) bool
 	ShellSessions              *containershell.Registry
 	VulnerabilityEnabled       func(context.Context) bool
 	VulnerabilityIgnoreUnfixed func() bool

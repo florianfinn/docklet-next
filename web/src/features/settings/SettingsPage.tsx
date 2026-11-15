@@ -1,3 +1,4 @@
+import { ModulesSection } from "./sections/ModulesSection";
 import { IDS } from "./settings-sections";
 import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, LayoutGrid, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
 import { NavLink, Navigate, useParams } from "react-router";
@@ -25,7 +26,7 @@ import { ConnectedUpdatesSection as LiveUpdatesSection } from "./sections/Connec
 import { UpdatesSection } from "./sections/UpdatesSection";
 
 const GROUPS = [
-  { key: "hub", items: [{ id: "general", icon: Settings2 }, { id: "appearance", icon: Palette }, { id: "help", icon: Info }, { id: "auth", icon: KeyRound }] },
+  { key: "hub", items: [{ id: "modules", icon: LayoutGrid }, { id: "general", icon: Settings2 }, { id: "appearance", icon: Palette }, { id: "help", icon: Info }, { id: "auth", icon: KeyRound }] },
   { key: "operations", items: [{ id: "hosts", icon: HardDrive }, { id: "updates", icon: RefreshCw }, { id: "backups", icon: Archive }, { id: "notifications", icon: BellRing }, { id: "autoHeal", icon: HeartPulse }, { id: "serviceWidgets", icon: LayoutGrid }] },
   { key: "system", items: [{ id: "security", icon: ShieldAlert }, { id: "activity", icon: History }] },
 ] as const;
@@ -44,7 +45,7 @@ export default function SettingsPage() {
   const liveScans = adapter.kind === "http" && id === "security";
   const liveBackups = id === "backups";
   // Notification targets and Auto Heal have no hub-settings draft; both adapters serve them directly.
-  const own = id === "notifications" || id === "autoHeal" || id === "serviceWidgets";
+  const own = id === "modules" || id === "notifications" || id === "autoHeal" || id === "serviceWidgets";
   const liveUpdates = adapter.kind === "http" && id === "updates";
   const settings = useSettings(!liveHosts && !liveScans && !liveUpdates && !liveBackups && !own && !connected && id !== "appearance" && id !== "help");
   const hub = useConnectedSettings(connected && id !== "auth");
@@ -77,7 +78,7 @@ export default function SettingsPage() {
           </div>
         </nav>
         <div key={id} className="min-w-0">
-          {id === "appearance" ? (
+          {id === "modules" ? <ModulesSection /> : id === "appearance" ? (
             <div className="flex flex-col gap-5">
               <AppearanceSection />
               <div className="rounded-xl border bg-card p-6">

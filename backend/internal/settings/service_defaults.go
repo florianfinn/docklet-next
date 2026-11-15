@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.; inert Arcane tools sentinel removed (#362).
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.; inert Arcane tools sentinel removed (#362); optional-module foundation (#472).
 
 package settings
 
@@ -10,10 +10,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/features"
 	"log/slog"
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"go.getarcane.app/kit/pkg"
@@ -25,7 +27,7 @@ import (
 
 // DefaultSettingsConfig returns the canonical default settings model used by Arcane.
 func DefaultSettingsConfig() *Settings {
-	return &Settings{
+	cfg := &Settings{
 		UpdateCheckInterval:                   SettingVariable{Value: "12h"},
 		UpdateNotify:                          SettingVariable{Value: "false"},
 		TimeZone:                              SettingVariable{Value: ""},
@@ -91,6 +93,7 @@ func DefaultSettingsConfig() *Settings {
 		AuthSessionTimeout:                    SettingVariable{Value: "1440"},
 		AuthPasswordPolicy:                    SettingVariable{Value: "strong"},
 		FeatureVulnerabilityManagementEnabled: SettingVariable{Value: "true"},
+		ModuleProxyEnabled:                    SettingVariable{Value: "false"},
 		VulnerabilityScanSchedule:             SettingVariable{Value: `{"mode":"manual"}`},
 		VulnerabilityNotifyCritical:           SettingVariable{Value: "false"},
 		VulnerabilityNotifyHigh:               SettingVariable{Value: "false"},
@@ -133,6 +136,10 @@ func DefaultSettingsConfig() *Settings {
 
 		InstanceID: SettingVariable{Value: ""},
 	}
+	for _, module := range features.Modules() {
+		_ = cfg.UpdateField(module.SettingKey, strconv.FormatBool(module.DefaultEnabled), true)
+	}
+	return cfg
 }
 
 // retiredSettingValuesInternal lists former defaults that startup replaces

@@ -20,6 +20,7 @@ export const deSetup: typeof enSetup = {
     hub: { title: "Hub", description: "Name, Adresse, Zeitzone" },
     projects: { title: "Projekte", description: "Verzeichnisse und Datei-IDs" },
     auth: { title: "Anmeldung", description: "Login-Modus" },
+    modules: { title: "Module", description: "Optionale Funktionen" },
     review: { title: "Prüfen", description: "Zusammenfassung" },
     done: { title: "Fertig", description: "Nächster Schritt" },
   },

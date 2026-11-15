@@ -2,13 +2,14 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original wiring of fresh container and host readers for D6/D7 and shared restart admission checks. M14 host maintenance and availability.
+// Deviations: Original wiring of fresh container and host readers for D6/D7 and shared restart admission checks. M14 host maintenance and availability; optional-module foundation (#472).
 
 package api
 
 import (
 	"context"
 	"encoding/json"
+	"github.com/florianfinn/docklet-next/types/features"
 	"net/http"
 	"net/url"
 
@@ -24,6 +25,15 @@ import (
 func operationCapabilityReaders(d HandlerDeps, cfg *config.Config) activity.OperationCapabilityReaders {
 	containers, hosts := d.Container.Service(), d.Environment.Service()
 	return activity.OperationCapabilityReaders{
+		ModuleReason: func(ctx context.Context, env string, id features.ID) string {
+			if !d.Modules.Enabled(ctx, id) {
+				return "feature-disabled"
+			}
+			if hosts == nil {
+				return "capability.unavailable"
+			}
+			return hosts.ModuleReason(ctx, env, id)
+		},
 		GuardOrigin: containers.GuardRuntimeOrigin,
 		RestartReason: func(ctx context.Context, env string) string {
 			if hosts == nil || hosts.GetDB() == nil {

@@ -19,6 +19,7 @@ export const enSetup = {
     hub: { title: "Hub", description: "Name, address, time zone" },
     projects: { title: "Projects", description: "Directories and file IDs" },
     auth: { title: "Sign-in", description: "Login mode" },
+    modules: { title: "Modules", description: "Optional functions" },
     review: { title: "Review", description: "Summary" },
     done: { title: "Done", description: "Next step" },
   },

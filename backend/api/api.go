@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences; hub-only service widget routes and neutral errors; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Docklet Next API title (#362).
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation; lifecycle-aware health; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; D6 fresh capability reader wiring. M14 host maintenance and availability; M15 simple-user rights and identity contracts; user-aware host-removal assignment cleanup; M17 runtime history and personal preferences; hub-only service widget routes and neutral errors; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Docklet Next API title (#362); optional-module foundation (#472).
 
 package api
 
 import (
 	"context"
 	"encoding/json/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/modules"
 	"io"
 	"maps"
 	"net/http"
@@ -239,6 +240,7 @@ func qualifyGenericArcaneArgumentsInternal(pkgPath, typeName, schemaName string)
 type HandlerDeps struct {
 	fx.In
 
+	Modules           *modules.Service
 	Runtime           *activity.RuntimeService
 	RuntimeHTTP       *activity.RuntimeHTTPService
 	RuntimeReceiver   *activity.RuntimeReceiver
@@ -454,6 +456,9 @@ type routeModule struct {
 }
 
 var routeModules = []routeModule{
+	{"modules", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		modules.RegisterRoutes(api, d.Modules, d.Environment.Service(), cfg != nil && (cfg.AgentMode || cfg.EdgeAgent))
+	}},
 	{"history", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
 		d.History.RegisterRoutes(api, cfg != nil && (cfg.AgentMode || cfg.EdgeAgent))
 	}},

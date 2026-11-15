@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original UI lifecycle and role boundary proofs. M19 web consumer integration; exact and prefix ranking before group truncation.
+// Deviations: Original UI lifecycle and role boundary proofs. M19 web consumer integration; exact and prefix ranking before group truncation; optional-module foundation (#472).
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -55,10 +55,10 @@ it("keyboard opens with Ctrl/Meta K, Escape closes and editor keeps its shortcut
   const input = within(dialog).getByRole("combobox"); await userEvent.type(input, "Profile"); await userEvent.keyboard("{ArrowDown}{Enter}"); await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
 });
 it("identity change closes current results", async () => {
-  const adapter = createDemoAdapter(); let end = () => {}; let version = 0;
-  registerIdentityLifetime(adapter.subscribeChanges, { active: () => true, version: () => version, listen: (fn) => { end = fn; return () => {}; } });
+  const adapter = createDemoAdapter(); const listeners=new Set<()=>void>(); let version = 0;
+  registerIdentityLifetime(adapter.subscribeChanges, { active: () => true, version: () => version, listen: (fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; } });
   renderWithApp(<GlobalSearch />, adapter); await userEvent.click(screen.getByRole("button", { name: "Search" })); await screen.findByRole("dialog");
-  await act(() => { version++; end(); }); expect(screen.queryByRole("dialog") === null).toBe(true);
+  await act(() => { version++; listeners.forEach((notify)=>notify()); }); expect(screen.queryByRole("dialog") === null).toBe(true);
 });
 it("user destinations all resolve in UserShell and no admin-only query is sent", async () => {
   const demo = createDemoAdapter(), stack = (await demo.listStacks())[0]!;

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472).
 
 package settings
 
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	moduleDTO "github.com/florianfinn/docklet-next/types/modules"
 	"net/http"
 	"os"
 	"strconv"
@@ -260,6 +261,9 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 	if input.EnvironmentID == "0" && h.cfg != nil && h.cfg.UIConfigurationDisabled {
 		return nil, &environmentDTO.HostProblem{Code: "settings.ui-configuration-disabled", Status: 403}
 	}
+	if input.Body.ModuleProxyEnabled != nil && input.EnvironmentID != "0" && (h.cfg == nil || !h.cfg.AgentMode && !h.cfg.EdgeAgent) {
+		return nil, huma.Error400BadRequest("This setting is hub-only")
+	}
 	if input.Body.BackupDefaultRetentionCount != nil && (input.EnvironmentID != "0" || h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent)) {
 		return nil, huma.Error400BadRequest("backupDefaultRetentionCount is a hub-only setting")
 	}
@@ -352,6 +356,9 @@ func (h *SettingsHandler) updateSettingsForLocalEnvironment(ctx context.Context,
 
 	updatedSettings, err := h.settingsService.UpdateSettings(ctx, input)
 	if err != nil {
+		if p, ok := errors.AsType[*moduleDTO.Problem](err); ok {
+			return nil, p
+		}
 		if p, ok := errors.AsType[*settings.Problem](err); ok {
 			return nil, p
 		}

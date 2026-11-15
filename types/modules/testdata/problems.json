@@ -1,0 +1,106 @@
+[
+  {
+    "transport": "direct",
+    "code": "module-busy",
+    "status": 409,
+    "body": {
+      "status": 409,
+      "code": "module-busy",
+      "feature": "proxy",
+      "operation": "apply-1"
+    }
+  },
+  {
+    "transport": "direct",
+    "code": "module-on",
+    "status": 409,
+    "body": {
+      "status": 409,
+      "code": "module-on",
+      "feature": "proxy",
+      "operation": "apply-1"
+    }
+  },
+  {
+    "transport": "direct",
+    "code": "operation-conflict",
+    "status": 409,
+    "body": {
+      "status": 409,
+      "code": "operation-conflict",
+      "feature": "proxy",
+      "operation": "apply-1"
+    }
+  },
+  {
+    "transport": "direct",
+    "code": "feature-disabled",
+    "status": 403,
+    "body": {
+      "status": 403,
+      "code": "feature-disabled",
+      "feature": "proxy"
+    }
+  },
+  {
+    "transport": "direct",
+    "code": "module-not-found",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "API endpoint not found: /api/environments/example/modules/proxy/data"
+    }
+  },
+  {
+    "transport": "edge",
+    "code": "module-busy",
+    "status": 409,
+    "body": {
+      "status": 409,
+      "code": "module-busy",
+      "feature": "proxy",
+      "operation": "apply-1"
+    }
+  },
+  {
+    "transport": "edge",
+    "code": "module-on",
+    "status": 409,
+    "body": {
+      "status": 409,
+      "code": "module-on",
+      "feature": "proxy",
+      "operation": "apply-1"
+    }
+  },
+  {
+    "transport": "edge",
+    "code": "operation-conflict",
+    "status": 409,
+    "body": {
+      "status": 409,
+      "code": "operation-conflict",
+      "feature": "proxy",
+      "operation": "apply-1"
+    }
+  },
+  {
+    "transport": "edge",
+    "code": "feature-disabled",
+    "status": 403,
+    "body": {
+      "status": 403,
+      "code": "feature-disabled",
+      "feature": "proxy"
+    }
+  },
+  {
+    "transport": "edge",
+    "code": "module-not-found",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "API endpoint not found: /api/environments/example/modules/proxy/data"
+    }
+  }
+]

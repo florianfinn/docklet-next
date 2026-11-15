@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original real Direct/Edge settings worker, online transition and agent prune evidence.
+// Deviations: Original real Direct/Edge settings worker, online transition and agent prune evidence; optional-module foundation (#472).
 
 package bootstrap
 
@@ -43,6 +43,11 @@ import (
 
 func actualSettingsTunnel(t *testing.T, handler http.Handler, credential string) *edge.AgentTunnel {
 	t.Helper()
+	return actualSettingsTunnelForEnvironment(t, handler, credential, "remote")
+}
+
+func actualSettingsTunnelForEnvironment(t *testing.T, handler http.Handler, credential, environmentID string, sessionKeys ...string) *edge.AgentTunnel {
+	t.Helper()
 	registry := edge.NewTunnelRegistry()
 	previous := edge.GetRegistry()
 	edge.SetDefaultRegistry(registry)
@@ -53,13 +58,18 @@ func actualSettingsTunnel(t *testing.T, handler http.Handler, credential string)
 		if token != credential {
 			return "", errors.New("invalid synthetic token")
 		}
-		return "remote", nil
+		return environmentID, nil
 	}, func(_ context.Context, _ string, online bool) {
 		if online {
 			once.Do(func() { close(connected) })
 		}
 	})
-	server.SetSessionKeyResolver(func(context.Context, string, string) (string, error) { return "key", nil })
+	server.SetSessionKeyResolver(func(context.Context, string, string) (string, error) {
+		if len(sessionKeys) > 0 {
+			return sessionKeys[0], nil
+		}
+		return "key", nil
+	})
 	router := echo.New()
 	router.GET("/api/tunnel/connect", server.HandleConnect)
 	manager := httptest.NewServer(router)
@@ -70,7 +80,7 @@ func actualSettingsTunnel(t *testing.T, handler http.Handler, credential string)
 	go func() { defer close(done); tunnelClient.StartWithErrorChan(life, nil) }()
 	t.Cleanup(func() {
 		cancel()
-		registry.Unregister("remote")
+		registry.Unregister(environmentID)
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
@@ -82,7 +92,7 @@ func actualSettingsTunnel(t *testing.T, handler http.Handler, credential string)
 	case <-time.After(5 * time.Second):
 		t.Fatal("history Edge registration barrier not reached")
 	}
-	tunnel, ok := registry.Get("remote").Get()
+	tunnel, ok := registry.Get(environmentID).Get()
 	require.True(t, ok)
 	return tunnel
 }

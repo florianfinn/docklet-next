@@ -2,10 +2,11 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38.
+// Deviations: Original implementation for issue 38; optional-module foundation (#472).
 package activity
 
 import (
+	"github.com/florianfinn/docklet-next/types/features"
 	"testing"
 
 	"github.com/florianfinn/docklet-next/types/capability"
@@ -15,7 +16,7 @@ import (
 func TestCapabilityDescriptorAvailabilityInvariantInternal(t *testing.T) {
 	ref := capability.ResourceRef{Kind: "environment", ID: "env-1"}
 	descriptors := capabilityDescriptorsInternal(ref)
-	require.Len(t, descriptors, len(adapterOperationIDs)+len(backupOperationIDs)+len(settingsOperationIDs))
+	require.Len(t, descriptors, len(adapterOperationIDs)+len(backupOperationIDs)+len(settingsOperationIDs)+len(features.Modules()))
 	available := map[string]bool{"listImages": true, "listVolumes": true, "getVolume": true, "getTopology": true, "subscribeMetrics": true, "listStacks": true, "getStack": true, "listContainers": true, "listHosts": true, "listActions": true, "listEvents": true, "subscribeActions": true, "subscribeChanges": true}
 	for _, descriptor := range descriptors {
 		require.Equal(t, ref, descriptor.ResourceRef)

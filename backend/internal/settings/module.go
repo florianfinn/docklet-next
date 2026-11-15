@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; M19 backend contracts and target identity integration; optional-module foundation (#472).
 
 // Package settings owns persisted application settings and their HTTP surface.
 package settings
 
 import (
+	moduleDTO "github.com/florianfinn/docklet-next/types/modules"
 	dto "github.com/florianfinn/docklet-next/types/settings"
 	"net/http"
 	"reflect"
@@ -90,6 +91,9 @@ func RegisterSettings(api huma.API, settingsService *SettingsService, proxyRemot
 
 	ref := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.Problem](), true, "")
 	api.OpenAPI().Paths["/environments/{id}/settings"].Put.Responses["400"] = &huma.Response{Description: "Invalid setting", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: ref}}}
+	moduleSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[moduleDTO.Problem](), true, "")
+	frameworkSchema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
+	api.OpenAPI().Paths["/environments/{id}/settings"].Put.Responses["409"] = &huma.Response{Description: "Module has unfinished work or setup conflict", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{moduleSchema, frameworkSchema}}}}}
 	handlerutil.HostProblemResponses(api, api.OpenAPI().Paths["/environments/{id}/settings"].Put, "403", "502")
 
 }

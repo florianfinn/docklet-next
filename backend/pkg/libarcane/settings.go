@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; Arcane image registry host helpers removed (#235); docker client refresh interval validated as cron (#407).
+// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; Arcane image registry host helpers removed (#235); docker client refresh interval validated as cron (#407); optional-module foundation (#472).
 
 package libarcane
 
 import (
 	"fmt"
+	"github.com/florianfinn/docklet-next/types/features"
 	"slices"
 	"strings"
 
@@ -56,7 +57,11 @@ func TimeoutSettingKeys() []string {
 
 // AgentSyncedSettingKeys returns a fresh copy of every hub setting propagated to agents.
 func AgentSyncedSettingKeys() []string {
-	return append(TimeoutSettingKeys(), "activityEventLimit", "activityRunLimit")
+	keys := append(TimeoutSettingKeys(), "activityEventLimit", "activityRunLimit")
+	for _, module := range features.Modules() {
+		keys = append(keys, module.SettingKey)
+	}
+	return keys
 }
 
 func IsCronSettingKey(key string) bool {

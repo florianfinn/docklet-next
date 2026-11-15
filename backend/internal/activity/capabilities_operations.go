@@ -2,13 +2,14 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original D6 permission-first operation descriptors with fresh readers; D7 host maintenance and restart/settings refusal parity. M14 host maintenance and availability.
+// Deviations: Original D6 permission-first operation descriptors with fresh readers; D7 host maintenance and restart/settings refusal parity. M14 host maintenance and availability; optional-module foundation (#472).
 
 package activity
 
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/types/features"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 // Readers use current host state and the same inspect/override guard as admission.
 // They are invoked only after the resource and grants have been validated.
 type OperationCapabilityReaders struct {
+	ModuleReason        func(context.Context, string, features.ID) string
 	HostReason          func(context.Context, string) string
 	HostOperationReason func(context.Context, string) string
 	RestartReason       func(context.Context, string) string

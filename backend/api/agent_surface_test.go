@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 agent route contract test; M17 runtime history and personal preferences. M23 #435: active image summary route snapshot.
+// Deviations: Original issue #8 agent route contract test; M17 runtime history and personal preferences. M23 #435: active image summary route snapshot; optional-module foundation (#472).
 
 package api
 
@@ -22,12 +22,12 @@ const routeSnapshotHeader = "# Source: docklet-next/docs/design/core-adoption.md
 	"# Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71\n" +
 	"# Retrieved: 2026-10-13\n" +
 	"# License: Apache-2.0\n" +
-	"# Deviations: Agent route snapshot for issue #8; M23 #435 active image summaries.\n"
+	"# Deviations: Agent route snapshot for issue #8; M23 #435 active image summaries; optional module cleanup foundation (#472).\n"
 
 func TestAgentAndEdgeAgentRouteAllowlist(t *testing.T) {
 	wantModules := []string{
 		"activity", "autoheal", "container", "diagnostics", "health", "history", "image", "image-update",
-		"job", "network", "port", "project", "registry", "runtime", "settings", "system", "updater", "upload",
+		"job", "modules", "network", "port", "project", "registry", "runtime", "settings", "system", "updater", "upload",
 		"version", "volume", "vulnerability",
 	}
 	wantRoutes, err := os.ReadFile(filepath.Join("testdata", "agent-routes.txt"))

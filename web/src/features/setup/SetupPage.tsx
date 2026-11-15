@@ -1,3 +1,5 @@
+import { MODULES } from "@/domain/modules";
+import { ModuleChoicesFields } from "@/features/settings/sections/ModuleChoicesFields";
 import { ArrowLeft, ArrowRight, CheckCircle2, LayoutDashboard, Pencil, RotateCcw, Server, Settings2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
@@ -61,6 +63,7 @@ function ReviewBlock({ title, onEdit, rows }: { title: string; onEdit: () => voi
 export default function SetupPage() {
   const t = useTranslations("setup");
   const tr = useTranslations("setup.review");
+ const tm = useTranslations("settings.modules");
   const commandError = useCommandError();
   const adapter = useAdapter();
   const mode = useAuthMode();
@@ -92,7 +95,7 @@ export default function SetupPage() {
   const requested = params.get("step") as SetupStep | null;
   const index = Math.min(Math.max(0, SETUP_STEPS.indexOf(requested ?? "hub")), draft.reached);
   const step = SETUP_STEPS[index] ?? "hub";
-  const errorCount = { hub: [general.hubName, general.hubAddress, general.domainUrl], projects: Object.values(hostErr), auth: [...Object.values(authErr), ...(connected && draft.auth.mode === "local" && !draft.auth.local.passwordSet ? [draft.currentPassword ? undefined : t("currentPasswordRequired")] : [])], review: [], done: [] }[step].filter(Boolean).length;
+  const errorCount = { hub: [general.hubName, general.hubAddress, general.domainUrl], projects: Object.values(hostErr), auth: [...Object.values(authErr), ...(connected && draft.auth.mode === "local" && !draft.auth.local.passwordSet ? [draft.currentPassword ? undefined : t("currentPasswordRequired")] : [])], modules: [], review: [], done: [] }[step].filter(Boolean).length;
   const go = (s: SetupStep) => setParams({ step: s });
 
   const next = async () => {
@@ -109,8 +112,8 @@ export default function SetupPage() {
           queryClient.setQueryData(queryKeys.currentUser, { ...currentUser.data, requiresPasswordChange: false });
         }
         const passwordSet = draft.auth.mode === "local" && draft.password.password.length > 0;
-        await adapter.completeSetup({ general: draft.general, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet: connected ? true : passwordSet } } });
-        await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.settings }), queryClient.invalidateQueries({ queryKey: queryKeys.connectedSettings })]);
+        await adapter.completeSetup({ modules: draft.modules, general: draft.general, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet: connected ? true : passwordSet } } });
+        await Promise.all([queryClient.invalidateQueries({ queryKey: ["module-states"] }), queryClient.invalidateQueries({ queryKey: queryKeys.settings }), queryClient.invalidateQueries({ queryKey: queryKeys.connectedSettings })]);
         patchSetup({ password: { password: "", confirm: "" }, reached: SETUP_STEPS.length - 1 });
         go("done");
       } catch (e) {
@@ -128,7 +131,7 @@ export default function SetupPage() {
 
   const steps = SETUP_STEPS.map((id) => ({ id, title: t(`steps.${id}.title`), description: t(`steps.${id}.description`) }));
   const show = attempted.includes(step);
-  const leads: Partial<Record<SetupStep, string>> = { hub: t("hubLead"), projects: t("projectsLead"), auth: t("authLead"), review: t("reviewLead") };
+  const leads: Partial<Record<SetupStep, string>> = { hub: t("hubLead"), projects: t("projectsLead"), auth: t("authLead"), modules: tm("lead"), review: t("reviewLead") };
 
   return (
     <div className="dot-grid min-h-svh">
@@ -194,7 +197,8 @@ export default function SetupPage() {
                   </div>}
                 </div>
               ) : <AuthModeFields value={draft.auth} onChange={(auth) => patchSetup({ auth })} password={draft.password} onPassword={(password) => patchSetup({ password })} showErrors={show} idPrefix="setup-auth" />)}
-              {step === "review" && (
+              {step === "modules" && <ModuleChoicesFields value={draft.modules} onChange={(modules) => patchSetup({ modules })} />}
+ {step === "review" && (
                 <div className="flex flex-col gap-3">
                   <ReviewBlock
                     title={tr("hub")}
@@ -225,7 +229,8 @@ export default function SetupPage() {
                       ...(draft.auth.mode === "proxy" ? ([[tr("header"), draft.auth.proxy.userHeader]] as [string, string][]) : []),
                     ]}
                   />
-                  <section className="rounded-xl border bg-card/40 p-4">
+                  <ReviewBlock title={tm("title")} onEdit={() => go("modules")} rows={MODULES.map((m) => [tm(`names.${m.id}`), tm(draft.modules[m.id] ? "on" : "off")])} />
+ <section className="rounded-xl border bg-card/40 p-4">
                     <h3 className="mb-2 text-sm font-semibold">{tr("connection")}</h3>
                     <ul className="flex flex-col gap-1.5 text-sm">
                       <li className="flex gap-2">

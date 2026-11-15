@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; one environment route identity guard before every path consumer (#264).
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; one environment route identity guard before every path consumer (#264); optional-module foundation (#472).
 
 package bootstrap
 
@@ -259,12 +259,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		e.IPExtractor = echo.ExtractIPFromXFFHeader(opts...)
 	}
 
-	apiNotFound := func(c *echo.Context) error {
-		return c.JSON(http.StatusNotFound, map[string]any{
-			"success": false,
-			"error":   "API endpoint not found: " + c.Request().URL.Path,
-		})
-	}
+	apiNotFound := middleware.APINotFound
 
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.RequestID())
@@ -357,7 +352,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
-		middleware.EnvironmentProxySecurity{ShellSessions: shellSessions, VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
+		middleware.EnvironmentProxySecurity{ModuleEnabled: deps.Settings.Service().IsFeatureEnabled, ShellSessions: shellSessions, VulnerabilityIgnoreUnfixed: func() bool { return deps.Settings.Service().GetSettingsConfig().TrivyIgnoreUnfixed.IsTrue() }, VulnerabilityEnabled: func(ctx context.Context) bool {
 			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
 		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())

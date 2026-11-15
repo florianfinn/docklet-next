@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original production runtime route coverage for M4 identity.
+// Deviations: Original production runtime route coverage for M4 identity; optional-module foundation (#472).
 
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -34,7 +34,7 @@ it("runs local sign-in, first setup, connected settings and profile on productio
   let signedIn = false;
   let passwordChanged = false;
   const settings: Record<string, string> = {
-    setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
+    moduleProxyEnabled: "false", setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
     keepActionOutput: "true", actionPresentation: "dialog",
   };
   const user = { id: "admin", username: "operator", requiresPasswordChange: true, locale: "de" };
@@ -61,6 +61,7 @@ it("runs local sign-in, first setup, connected settings and profile on productio
       writes.push("profile");
       return new Response(JSON.stringify({ success: true, data: user }));
     }
+    if (path === "/api/environments/0/settings/public") return new Response(JSON.stringify([{key:"moduleProxyEnabled",value:settings.moduleProxyEnabled}]));
     if (path === "/api/environments/0/settings") {
       if (init?.method === "PUT") {
         Object.assign(settings, JSON.parse(String(init.body)) as Record<string, string>);
@@ -86,6 +87,8 @@ it("runs local sign-in, first setup, connected settings and profile on productio
   await userEvent.type(screen.getByLabelText("Neues Administratorpasswort"), "New-password1!");
   await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
   await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+  expect((await screen.findByRole("switch",{name:"Proxy"})).getAttribute("aria-checked")).toBe("false");
+  await userEvent.click(screen.getByRole("button",{name:"Weiter"}));
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
   await waitFor(() => expect(settings.setupCompleted).toBe("true"));
   expect(passwordChanged).toBe(true);

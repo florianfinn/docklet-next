@@ -5,6 +5,9 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+ ["GET /modules", "list-modules"],
+ ["DELETE /modules/{id}/data", "delete-module-data"],
+ ["DELETE /environments/{id}/modules/{module}/data", "delete-host-module-data"],
   ["POST /environments/{id}/images/vulnerabilities/active-summaries", "get-active-image-vulnerability-summaries"],
   ["GET /environments/{id}/vulnerabilities/candidates", "get-vulnerability-candidates"],
   ["POST /environments/{id}/vulnerabilities/candidates/scan", "scan-vulnerability-candidates"],

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; notification and Auto Heal contracts and delivery for #296; optional-module foundation (#472).
 
 package settings
 
@@ -32,6 +32,11 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, key, value string) 
 	if err := libarcane.ValidateCronSetting(key, value); err != nil {
 		return common.Classify(common.ErrValidation, fmt.Errorf("invalid cron expression for %s: %w", key, err))
 	}
+	release, guardErr := s.guardModuleWrites(ctx, []libarcane.SettingUpdate{{Key: key, Value: value}})
+	if guardErr != nil {
+		return guardErr
+	}
+	defer release()
 	s.writes.Lock()
 	defer s.writes.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -57,6 +62,11 @@ func (s *SettingsService) UpdateSettingValues(ctx context.Context, updates []lib
 		}
 		values = append(values, SettingVariable{Key: update.Key, Value: update.Value})
 	}
+	release, guardErr := s.guardModuleWrites(ctx, updates)
+	if guardErr != nil {
+		return guardErr
+	}
+	defer release()
 	s.writes.Lock()
 	defer s.writes.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -94,6 +104,18 @@ func (s *SettingsService) UpdateSettings(ctx context.Context, updates settings.U
 	if err := normalization.Normalize(&updates); err != nil {
 		return nil, err
 	}
+	var moduleUpdates []libarcane.SettingUpdate
+	rv, rt := reflect.ValueOf(updates), reflect.TypeFor[settings.Update]()
+	for i := range rt.NumField() {
+		if key, value, ok := extractUpdateValue(rt.Field(i), rv.Field(i)); ok {
+			moduleUpdates = append(moduleUpdates, libarcane.SettingUpdate{Key: key, Value: value})
+		}
+	}
+	release, guardErr := s.guardModuleWrites(ctx, moduleUpdates)
+	if guardErr != nil {
+		return nil, guardErr
+	}
+	defer release()
 	s.writes.Lock()
 	defer s.writes.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -240,4 +262,17 @@ func (s *SettingsService) persistSettings(ctx context.Context, values []SettingV
 		}
 		return nil
 	})
+}
+
+// SetModuleWriteGuard is wired once at startup, before request handling. Lock order
+// is module gate then settings writes; admission never takes the settings mutex.
+func (s *SettingsService) SetModuleWriteGuard(guard func(context.Context, []libarcane.SettingUpdate) (func(), error)) {
+	s.moduleWriteGuard = guard
+}
+
+func (s *SettingsService) guardModuleWrites(ctx context.Context, updates []libarcane.SettingUpdate) (func(), error) {
+	if s.moduleWriteGuard != nil {
+		return s.moduleWriteGuard(ctx, updates)
+	}
+	return func() {}, nil
 }

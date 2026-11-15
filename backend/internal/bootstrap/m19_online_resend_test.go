@@ -2,7 +2,7 @@
 // Revision: 8e133434769733113609882186fb6ba6e79a8c67
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original manual reconnect and Edge heartbeat settings resend test.
+// Deviations: Original manual reconnect and Edge heartbeat settings resend test; optional-module foundation (#472).
 
 package bootstrap
 
@@ -25,6 +25,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/florianfinn/docklet-next/types/contract"
+	"github.com/florianfinn/docklet-next/types/features"
 	settingsDTO "github.com/florianfinn/docklet-next/types/settings"
 	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/labstack/echo/v5"
@@ -54,6 +55,9 @@ func TestM19ManualReconnectAndEdgeHeartbeatResendSettings(t *testing.T) {
 			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("settings", "test"))
 			api.UseMiddleware(auth.NewHumaMiddleware(api, &auth.AuthService{}, nil, nil, nil, cfg))
 			settings.RegisterSettings(api, agent, nil, cfg)
+			var moduleCalls atomic.Int32
+			registerM27Probe(t, api, agent, true, "/environments/{id}/modules/proxy/data", "m27-host-probe", &moduleCalls)
+			require.NoError(t, agent.UpdateSetting(t.Context(), features.ProxySettingKey, "true"))
 			huma.Get(api, "/app-version", func(context.Context, *struct{}) (*struct{ Body version.Info }, error) {
 				return &struct{ Body version.Info }{Body: version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}}, nil
 			})
@@ -86,7 +90,7 @@ func TestM19ManualReconnectAndEdgeHeartbeatResendSettings(t *testing.T) {
 			defer cancel()
 			defer worker.Stop(context.Background())
 
-			_, err = hub.UpdateSettings(t.Context(), settingsDTO.Update{ActivityEventLimit: new("50"), ActivityRunLimit: new("10")})
+			_, err = hub.UpdateSettings(t.Context(), settingsDTO.Update{ModuleProxyEnabled: new("false"), ActivityEventLimit: new("50"), ActivityRunLimit: new("10")})
 			require.NoError(t, err)
 			select {
 			case <-observed.attempts:
@@ -113,6 +117,12 @@ func TestM19ManualReconnectAndEdgeHeartbeatResendSettings(t *testing.T) {
 			require.NoError(t, agent.Stop(context.Background()))
 			require.Equal(t, 50, agent.GetIntSetting(t.Context(), "activityEventLimit", 0))
 			require.Equal(t, 10, agent.GetIntSetting(t.Context(), "activityRunLimit", 0))
+			require.False(t, agent.IsFeatureEnabled(t.Context(), features.Proxy), "M3 reconnect must replace the stale enabled setting")
+			raw, status, err := env.ProxyRequest(t.Context(), "remote", "DELETE", "/api/environments/0/modules/proxy/data", nil)
+			require.NoError(t, err)
+			require.Equal(t, 403, status, string(raw))
+			require.Contains(t, string(raw), "feature-disabled")
+			require.Zero(t, moduleCalls.Load())
 
 			// A second check of an agent already online announces nothing.
 			if isEdge {

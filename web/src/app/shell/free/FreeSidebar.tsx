@@ -1,3 +1,4 @@
+import { useModuleStates } from "@/data/use-module";
 import { Activity } from "lucide-react";
 import { NavLink, useLocation } from "react-router";
 import { useTranslations } from "use-intl";
@@ -78,6 +79,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
   const logoEntrance = useVisualStyle("logoEntrance");
   const motion = useMotionEnabled();
   const backupAccess = useHubBackupAccess();
+  const modules = useModuleStates();
   const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -135,7 +137,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {visibleNavItems(group.items, backupAccess.data?.read === true).map((item) => (
+                {visibleNavItems(group.items, backupAccess.data?.read === true, modules.data).map((item) => (
                   <NavEntry key={item.key} item={item} groupBadge={group.key === "later"} count={counts[item.key]} active={isNavActive(pathname, item.to)} onNavigate={closeMobile} />
                 ))}
               </SidebarMenu>

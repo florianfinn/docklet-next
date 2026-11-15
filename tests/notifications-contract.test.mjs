@@ -33,8 +33,8 @@ test("v10 manifest contains the actual Auto Heal and notification dispatch produ
 
 test("M19 freezes target-ID routes, import codes and required v15 hints", () => {
   const spec = JSON.parse(read("api/openapi.json"));
-  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v18.json"));
-  assert.equal(fixture.version, 18);
+  const fixture = JSON.parse(read("types/contract/testdata/agent-hub-v19.json"));
+  assert.equal(fixture.version, 19);
   assert.equal(fixture.minimumAgentContractVersion, 18);
   assert.deepEqual(fixture.autoHeal.settings, spec.components.schemas.AutohealSettings);
   assert.deepEqual(fixture.autoHeal.update, spec.components.schemas.AutohealUpdate);

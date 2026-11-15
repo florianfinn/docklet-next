@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Capability-gated, bounded and cancelable log downloads (#379); Explicit pending release and once-only delivery-failure cancellation (#416); M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences.
+// Deviations: Capability-gated, bounded and cancelable log downloads (#379); Explicit pending release and once-only delivery-failure cancellation (#416); M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation; application-heartbeat dispatch admission; M17 runtime history and personal preferences; optional-module foundation (#472).
 
 package edge
 
@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
+	"github.com/florianfinn/docklet-next/types/features"
 	historyDTO "github.com/florianfinn/docklet-next/types/history"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
@@ -57,6 +58,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		return nil, vulnerability.Fail("vulnerability.request-too-large", 413)
 	}
 
+	if module, ok := features.ForPath(req.Path); ok && !slices.Contains(tunnel.Capabilities, module.Capability) {
+		return nil, remenv.ErrAgentUpdateRequired
+	}
 	commandName := req.Command
 	if commandName == "" {
 		resolved, ok := ResolveEdgeCommandName(req.Method, req.Path, false).Get()

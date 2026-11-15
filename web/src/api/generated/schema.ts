@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 30a35b71deca7b0212a65cc908da12ae91c9801b1e49fabd3e7fdfd93ad50e37
+// Revision: 6e654426b440651f0b2ca875b7a529af2cfe37c928bb23c7a0899f16d41a1647
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -2439,6 +2439,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/modules/{module}/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete-host-module-data"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/networks": {
         parameters: {
             query?: never;
@@ -4741,6 +4757,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list-modules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/modules/{id}/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete-module-data"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/dispatch": {
         parameters: {
             query?: never;
@@ -6898,6 +6946,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseListModulesState: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseListModulesState.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ModulesState"][] | null;
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseListProjectReference: {
             /**
              * Format: uri
@@ -7041,6 +7101,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["BaseMessageResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseModulesDeleteResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseModulesDeleteResult.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ModulesDeleteResult"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -10486,6 +10558,28 @@ export interface components {
             readonly $schema?: string;
             key: string;
         };
+        ModulesDeleteResult: {
+            pendingCleanup: components["schemas"]["ModulesPendingCleanup"][];
+        };
+        ModulesModuleProblem: {
+            /** @enum {string} */
+            code: "module-busy" | "module-on" | "feature-disabled" | "operation-conflict" | "agent.update-required";
+            feature: string;
+            operation?: string;
+            /** Format: int64 */
+            status: number;
+        };
+        ModulesPendingCleanup: {
+            id: string;
+            name: string;
+            reason: string;
+        };
+        ModulesState: {
+            enabled: boolean;
+            id: string;
+            /** @enum {string} */
+            kind: "module";
+        };
         NetworkConnectContainerRequest: {
             /**
              * Format: uri
@@ -11848,6 +11942,8 @@ export interface components {
             loadAlertsEnabled?: string | null;
             maxConcurrentActivities?: string | null;
             maxImageUploadSize?: string | null;
+            /** @enum {string|null} */
+            moduleProxyEnabled?: "true" | "false" | null;
             projectsDirectory?: string | null;
             proxyRequestTimeout?: string | null;
             pruneBuildCacheMode?: string | null;
@@ -24390,6 +24486,56 @@ export interface operations {
             };
         };
     };
+    "delete-host-module-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                module: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseModulesDeleteResult"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Module must be off and idle */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ModulesModuleProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-networks": {
         parameters: {
             query?: {
@@ -27171,6 +27317,15 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Module has unfinished work or setup conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Host or framework refusal */
@@ -35881,6 +36036,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseEnvironmentHubDiscovery"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListModulesState"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-module-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseModulesDeleteResult"];
+                };
+            };
+            /** @description Module must be off and idle */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ModulesModuleProblem"];
                 };
             };
             /** @description Error */

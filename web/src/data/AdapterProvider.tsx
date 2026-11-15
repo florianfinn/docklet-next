@@ -2,7 +2,7 @@
 // Revision: 8dcaf91635d017da67d2ad497797780c07348ef569f884d278f117e3dce3f929
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: #69 connected identity and hub settings. Issue #77: session-bound closure and identity generation cleanup. R1: preserve the confirmed currentUser during active identity replacement and establishment. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M14 #314: invalidate capability queries with container, stack and host changes. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: app query client with the hub maintenance retry policy (app-query-client.ts). M23 #435: bounded Dashboard events window and timeline slots. M26 #462: bounded shell counts and raw inventory ownership.
+// Deviations: #69 connected identity and hub settings. Issue #77: session-bound closure and identity generation cleanup. R1: preserve the confirmed currentUser during active identity replacement and establishment. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M14 #314: invalidate capability queries with container, stack and host changes. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: app query client with the hub maintenance retry policy (app-query-client.ts). M23 #435: bounded Dashboard events window and timeline slots. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472).
 
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -33,7 +33,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   dashboardEvents: [queryKeys.dashboardEvents],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot, ["backup-overviews"], ["backup-overview"], ["backup-repository"]],
-  settings: [queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
+  settings: [["module-states"], ["module-management"], queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
   images: [queryKeys.images],
   registries: [["registries"]],
 };

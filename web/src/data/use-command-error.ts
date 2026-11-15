@@ -2,8 +2,10 @@
 // Revision: d03b817a6aa2286616ba32fc3b04a9d3f82422ed
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original catalogue-backed fallback for technical command errors. M14 host maintenance and availability. M19: total contract-code catalogue maps.
+// Deviations: Original catalogue-backed fallback for technical command errors. M14 host maintenance and availability. M19: total contract-code catalogue maps; optional-module foundation (#472).
 
+import { MODULE_CODE_KEYS } from "./wire-catalogue-modules";
+import { ModuleProblemError } from "./module-error";
 import { operationReasonKey } from "./operation-reason";
 import { useCallback } from "react";
 import { useTranslations } from "use-intl";
@@ -21,7 +23,8 @@ export function useCommandError() {
   const all = useTranslations();
   return useCallback((error: unknown): string => {
     // Typed settings refusals (for example an invalid time zone) carry their own catalogue keys.
-    if (error instanceof SettingsProblemError) return settingsErrorMessage(error, all);
+    if (error instanceof ModuleProblemError) return all(wireKey(MODULE_CODE_KEYS, error.code) ?? "settings.modules.codes.module-not-found", { operation: error.operation });
+ if (error instanceof SettingsProblemError) return settingsErrorMessage(error, all);
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
       const key = operationReasonKey(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code);

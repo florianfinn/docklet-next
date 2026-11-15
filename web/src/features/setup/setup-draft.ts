@@ -1,15 +1,17 @@
+import { defaultModules, type ModuleChoices } from "@/domain/modules";
 import { hubAddressCandidates, type HubDiscovery } from "@/domain/hub-discovery";
 import type { AuthSettings, GeneralSettings, HostDefaults } from "@/domain/settings";
 import type { PasswordDraft } from "@/features/settings/field-rules";
 import { createStore, useStore } from "@/shared/lib/store";
 
-export const SETUP_STEPS = ["hub", "projects", "auth", "review", "done"] as const;
+export const SETUP_STEPS = ["hub", "projects", "auth", "modules", "review", "done"] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 /** Where the internal hub address came from; discovery never replaces a manual value. */
 export type HubAddressOrigin = { kind: "discovered"; candidateId: string } | { kind: "manual" } | null;
 
 export interface SetupDraft {
+  modules: ModuleChoices;
   general: GeneralSettings;
   hubAddressOrigin: HubAddressOrigin;
   hostDefaults: HostDefaults;
@@ -23,6 +25,7 @@ export interface SetupDraft {
 /** First-run values of a fresh hub (not the current demo settings). */
 export function freshSetupDraft(): SetupDraft {
   return {
+    modules: defaultModules(),
     general: { hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", timeZone: "Europe/Berlin" },
     hubAddressOrigin: null,
     hostDefaults: { projectDir: "/home/docker", installDir: "/home/docker/docklet-agent", connection: "direct", puid: "", pgid: "", detectSocketGroup: true },

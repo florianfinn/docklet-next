@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original connected first-run flow contract test.
+// Deviations: Original connected first-run flow contract test; optional-module foundation (#472).
 
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -66,9 +66,17 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   await userEvent.type(screen.getByLabelText("Neues Administratorpasswort"), "New-password1!");
   await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
   await next();
+  const moduleSwitch=await screen.findByRole("switch",{name:"Proxy"});
+  expect(moduleSwitch.getAttribute("aria-checked")).toBe("false");
+  if(target!=="/settings/general") await userEvent.click(moduleSwitch);
+  await userEvent.click(screen.getByRole("button",{name:"Zurück"}));
+  await next();
+  expect(screen.getByRole("switch",{name:"Proxy"}).getAttribute("aria-checked")).toBe(String(target!=="/settings/general"));
+  await next();
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
   if (fail) await waitFor(() => expect(errorToast).toHaveBeenCalledWith("Die Einrichtung konnte nicht gespeichert werden. Prüfe die Angaben und versuche es erneut."));
   else await waitFor(() => expect(settings.setupCompleted).toBe("true"));
+  expect(writes[0]?.moduleProxyEnabled).toBe(String(target!=="/settings/general"));
   expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
   expect(writes[0]?.projectsDirectory).toBeUndefined();
   if (!fail) {

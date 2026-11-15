@@ -45,6 +45,11 @@ describe("first-run setup", () => {
     await userEvent.type(screen.getByLabelText("Neues Passwort"), "ein-sehr-langes-passwort");
     await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "ein-sehr-langes-passwort");
     await next();
+    await userEvent.click(await screen.findByRole("switch", { name: "Proxy" }));
+    await userEvent.click(screen.getByRole("button", { name: "Zurück" }));
+    await next();
+    expect(screen.getByRole("switch", { name: "Proxy" }).getAttribute("aria-checked")).toBe("true");
+    await next();
 
     await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Hub" }));
     expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
@@ -55,6 +60,7 @@ describe("first-run setup", () => {
 
     expect(await screen.findByRole("heading", { name: "Docklet ist eingerichtet" }) !== null).toBe(true);
     const saved = await adapter.getSettings();
+    expect(await adapter.getModuleStates!()).toEqual({ proxy: true });
     expect([saved.setupCompleted, saved.general.hubAddress, saved.general.domainUrl, saved.auth.mode, saved.auth.local.passwordSet]).toEqual([true, "192.0.2.10:8080", "", "local", true]);
     expect(JSON.stringify(saved).includes("ein-sehr-langes-passwort")).toBe(false);
 

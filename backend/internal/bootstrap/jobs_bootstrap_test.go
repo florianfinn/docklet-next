@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation; optional-module foundation (#472).
 
 package bootstrap
 
@@ -61,6 +61,10 @@ func (s *settingsSubscriptionSchedulerStubInternal) RescheduleJob(_ context.Cont
 
 type timeoutSyncEnvironmentStubInternal struct {
 	started chan struct{}
+}
+
+func (s *timeoutSyncEnvironmentStubInternal) ModuleReason(context.Context, string, features.ID) string {
+	return ""
 }
 
 func (s *timeoutSyncEnvironmentStubInternal) ListRemoteEnvironments(context.Context) ([]environment.Environment, error) {

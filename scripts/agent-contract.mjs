@@ -23,6 +23,20 @@ export function agentFixture(spec, fixture) {
   const recovery = schemas[summary.properties.recovery.$ref.split("/").at(-1)];
   const include = operation.parameters.find((parameter) => parameter.name === "includeSummary");
   if (!include || !summary || !recovery) throw new Error("missing activity discovery producer");
+  const moduleSource = readFileSync(new URL("../types/features/features.go", import.meta.url), "utf8");
+  const moduleConstant = (name) => moduleSource.match(new RegExp(`\\b${name}\\s+(?:ID\\s+)?=\\s*"([^"]+)"`))?.[1];
+  const moduleDefinitions = [...moduleSource.matchAll(/\{ID: (\w+), Kind: Module, SettingKey: (\w+), HubPrefix: "([^"]+)", HostPrefix: "([^"]+)", Capability: "([^"]+)", AgentModule: "([^"]+)"/g)]
+    .map(([, id, key, hubPrefix, hostPrefix, capability, agentModule]) => ({ id: moduleConstant(id), settingKey: moduleConstant(key), hubPrefix, hostPrefix, capability, agentModule, defaultEnabled: false }));
+  if (moduleDefinitions.length === 0 || moduleDefinitions.some((d) => !d.id || !d.settingKey)) throw new Error("missing module registry producer");
+  manifest.modules = {
+    definitions: moduleDefinitions,
+    refusalCodes: schemas.ModulesModuleProblem.properties.code.enum,
+    routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+      .filter(([, op]) => op?.tags?.includes("Modules"))
+      .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
+    settings: Object.fromEntries(moduleDefinitions.map((d) => [d.settingKey, schemas.SettingsUpdate.properties[d.settingKey]])),
+    minimumContract: 19,
+  };
   manifest.activityDiscovery = {
     route: `GET ${path}`,
     includeParameter: include,
@@ -278,7 +292,7 @@ function formatFixture(value, depth = 0) {
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
   if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
-  if (depth >= 3 && JSON.stringify(value).length <= 300) return JSON.stringify(value);
+  if (depth >= 3 && JSON.stringify(value).length <= 400) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums.
+// Deviations: Original total catalogue maps for rendered contract enums; optional-module foundation (#472).
 
 import { fireEvent, renderHook, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,6 +29,7 @@ import type { Volume } from "@/domain/volumes";
 import { createDemoAdapter } from "./demo/demo-adapter";
 import { AdapterError, type AdapterErrorCode } from "./api";
 import { AdapterOutcomeError } from "./capability";
+import { moduleProblem } from "./module-error";
 import { useCommandError } from "./use-command-error";
 import { renderRun, type CodedActionRun } from "./message-code";
 import { createHostRestarts } from "./http/host-restarts";
@@ -41,6 +42,9 @@ const intl = ({ children }: { children: React.ReactNode }) => <IntlProvider loca
 
 export function imageError(code: string) {
   return renderHook(() => useImageError(), { wrapper: intl }).result.current(code);
+}
+export function moduleError() {
+ return renderHook(() => useCommandError(), { wrapper: intl }).result.current(moduleProblem({status:409,code:"module-on",feature:"proxy"},409));
 }
 export function commandError(code: string) {
   return renderHook(() => useCommandError(), { wrapper: intl }).result.current(new AdapterOutcomeError({ kind: "error", code }));

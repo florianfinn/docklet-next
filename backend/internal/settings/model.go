@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; optional-module foundation (#472).
 
 package settings
 
@@ -139,6 +139,9 @@ type Settings struct {
 	BuildTimeout                   SettingVariable `key:"buildTimeout,envOverride" meta:"label=Build Timeout;type=number;keywords=build,timeout,seconds,buildkit;category=build;description=Timeout for BuildKit builds in seconds (default: 1800 = 30 minutes)"`
 	DepotProjectId                 SettingVariable `key:"depotProjectId,envOverride" meta:"label=Depot Project ID;type=text;keywords=depot,project,id,build,provider;category=build;description=Depot project identifier"`
 	DepotToken                     SettingVariable `key:"depotToken,envOverride,sensitive" meta:"label=Depot Token;type=password;keywords=depot,token,api,secret,build,provider;category=build;description=Depot API token"`
+
+	// Module state is persisted and synchronised by the hub; local environment values never override it.
+	ModuleProxyEnabled SettingVariable `key:"moduleProxyEnabled,public,internal" meta:"label=Proxy module;type=boolean;category=modules;description=Enable the optional proxy module"`
 
 	// Authentication and security categories
 	AuthLocalEnabled                      SettingVariable `key:"authLocalEnabled,public" meta:"label=Local Authentication;type=boolean;keywords=local,auth,authentication,username,password,login,credentials;category=authentication;description=Enable local username/password authentication" catmeta:"id=authentication;title=Authentication;icon=lock;url=/settings/authentication;description=Manage authentication providers, password policy, and session behavior"`

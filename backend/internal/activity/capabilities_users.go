@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M19 backend contracts and target identity integration.
+// Deviations: Original simple-user resource authorization; M19 backend contracts and target identity integration; optional-module foundation (#472).
 
 package activity
 
@@ -44,6 +44,11 @@ func userCapabilities(ctx context.Context, in *GetCapabilitiesInput, ps *authz.P
 	}
 	out := capabilityDescriptorsInternal(capability.ResourceRef{Kind: in.Kind, ID: in.ID})
 	for i := range out {
+		if strings.HasPrefix(out[i].OperationID, "module.") {
+			out[i].Available = false
+			out[i].DisabledReasonCode = "access.admin-required"
+			continue
+		}
 		op := userCapabilityOperations[out[i].OperationID]
 		if in.Kind == "stack" && out[i].OperationID == "subscribeMetrics" {
 			op = "get-project-runtime"

@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups.
+// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472).
 
 import { renderHook } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
@@ -26,7 +26,7 @@ import { mapActivityDetail } from "./http/map-dto";
 import { renderMessage, renderRun } from "./message-code";
 import { simulationStore } from "./demo/simulation";
 import { GUARDED_WIRE_ENUMS } from "./wire-catalogue.test-support";
-import { de, en, at, advisoryUsage, imageError, commandError, volumeOrNetworkError, backupStatus, backupTargets, hubBackup, restartPhase, restartFailure, historyState, prune, scanStatus, systemHint, notificationResult } from "./wire-catalogue-render.test-support";
+import { de, en, at, moduleError, advisoryUsage, imageError, commandError, volumeOrNetworkError, backupStatus, backupTargets, hubBackup, restartPhase, restartFailure, historyState, prune, scanStatus, systemHint, notificationResult } from "./wire-catalogue-render.test-support";
 
 beforeEach(() => { setAppLocale("de"); simulationStore.set((state) => ({ ...state, latency: "instant", live: false })); });
 afterEach(() => { vi.restoreAllMocks(); simulationStore.reset(); });
@@ -38,6 +38,7 @@ function activityMessage(code: "runtime.wait-timeout" | "runtime.waiter-disconne
 
 // Each row names a representative property of one distinct guarded union and its real consumer.
 const proofs = [
+ {property:"ModulesModuleProblem.code",member:"module-on",key:"settings.modules.codes.module-on",render:()=>moduleError()},
   { property: "UpdaterRecoveryResult.outcome", member: "restored", key: "images.errors.recovery_restored", render: () => renderWithApp(<UpdateRecovery run={renderRun(mapActivityDetail({ activity: { id: "example", type: "project_update", environmentId: "example", status: "failed", startedAt: at, createdAt: at, imageLifecycle: recoveryFixture[0] as never }, messages: [], output: [], stepTrace: [], outputTruncated: false }), "de")} />).container.textContent ?? "" },
   { property: "VulnerabilityCandidateResult.state", member: "queued", key: "security.candidates.states.queued", render: () => renderWithApp(<CandidateState state="queued" />).container.textContent ?? "" },
   { property: "VulnerabilityCandidateRun.status", member: "running", key: "security.historyStatus.running", render: () => renderWithApp(<CandidateRunStatus status="running" />).container.textContent ?? "" },

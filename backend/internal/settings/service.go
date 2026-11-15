@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; M19 backend contracts and target identity integration; optional-module foundation (#472).
 
 package settings
 
@@ -46,6 +46,7 @@ type SettingsService struct {
 	envOverrides        []settingsEnvOverride
 	scanScheduleWarning sync.Once
 	writes              sync.Mutex
+	moduleWriteGuard    func(context.Context, []libarcane.SettingUpdate) (func(), error)
 	effectsMu           sync.Mutex
 	effects             []func()
 	effectsWake         chan struct{}

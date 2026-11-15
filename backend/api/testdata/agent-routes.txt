@@ -2,10 +2,11 @@
 # Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Agent route snapshot for issue #8; M23 #435 active image summaries.
+# Deviations: Agent route snapshot for issue #8; M23 #435 active image summaries; optional module cleanup foundation (#472).
 DELETE /environments/{id}/activities/history
 DELETE /environments/{id}/containers/{containerId}
 DELETE /environments/{id}/images/{imageId}
+DELETE /environments/{id}/modules/{module}/data
 DELETE /environments/{id}/networks/{networkId}
 DELETE /environments/{id}/projects/{projectId}/destroy
 DELETE /environments/{id}/updater/restore-points/{pointId}
