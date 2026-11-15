@@ -72,7 +72,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
 | [Proxy UI concept](proxy-ui-concept.md) | Development-only Traefik/Caddy UI, live lab bridge and three routing-map placements |
 | [Proxy import analysis](proxy-import-analysis.md) | Dated read-only findings from a real Traefik edge and their constraints on the proxy module |
-| [Optional modules](optional-modules.md) | M27 proposal: in-image modules on the feature registry, hub and agent refusal, lifecycle and host compatibility |
-| [Proxy module](proxy-module.md) | M27 proposal: agent-owned Traefik and Caddy writes, journaled write protocol, verification outcomes and measured evidence |
+| [Optional modules](optional-modules.md) | M27 design: in-image modules on the feature registry, access-then-gate refusal, admission fence, setup step and host compatibility |
+| [Proxy module](proxy-module.md) | M27 design: agent-owned Traefik and Caddy writes, journaled write protocol with recovery and release, verification evidence and measured baseline |
 
 Historical plans belong in the [history index](../history/README.md).
