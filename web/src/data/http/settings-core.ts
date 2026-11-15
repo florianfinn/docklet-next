@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration.
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration. #410 process zone and user zone reads.
 
 import { settingsProblem, SettingsProblemError } from "../settings-error";
 import { discardResponse, drainResponse } from "./identity-reads";
@@ -39,7 +39,7 @@ function loadAlerts(values: CoreSettings): LoadAlertSettings {
   };
 }
 
-export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "saveSettings"> & Pick<DockletAdapter, "getBackupDefaultRetention" | "setBackupDefaultRetention"> {
+export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "getStackStopMode" | "getHubTimeZone" | "saveSettings"> & Pick<DockletAdapter, "getBackupDefaultRetention" | "setBackupDefaultRetention"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new Error(`settings.read.${response.status}`); }
@@ -85,6 +85,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       });
     },
     getStackStopMode: () => readStackStopMode(baseUrl, client),
+    getHubTimeZone: () => readHubTimeZone(baseUrl, client),
     async getBackupDefaultRetention() {
       // Older hubs without the setting use the established default.
       const raw = (await read()).backupDefaultRetentionCount ?? "7";
@@ -109,7 +110,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
       if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
       return {
-        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, configuredTimeZone: values.timeZone ?? "", stackStopMode: stackStopMode(values) },
+        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone, configuredTimeZone: values.timeZone ?? "", defaultTimeZone: validZone(values.defaultTimeZone), stackStopMode: stackStopMode(values) },
         hostDefaults,
         activity: { maxEvents: Number(values.activityEventLimit ?? HISTORY_LIMITS.events.default), maxFinishedActions: Number(values.activityRunLimit ?? HISTORY_LIMITS.actions.default), keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation, loadAlerts: loadAlerts(values) },
       };
@@ -148,9 +149,23 @@ function stackStopMode(values: CoreSettings): "down" | "stop" {
 }
 
 export async function readStackStopMode(baseUrl: string, client: CsrfClient): Promise<"down" | "stop"> {
+  return stackStopMode(await readSettingsList(baseUrl, client));
+}
+
+/** Older hubs without the value fall back to UTC like the user hook did before. */
+export async function readHubTimeZone(baseUrl: string, client: CsrfClient): Promise<string> {
+  return validZone((await readSettingsList(baseUrl, client)).effectiveTimeZone) ?? "UTC";
+}
+
+async function readSettingsList(baseUrl: string, client: CsrfClient): Promise<Record<string, string>> {
   const response = await client.fetch(`${baseUrl}/environments/0/settings`, { headers: { Accept: "application/json" } });
   if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new Error(`settings.read.${response.status}`); }
   const items: unknown = await response.json();
   if (!Array.isArray(items) || !items.every((item) => typeof item?.key === "string" && typeof item?.value === "string")) throw new Error("settings.invalid-response");
-  return stackStopMode(Object.fromEntries(items.map((item) => [item.key, item.value])));
+  return Object.fromEntries(items.map((item) => [item.key, item.value]));
+}
+
+function validZone(zone: string | undefined): string | undefined {
+  if (!zone) return undefined;
+  try { new Intl.DateTimeFormat("en", { timeZone: zone }); return zone; } catch { return undefined; }
 }

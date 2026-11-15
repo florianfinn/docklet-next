@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Receipt-owned runtime projection and compact fallback shared by current exports.
+// Deviations: Receipt-owned runtime projection and compact fallback shared by current exports. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -67,9 +67,16 @@ func runtimeSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt) (activitytypes.
 	knowledge := runtimeKnowledgeInternal(row)
 	dto := activityToDTOInternal(&model)
 	dto.RuntimeKnowledge = &knowledge
+	if err := runtimeProjectObservedTx(tx, row, &dto); err != nil {
+		return activitytypes.RuntimeSnapshot{}, err
+	}
+	if dto.ImageLifecycle != nil && dto.ImageLifecycle.Code == "runtime.outcome-unknown" {
+		knowledge.OutcomeState = activitytypes.RuntimeOutcomeUnknown
+		dto.RuntimeKnowledge = &knowledge
+	}
 	result, err := runtimeRecreateResult(row)
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, err
 	}
-	return activitytypes.RuntimeSnapshot{Activity: dto, RuntimeKnowledge: knowledge, Result: result}, nil
+	return activitytypes.RuntimeSnapshot{Operation: RuntimeOperation(*row.OperationID), Activity: dto, RuntimeKnowledge: knowledge, Result: result}, nil
 }

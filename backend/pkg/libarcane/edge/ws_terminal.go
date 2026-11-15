@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original bounded Edge terminal exit drain.
+// Deviations: Explicit pending release and shared once-only stream close (#416); Original bounded Edge terminal exit drain.
 
 package edge
 
@@ -24,7 +24,8 @@ func forwardTerminalAgentToClient(viewer, stream context.Context, browser *webso
 		if timer != nil {
 			timer.Stop()
 		}
-		sendWebSocketClose(tunnel, id)
+		pending.Release()
+		pending.closeAgent(tunnel, id, MessageTypeStreamClose)
 	}()
 	beginClose := func(send bool) {
 		if timer != nil {

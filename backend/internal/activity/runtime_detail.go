@@ -21,7 +21,7 @@ func runtimeDetailTxInternal(tx *gorm.DB, row *RuntimeReceipt) (*activitytypes.R
 }
 func runtimeDetailSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt, executorWire bool) (*activitytypes.RuntimeExecutionDetail, error) {
 	var oversized int64
-	if err := tx.Model(&Activity{}).Where("id = ? AND (length(CAST(runtime_output AS BLOB)) > ? OR length(CAST(metadata AS BLOB)) > ? OR length(CAST(runtime_step_trace AS BLOB)) > 65536 OR length(CAST(latest_message AS BLOB)) > ? OR length(CAST(step AS BLOB)) > ?)", row.RunID, activitytypes.RuntimeMaxOutputBytes, 65536, 256<<10, 256<<10).Count(&oversized).Error; err != nil {
+	if err := tx.Model(&Activity{}).Where("id = ? AND (length(CAST(runtime_output AS BLOB)) > ? OR length(CAST(metadata AS BLOB)) > ? OR length(CAST(runtime_step_trace AS BLOB)) > 65536 OR length(CAST(latest_message AS BLOB)) > ? OR length(CAST(step AS BLOB)) > ?)", row.RunID, activitytypes.RuntimeMaxOutputBytes, activitytypes.RuntimeMaxMetadataBytes, 256<<10, 256<<10).Count(&oversized).Error; err != nil {
 		return nil, err
 	}
 	if oversized != 0 {

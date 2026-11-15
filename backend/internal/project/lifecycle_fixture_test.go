@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Migrated SQLite, real project files, shared image lease and controlled Docker effects. M18 controlled partial tag failures and actual prune-list responses.
+// Deviations: Migrated SQLite, real project files, shared image lease and controlled Docker effects. M18 controlled partial tag failures and actual prune-list responses. M24 fixture observation uses an instant test clock.
 
 package project
 
@@ -31,6 +31,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	registryService "github.com/florianfinn/docklet-next/backend/internal/registry"
+	"github.com/florianfinn/docklet-next/backend/internal/stability/stabilitytest"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
@@ -80,6 +81,8 @@ type lifecycleFixture struct {
 	onTag                     func(string) error
 	normalDeploy              bool
 	containerd                bool
+	// listFails answers the container list with a daemon error.
+	listFails bool
 }
 
 func newLifecycleFixture(t *testing.T) *lifecycleFixture {
@@ -111,6 +114,7 @@ func newLifecycleFixture(t *testing.T) *lifecycleFixture {
 	registries := registryService.NewContainerRegistryService(db, nil, nil, nil)
 	cfg := config.Load()
 	f.service = NewProjectService(db, settingsService, events, images, daemon, nil, registries, cfg, nil, nil)
+	f.service.UseObservationClock(stabilitytest.NewClock())
 	path := filepath.Join(f.root, "example-stack")
 	require.NoError(t, os.Mkdir(path, 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(path, "compose.yaml"), []byte(lifecycleOriginal), 0600))
@@ -185,6 +189,10 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 			hook()
 			f.mu.Lock()
+		}
+		if f.listFails {
+			http.Error(w, "synthetic daemon failure", 500)
+			return
 		}
 		rows := []map[string]any{}
 		for _, c := range f.workloads {

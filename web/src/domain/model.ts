@@ -254,6 +254,8 @@ export interface RunOutputLine {
 
 export interface ActionRun {
   recreateResult?: { oldId: string; newId: string; oldName: string; newName: string };
+  updateRecovery?: { outcome: "restored" | "restore-failed" | "unavailable" | "not-needed" | "interrupted"; code?: string };
+  jobRef?: { jobId: string; runId: string };
   baselineCode?: string;
   lifecycleCode?: string;
   effectVerified?: boolean;

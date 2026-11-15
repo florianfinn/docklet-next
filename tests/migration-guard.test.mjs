@@ -72,7 +72,8 @@ test("worktree guard rejects all manifest and baseline bypasses", (t) => {
 test("release transition accepts the exact pinned prerelease chain, with manifested forward entries", () => {
   const release = JSON.parse(readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
   const baselinePath = "sqlite/001_baseline.sql";
-  const forwardPath = "sqlite/003_fixture.sql";
+  const forwardVersion = Math.max(...Object.keys(release).map((path) => Number(path.match(/\/(\d+)_/)[1]))) + 1;
+  const forwardPath = `sqlite/${String(forwardVersion).padStart(3, "0")}_fixture.sql`;
   const releaseFiles = Object.keys(release).map((path) => [path, readFileSync(new URL(`../backend/resources/migrations/${path}`, import.meta.url))]);
   const forwardBytes = Buffer.from("-- +goose Up\nCREATE TABLE fixture(id TEXT);\n");
   const forwardHash = createHash("sha256").update(forwardBytes).digest("hex");

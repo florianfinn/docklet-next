@@ -344,6 +344,7 @@ export const deVolumes: typeof enVolumes = {
     "runtime_interrupted": "Die Aktion wurde unterbrochen.",
     "backup_target_probe-host-mismatch": "Lokale Ziele und eingehängte Ziele auf ihrem zugehörigen Host testen.",
     "backup_target_location-conflict": "Der Host hat für dieses Ziel einen anderen Speicherort gespeichert.",
+    "backup_target_identity-unavailable": "Dieser Host hat seine Hub-Identität noch nicht erhalten. Versuche es gleich noch einmal.",
 
     volume_backup_target_key_viewed: "Backup-Wiederherstellungsschlüssel wurde angezeigt.",
     volume_exists: "Ein Volume mit diesem Namen ist bereits vorhanden.",

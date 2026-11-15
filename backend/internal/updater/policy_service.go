@@ -114,6 +114,9 @@ func (s *UpdaterService) ConfigureImagePolicies(envs *environment.EnvironmentSer
 		}
 		var out base.ApiResponse[*projectDTO.UpdateInfo]
 		err := envs.ProxyJSONRequest(ctx, env, http.MethodPost, "/api/environments/0/updater/projects/"+url.PathEscape(target)+"/check", nil, &out)
+		if refusal := relayedCheckRefusal(err); refusal != nil {
+			return nil, refusal
+		}
 		if err != nil {
 			return nil, err
 		}

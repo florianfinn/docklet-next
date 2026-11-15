@@ -2,7 +2,7 @@
 // Revision: 5f56262875af9a8ec0fe9007cb889bd3a513085d
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original per-view, per-tab and per-locale responsive security regressions.
+// Deviations: Original per-view, per-tab and per-locale responsive security regressions. M24 S6: observed recovery and update UI follow-ups.
 
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -47,6 +47,7 @@ for (const locale of ["en-US", "de"] as const) {
         const rows = () => [...container.querySelectorAll('[data-security-row]')];
         expect(rows().length).toBe(2);
         const row = rows()[0]!;
+        if (view === "cards") expect(row.querySelector("dl")?.className).toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))]");
         expect(row.getAttribute("data-state")).toBe("selected");
         expect(row.textContent?.includes(findings[0]!.image)).toBe(true);
         expect(row.textContent?.includes(findings[0]!.pkg)).toBe(true);

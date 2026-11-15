@@ -69,7 +69,7 @@ remove shared infrastructure needed by retained features.
 | Images/networks/volumes | Full management, particularly topology | Navigation grouping follows the approved UI |
 | Image builds | Compose build within a stack | Remove standalone build workshop and its exclusive functions |
 | Updates | Detection/manual installation; optional scheduled installation per stack/container | Check only by default; never install automatically without activation |
-| Recovery after updates | Show failures and offer previous image/configuration for manual recovery | No automatic rollback and no promise to restore application data |
+| Recovery after updates | Observe scheduled updates and explicit “Update with check”; attempt previous workload recovery on failure; ordinary manual updates offer manual recovery | [Observed recovery](scheduled-update-recovery.md) never restores application data |
 | Backups | Volume/system backups, manual/scheduled restore and retention; add bind mounts | Remove S3 |
 | Backup destinations | Local directories, existing host mounts and dedicated SMB/NFS connections | Evaluate exact permission and mount behaviour |
 | Vulnerability scans | Optional manual/scheduled scans, findings and dashboard widget | Keep distinct from image-update detection |

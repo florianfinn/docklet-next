@@ -2,7 +2,7 @@
 // Revision: d1d32cd1ff7e653ebe5f7fc1ad4151740a091bb2bddbc473680d83f761496ee0
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected identity and hub settings. #102 identity-scoped toast history and owned-notice cleanup. #102 source-local initial notification history and consumer regression coverage. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. Issue #77: session-bound closure and identity generation cleanup. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #69 connected identity and hub settings. #102 identity-scoped toast history and owned-notice cleanup. #102 source-local initial notification history and consumer regression coverage. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. Issue #77: session-bound closure and identity generation cleanup. Simple-user management, assigned-stack access and mode-aware self-service. #370 agent restarts notify on first observation.
 
 import { useIsUser } from "@/data/use-principal";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,7 +27,7 @@ import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
 import { useNow } from "./run-phase";
 import { runtimePresentation } from "./runtime-presentation";
-import { hasPresentationIntent, presentationStore, RunToastCoordinator } from "./run-presentation";
+import { hasPresentationIntent, notifiesOnFirstObservation, presentationStore, RunToastCoordinator } from "./run-presentation";
 
 function ActionToast({ id, toastId }: { id: string; toastId: string | number }) {
   const user = useIsUser();
@@ -124,7 +124,7 @@ export function ActionToasts() {
       const firstSourceObservation = initialSources === undefined && !targetedOnly;
       const pending = initialSources ?? (targetedOnly ? new Set<string>() : (initialSources = new Set(failed)));
       const rendered = runs.map((run) => renderRun(run, localeRef.current));
-      const history = new Set(rendered.filter((run) => (firstSourceObservation || (run.hostId !== undefined && pending.has(run.hostId))) && !seen.has(run.id) && !hasPresentationIntent(run, presentationStore.get())).map((run) => run.id));
+      const history = new Set(rendered.filter((run) => (firstSourceObservation || (run.hostId !== undefined && pending.has(run.hostId))) && !seen.has(run.id) && !hasPresentationIntent(run, presentationStore.get()) && !notifiesOnFirstObservation(run)).map((run) => run.id));
       seen = new Set(runs.map((run) => run.id));
       // Health clears before its array: seed this last history first, then retire the source.
       if (!health.failures.some((failure) => failure.hostId === undefined)) {

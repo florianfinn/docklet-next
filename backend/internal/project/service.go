@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. M18 deploy-point effect marking.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. M18 deploy-point effect marking. M24 observed lifecycle clock seam.
 
 package project
 
@@ -28,6 +28,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/workspace"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/stability"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
@@ -80,9 +81,10 @@ type ProjectService struct {
 
 	// syncMu serializes SyncProjectsFromFileSystem: its discovery walk and its
 	// cleanup pass must not interleave with another run's.
-	syncMu         sync.Mutex
-	contentMu      sync.Mutex
-	lifecycleCheck func(context.Context, string) (*projecttypes.UpdateInfo, error)
+	syncMu           sync.Mutex
+	contentMu        sync.Mutex
+	lifecycleCheck   func(context.Context, string) (*projecttypes.UpdateInfo, error)
+	observationClock stability.Clock
 
 	composeNames  composeNameCache
 	parsedCompose projecttypes.ComposeCache[*types.Project]

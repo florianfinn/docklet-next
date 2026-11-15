@@ -116,6 +116,30 @@ hosts stays in [host onboarding](host-onboarding.md).
     acknowledgement or refusal cannot replace an unconfirmed deadline result.
     Terminal states and codes are immutable.
 11. Environment 0 has no restart action.
+12. **Latest restart after a reload** (#370, #429): `GET
+    /environments/{id}/agent/restarts/latest` returns the host's active restart,
+    else its newest settled one (by creation time, run ID as tie-break), or an
+    empty object when the host never restarted its agent. The read is hub-local
+    like the run read and administrator-only for simple users. It reuses the
+    unchanged run schema in a wrapper, so the agent contract stays the same.
+    Restart runs are not activities: the agent panel reads this route when it
+    opens and always shows the latest outcome with its finish time, without an
+    expiry. A settled run read this way is shown in the panel only; it never
+    appears as a new action or toast. An active run continues to be followed
+    like an in-session run and notifies when it settles. Within one run the
+    further observation wins, so a reopen also applies an outcome that a
+    stopped follow missed; of two different runs the panel shows a running one,
+    else the later start. In the browser the restart reads have their own
+    HTTP/1.1 admission key, so they do not wait behind slow reads of a host
+    whose agent is restarting. An active run read before the first activity
+    history counts as a targeted publication, so it cannot seed that history:
+    older settled activities that arrive later stay silent. A single host's
+    refresh waits for that first history and still applies when that history
+    is published but another source times out. The first history clears the
+    targeted mark even when it is empty, so a later new failure still
+    notifies. A refusal by a busy agent settles a durable `failed`/`host.busy`
+    row and is therefore shown after a reload. A `host.busy` answer at hub
+    intake creates no run and stays visible only in the session that asked.
 
 ## Persistence and check transport constraints
 

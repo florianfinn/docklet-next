@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Bounded remote runtime implementation, active in production since #125. M23 #435: active counts cancellation ingress.
+// Deviations: Cancelable finite log-download ingress (#379); M12 synchronous volume-backup cancellation reuses the existing request registry;  Bounded remote runtime implementation, active in production since #125. M23 #435: active counts cancellation ingress.
 
 package edge
 
@@ -89,7 +89,7 @@ type runtimeRequestIngressInternal struct {
 }
 
 func (c *TunnelClient) scheduleRuntimeRequestInternal(ctx context.Context, conn TunnelConnection, msg *TunnelMessage, workers *sync.WaitGroup, command bool) {
-	cancelable := volumeBackupCancelableRequest(msg.Method, msg.Path) || activeSummaryRequest(msg.Method, msg.Path)
+	cancelable := volumeBackupCancelableRequest(msg.Method, msg.Path) || activeSummaryRequest(msg.Method, msg.Path) || containerLogsDownloadRequest(msg.Method, msg.Path)
 	if !runtimeRequestPathInternal(msg.Path) && !cancelable {
 		workers.Go(func() { c.handleRequest(ctx, conn, msg) })
 		return

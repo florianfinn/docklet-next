@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; Arcane image registry host helpers removed (#235).
+// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; Arcane image registry host helpers removed (#235); docker client refresh interval validated as cron (#407).
 
 package libarcane
 
@@ -46,6 +46,7 @@ var cronSettingKeys = []string{
 	"environmentHealthInterval",
 	"eventCleanupInterval",
 	"expiredSessionsCleanupInterval",
+	"dockerClientRefreshInterval",
 }
 
 // TimeoutSettingKeys returns the settings propagated to remote environments.

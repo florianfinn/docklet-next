@@ -620,7 +620,7 @@ moved source tag is returned to its recorded prior local mapping under the host
 lease after inspection, without undoing observed partial container effects. If
 that tag changed concurrently or cleanup cannot be proved, keep U/protection and
 use existing inspection/disposition; never overwrite an external writer blindly.
-There is no automatic workload rollback and no persistent baseline-owned tag.
+Plain manual updates have no automatic workload rollback; [observed updates](scheduled-update-recovery.md) attempt recovery. No persistent baseline-owned tag.
 
 ### Snapshot, restore and orphan cleanup
 
@@ -658,7 +658,7 @@ composition and shared-reference safety before file/tag changes, then replace
 files/env as the admitted actor and deploy saved IDs with pull never plus image-ID
 verification. Never down-with-volumes. Replacement and Docker are not atomic;
 failed/partial or unknown outcomes retain both points and actual evidence, with
-no automatic rollback. Another deliberate restore remains possible after runtime
+no recursive automatic recovery. Another deliberate restore remains possible after runtime
 settlement, using a fresh pre-restore point, even if baseline capture failed.
 
 Host-scoped point listing/deletion resolves metadata by point ID independently
@@ -724,7 +724,7 @@ existing runtime has no distributed effect-fencing lease. Do not invent one.
 | Any / T | Generic tag/load targets reserved namespace | Refuse before daemon mutation; successful archive inspection/namespace guard cannot be deferred until after load |
 | D / R | Deploy returns successfully | Inspect every affected container against frozen image IDs; mismatch is failed/partial, never success. With verified IDs, capture baseline and settle outcome/activity; release run protection only after durable settlement, without persistent binding |
 | D / R / normal deploy | Effects succeed but new baseline capture fails | Keep truthful workflow success with visible baseline-unavailable code/status; no old baseline may prove the new state. Later update refuses until normal deploy records it; restore remains available and captures current files/IDs as partial-source |
-| D / R | Deploy fails midway | Keep point and actual partial evidence; when worker/children settle, T failed with typed deploy code; failed candidate never becomes active deployment state. Record committed version edit or reconcile prior rebuild tag, preserve partial IDs; allow deliberate restore after settlement, no automatic restore |
+| D / R | Deploy fails midway | Keep point and actual partial evidence; when worker/children settle, T failed with typed deploy code; failed candidate never becomes active deployment state. Record committed version edit or reconcile prior rebuild tag, preserve partial IDs; allow deliberate restore after settlement; observed updates follow [recovery](scheduled-update-recovery.md) |
 | Q / C / P / L / D / R / U | Restore requested during update/restore | Same target or parent exclusion returns authorized `run.busy`/`run.cancelling`; no queued automatic restore, second executor or point deletion |
 | Idle / T | Restore requested | No current-baseline prerequisite. Check selected point, expected saved revision and replacement acknowledgment; Q captures current saved files + inspected IDs in a pre-restore point, then R / pull never / exact-ID verification |
 | D / R failed or capture unavailable → T | Restore requested | Inspect current state; create partial-source pre-restore point from current saved files/IDs, including committed failed rewrite; restore selected point without normal deploy first |

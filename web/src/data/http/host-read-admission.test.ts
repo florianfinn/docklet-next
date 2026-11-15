@@ -2,7 +2,7 @@
 // Revision: bbab488e30d2e91edbd840bca929737c3ac1ab5c
 // Retrieved: 2026-11-07
 // License: Apache-2.0
-// Deviations: Original fair physical admission, cancellation, protocol and response lifetime proofs.
+// Deviations: Original fair physical admission, cancellation, protocol and response lifetime proofs. M26 #462: read-only POST summaries share the physical read budget.
 
 import { afterEach, expect, it, vi } from "vitest";
 import { createHostReadAdmission } from "./host-read-admission";
@@ -219,4 +219,39 @@ it("aborting an unanswered request releases its slot even when the transport ign
   let started = false; const next = fetch(path(6)).then((response) => { started = true; return response; });
   await flush(); expect(started).toBe(false); controller.abort(); await flush(); expect(started).toBe(true);
   gate.resolve(Response.json({ late: true })); await (await first).text(); await (await next).text(); await consume(held);
+});
+
+// #370: a hub-owned restart read takes the next free slot instead of queueing behind its host's
+// agent-backed reads, and a slow host read never holds it.
+it.each(["restarts/latest", "restarts/example-run"])("admits the hub-owned %s read ahead of queued host reads", async (route) => {
+  const sent: string[] = [];
+  const gates = new Map<string, ReturnType<typeof deferred<Response>>>();
+  const physical = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input); sent.push(url);
+    const gate = deferred<Response>(); gates.set(url, gate); return gate.promise;
+  });
+  const fetch = createHostReadAdmission(physical, "/api", () => "http/1.1");
+  const host = Array.from({ length: 8 }, (_, i) => fetch(path(i)));
+  await flush(); expect(sent.length).toBe(5);
+  const restart = fetch(`/api/environments/direct/agent/${route}`);
+  await flush(); expect(sent.length).toBe(5);
+  gates.get(path(0))!.resolve(Response.json({ ok: true })); await (await host[0]!).text(); await flush();
+  expect(sent.at(-1)).toBe(`/api/environments/direct/agent/${route}`);
+  gates.get(`/api/environments/direct/agent/${route}`)!.resolve(Response.json({ ok: true })); await (await restart).text();
+  // Every later host read is answered and consumed as soon as admission sends it.
+  const rest = host.slice(1).map(async (read) => (await read).text());
+  for (let round = 0; round < 20 && sent.length < 9; round++) { for (const gate of gates.values()) gate.resolve(Response.json({ ok: true })); await flush(); }
+  for (const gate of gates.values()) gate.resolve(Response.json({ ok: true }));
+  await Promise.all(rest);
+});
+
+it.each(["active-summaries", "summaries"])("admits read-only %s POSTs within the physical host read budget", async (suffix) => {
+  const physical = vi.fn(async () => Response.json({ ok: true }));
+  const fetch = createHostReadAdmission(physical, "/api", () => "http/1.1");
+  const held = await Promise.all([1, 2, 3, 4, 5].map((i) => fetch(path(i))));
+  const read = fetch(`/api/environments/direct/images/vulnerabilities/${suffix}`, { method: "POST", body: "{}" });
+  await flush(); expect(physical.mock.calls.length).toBe(5);
+  await held[0]!.text();
+  await (await read).text(); await consume(held.slice(1));
+  expect(physical.mock.calls.length).toBe(6);
 });

@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original real registry/checker and stateful Docker image fixture for runtime transports.
+// Deviations: Original real registry/checker and stateful Docker image fixture for runtime transports; effect holds leave independent inspections available.
 
 package activity_test
 
@@ -65,12 +65,15 @@ func newContainerImageHTTP(t *testing.T) (*containerImageHTTP, *httptest.Server)
 	return &containerImageHTTP{base: newRecreateHTTP(t), ref: ref, repo: repo, oldImage: oldID.String(), newImage: newID.String(), oldManifest: manifest.String(), tag: oldID.String(), images: map[string]string{runtimeContainerID: oldID.String()}}, server
 }
 func (d *containerImageHTTP) serve(w http.ResponseWriter, r *http.Request) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	p := r.URL.Path
 	if strings.HasPrefix(p, "/v") {
 		p = p[strings.Index(p[1:], "/")+1:]
 	}
+	if strings.Contains(p, "/containers/") && p != "/containers/create" && p != "/containers/json" && !strings.HasSuffix(p, "/json") {
+		return d.base.serve(w, r)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case p == "/info":

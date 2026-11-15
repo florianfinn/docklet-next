@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original image and registry safety contract for issue #229.
+// Deviations: Original image and registry safety contract for issue #229; M24 migrated schema for the previous-image slot cleanup.
 
 package prune
 
@@ -11,17 +11,17 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
-	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/system"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -52,15 +52,16 @@ func TestPR1ScheduledAndInteractivePruneShareImageGuard(t *testing.T) {
 	c, err := client.New(client.WithHost(daemon.URL), client.WithAPIVersion("1.41"))
 	require.NoError(t, err)
 	defer c.Close()
-	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
+	// The guard reads the migrated schema, including previous-image slots.
+	db, err := database.InitializeHub(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "prune.db")), database.MigrationOptions{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&guard.Protection{}))
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	runtime := francistest.New(t)
 	admission := runs.NewAdmission(runtime.Service(), t.Name())
 	require.NoError(t, admission.Register(runtime))
 	francistest.Start(t, runtime)
 	getter := func(context.Context) (*client.Client, error) { return c, nil }
-	g := &guard.Service{DB: &database.DB{DB: db}, Docker: getter, Admission: admission}
+	g := &guard.Service{DB: db, Docker: getter, Admission: admission}
 	require.NoError(t, g.Protect(t.Context(), guard.Protection{ImageID: id, Reason: "restore-point", OwnerID: "point"}))
 	s := NewService(time.UTC, getter, nil, nil, nil, nil)
 	s.SetImageGuard(g)

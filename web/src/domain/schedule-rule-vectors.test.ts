@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original exact-instant parity against the shared Go/web vectors.
+// Deviations: Original exact-instant parity against the shared Go/web vectors. M24 S6: observed recovery and update UI follow-ups.
 
 import { readFileSync } from "node:fs";
 import { it, expect } from "vitest";
@@ -18,4 +18,15 @@ it.each(vectors)("SR11 shared vector $name", (v) => {
     if (fixedDaily) expect(nextOccurrence({ mode: "daily", time: `${fixedDaily[2]!.padStart(2, "0")}:${fixedDaily[1]!.padStart(2, "0")}` }, after, v.zone)?.toISOString()).toBe(actual?.toISOString());
     if (actual) after = actual;
   }
+});
+
+
+it.each([
+  ["2027-03-27T12:00:00Z", "2027-03-28T01:30:00Z"],
+  ["2026-10-24T12:00:00Z", "2026-10-25T00:30:00Z"],
+  ["2026-10-25T01:15:00Z", "2026-11-01T01:30:00Z"],
+])("F5 weekly DST parity after %s", (after, expected) => {
+  const calendar = nextOccurrence({ mode: "weekly", time: "02:30", day: "sun" }, new Date(after), "Europe/Berlin")?.toISOString();
+  expect(calendar).toBe(new Date(expected).toISOString());
+  expect(calendar).toBe(nextScheduleExpression("0 30 2 * * 0", new Date(after), "Europe/Berlin")?.toISOString());
 });

@@ -30,7 +30,7 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, key, value string) 
 		return err
 	}
 	if err := libarcane.ValidateCronSetting(key, value); err != nil {
-		return fmt.Errorf("invalid cron expression for %s: %w", key, err)
+		return common.Classify(common.ErrValidation, fmt.Errorf("invalid cron expression for %s: %w", key, err))
 	}
 	s.writes.Lock()
 	defer s.writes.Unlock()
@@ -185,7 +185,7 @@ func (s *SettingsService) prepareUpdateValues(updates settings.Update, cfg, defa
 		}
 
 		if err := libarcane.ValidateCronSetting(key, value); err != nil {
-			return nil, fmt.Errorf("invalid cron expression for %s: %w", key, err)
+			return nil, common.Classify(common.ErrValidation, fmt.Errorf("invalid cron expression for %s: %w", key, err))
 		}
 
 		var valueToSave string

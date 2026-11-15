@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original compact replacement identity persistence and conditional hub projection; M18 standalone image update and restore safety.
+// Deviations: Original compact replacement identity persistence and conditional hub projection; M18 standalone image update and restore safety. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -106,8 +106,23 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 				_, err := runtimeEvidenceTxInternal(tx, now, runtimeRowIdentityInternal(&row), runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: row.ExecutorStartedAt})
 				return err
 			}
+			observed, err := runtimeObservedRunTx(tx, row.RunID)
+			if err != nil {
+				return err
+			}
+			if observed != nil && row.OperationID != nil && runtimeContainerImageOperation(RuntimeOperation(*row.OperationID)) {
+				// Process loss cut the observation, compensation or verification:
+				// journal identity is no stability proof. The journal's final
+				// replacement, if any, is still the live container.
+				message := string(activityDTO.CodeRuntimeInterrupted)
+				evidence := updaterDTO.LifecycleResult{RunID: row.RunID, Code: message, HTTPStatus: 503, Recovery: &updaterDTO.RecoveryResult{Outcome: "interrupted"}}
+				result := runtimeLocalResultInternal{recovered: true, state: "failed", code: activityDTO.CodeRuntimeInterrupted, message: message, errorText: &message,
+					settledAt: now, startedAt: row.ExecutorStartedAt, recreate: recovered.Result, imageLifecycle: &evidence}
+				_, _, err := runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
+				return err
+			}
 			state, code := "failed", activityDTO.Code(recovered.Code)
-			if recovered.Result != nil {
+			if recovered.Result != nil && recovered.Code == "" {
 				state, code = "success", activityDTO.CodeActivitySuccess
 			}
 			// The journal's committed observations are the effect evidence. Keep the
@@ -121,6 +136,9 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 						evidence.Code, evidence.HTTPStatus = "update.deploy-failed", 500
 					}
 					result.code = activityDTO.CodeRuntimeFailed
+					if recovered.Code == "runtime.interrupted" {
+						result.code = activityDTO.CodeRuntimeInterrupted
+					}
 					result.message = evidence.Code
 				}
 				result.imageLifecycle = &evidence
@@ -128,7 +146,7 @@ func (s *RuntimeService) recoverRecreatesStartup(ctx context.Context) error {
 			if state == "failed" {
 				result.errorText = new(result.message)
 			}
-			_, _, err := runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
+			_, _, err = runtimeCompleteTxInternal(tx, now, runtimeRowIdentityInternal(&row), result)
 			return err
 		})
 		if err != nil {

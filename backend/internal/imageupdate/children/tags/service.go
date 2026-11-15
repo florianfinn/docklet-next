@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; clean only observations with a stale policy key.
 
 package tags
 
@@ -57,14 +57,14 @@ func NewService(
 }
 
 // Check evaluates the tag policy of each listed container running a wanted
-// image. Digest-tracked containers are handed to clearDigestTracked and each
-// finished check is handed to save as soon as it completes.
+// image. Policy cleanup runs before any observation is saved; matching digest
+// observations survive tag scans. Finished tag checks are saved immediately.
 func (s *Service) Check(
 	ctx context.Context,
 	listed []container.Summary,
 	wanted map[string]bool,
 	credentials []containerregistry.Credential,
-	clearDigestTracked func(context.Context, []string) error,
+	clearDigestTracked func(context.Context, []container.Summary) error,
 	save func(context.Context, container.Summary, *imageupdate.Response) error,
 ) (map[string]*imageupdate.Response, error) {
 	results := map[string]*imageupdate.Response{}
@@ -84,19 +84,19 @@ func (s *Service) Check(
 	}()
 	policy := updater.DefaultLabelPolicy()
 	candidates := make([]container.Summary, 0, len(listed))
-	var staleDigestContainerIDs []string
+	var tracked []container.Summary
 	for _, cnt := range listed {
 		if !wanted[refs.NormalizeImageUpdateRef(cnt.Image)] || imageref.IsUpdateCheckDisabled(cnt.Labels) {
 			continue
 		}
+		tracked = append(tracked, cnt)
 		tagPolicy, policyErr := tagpolicy.Resolve(cnt.Image, policy.TagPolicy(cnt.Labels))
 		if policyErr == nil && tagPolicy.Strategy == "digest" {
-			staleDigestContainerIDs = append(staleDigestContainerIDs, cnt.ID)
 			continue
 		}
 		candidates = append(candidates, cnt)
 	}
-	if clearErr := clearDigestTracked(ctx, staleDigestContainerIDs); clearErr != nil {
+	if clearErr := clearDigestTracked(ctx, tracked); clearErr != nil {
 		return results, clearErr
 	}
 

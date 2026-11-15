@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original exact hub restart routing and zero-forward proof.
+// Deviations: Original exact hub restart routing and zero-forward proof; M25 latest restart read stays hub-local.
 
 package middleware
 
@@ -17,7 +17,7 @@ import (
 )
 
 func TestHostRestartRoutesStayHubOwnedWithZeroForwards(t *testing.T) {
-	for _, route := range []struct{ method, suffix string }{{"POST", "/agent/restart"}, {"GET", "/agent/restarts/example-run"}} {
+	for _, route := range []struct{ method, suffix string }{{"POST", "/agent/restart"}, {"GET", "/agent/restarts/example-run"}, {"GET", "/agent/restarts/latest"}} {
 		t.Run(route.method+route.suffix, func(t *testing.T) {
 			var forwards atomic.Int32
 			agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { forwards.Add(1); w.WriteHeader(418) }))

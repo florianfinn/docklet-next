@@ -29,6 +29,7 @@ export const SHIPPED_DESIGN = {
     glowSize: 128,
     glowLine: 2,
     dotWave: true,
+    dotPattern: "deepwave",
     dotWaveStrength: 0.9,
     dotWavePeriod: 32,
     sidebarWidth: 17.5,

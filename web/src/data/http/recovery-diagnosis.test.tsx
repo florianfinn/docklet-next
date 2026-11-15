@@ -50,7 +50,7 @@ it.each(["environment", "stream reopen"] as const)("MNT1 %s refresh after mainte
   expect(client.getQueryState(queryKeys.activeSecurity)?.status).toBe("success");
   let resets = 0; const offIdentity = identityLifetime(f.adapter).listen(() => { resets++; });
   f.state.maintenance = true; await f.adapter.getHubBackupMaintenance();
-  const paths = ["/api/environments/first/images", "/api/environments/first/volumes", "/api/environments/first/volumes/binds", "/api/environments/first/images/vulnerabilities/active-summaries"];
+  const paths = ["/api/environments/first/images", "/api/environments/first/volumes", "/api/environments/first/volumes/_collection/binds", "/api/environments/first/images/vulnerabilities/active-summaries"];
   paths.forEach((path) => f.state.hold.add(path));
   f.state.maintenance = false; await f.adapter.getHubBackupMaintenance(); await tick(100);
   expect(paths.every((path) => f.pending.some((p) => p.path === path))).toBe(true);

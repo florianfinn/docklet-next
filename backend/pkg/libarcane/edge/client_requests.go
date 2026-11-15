@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation; M16 bind mounts and backup completion; aborted handlers send no response. M23 #435: active counts cancellation ingress.
+// Deviations: Cancelable finite log-download ingress (#379); M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation; M16 bind mounts and backup completion; aborted handlers send no response. M23 #435: active counts cancellation ingress.
 
 package edge
 
@@ -35,7 +35,7 @@ func (c *TunnelClient) messageLoop(ctx context.Context, conn TunnelConnection, w
 			case MessageTypeRequest:
 				c.scheduleRuntimeRequestInternal(ctx, conn, msg, workers, false)
 			case MessageTypeCommandRequest:
-				if runtimeRequestPathInternal(msg.Path) || (volumeBackupCancelableRequest(msg.Method, msg.Path) || activeSummaryRequest(msg.Method, msg.Path)) {
+				if runtimeRequestPathInternal(msg.Path) || (volumeBackupCancelableRequest(msg.Method, msg.Path) || activeSummaryRequest(msg.Method, msg.Path) || containerLogsDownloadRequest(msg.Method, msg.Path)) {
 					c.scheduleRuntimeRequestInternal(ctx, conn, msg, workers, true)
 				} else if transferID := strings.TrimSpace(msg.Metadata[bodyTransferMetadataKey]); transferID != "" {
 					c.beginCommandRequestTransferInternal(ctx, conn, transferID, msg)

@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; #410 hub zone for users.
 
 package settings
 
@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestUserSettingsReadContainsOnlySetupStatusAndStopMode(t *testing.T) {
+func TestUserSettingsReadContainsOnlySetupStatusStopModeAndZone(t *testing.T) {
 	require.Equal(t, access.Self, access.Rules["get-settings"].Kind)
 	svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
 	require.NoError(t, err)
@@ -22,8 +22,9 @@ func TestUserSettingsReadContainsOnlySetupStatusAndStopMode(t *testing.T) {
 	ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, access.Synthesize("viewer", nil))
 	out, err := h.GetSettings(ctx, &GetSettingsInput{EnvironmentID: "0"})
 	require.NoError(t, err)
-	require.Len(t, out.Body, 2)
+	require.Len(t, out.Body, 3)
 	require.Equal(t, "setupCompleted", out.Body[0].Key)
 	require.Equal(t, "stackStopMode", out.Body[1].Key)
 	require.Equal(t, "down", out.Body[1].Value)
+	require.Equal(t, "effectiveTimeZone", out.Body[2].Key)
 }

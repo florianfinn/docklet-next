@@ -42,6 +42,6 @@ export function mapRuntime(snapshot: unknown, hostId: string, id?: string, detai
     return { ...run, ...(value.result ? { recreateResult: value.result as NonNullable<RuntimeRun["recreateResult"]> } : {}), outcomeState: value.outcomeState as "known" | "unknown", cancelRequested: value.cancelRequested,
       runtime: { ...rights, sourceObserved: false, resultCode: typeof value.messageCode === "string" ? value.messageCode : undefined,
         unknownReason: recovery?.unknownReason, released: recovery?.disposition === "released", releaseReason: recovery?.dispositionReason,
-        lateResult: recovery?.disposition ? recovery.executorResultCode : undefined } };
+        lateResult: recovery?.disposition && recovery.disposition !== "refused" ? recovery.executorResultCode : undefined } };
   } catch { throw runtimeError("runtime.invalid-response"); }
 }

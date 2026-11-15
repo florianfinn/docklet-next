@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original compatibility boundary.
+// Deviations: Original compatibility boundary; M26 same-version fingerprint boundary.
 
 package contract
 
@@ -29,4 +29,9 @@ func TestAgentCompatibilityAndRecoveryRoutes(t *testing.T) {
 
 func TestV8RejectsV7EvenWithCurrentFingerprint(t *testing.T) {
 	require.False(t, AgentCompatible(7, AgentHubFingerprint))
+}
+
+// Builds before the M26 collection routes share version 18 and must refuse this build.
+func TestEarlierV18FingerprintIsRejected(t *testing.T) {
+	require.False(t, AgentCompatible(18, "7e7dbc378cf7da65372c3ff4bce98ec958b98e009f481b98b0140c4497d9744a"))
 }

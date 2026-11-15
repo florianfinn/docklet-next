@@ -119,6 +119,10 @@ func (h *SettingsHandler) appendRuntimeSettingsInternal(settingsDto []settings.P
 		cfg = config.Load()
 	}
 	settingsDto = append(settingsDto, settings.PublicSetting{Key: "effectiveTimeZone", Value: cfg.GetLocation().String(), Type: "string"})
+	if !cfg.AgentMode && !cfg.EdgeAgent {
+		// The process TZ the reset action returns to; agents keep their own zone.
+		settingsDto = append(settingsDto, settings.PublicSetting{Key: "defaultTimeZone", Value: cfg.ProcessLocation().String(), Type: "string"})
+	}
 
 	uiConfigDisabled := false
 	if h.cfg != nil {
@@ -203,10 +207,16 @@ func (h *SettingsHandler) GetPublicSettings(ctx context.Context, input *GetPubli
 func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInput) (*GetSettingsOutput, error) {
 	ps, _ := middleware.PermissionsFromContext(ctx)
 	if ps != nil && ps.UserID != "" {
-		// Users read only what their own screens need: setup status and the Stop mode their Stop action follows.
+		// Users read only what their own screens need: setup status, the Stop mode their Stop action
+		// follows and the hub zone their schedule times are shown in.
+		cfg := h.cfg
+		if cfg == nil {
+			cfg = config.Load()
+		}
 		return &GetSettingsOutput{Body: []settings.PublicSetting{
 			{Key: "setupCompleted", Value: h.settingsService.GetStringSetting(ctx, "setupCompleted", "false"), Type: "boolean"},
 			{Key: "stackStopMode", Value: h.settingsService.GetStringSetting(ctx, "stackStopMode", "down"), Type: "select"},
+			{Key: "effectiveTimeZone", Value: cfg.GetLocation().String(), Type: "string"},
 		}}, nil
 	}
 	isAdmin := ps.IsGlobalAdmin()

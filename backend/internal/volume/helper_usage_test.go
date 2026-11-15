@@ -91,7 +91,7 @@ func TestHelperExcludedFromVolumeReadRoutes(t *testing.T) {
 					require.NoError(t, json.Unmarshal(body, dest))
 				}
 				var sizes base.ApiResponse[[]VolumeSizeInfo]
-				get("/sizes", "", &sizes)
+				get("/_collection/sizes", "", &sizes)
 				require.Equal(t, []VolumeSizeInfo{{Name: "data", Size: 512, RefCount: int64(len(wantIDs))}}, sizes.Data)
 				var usage base.ApiResponse[VolumeUsageResponse]
 				get("/data/usage", "", &usage)
@@ -113,7 +113,7 @@ func TestHelperExcludedFromVolumeReadRoutes(t *testing.T) {
 				}
 				require.Equal(t, wantCounts, list.Counts)
 				var counts base.ApiResponse[VolumeUsageCountsData]
-				get("/counts", "", &counts)
+				get("/_collection/counts", "", &counts)
 				require.Equal(t, wantCounts, counts.Data)
 				snapshot := svc.CountUsageFromSnapshot([]volume.Volume{raw}, items)
 				require.Equal(t, volumetypes.UsageCounts{Total: 1, Inuse: wantCounts.Inuse, Unused: wantCounts.Unused}, snapshot)

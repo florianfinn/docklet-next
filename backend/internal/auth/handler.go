@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints.
+// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints; remove dead token-version mismatch handling.
 
 package auth
 
@@ -212,8 +212,7 @@ func (h *AuthHandler) RefreshToken(ctx context.Context, input *RefreshTokenInput
 		case errors.Is(err, common.ErrInvalidToken),
 			errors.Is(err, common.ErrExpiredToken),
 			errors.Is(err, common.ErrTokenValidation),
-			errors.Is(err, common.ErrSessionRevoked),
-			errors.Is(err, common.ErrTokenVersionMismatch):
+			errors.Is(err, common.ErrSessionRevoked):
 			return nil, huma.Error401Unauthorized("Invalid or expired refresh token")
 		default:
 			return nil, huma.Error500InternalServerError("Failed to refresh token")
@@ -594,9 +593,8 @@ func parseSecurityRequirementsInternal(api huma.API, ctx operationProvider) secu
 }
 
 // tryBearerAuthInternal attempts Bearer token authentication. Returns the
-// authenticated user on success, or the underlying error from VerifyToken so
-// the caller can distinguish a missing/invalid token from a token-version
-// mismatch (which requires clearing the stale cookie).
+// authenticated user on success, or the verification error so the caller can
+// clear cookies when the session expired or was revoked.
 func tryBearerAuthInternal(ctx huma.Context, authService *AuthService) (*userdomain.User, string, error) {
 	token, fromCookie := extractBearerTokenInternal(ctx)
 	if token == "" {
@@ -871,13 +869,6 @@ func handleBearerAuthInternal(api huma.API, ctx huma.Context, authService *AuthS
 		newCtx := setUserInContextInternal(ctx.Context(), authenticatedUser, ps)
 		newCtx = context.WithValue(newCtx, middleware.ContextKeyCurrentSessionID, sessionID)
 		return huma.WithContext(ctx, newCtx), true
-	}
-	if errors.Is(err, common.ErrTokenVersionMismatch) {
-		// The app version changed (a self-update). The session is still valid — the
-		// refresh path tolerates the version change and rotates the token — so do NOT
-		// clear the auth cookies. Return a recoverable 401 the frontend refreshes from.
-		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Application has been updated. Refreshing session.")
-		return nil, true
 	}
 	if errors.Is(err, common.ErrSessionRevoked) || errors.Is(err, common.ErrTokenValidation) || errors.Is(err, common.ErrExpiredToken) {
 		for _, cookieHeader := range cookie.BuildClearTokenCookieStringsFor(cookie.SecureCookieFromContext(ctx.Context())) {

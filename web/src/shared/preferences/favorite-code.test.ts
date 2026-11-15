@@ -149,8 +149,8 @@ describe("shipped default design", () => {
     const { dotDrift: _orbit, ...visual } = USER_FAVORITE.sections.visual;
     const shipped = defaultSnapshot();
     expect([shipped.tokens, shipped.uiStyle, shipped.dashboard, shipped.fleet, shipped.overview]).toEqual([USER_FAVORITE.sections.tokens, USER_FAVORITE.sections.uiStyle, USER_FAVORITE.sections.dashboard, USER_FAVORITE.sections.fleet, USER_FAVORITE.sections.overview]);
-    // Every visual field of the code, plus the new 3D depth on its default; the old orbit key is gone.
-    expect([{ ...shipped.visual, dotDepth: undefined }, (shipped.visual?.dotDepth ?? 0) > 0]).toEqual([{ ...visual, dotDepth: undefined }, true]);
+    // Every visual field of the code, plus the 3D depth and the deepwave pattern on their defaults; the old orbit key is gone.
+    expect([{ ...shipped.visual, dotDepth: undefined }, (shipped.visual?.dotDepth ?? 0) > 0]).toEqual([{ ...visual, dotPattern: "deepwave", dotDepth: undefined }, true]);
     // Fresh stores start from the same data, independently of each other.
     expect([designStore.get().tokens.palette, uiStyleStore.get().runMotion, layoutStore.get().hidden, fleetViewStore.get().placement, fleetViewStore.get().hostArea, preferencesStore.get().stacksLayout, visualStyleStore.get().logoMotion]).toEqual([USER_FAVORITE.sections.tokens.palette, "sweep", USER_FAVORITE.sections.dashboard.hidden, "right", { w: 5, h: 2 }, "hosts", "relay"]);
     expect(["services" in DEFAULT_LAYOUT, DEFAULT_FLEET_VIEW.hostOrder, DEFAULT_PREFERENCES.hostSelection]).toEqual([false, [], []]);

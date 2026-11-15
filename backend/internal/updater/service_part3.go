@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M21 tag-policy records store the selected version.
+// Deviations: Local module namespace; M21 tag-policy records store the selected version; #406 typed layout refusal before details.
 
 package updater
 
@@ -120,6 +120,9 @@ func (s *UpdaterService) clearUnscopedRecordInternal(ctx context.Context, record
 func (s *UpdaterService) CheckProjectUpdates(ctx context.Context, projectID string) (*projecttypes.UpdateInfo, error) {
 	if s.deps.Projects == nil || s.deps.DB == nil || s.engine == nil {
 		return nil, errors.New("project update checker unavailable")
+	}
+	if err := s.deps.Projects.UpdateLayoutRefusal(ctx, projectID); err != nil {
+		return nil, err
 	}
 	details, err := s.deps.Projects.GetProjectDetails(ctx, projectID, projecttypes.DetailsOptions{IncludeServiceConfigs: true})
 	if err != nil {

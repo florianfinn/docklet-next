@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original stateful image/container Docker producer and real slot/guard fixture.
+// Deviations: Original stateful image/container Docker producer and real slot/guard fixture. M24 #440: engine start/AutoRemove semantics, errors after completed effects.
 
 package container
 
@@ -53,6 +53,10 @@ type updateDaemon struct {
 	// containerd maps an image ID (the index) to its platform manifest; set,
 	// inspects answer in the containerd image store's shape.
 	containerd map[string]string
+	// inspect adjusts an exact container inspect answer; failAfter applies the
+	// named effect, then answers with an error (the daemon completed it).
+	inspect   func(id string, item *dc.InspectResponse)
+	failAfter string
 }
 
 func newUpdateDaemon() *updateDaemon {
@@ -141,6 +145,11 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 			createdID = updateRestoreID
 		}
 		d.containers[createdID] = dc.InspectResponse{ID: createdID, Name: "/" + r.URL.Query().Get("name"), Image: d.tag, HostConfig: &body.HostConfig, State: &dc.State{}, Created: time.Now().Format(time.RFC3339Nano), Config: &body.Config}
+		if d.failAfter == "create" {
+			d.failAfter = ""
+			http.Error(w, "synthetic error after effect", 500)
+			return
+		}
 		w.WriteHeader(201)
 		_ = json.NewEncoder(w).Encode(map[string]string{"Id": createdID})
 	case strings.HasPrefix(p, "/containers/"):
@@ -160,6 +169,9 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(parts) == 2 && parts[1] == "json" {
+			if d.inspect != nil {
+				d.inspect(id, &item)
+			}
 			_ = json.NewEncoder(w).Encode(item)
 			return
 		}
@@ -177,10 +189,21 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 			item.Name = "/" + r.URL.Query().Get("name")
 		case "stop":
 			item.State.Running = false
+			if item.HostConfig != nil && item.HostConfig.AutoRemove {
+				delete(d.containers, id)
+				w.WriteHeader(204)
+				return
+			}
 		case "start":
-			item.State.Running = true
+			// An API start resets the restart counter, as the engine does.
+			item.State.Running, item.State.StartedAt, item.RestartCount = true, time.Now().UTC().Format(time.RFC3339Nano), 0
 		case "remove":
 			delete(d.containers, id)
+			if d.failAfter == op {
+				d.failAfter = ""
+				http.Error(w, "synthetic error after effect", 500)
+				return
+			}
 			w.WriteHeader(204)
 			return
 		default:
@@ -188,6 +211,11 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		d.containers[id] = item
+		if d.failAfter == op {
+			d.failAfter = ""
+			http.Error(w, "synthetic error after effect", 500)
+			return
+		}
 		w.WriteHeader(204)
 	default:
 		http.NotFound(w, r)

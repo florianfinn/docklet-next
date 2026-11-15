@@ -3,7 +3,7 @@ Source: docklet-next/issues/341
 Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 Retrieved: 2026-11-04
 License: Apache-2.0
-Deviations: Original update policy model rationale.
+Deviations: Original update policy model rationale. M24 S6: observed recovery and update UI follow-ups.
 -->
 
 # Update policy model
@@ -25,7 +25,7 @@ stays as accepted.
   check | scheduled, window).
 - B1: standalone containers get check, install and a policy through recreate; Unraid and uncertain
   origin stay excluded ("Docklet does not manage their updates").
-- core-adoption: never install automatically without activation; no automatic rollback.
+- core-adoption: never install automatically without activation; plain manual updates require manual recovery; [observed updates](scheduled-update-recovery.md) can restore workloads.
 
 ## Starting point (main 89f69980)
 

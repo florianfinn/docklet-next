@@ -55,3 +55,12 @@ it.each(["en-US", "de"] as const)("SR7: a refused zone save shows the invalid-zo
   renderWithApp(<Refusal error={error} />);
   expect((await screen.findByText(catalogs[locale].settings.codes.settings["invalid-time-zone"])) !== null).toBe(true);
 });
+
+it.each(["en-US", "de"] as const)("#410: with a saved override the reset label names the process TZ the hub reports in %s", async (locale) => {
+  setAppLocale(locale);
+  renderWithApp(<Fields saved={{ ...general, timeZone: "Europe/Berlin", configuredTimeZone: "Europe/Berlin", defaultTimeZone: "Asia/Tokyo" }} />);
+  const reset = await screen.findByRole("button", { name: /TZ/ });
+  expect(reset.textContent?.includes("(Asia/Tokyo)")).toBe(true);
+  expect(reset.textContent?.includes(catalogs[locale].settings.general.systemTZ)).toBe(false);
+  expect(screen.getByRole("combobox").getAttribute("placeholder")).toBe("Asia/Tokyo");
+});

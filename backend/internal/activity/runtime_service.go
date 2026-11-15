@@ -24,6 +24,7 @@ import (
 type RuntimeResolvedTarget struct {
 	Origin              *containertypes.OriginFields
 	ComposeProjectLabel bool
+	ReplacementRunID    string
 	Protected           bool
 	Target              RuntimeTarget
 	ComposeManaged      bool

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; retain browser cookies at the hub boundary; session-bound viewer lifetime and durable validation; preserve upstream close metadata and terminal exit delivery; revoked terminal viewers forward no new input.
+// Deviations: Explicit pending release and shared once-only stream close on delivery failure (#416); Local module namespace; retain browser cookies at the hub boundary; session-bound viewer lifetime and durable validation; preserve upstream close metadata and terminal exit delivery; revoked terminal viewers forward no new input.
 
 package edge
 
@@ -92,8 +92,15 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	}
 	clientDoneCh := make(chan struct{})
 
+	pending.onFailure = func() {
+		cancel()
+		pending.closeAgent(tunnel, streamID, MessageTypeStreamClose)
+	}
 	tunnel.Pending.Store(streamID, pending)
-	defer tunnel.Pending.Delete(streamID)
+	defer func() {
+		pending.Release()
+		tunnel.Pending.CompareAndDelete(streamID, pending)
+	}()
 
 	headers := buildWebSocketHeaders(req)
 	if openStreamErr := DefaultCommandClient.OpenStream(streamCtx, tunnel, &CommandRequest{
@@ -114,7 +121,7 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	)
 
 	// Goroutine to read from client and send to agent
-	go forwardClientToAgent(viewerCtx, streamCtx, clientWS, tunnel, streamID, clientDoneCh)
+	go forwardClientToAgent(viewerCtx, streamCtx, clientWS, tunnel, streamID, clientDoneCh, pending)
 
 	if terminal {
 		forwardTerminalAgentToClient(viewerCtx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
@@ -140,7 +147,7 @@ func buildWebSocketHeaders(req *http.Request) map[string]string {
 	return headers
 }
 
-func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Conn, tunnel *AgentTunnel, streamID string, doneCh chan<- struct{}) {
+func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Conn, tunnel *AgentTunnel, streamID string, doneCh chan<- struct{}, pending *PendingRequest) {
 	defer close(doneCh)
 	for {
 		msgType, data, err := clientWS.Read(streamCtx)
@@ -151,7 +158,7 @@ func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Co
 			if wshub.Relay(ctx) != nil && wshub.Relay(ctx).IsTerminal() {
 				_ = sendStreamDataInternal(tunnel, streamID, int(websocket.MessageText), wshub.TerminalCloseControl)
 			} else {
-				sendWebSocketClose(tunnel, streamID)
+				pending.closeAgent(tunnel, streamID, MessageTypeStreamClose)
 			}
 			return
 		}
@@ -175,6 +182,10 @@ func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Co
 }
 
 func forwardAgentToClient(ctx, streamCtx context.Context, clientWS *websocket.Conn, tunnel *AgentTunnel, pending *PendingRequest, streamID string, clientDoneCh <-chan struct{}) {
+	defer func() {
+		pending.Release()
+		pending.closeAgent(tunnel, streamID, MessageTypeStreamClose)
+	}()
 	pingTicker := sessionlife.NewTicker(streamCtx, tunnelWSPingPeriod)
 	defer pingTicker.Stop()
 
@@ -192,7 +203,7 @@ func forwardAgentToClient(ctx, streamCtx context.Context, clientWS *websocket.Co
 			return
 		case <-pingTicker.C:
 			if sessionlife.Check(streamCtx) != nil {
-				sendWebSocketClose(tunnel, streamID)
+				pending.closeAgent(tunnel, streamID, MessageTypeStreamClose)
 				return
 			}
 			// Ping round-trips; the pong is serviced by forwardClientToAgent's read.
@@ -201,7 +212,7 @@ func forwardAgentToClient(ctx, streamCtx context.Context, clientWS *websocket.Co
 			pcancel()
 			if err != nil {
 				slog.DebugContext(ctx, "Failed to ping client WebSocket", "streamId", streamID, "error", err)
-				sendWebSocketClose(tunnel, streamID)
+				pending.closeAgent(tunnel, streamID, MessageTypeStreamClose)
 				return
 			}
 		case msg, ok := <-pending.ResponseCh:

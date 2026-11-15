@@ -24,7 +24,7 @@ import (
 
 func provideAutoHealJobInternal(d *docker.DockerClientService, s *settings.SettingsService, e *event.EventService, n *notification.NotificationService, a *runs.Admission, db *database.DB, cfg *config.Config, runtime *activity.RuntimeService, volumes *volume.VolumeService) (*scheduler.AutoHealJob, error) {
 	return scheduler.NewAutoHealJob(d, s, e, n, a, scheduler.AutoHealOptions{DB: db, Config: cfg, Busy: func(ctx context.Context, v container.InspectResponse) (bool, error) {
-		held, err := runtime.HeldForContainer(ctx, v.ID, "")
+		held, err := runtime.HeldForContainer(ctx, v.ID, "", v.Config.Labels)
 		if held || err != nil {
 			return true, err
 		}

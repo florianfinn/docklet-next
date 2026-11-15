@@ -235,3 +235,26 @@ enums, recreate options and result.
 | OR15 | partial-label unknown | standalone not offered, edit locked | assign API and guard | assigning standalone → 409 (mutation: allow) |
 | OR16 | concurrent assign, reset and recreate | conditional writes | assign/reset API and projection | race tests; the final row matches the last committed intent |
 | OR17 | recreate concurrency | container-scoped run excludes parallel container, parent stack and policy runs | real admission → receiver with effects held | hold a recreate effect; start a manual restart, a parent stack run and a policy update on the same container → each refused or queued per the existing scope rules, no second effect (mutation: skip the exclusion for the new operations) |
+
+## Replacement exclusion and system workloads
+
+The fresh executing-host inspect carries `io.docklet.run` into runtime admission.
+A different run is refused with `run.busy` while that label names an unsettled
+receipt in the same executing environment. The receipt holds the replacement
+through creation, startup, observed image updates and restart recovery. Labels
+of settled, pruned or unknown receipts do not hold the target. Lookup failures
+refuse admission conservatively. This applies to all container runtime operations,
+including scheduled image updates, and to Auto Heal's fresh inspect.
+
+Hub-local admission refuses synchronously with HTTP 409. Direct and Edge admission
+returns HTTP 202 before the executing receiver refuses; the hub records a refused
+run with busy wording and known no-effect evidence. A genuine interruption keeps
+its unverified-effect presentation. Compensation and verification remain inside
+the original run and do not enter admission again. Container remove/kill and the
+existing Auto Heal check-then-act race remain outside this exclusion.
+
+Workloads labelled `io.docklet.system=agent` or `hub` are protected on every host.
+Fresh origin admission, operation descriptors, details/list redeploy eligibility,
+runtime metadata and the effect guard share this rule. Arcane's existing
+current-process ID/cgroup rule still supplies its identity verdict. The separate
+self-update path and Auto Heal's current-process self filter retain their rules.

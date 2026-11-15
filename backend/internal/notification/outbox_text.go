@@ -2,7 +2,7 @@
 // Revision: 8696c990fba68be0dd3ca9ac4de61434f6c56131
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original readable outbox notice templates; M21 container update failure subject and link.
+// Deviations: Original readable outbox notice templates; M21 container update failure subject and link; M24 scheduled recovery notices.
 
 package notification
 
@@ -15,6 +15,11 @@ import (
 
 // reasonPhrases turns typed outbox reasons into short English phrases; codes stay in the webhook variables.
 var reasonPhrases = map[string]string{
+	"restore.unavailable":                     "the previous version is unavailable",
+	"restore.files-changed":                   "the saved configuration changed",
+	"restore.shared-reference":                "the image reference is shared",
+	"image.busy":                              "another image operation is running",
+	"container.auto-remove":                   "--rm",
 	"runtime.failed":                          "the deployment failed",
 	"runtime.interrupted":                     "the run was interrupted",
 	"backup.failed":                           "the backup failed",
@@ -82,7 +87,28 @@ func outboxText(eventType, host string, payload database.JSON, linkBase string) 
 		if container := str("container"); container != "" {
 			subject = "container " + container
 		}
-		lines = append(lines, fmt.Sprintf("%s failed: %s on %s", title, subject, host), "Reason: "+reasonPhrase(str("reason")))
+		if scheduled, _ := payload["scheduled"].(bool); scheduled {
+			// Short first line for the subject; details follow in the body.
+			head, detail := "Scheduled update failed", "Reason: "+reasonPhrase(str("reason"))
+			switch str("reason") {
+			case "auto-restored":
+				detail = "The previous version is running again."
+			case "auto-restore-failed":
+				detail = "The automatic restore failed too — action needed."
+			case "auto-restore-unavailable":
+				detail = fmt.Sprintf("An automatic restore was not possible (%s) — action needed.", reasonPhrase(str("recoveryReason")))
+			case "update-interrupted":
+				head, detail = "Scheduled update interrupted", "Check the target."
+			}
+			lines = append(lines, fmt.Sprintf("%s: %s on %s", head, subject, host), detail)
+			// A not-needed recovery proved no workload effect worth restoring.
+			switch str("recovery") {
+			case "restored", "restore-failed", "unavailable", "interrupted":
+				lines = append(lines, "Volume data was not restored; the app may already have migrated it.")
+			}
+		} else {
+			lines = append(lines, fmt.Sprintf("%s failed: %s on %s", title, subject, host), "Reason: "+reasonPhrase(str("reason")))
+		}
 	case "backup_failed":
 		title := "Backup"
 		if str("operation") == "restore" {

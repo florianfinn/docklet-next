@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; M18 live scheduling, policy and contract foundation; preserve current digest-policy observations during cleanup.
 
 package imageupdate
 
@@ -13,7 +13,6 @@ import (
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"log/slog"
 	"maps"
-	"slices"
 
 	"time"
 
@@ -313,18 +312,15 @@ func (s *ImageUpdateService) checkContainerTagUpdatesInternal(ctx context.Contex
 	return s.tags.Check(ctx, listed.Items, wanted, credentials, s.deleteContainerUpdateRecordsInternal, s.saveContainerTagResultInternal)
 }
 
-// staleDigestRecordDeleteChunk bounds the IN list used to clear container
-// records whose policy switched to digest tracking.
-const staleDigestRecordDeleteChunk = 500
-
-// deleteContainerUpdateRecordsInternal clears the stored results of containers
-// whose policy no longer tracks tags, in bounded IN-list chunks.
-func (s *ImageUpdateService) deleteContainerUpdateRecordsInternal(ctx context.Context, containerIDs []string) error {
+// deleteContainerUpdateRecordsInternal removes observations from a previous
+// policy before the current check writes replacements. Matching rows survive.
+func (s *ImageUpdateService) deleteContainerUpdateRecordsInternal(ctx context.Context, containers []container.Summary) error {
 	if s.db == nil {
 		return nil
 	}
-	for chunk := range slices.Chunk(containerIDs, staleDigestRecordDeleteChunk) {
-		if err := s.db.WithContext(ctx).Where("container_id IN ?", chunk).Delete(&ImageUpdateRecord{}).Error; err != nil {
+	for _, cnt := range containers {
+		key := imageref.UpdatePolicyKey(cnt.Image, cnt.Labels)
+		if err := s.db.WithContext(ctx).Where("container_id = ? AND policy_key <> ?", cnt.ID, key).Delete(&ImageUpdateRecord{}).Error; err != nil {
 			return err
 		}
 	}

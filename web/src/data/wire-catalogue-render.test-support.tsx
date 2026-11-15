@@ -97,7 +97,8 @@ export async function restartPhase() {
   return (await restartRun({ state: "reserved" })).steps[0]!.label;
 }
 export async function restartFailure(code: string) {
-  return (await restartRun({ state: "failed", code })).error;
+  // The hub sets settledAt with every terminal state (restart_controller.go persist/markSent).
+  return (await restartRun({ state: "failed", code, settledAt: at })).error;
 }
 
 export function historyState() {

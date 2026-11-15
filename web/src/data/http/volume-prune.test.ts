@@ -39,8 +39,8 @@ describe.each([false, true])("prune transport (Edge=%s)", (edge) => {
     const f = volumeFixture(edge); const original = f.fetcher.getMockImplementation()!;
     f.fetcher.mockImplementation(async (input, init) => {
       if (new URL(String(input), "https://hub.example.com").pathname.endsWith("/environments")) return new Response(JSON.stringify({ success: true, data: ["host", "offline", "failed"].map((id) => ({ id, name: id, apiUrl: "https://agent.example.com", isEdge: edge, status: id === "offline" ? "offline" : "online", enabled: true })), pagination: { totalItems: 3 } }));
-      if (String(input).includes("/failed/volumes/prune")) return f.json({ code: "agent.unavailable" }, 502);
-      if (String(input).includes("/host/volumes/prune")) return f.json(plan);
+      if (String(input).includes("/failed/volumes/_collection/prune")) return f.json({ code: "agent.unavailable" }, 502);
+      if (String(input).includes("/host/volumes/_collection/prune")) return f.json(plan);
       return original(input, init);
     });
     const preview = await f.adapter.planVolumePrune({ hostIds: ["host", "offline", "failed"] });

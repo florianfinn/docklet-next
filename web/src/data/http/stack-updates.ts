@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original phase 2a stack update consumer for issue #231.
+// Deviations: Original phase 2a stack update consumer for issue #231. M24 S6: observed recovery and update UI follow-ups.
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { UpdatesApi, PolicyMode } from "@/domain/stack-updates";
@@ -14,7 +14,7 @@ import { baseline, points, policy, hints, checkResult } from "./update-decoders"
 import { runtimeResponseError } from "./runtime-mapping";
 import { MAINTENANCE_CODE } from "./problem-code";
 interface Options { baseUrl: string; client: CsrfClient; capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>; generation: () => number; changed: () => void }
-export function createStackUpdates({ baseUrl, client, capability, generation, changed }: Options): Required<Omit<UpdatesApi, "checkAllUpdates" | "restoreContainerImage" | "getContainerPreviousImage" | "getUpdateSettings">> {
+export function createStackUpdates({ baseUrl, client, capability, generation, changed }: Options): Required<Omit<UpdatesApi, "checkAllUpdates" | "restoreContainerImage" | "getContainerPreviousImage" | "getUpdateSettings" | "getUpdateCheckJob" | "getUpdateJobTargets">> {
   async function request(operation: string, ref: ResourceRef, suffix: string, method = "GET", body?: object, reads: string[] = []): Promise<unknown> {
     const owner = generation(), current = () => { if (owner !== generation()) throw new CancelledError(); };
     for (const name of [operation, ...reads]) { const cap = await capability(name, ref); current(); if (!cap.available) throw unavailable(name, cap.resourceRef, cap.disabledReasonCode); }

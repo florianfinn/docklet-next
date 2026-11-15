@@ -68,7 +68,7 @@ it("posts the bind key for a size scan and maps the measurement", async () => {
   const key = bindKey("/srv/app");
   const { calls, commands } = measure(200, { success: true, data: { key, measuredSize: 42, measuredAt: "2026-11-02T00:00:00Z", measuredPartial: false } });
   expect(await commands.measureBind!(`first~${key}`)).toEqual({ sizeBytes: 42, measuredAt: "2026-11-02T00:00:00Z", partial: false });
-  expect(calls).toEqual([["/api/environments/first/volumes/binds/size", JSON.stringify({ key })]]);
+  expect(calls).toEqual([["/api/environments/first/volumes/_collection/binds/size", JSON.stringify({ key })]]);
   await expect(commands.measureBind!("first~data")).rejects.toThrow();
 });
 

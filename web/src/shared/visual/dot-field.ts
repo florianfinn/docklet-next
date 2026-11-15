@@ -1,5 +1,6 @@
-import { visualStyleStore } from "@/shared/preferences/visual-style-store";
+import { type DotPattern, visualStyleStore } from "@/shared/preferences/visual-style-store";
 
+import { createDeepwaveField, type DeepwaveField, deepwaveHeight, deepwaveLift, deepwaveTime } from "./deepwave";
 import { colourMix, latticeCount, projectPoint, surfaceHeight } from "./dot-wave";
 
 /**
@@ -9,12 +10,17 @@ import { colourMix, latticeCount, projectPoint, surfaceHeight } from "./dot-wave
  * page, motion "off", reduced motion and the wave switch off all stop the
  * loop (one static frame stays). Colours come from the theme variables and
  * are bucketed (8 hues × 6 strengths), so a frame sets at most 48 fill styles.
+ * The default "deepwave" pattern draws a perspective field instead and
+ * buckets by hue × opacity (8 × 8) on the same primary/secondary fade.
  */
 
 const FRAME_MS = 33;
 const HUES = 8;
 const STRENGTHS = 6;
 const MAX_DPR = 2;
+const DEEP_ALPHAS = 8;
+/** Highest base opacity of a deepwave point (front row on a crest). */
+const DEEP_ALPHA_MAX = 0.62;
 
 interface Field {
   canvas: HTMLCanvasElement;
@@ -29,6 +35,9 @@ interface Field {
   py: Float32Array;
   pr: Float32Array;
   visible: boolean;
+  pattern: DotPattern;
+  /** Deepwave points; null for the lattice. */
+  deep: DeepwaveField | null;
   /** Mean draw time of the last frames in ms, for QA (data-frame-ms). */
   cost: number;
 }
@@ -37,6 +46,7 @@ const fields = new Set<Field>();
 let raf = 0;
 let last = 0;
 let styles: string[] = [];
+let deepStyles: string[] = [];
 let shared: { off: () => void } | null = null;
 
 type Rgb = [number, number, number];
@@ -74,6 +84,15 @@ function buildStyles(): void {
     }
   }
   styles = out;
+  // Deepwave: one saturation (the wave strength); opacity carries depth and crest.
+  const style = visualStyleStore.get();
+  const strength = style.dotWave ? style.dotWaveStrength : 0;
+  const deep: string[] = [];
+  for (let h = 0; h < HUES; h++) {
+    const [r, g, b] = mix(grey, mix(primary, secondary, h / (HUES - 1)), strength);
+    for (let a = 0; a < DEEP_ALPHAS; a++) deep.push(`rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${(0.04 + 0.86 * (a / (DEEP_ALPHAS - 1))).toFixed(3)})`);
+  }
+  deepStyles = deep;
 }
 
 function animating(): boolean {
@@ -91,8 +110,10 @@ function layout(f: Field): void {
   f.canvas.width = Math.max(1, Math.round(width * dpr));
   f.canvas.height = Math.max(1, Math.round(height * dpr));
   f.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  f.pattern = visualStyleStore.get().dotPattern;
+  f.deep = f.pattern === "deepwave" ? createDeepwaveField(width, height) : null;
   const { cols, rows, spacing } = latticeCount(width, height);
-  const n = cols * rows;
+  const n = f.deep ? f.deep.count : cols * rows;
   f.xs = new Float32Array(n);
   f.ys = new Float32Array(n);
   f.buckets = new Uint8Array(n);
@@ -101,23 +122,40 @@ function layout(f: Field): void {
   f.pr = new Float32Array(n);
   const ox = (width - (cols - 1) * spacing) / 2;
   const oy = (height - (rows - 1) * spacing) / 2;
-  for (let r = 0, i = 0; r < rows; r++) for (let c = 0; c < cols; c++, i++) {
+  if (!f.deep) for (let r = 0, i = 0; r < rows; r++) for (let c = 0; c < cols; c++, i++) {
     f.xs[i] = ox + c * spacing;
     f.ys[i] = oy + r * spacing;
   }
   f.canvas.dataset.points = String(n);
 }
 
+/** Deepwave: crests rise, grow and brighten; the height also picks the primary → secondary hue. */
+function placeDeep(f: Field, d: DeepwaveField, t: number, depth: number, period: number): void {
+  const time = deepwaveTime(t, period);
+  const lift = deepwaveLift(depth);
+  for (let i = 0; i < d.count; i++) {
+    const h = deepwaveHeight(d, i, time);
+    const up = (h + 1) / 2;
+    f.px[i] = d.x[i] ?? 0;
+    f.py[i] = (d.y[i] ?? 0) - h * (d.amp[i] ?? 0) * lift;
+    f.pr[i] = ((d.size[i] ?? 0) * (0.6 + 0.8 * up)) / 2;
+    const a = ((d.alpha[i] ?? 0) * (0.15 + 0.85 * up)) / DEEP_ALPHA_MAX;
+    f.buckets[i] = Math.round(colourMix(h) * (HUES - 1)) * DEEP_ALPHAS + Math.min(DEEP_ALPHAS - 1, Math.round(a * (DEEP_ALPHAS - 1)));
+  }
+}
+
 function draw(f: Field, t: number): void {
   const started = performance.now();
   const style = visualStyleStore.get();
+  if (f.pattern !== style.dotPattern) layout(f);
   const wave = style.dotWave;
   const depth = wave ? style.dotDepth : 0;
   const strength = wave ? style.dotWaveStrength : 0;
   const period = style.dotWavePeriod;
   const centre = { x: f.width / 2, y: f.height / 2 };
   const n = f.xs.length;
-  for (let i = 0; i < n; i++) {
+  if (f.deep) placeDeep(f, f.deep, t, depth, period);
+  else for (let i = 0; i < n; i++) {
     const x = f.xs[i] ?? 0;
     const y = f.ys[i] ?? 0;
     // One height per point feeds position and colour, so the colour crest is the height crest.
@@ -133,8 +171,9 @@ function draw(f: Field, t: number): void {
   const ctx = f.ctx;
   ctx.clearRect(0, 0, f.width, f.height);
   const used = new Set(f.buckets);
+  const table = f.deep ? deepStyles : styles;
   for (const b of used) {
-    ctx.fillStyle = styles[b] ?? "rgba(140,140,150,0.26)";
+    ctx.fillStyle = table[b] ?? "rgba(140,140,150,0.26)";
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
       if (f.buckets[i] !== b) continue;
@@ -212,7 +251,7 @@ export function attachDotField(canvas: HTMLCanvasElement): () => void {
   const ctx = canvas.getContext("2d");
   if (!ctx || typeof ResizeObserver === "undefined") return () => undefined;
   const empty = new Float32Array(0);
-  const f: Field = { canvas, ctx, width: 0, height: 0, xs: empty, ys: empty, buckets: new Uint8Array(0), px: empty, py: empty, pr: empty, visible: true, cost: 0 };
+  const f: Field = { canvas, ctx, width: 0, height: 0, xs: empty, ys: empty, buckets: new Uint8Array(0), px: empty, py: empty, pr: empty, visible: true, pattern: visualStyleStore.get().dotPattern, deep: null, cost: 0 };
   if (!shared) startShared();
   fields.add(f);
   canvas.dataset.ready = "";

@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety. M19 #349 unreachable agent refused before admission. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Registered legacy/async lifecycle boundary with preflush admission; M18 standalone image update and restore safety. M19 #349 unreachable agent refused before admission. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -99,10 +99,10 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 				options.Recreate = &request.Edit
 			} else if operation == RuntimeUpdateContainer && len(bytes.TrimSpace(input.RawBody)) != 0 {
 				var request updaterDTO.VerifiedImageRequest
-				if activitytypes.DecodeRuntimeJSON(input.RawBody, &request) != nil || !updaterDTO.ValidManifest(request.ExpectedManifest) {
+				if activitytypes.DecodeRuntimeJSON(input.RawBody, &request) != nil || (request.ExpectedManifest == "" && !request.AutoRestore || request.ExpectedManifest != "" && !updaterDTO.ValidManifest(request.ExpectedManifest)) {
 					return nil, huma.Error400BadRequest("Invalid verified image update request")
 				}
-				options.ContainerImage = &updaterDTO.ContainerImageRequest{ExpectedManifest: request.ExpectedManifest}
+				options.ContainerImage = &updaterDTO.ContainerImageRequest{ExpectedManifest: request.ExpectedManifest, AutoRestore: request.AutoRestore}
 			} else if len(bytes.TrimSpace(input.RawBody)) != 0 {
 				return nil, huma.Error400BadRequest("Runtime command has no request body")
 			}

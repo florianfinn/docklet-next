@@ -4,7 +4,7 @@ export const deBackend: typeof enBackend = {
   errors: {
     "candidate": {"unavailable": "Der Kandidat konnte nicht aus der Registry geprüft werden.", "deferred": "Dieser Kandidat wurde noch nicht geprüft."},
     "agent": {"unavailable": "Der Host ist nicht erreichbar. Prüfe die Verbindung."},
-    "container": {"origin-locked": "Docklet verwaltet keine Updates für diesen Container.", "recreate-ambiguous": "Der Ersatz-Container konnte nicht eindeutig ermittelt werden.", "recreate-recovered": "Die Container-Neuerstellung wurde wiederhergestellt."},
+    "container": {"auto-remove": "Automatische Wiederherstellung ist für einen laufenden Auto-Remove-Container nicht möglich.","origin-locked": "Docklet verwaltet keine Updates für diesen Container.", "recreate-ambiguous": "Der Ersatz-Container konnte nicht eindeutig ermittelt werden.", "recreate-recovered": "Die Container-Neuerstellung wurde wiederhergestellt."},
     "deploy": {"point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen."},
     "settings": {"invalid-time-zone": "Wähle eine gültige Zeitzone."},
     "history": {"sample-too-large": "Die Verlaufsstichprobe überschreitet die Größenbegrenzung.", "sample-invalid": "Der Host hat eine ungültige Verlaufsstichprobe geliefert.", "unavailable": "Der Verlauf ist nicht verfügbar.", "invalid-range": "Wähle einen Verlaufszeitraum von 24h, 7d oder 30d."},
@@ -88,7 +88,7 @@ export const deBackend: typeof enBackend = {
       "sync-failed": "Registry-Einstellungen konnten nicht mit dem Agent synchronisiert werden. Verbindung prüfen und erneut versuchen.",
       "unavailable": "Die Registry konnte nicht erreicht werden. Adresse und Netzwerkverbindung prüfen."
     },
-    "restore": {
+    "restore": {"files-changed": "Die Stack-Dateien haben sich geändert. Automatische Wiederherstellung ist nicht möglich.",
       "unavailable": "Dieser Wiederherstellungspunkt ist unvollständig oder seine aufbewahrten Images sind nicht verfügbar.",
       "shared-reference": "Ein anderer Workload verhindert das Verschieben einer gemeinsamen Image-Referenz. Den Konflikt vor der Wiederherstellung beheben.",
       "image-mismatch": "Die wiederhergestellten Image-Zuordnungen konnten nicht geprüft werden. Den Lauf vor einem erneuten Versuch prüfen.",
@@ -96,7 +96,7 @@ export const deBackend: typeof enBackend = {
       "not-found": "Der Wiederherstellungspunkt wurde nicht gefunden. Die Liste der Punkte aktualisieren.",
       "deploy-failed": "Die Bereitstellung zur Wiederherstellung ist fehlgeschlagen. Das Teilergebnis vor einem weiteren Wiederherstellungsversuch prüfen."
     },
-    "update": {
+    "update": {"unstable": "Die aktualisierte Version lief nicht stabil.","auto-restored": "Das Update ist fehlgeschlagen. Die vorherige Version läuft wieder. Volume-Daten wurden nicht wiederhergestellt.","auto-restore-failed": "Update und automatische Wiederherstellung sind fehlgeschlagen. Ein Eingriff ist nötig. Volume-Daten wurden nicht wiederhergestellt.","auto-restore-unavailable": "Das Update ist fehlgeschlagen; eine automatische Wiederherstellung war nicht möglich. Volume-Daten wurden nicht wiederhergestellt.","interrupted": "Das Update wurde unterbrochen. Prüfe das Ziel. Volume-Daten wurden nicht wiederhergestellt.","candidate-failed": "Dieser Kandidat ist zuvor fehlgeschlagen und wurde wiederhergestellt. Er wird übersprungen.",
       "candidate-changed": "Das Kandidaten-Image hat sich geändert. Prüfe es vor dem Update erneut.",
       "service-coupled": "Dieser Dienst muss zusammen mit seinem Stack aktualisiert werden.",
       "permission-denied": "Die gespeicherte Identität hat nicht mehr die erforderlichen Berechtigungen.",

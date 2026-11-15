@@ -182,7 +182,7 @@ func TestPruneStopsIdleHelperAndKeepsRealConsumers(t *testing.T) {
 					f.containers = []container.Summary{consumer}
 				}
 				call := pruneTransport(t, transport, pruneRouter(t, f.service(t)))
-				status, body := call("GET", "/api/environments/0/volumes/prune", "all=true", nil)
+				status, body := call("GET", "/api/environments/0/volumes/_collection/prune", "all=true", nil)
 				require.Equal(t, 200, status, string(body))
 				var plan base.ApiResponse[volumetypes.PrunePlan]
 				require.NoError(t, json.Unmarshal(body, &plan))
@@ -192,7 +192,7 @@ func TestPruneStopsIdleHelperAndKeepsRealConsumers(t *testing.T) {
 					require.Len(t, plan.Data.Candidates, 1)
 				}
 				require.Zero(t, f.stopped, "planning is read-only")
-				status, body = call("POST", "/api/environments/0/volumes/prune", "", []byte(`{"candidates":[{"name":"data","createdAt":"`+pruneCreated+`"}]}`))
+				status, body = call("POST", "/api/environments/0/volumes/_collection/prune", "", []byte(`{"candidates":[{"name":"data","createdAt":"`+pruneCreated+`"}]}`))
 				require.Equal(t, 200, status, string(body))
 				var result base.ApiResponse[volumetypes.PruneResult]
 				require.NoError(t, json.Unmarshal(body, &result))

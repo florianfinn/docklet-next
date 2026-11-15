@@ -210,6 +210,47 @@ func TestSQLiteRestoreMigratesOlderSupportedPair(t *testing.T) {
 	require.Equal(t, mustNewestMigration(), version)
 }
 
+// A restored pair from before 004 keeps every host status and carries the host verdict rule.
+func TestSQLiteRestoreOfPre004PairCarriesHostVerdictRule(t *testing.T) {
+	cfg := &config.Config{DatabaseURL: sqlitestore.URL(filepath.Join(t.TempDir(), "source.db")), BackupDir: t.TempDir()}
+	source, err := database.OpenHubForRestore(t.Context(), cfg.DatabaseURL)
+	require.NoError(t, err)
+	defer source.Close()
+	pool, err := source.SQLDB()
+	require.NoError(t, err)
+	migrations, err := fs.Sub(resources.FS, "migrations/sqlite")
+	require.NoError(t, err)
+	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, migrations)
+	require.NoError(t, err)
+	_, err = provider.UpTo(t.Context(), 3)
+	require.NoError(t, err)
+	require.NoError(t, francis.InitializeStore(t.Context(), cfg.DatabaseURL))
+	statuses := map[string]string{"ur": "update-required", "on": "online", "tr": "token-rejected"}
+	for id, status := range statuses {
+		require.NoError(t, source.Exec("INSERT INTO environments(id, api_url, status) VALUES (?, 'http://agent.example.com', ?)", id, status).Error)
+	}
+	_, _, err = fixtureArchive(t, source, cfg, "pre-004", 2<<30)
+	require.NoError(t, err)
+	target := &config.Config{DatabaseURL: sqlitestore.URL(filepath.Join(t.TempDir(), "target.db")), BackupDir: cfg.BackupDir}
+	require.NoError(t, OfflineRestore(t.Context(), target, "pre-004"))
+	restored, err := database.InitializeHub(t.Context(), target.DatabaseURL, database.MigrationOptions{})
+	require.NoError(t, err)
+	defer restored.Close()
+	for id, status := range statuses {
+		var row struct {
+			Status              string
+			StatusCheckRevision int64
+		}
+		require.NoError(t, restored.Raw("SELECT status, status_check_revision FROM environments WHERE id = ?", id).Scan(&row).Error)
+		require.Equal(t, status, row.Status, id)
+		require.Zero(t, row.StatusCheckRevision, id)
+	}
+	var triggers []string
+	require.NoError(t, restored.Raw("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'environments' ORDER BY name").Scan(&triggers).Error)
+	require.Equal(t, []string{"environments_no_reinsert", "environments_revision_monotonic", "environments_verdict_update"}, triggers)
+	require.ErrorContains(t, restored.Exec("UPDATE environments SET status = 'online' WHERE id = 'ur'").Error, "host.status-verdict")
+}
+
 func TestSQLitePreparePairRejectsNonemptyWAL(t *testing.T) {
 	for _, hub := range []bool{true, false} {
 		name := "francis"

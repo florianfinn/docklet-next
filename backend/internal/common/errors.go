@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, federated credentials, central variables, GitOps, saved Git repositories, templates, Swarm, OIDC and passkeys.
+// Deviations: Removed dead token-version mismatch error; functional cut: removed APNS mobile push, federated credentials, central variables, GitOps, saved Git repositories, templates, Swarm, OIDC and passkeys.
 
 package common
 
@@ -50,7 +50,6 @@ var (
 	ErrFeatureDisabled                   = Classify(ErrForbidden, errors.New("feature disabled"))
 	ErrInvalidToken                      = errors.New("invalid token")
 	ErrExpiredToken                      = errors.New("token expired")
-	ErrTokenVersionMismatch              = errors.New("token version mismatch")
 	ErrUserNotFound                      = errors.New("user not found")
 	ErrAmbiguousUserEmail                = Classify(ErrConflict, errors.New("multiple accounts share this email"))
 	ErrTokenValidation                   = Classify(ErrUnauthorized, errors.New("Invalid token claims"))

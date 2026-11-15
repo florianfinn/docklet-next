@@ -2,12 +2,27 @@
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys.
+// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys. M24 recovery evidence, validation and reason contracts.
 
 import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "recovery_restored": "Vorherige Version wiederhergestellt",
+  "recovery_restore-failed": "Automatische Wiederherstellung fehlgeschlagen",
+  "recovery_unavailable": "Automatische Wiederherstellung nicht verfügbar",
+  "recovery_not-needed": "Automatische Wiederherstellung war nicht nötig",
+  "recovery_interrupted": "Update unterbrochen",
+
+  "update_unstable": "Die aktualisierte Version lief nicht stabil.",
+  "update_auto-restored": "Das Update ist fehlgeschlagen. Die vorherige Version läuft wieder. Volume-Daten wurden nicht wiederhergestellt.",
+  "update_auto-restore-failed": "Update und automatische Wiederherstellung sind fehlgeschlagen. Ein Eingriff ist nötig. Volume-Daten wurden nicht wiederhergestellt.",
+  "update_auto-restore-unavailable": "Das Update ist fehlgeschlagen; eine automatische Wiederherstellung war nicht möglich. Volume-Daten wurden nicht wiederhergestellt.",
+  "update_interrupted": "Das Update wurde unterbrochen. Prüfe das Ziel. Volume-Daten wurden nicht wiederhergestellt.",
+  "update_candidate-failed": "Dieser Kandidat ist zuvor fehlgeschlagen und wurde wiederhergestellt. Er wird übersprungen.",
+  "restore_files-changed": "Die Stack-Dateien haben sich geändert. Automatische Wiederherstellung ist nicht möglich.",
+  "container_auto-remove": "Automatische Wiederherstellung ist für einen laufenden Auto-Remove-Container nicht möglich.",
+
   "candidate_unavailable": deBackend.errors.candidate.unavailable,
   "candidate_deferred": deBackend.errors.candidate.deferred,
   "update_candidate-changed": deBackend.errors.update["candidate-changed"],

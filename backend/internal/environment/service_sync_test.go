@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.; M25 host verdict rule in the fixture.
 
 package environment
 
@@ -139,6 +139,7 @@ func setupSyncDBInternal(t *testing.T) *database.DB {
 			&registry.ContainerRegistry{},
 		),
 	)
+	installHostStatusRuleForTest(t, db)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })

@@ -2,7 +2,7 @@
 // Revision: 4023414fcf620a9ea4be2429ee70fa8fd8230f9c
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Explicit execution-input, storage-error and recovery-projection barriers.
+// Deviations: Explicit execution-input, storage-error and recovery-projection barriers. M24 recovery evidence, validation and reason contracts.
 
 package updater
 
@@ -30,7 +30,7 @@ func TestPolicyRecoveryMergesRecordedTargets(t *testing.T) {
 			child, _, err := f.p.store.PrepareChild(t.Context(), p, "wrapper")
 			require.NoError(t, err)
 			require.NoError(t, policy.AdmitChild(f.db.DB, &dto.PolicyBinding{ChildID: child.ID}, child.ID))
-			f.receipts[child.ID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
+			f.receipts[child.ID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess, ImageLifecycle: &dto.LifecycleResult{Verified: true}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
 			run := st.Run{ID: "wrapper", AttemptCount: 2, Outcome: st.Outcome{Targets: []st.TargetOutcome{{ID: "unrelated", Status: st.Skipped}}}}
 			if existing {
 				run.Outcome.Targets = append(run.Outcome.Targets, st.TargetOutcome{ID: "stack", Status: st.Failed})

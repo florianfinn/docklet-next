@@ -2,12 +2,27 @@
 // Revision: 4b115b750db13ed0934695adb071d6d4eb374310
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys.
+// Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys. M24 recovery evidence, validation and reason contracts.
 
 import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "recovery_restored": "Previous version restored",
+  "recovery_restore-failed": "Automatic restore failed",
+  "recovery_unavailable": "Automatic restore unavailable",
+  "recovery_not-needed": "Automatic restore was not needed",
+  "recovery_interrupted": "Update interrupted",
+
+  "update_unstable": "The updated version did not run stably.",
+  "update_auto-restored": "The update failed. The previous version is running again. Volume data was not restored.",
+  "update_auto-restore-failed": "The update and automatic restore failed. Action is needed. Volume data was not restored.",
+  "update_auto-restore-unavailable": "The update failed and automatic restore was unavailable. Volume data was not restored.",
+  "update_interrupted": "The update was interrupted. Check the target. Volume data was not restored.",
+  "update_candidate-failed": "This candidate previously failed and was restored. It will be skipped.",
+  "restore_files-changed": "The stack files changed. Automatic restore is unavailable.",
+  "container_auto-remove": "Automatic restore is unavailable for a running auto-remove container.",
+
   "candidate_unavailable": enBackend.errors.candidate.unavailable,
   "candidate_deferred": enBackend.errors.candidate.deferred,
   "update_candidate-changed": enBackend.errors.update["candidate-changed"],

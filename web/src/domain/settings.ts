@@ -119,6 +119,8 @@ export interface GeneralSettings {
   linkBase: LinkBase;
   timeZone: string;
   configuredTimeZone?: string;
+  /** Process TZ the reset action returns to; connected hubs only. */
+  defaultTimeZone?: string;
 }
 
 export interface HubSettings {

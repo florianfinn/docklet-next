@@ -110,7 +110,7 @@ export function ScheduleWidget({ jobs, hosts, now }: { jobs: ScheduledJob[]; hos
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm group-hover/job:underline group-hover/job:underline-offset-4">{title}</div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {t(`kinds.${j.kind}`)} · {j.cadence}
+                    {t(`kinds.${j.kind}`)}{j.cadence && <> · {j.cadence}</>}
                     <HostChip host={hosts.get(j.hostId ?? "")} />
                   </div>
                 </div>

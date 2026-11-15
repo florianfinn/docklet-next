@@ -2,23 +2,20 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
-
+// Deviations: Local module namespace; M26 #445 candidate credential revision.
 package registry
 
 import (
 	"context"
-
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
-
 	kit "go.getarcane.app/kit/pkg"
 	"log/slog"
 	"net/http"
-
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/base"
@@ -84,6 +81,7 @@ func (f rateLimitRoundTripFuncInternal) RoundTrip(req *http.Request) (*http.Resp
 }
 
 type ContainerRegistryService struct {
+	credentialRevision     atomic.Uint64
 	db                     *database.DB
 	dockerClient           registryDaemonGetter
 	cache                  *hot.HotCache[string, string]
@@ -201,7 +199,8 @@ func (s *ContainerRegistryService) GetRegistryByID(ctx context.Context, id strin
 	return &registryRecord, nil
 }
 
-func (s *ContainerRegistryService) CreateRegistry(ctx context.Context, req containerregistry.CreateContainerRegistryRequest) (*ContainerRegistry, error) {
+func (s *ContainerRegistryService) CreateRegistry(ctx context.Context, req containerregistry.CreateContainerRegistryRequest) (_ *ContainerRegistry, err error) {
+	defer s.advanceCredentialRevision(&err)
 	if err := validateRegistryAddress(req.URL); err != nil {
 		return nil, err
 	}
@@ -268,7 +267,8 @@ func (s *ContainerRegistryService) CreateRegistry(ctx context.Context, req conta
 	return registryRecord, nil
 }
 
-func (s *ContainerRegistryService) UpdateRegistry(ctx context.Context, id string, req containerregistry.UpdateContainerRegistryRequest) (*ContainerRegistry, error) {
+func (s *ContainerRegistryService) UpdateRegistry(ctx context.Context, id string, req containerregistry.UpdateContainerRegistryRequest) (_ *ContainerRegistry, err error) {
+	defer s.advanceCredentialRevision(&err)
 	if req.URL != nil {
 		if err := validateRegistryAddress(*req.URL); err != nil {
 			return nil, err
@@ -348,8 +348,7 @@ func (s *ContainerRegistryService) UpdateRegistry(ctx context.Context, id string
 	if updateRegistryErr := s.db.WithContext(ctx).Save(registryRecord).Error; updateRegistryErr != nil {
 		return nil, fmt.Errorf("failed to update registry: %w", updateRegistryErr)
 	}
-	return registryRecord,
-		nil
+	return registryRecord, nil
 }
 
 func (s *ContainerRegistryService) applyRegistryTypeUpdateInternal(localRegistry *ContainerRegistry, registryType *string) error {
@@ -425,7 +424,8 @@ func (s *ContainerRegistryService) updateGenericRegistryFieldsInternal(localRegi
 	return nil
 }
 
-func (s *ContainerRegistryService) DeleteRegistry(ctx context.Context, id string) error {
+func (s *ContainerRegistryService) DeleteRegistry(ctx context.Context, id string) (err error) {
+	defer s.advanceCredentialRevision(&err)
 	if err := s.db.WithContext(ctx).Where("id = ?", id).Delete(&ContainerRegistry{}).Error; err != nil {
 		return fmt.Errorf("failed to delete container registry: %w", err)
 	}

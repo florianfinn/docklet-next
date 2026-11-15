@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: M23 #428 #389: the identity owner supplies retained volume rows across per-call readers. Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: M23 #428 #389: the identity owner supplies retained volume rows across per-call readers. Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M26: bounded optional size wait in the volume detail.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -21,6 +21,9 @@ import { mapVolumes } from "./resource-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
 
 type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
+// The host-wide size scan (Docker disk usage) can take minutes on large hosts; a volume detail waits this long
+// for it and otherwise shows the size as unknown.
+export const VOLUME_DETAIL_SIZE_WAIT_MS = 3_000;
 type Body<I extends Read> = operations[I]["responses"][200]["content"]["application/json"];
 type Schema = components["schemas"];
 
@@ -62,7 +65,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
   }
   /** Bind rows come from container mounts; the agent's bind list adds kind, path-rule verdict and sizes. */
   async function bindList(hostId: string, signal?: AbortSignal): Promise<Map<string, BindInfo> | undefined> {
-    const rows = await read("list-volume-binds", hostId, "binds", undefined, signal).catch((error) => {
+    const rows = await read("list-volume-binds", hostId, "_collection/binds", undefined, signal).catch((error) => {
       if (error instanceof CancelledError) throw error;
       return undefined;
     });
@@ -124,11 +127,15 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
         return { ...volume, backups: [] };
       }
       let inventory: InventoryObservation = { stale: false };
+      const sizeRead = new AbortController();
+      const stopSizeRead = () => sizeRead.abort();
+      signal?.addEventListener("abort", stopSizeRead, { once: true });
+      const sizeTimer = setTimeout(stopSizeRead, VOLUME_DETAIL_SIZE_WAIT_MS);
       const [row, ctx, sizes] = await Promise.all([
         read("get-volume", hostId, encodeURIComponent(name), (state) => { inventory = state; }, signal),
         context(hostId, signal),
-        read("get-volume-sizes", hostId, "sizes", undefined, signal).catch(() => null),
-      ]);
+        read("get-volume-sizes", hostId, "_collection/sizes", undefined, sizeRead.signal).catch(() => null),
+      ]).finally(() => { clearTimeout(sizeTimer); signal?.removeEventListener("abort", stopSizeRead); });
       check();
       signal?.throwIfAborted();
       const volume = map(row, hostId, ctx, inventory);

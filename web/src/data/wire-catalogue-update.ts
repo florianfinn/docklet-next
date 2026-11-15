@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums.
+// Deviations: Original total catalogue maps for rendered contract enums. M24 recovery reason catalogue entries.
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -12,6 +12,15 @@ type Schema = components["schemas"];
 
 // Update admission accepts this contract family, independently of other image-error consumers.
 export const UPDATE_REASON_KEYS = {
+  "update.unstable": IMAGE_ERROR_KEYS["update.unstable"],
+  "update.auto-restored": IMAGE_ERROR_KEYS["update.auto-restored"],
+  "update.auto-restore-failed": IMAGE_ERROR_KEYS["update.auto-restore-failed"],
+  "update.auto-restore-unavailable": IMAGE_ERROR_KEYS["update.auto-restore-unavailable"],
+  "update.interrupted": IMAGE_ERROR_KEYS["update.interrupted"],
+  "update.candidate-failed": IMAGE_ERROR_KEYS["update.candidate-failed"],
+  "restore.files-changed": IMAGE_ERROR_KEYS["restore.files-changed"],
+  "container.auto-remove": IMAGE_ERROR_KEYS["container.auto-remove"],
+
   "candidate.unavailable": IMAGE_ERROR_KEYS["candidate.unavailable"],
   "candidate.deferred": IMAGE_ERROR_KEYS["candidate.deferred"],
   "update.candidate-changed": IMAGE_ERROR_KEYS["update.candidate-changed"],
@@ -135,6 +144,16 @@ export const UPDATE_REASON_KEYS = {
   | Schema["UpdaterLifecycleResult"]["baselineCode"]
   | Schema["UpdaterLifecycleResult"]["code"]
   | Schema["UpdaterLifecycleResult"]["pointCode"]
+  | Schema["UpdaterRecoveryResult"]["code"]
   | Schema["UpdaterRestorePoint"]["code"]
   | Schema["UpdaterSystemImageHint"]["code"]
 >, CatalogueKey>;
+
+// The dependent detail renderer uses this frozen recovery vocabulary.
+export const RECOVERY_OUTCOME_KEYS = {
+  "restored": "images.errors.recovery_restored",
+  "restore-failed": "images.errors.recovery_restore-failed",
+  "unavailable": "images.errors.recovery_unavailable",
+  "not-needed": "images.errors.recovery_not-needed",
+  "interrupted": "images.errors.recovery_interrupted",
+} satisfies Record<Schema["UpdaterRecoveryResult"]["outcome"], CatalogueKey>;

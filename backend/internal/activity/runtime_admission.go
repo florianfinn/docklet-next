@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Durable-first admission, parent arbitration and atomic coded evidence; transactional host restart exclusion.
+// Deviations: Durable-first admission, parent arbitration and atomic coded evidence; transactional host restart exclusion. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -67,6 +67,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "runtime.target-changed"}
 	}
 	canonical.command.Target.Name = copyPtrInternal(resolved.Target.Name)
+	canonical.replacementRunID = resolved.ReplacementRunID
 	result, _, err = s.admissionPassInternal(ctx, canonical, true)
 	return result, err
 }
@@ -134,6 +135,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				if runID == "" {
 					runID = uuid.NewString()
 				}
+				if c.command.Target.Kind == "container" {
+					if err := replacementHoldTxInternal(tx, c.command.Store.EnvironmentID, c.replacementRunID, runID); err != nil {
+						return err
+					}
+				}
 				target := c.command.Target
 				row, err = runtimeAdmitTxInternal(tx, now, runtimeAdmissionInternal{Identity: c.identity(runID), Binding: c.binding(),
 					OperationID: string(c.command.Operation), TargetKind: target.Kind, TargetID: target.ID,
@@ -145,6 +151,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					if err := tx.Model(&Activity{}).Where("id=?", row.RunID).UpdateColumn("metadata", database.JSON{"changedFields": runtimeRecreateFields(c.command.Options)}).Error; err != nil {
 						return err
 					}
+				}
+				if err := runtimeObserveAdmissionTx(tx, now, row.RunID, c.command); err != nil {
+					return err
 				}
 				if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
 					return err

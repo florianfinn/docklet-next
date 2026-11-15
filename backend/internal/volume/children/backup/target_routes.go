@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original owning-host target handlers and transaction-local pairing fence; M16 bind mounts and backup completion.
+// Deviations: Original owning-host target handlers and transaction-local pairing fence; M16 bind mounts and backup completion; pass the probe executor role.
 
 package backup
 
@@ -30,7 +30,7 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 		return h
 	}
 	h.Service = s.targets
-	s.configureDraftProbe(h, environments)
+	s.configureDraftProbe(h, environments, cfg)
 	if (cfg == nil || !cfg.AgentMode && !cfg.EdgeAgent) && environments != nil {
 		s.configureTargetDelivery(environments)
 	}

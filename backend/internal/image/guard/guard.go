@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229; M18 standalone image update and restore safety.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; M18 standalone image update and restore safety; M24 #409 stale previous-image slots.
 
 // Package guard owns host-local image admission and persisted protection checks.
 package guard
@@ -250,6 +250,9 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 	defer release()
 	c, err := s.Docker(ctx)
 	if err != nil {
+		return nil, imageDTO.Failure("image.usage-unavailable", 503)
+	}
+	if err := s.releaseStalePreviousSlots(ctx, c); err != nil {
 		return nil, imageDTO.Failure("image.usage-unavailable", 503)
 	}
 	opts := client.ImageListOptions{All: false}

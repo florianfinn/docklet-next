@@ -20,10 +20,11 @@ import { useSectionDraft } from "../use-section-draft";
 
 /** Hub address, link policy, and time zone shared by settings and first-run setup. */
 /** `saved` is the stored zone state; without it (setup) no override is stored yet. */
-export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "gen", showLanguage = true }: { value: GeneralSettings; saved?: Pick<GeneralSettings, "timeZone" | "configuredTimeZone">; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string; showLanguage?: boolean }) {
-  // The effective zone equals TZ only while no override is saved; the draft never decides it.
+export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "gen", showLanguage = true }: { value: GeneralSettings; saved?: Pick<GeneralSettings, "timeZone" | "configuredTimeZone" | "defaultTimeZone">; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string; showLanguage?: boolean }) {
+  // The hub reports TZ beside an override; without that value the effective zone equals TZ
+  // only while no override is saved. The draft never decides it.
   const savedZone = saved ?? { timeZone: value.timeZone };
-  const processZone = savedZone.configuredTimeZone ? undefined : savedZone.timeZone;
+  const processZone = savedZone.defaultTimeZone ?? (savedZone.configuredTimeZone ? undefined : savedZone.timeZone);
   const t = useTranslations("settings.general");
   const tl = useTranslations("locale.switcher");
   const e = useGeneralErrors(value);

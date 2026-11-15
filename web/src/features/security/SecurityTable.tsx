@@ -2,10 +2,9 @@
 // Revision: 5f56262875af9a8ec0fe9007cb889bd3a513085d
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail.
+// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail. M24 S6: observed recovery and update UI follow-ups. M26 #449: tap help composition.
 
 import type { CSSProperties, ReactNode } from "react";
-import { CircleHelp } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { ColumnFilterRow, ColumnFilterSummary } from "@/shared/components/column-filters";
@@ -17,11 +16,10 @@ import { securityColumnGroups } from "./security-layout";
 import type { SortState } from "@/shared/lib/table-sort";
 import { cn } from "@/shared/lib/utils";
 import { Card } from "@/shared/ui/card";
-import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { BareTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+import { HelpTap } from "./HelpTap";
 
 export interface SecurityColumn<K extends string> { id: K; label: string; short?: string }
 export interface SecurityRow<K extends string> {
@@ -56,10 +54,7 @@ function FieldLabel({ label, help }: { label: string; help?: string }) {
   const t = useTranslations("security");
   return <span className="inline-flex items-center gap-1">
     {label}
-    {help && <Tooltip>
-      <TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-xs" aria-label={t("headerHelp.label", { column: label })}><CircleHelp aria-hidden /></Button></TooltipTrigger>
-      <TooltipContent className="max-w-xs">{help}</TooltipContent>
-    </Tooltip>}
+    {help && <HelpTap label={t("headerHelp.label", { column: label })} help={help} />}
   </span>;
 }
 
@@ -92,7 +87,7 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
   const groups = securityColumnGroups(view, columns.map((c) => c.id), condensed);
   const help = new Map(Object.entries(HEADER_HELP).map(([id, key]) => [id, t(`headerHelp.${key}`, { severity: columns.find((c) => c.id === id)?.label ?? "" })]));
   const onChange = (id: string, value: string) => setValues((cur) => ({ ...cur, [id]: value }));
-  const labelled = (row: SecurityRow<K>, ids: readonly K[]) => <dl className="grid min-w-0 gap-2">{ids.map((id) => <div key={id} className="min-w-0" data-field={id}>
+  const labelled = (row: SecurityRow<K>, ids: readonly K[]) => <dl className={cn("grid min-w-0 gap-2", view === "cards" && "grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))]")}>{ids.map((id) => <div key={id} className="min-w-0" data-field={id}>
     <dt className="text-[11px] text-muted-foreground"><FieldLabel label={columns.find((c) => c.id === id)!.label} help={view === "cards" ? help.get(id) : undefined} /></dt>
     <dd className="min-w-0 text-xs [overflow-wrap:anywhere]">{row.cells[id]}</dd>
   </div>)}</dl>;

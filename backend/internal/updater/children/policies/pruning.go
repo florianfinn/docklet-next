@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original bounded policy retention and deletion ownership.
+// Deviations: Original bounded policy retention and deletion ownership. M24 recovery evidence, validation and reason contracts.
 
 package policies
 
@@ -30,6 +30,9 @@ func deletePolicy(tx *gorm.DB, id string) error {
 		return err
 	}
 	if err := tx.Where("policy_id = ?", id).Delete(&Child{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("policy_id = ?", id).Delete(&FailedCandidate{}).Error; err != nil {
 		return err
 	}
 	return tx.Delete(&Policy{}, "id = ?", id).Error

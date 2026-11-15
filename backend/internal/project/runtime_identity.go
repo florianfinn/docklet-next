@@ -37,6 +37,10 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 		// otherwise select it. Unreadable peers, including archived rows, can
 		// conceal duplicate ownership and therefore block every successful lookup.
 		name, err := s.runtimeComposeName(ctx, row)
+		if err != nil && row.ID != projectID && UnsupportedUpdateLayout(err) != nil {
+			// A peer's unsupported layout still blocks, but never reads as the target's refusal.
+			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: peer %s: %s", row.ID, err.Error())
+		}
 		if err != nil {
 			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: %w", err)
 		}

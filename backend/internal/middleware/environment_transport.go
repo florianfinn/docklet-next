@@ -88,7 +88,11 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 
 	w.WriteHeader(resp.StatusCode)
 	if c.Request().Method != http.MethodHead {
-		edge.CopyBodyWithFlush(w, resp.Body)
+		if err := edge.CopyBodyWithFlush(w, resp.Body); err != nil && c.Request().Context().Err() == nil {
+			// The status is committed; aborting keeps a truncated upstream body from looking complete.
+			slog.WarnContext(c.Request().Context(), "Remote environment response ended early", "target", resp.Request.URL.Host, "error", err)
+			panic(http.ErrAbortHandler)
+		}
 	}
 	return nil
 }

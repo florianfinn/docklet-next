@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Mode matrix for connected route guards.
+// Deviations: Mode matrix for connected route guards; the connected sign-in form keeps the shared dot background.
 
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,18 @@ import ProductLoginPage from "@/features/auth/login/ProductLoginPage";
 afterEach(() => vi.restoreAllMocks());
 
 const denied = () => new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 });
+
+describe("connected sign-in form", () => {
+  it("shows the form on the shared dot background", async () => {
+    const adapter = createDemoAdapter();
+    adapter.getAuthMode = vi.fn(async () => "local" as const);
+    adapter.getCurrentUser = vi.fn(async () => { throw denied(); });
+    renderRoutes([{ path: "/login", element: <ProductLoginPage /> }], ["/login"], adapter);
+    const user = await screen.findByLabelText("Benutzername");
+    const page = user.closest("[data-slot=login-page]");
+    expect([page?.classList.contains("dot-grid"), !!page?.querySelector("canvas[data-slot=dot-field]")]).toEqual([true, true]);
+  });
+});
 
 describe.each(["none", "local", "proxy"] as const)("%s sign-in routing", (mode) => {
   it("handles a fresh load and a rejected session", async () => {

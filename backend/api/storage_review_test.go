@@ -19,8 +19,8 @@ func TestReview179ProxyPermissionsForStorageRoutes(t *testing.T) {
 	matcher := authz.NewPermissionMatcher()
 	matcher.CollectFromHumaAPI(SetupAPIForSpec())
 	for _, tc := range []struct{ method, suffix, perm string }{
-		{"GET", "/volumes/prune", authz.PermVolumesPrune},
-		{"POST", "/volumes/prune", authz.PermVolumesPrune},
+		{"GET", "/volumes/_collection/prune", authz.PermVolumesPrune},
+		{"POST", "/volumes/_collection/prune", authz.PermVolumesPrune},
 		{"GET", "/volumes/prune-me", authz.PermVolumesRead},
 		{"POST", "/volumes/data/rename", authz.PermVolumesRename},
 	} {

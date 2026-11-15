@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original hub-owned origin API and reading-host effect guards.
+// Deviations: Original hub-owned origin API and reading-host effect guards. M25 system workload protection.
 
 package container
 
@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/container/children/origin"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/internal/systemlabel"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
 	dto "github.com/florianfinn/docklet-next/types/container"
@@ -38,13 +39,16 @@ func (s *ContainerService) ConfigureOperations(db *gorm.DB, registration string,
 	}
 }
 func effectOriginGuard(inspect dockercontainer.InspectResponse) error {
+	current, err := cgroup.CurrentContainerID()
+	return effectOriginGuardWithIdentity(inspect, current, err)
+}
+func effectOriginGuardWithIdentity(inspect dockercontainer.InspectResponse, current string, err error) error {
 	if inspect.Config == nil {
 		return &dto.Problem{Code: "container.origin-locked", Status: 409, Origin: dto.OriginUnknown}
 	}
-	current, err := cgroup.CurrentContainerID()
 	compose := origin.HasComposeLabel(inspect.Config.Labels)
 	_, unraid := inspect.Config.Labels["net.unraid.docker.managed"]
-	if compose || unraid || labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, current, err) {
+	if compose || unraid || systemlabel.SelfProtected(inspect.Config.Labels, labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, current, err)) {
 		return &dto.Problem{Code: "container.origin-locked", Status: 409, Origin: origin.Detect(inspect.Config.Labels).Origin}
 	}
 	return nil
@@ -158,6 +162,7 @@ func (s *ContainerService) GuardRuntimeOrigin(ctx context.Context, environment, 
 			identity.Protected = labels.ShouldDisableArcaneServerRedeploy(inspect.Config.Labels, inspect.ID, current, currentErr)
 		}
 	}
+	identity.Protected = identity.Protected || systemlabel.SelfProtected(identity.Labels, identity.Protected)
 	return s.OriginGuard(ctx, environment, identity)
 }
 

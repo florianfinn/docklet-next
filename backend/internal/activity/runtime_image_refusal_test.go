@@ -57,6 +57,7 @@ func TestRuntimeImageTypedRefusalThroughDirectAndEdgeHTTP(t *testing.T) {
 			want               string
 		}{
 			{"update.config-drift", 409, 409, "update.config-drift"},
+			{"update.candidate-failed", 409, 409, "update.candidate-failed"},
 			{"restore.shared-reference", 409, 409, "restore.shared-reference"},
 			{"undeclared", 409, 503, "runtime.outcome-unknown"},
 			{"restore.unavailable", 401, 502, "agent.invalid-token"},

@@ -2,7 +2,7 @@
 // Revision: b3607be5144101152c8eb7738d389e8c73986fba
 // Retrieved: 2026-10-16
 // License: Apache-2.0 AND BSD-3-Clause
-// Deviations: Empty-model schema generation using the ported retained integrity inventory; M17 explicit WITHOUT ROWID table options.
+// Deviations: Empty-model schema generation using the ported retained integrity inventory; M17 explicit WITHOUT ROWID table options; M25 post-baseline triggers.
 
 package schema
 
@@ -29,16 +29,19 @@ type integrityRules struct {
 	Constraints  map[string][]string
 	Indexes      []string
 	WithoutRowID []string
+	// PostBaselineTriggers come from forward migrations after 001; the frozen
+	// baseline generation never creates them.
+	PostBaselineTriggers []string
 }
 
 // ApplyIntegrity is development-only: it refuses data and rebuilds empty model
 // tables with the independently retained constraints before producing a baseline.
-func ApplyIntegrity(db *gorm.DB) error { return applyIntegrity(db, Models()) }
+func ApplyIntegrity(db *gorm.DB) error { return applyIntegrity(db, Models(), true) }
 
 // ApplyBaselineIntegrity uses only the frozen baseline models for JSON constraints.
-func ApplyBaselineIntegrity(db *gorm.DB) error { return applyIntegrity(db, BaselineModels()) }
+func ApplyBaselineIntegrity(db *gorm.DB) error { return applyIntegrity(db, BaselineModels(), false) }
 
-func applyIntegrity(db *gorm.DB, models []any) error {
+func applyIntegrity(db *gorm.DB, models []any, postBaseline bool) error {
 	data, err := integrityFS.ReadFile("retained_integrity.json")
 	if err != nil {
 		return err
@@ -91,6 +94,14 @@ func applyIntegrity(db *gorm.DB, models []any) error {
 			continue
 		}
 		statement = strings.Replace(statement, " INDEX ", " INDEX IF NOT EXISTS ", 1)
+		if err = db.Exec(statement).Error; err != nil {
+			return err
+		}
+	}
+	if !postBaseline {
+		return nil
+	}
+	for _, statement := range rules.PostBaselineTriggers {
 		if err = db.Exec(statement).Error; err != nil {
 			return err
 		}

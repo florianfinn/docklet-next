@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 8428b88495c56209719c251687574c9bfa8b6ebc912359632bff6b5c2845e787
+// Revision: 30a35b71deca7b0212a65cc908da12ae91c9801b1e49fabd3e7fdfd93ad50e37
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1146,6 +1146,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/agent/restarts/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the active or newest agent restart run of a host */
+        get: operations["getEnvironmentLatestAgentRestart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/agent/restarts/{runId}": {
         parameters: {
             query?: never;
@@ -1382,7 +1399,7 @@ export interface paths {
         };
         /**
          * Download container logs
-         * @description Download every log line Docker retains for the container as a text file
+         * @description Download every log line Docker retains for the container as a text file. Edge buffers up to 64 MiB and refuses larger logs with JSON 413 before returning any file bytes; older Edge agents without this command return 503 agent.update-required. Direct streams without a size cap. A Docker read error after streaming starts can truncate the file.
          */
         get: operations["download-container-logs"];
         put?: never;
@@ -3781,6 +3798,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/volumes/_collection/binds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list-volume-binds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/binds/size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["measure-volume-bind"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get volume usage counts
+         * @description Get counts of volumes in use, unused, and total
+         */
+        get: operations["get-volume-usage-counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan unused volume removal
+         * @description Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.
+         */
+        get: operations["plan-volume-prune"];
+        put?: never;
+        /**
+         * Prune unused volumes
+         * @description Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.
+         */
+        post: operations["prune-volumes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/volumes/_collection/sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get volume sizes
+         * @description Get disk usage sizes for all volumes (slow operation)
+         */
+        get: operations["get-volume-sizes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/volumes/backups/overview": {
         parameters: {
             query?: never;
@@ -3954,102 +4067,6 @@ export interface paths {
         };
         /** Check if backup contains path */
         get: operations["backup-has-path"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/binds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list-volume-binds"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/binds/size": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["measure-volume-bind"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/counts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get volume usage counts
-         * @description Get counts of volumes in use, unused, and total
-         */
-        get: operations["get-volume-usage-counts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/prune": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Plan unused volume removal
-         * @description Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.
-         */
-        get: operations["plan-volume-prune"];
-        put?: never;
-        /**
-         * Prune unused volumes
-         * @description Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.
-         */
-        post: operations["prune-volumes"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/environments/{id}/volumes/sizes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get volume sizes
-         * @description Get disk usage sizes for all volumes (slow operation)
-         */
-        get: operations["get-volume-sizes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5467,6 +5484,7 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+            operation?: string;
             /** @enum {string} */
             outcomeState: "known" | "unknown";
             /** Format: int64 */
@@ -5883,7 +5901,7 @@ export interface components {
         BackupProblem: {
             activityId?: string;
             /** @enum {string} */
-            code: "volume.exists" | "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable" | "volume.bind.invalid-key" | "volume.bind.path-denied" | "volume.bind.not-mounted" | "volume.bind.source-missing" | "volume.bind.unsupported-type" | "volume.bind.unsupported" | "volume.bind.file-operation-unsupported" | "volume.bind.recovery-failed" | "volume.bind.snapshot-kind-mismatch" | "volume.bind.size-timeout" | "volume.helper-unavailable" | "volume.operation-failed" | "volume.workspace-busy" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "backup.copy.insufficient-space" | "runtime.interrupted" | "backup.target.probe-host-mismatch" | "backup.target.location-conflict";
+            code: "volume.exists" | "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable" | "volume.bind.invalid-key" | "volume.bind.path-denied" | "volume.bind.not-mounted" | "volume.bind.source-missing" | "volume.bind.unsupported-type" | "volume.bind.unsupported" | "volume.bind.file-operation-unsupported" | "volume.bind.recovery-failed" | "volume.bind.snapshot-kind-mismatch" | "volume.bind.size-timeout" | "volume.helper-unavailable" | "volume.operation-failed" | "volume.workspace-busy" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "backup.copy.insufficient-space" | "runtime.interrupted" | "backup.target.probe-host-mismatch" | "backup.target.location-conflict" | "backup.target.identity-unavailable";
             detail: string;
             hosts?: string[] | null;
             /** @enum {string} */
@@ -6587,6 +6605,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["EnvironmentHubDiscovery"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseEnvironmentLatestAgentRestart: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseEnvironmentLatestAgentRestart.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["EnvironmentLatestAgentRestart"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -8344,6 +8374,18 @@ export interface components {
             readonlyRootfs?: boolean;
             restartPolicy?: components["schemas"]["ContainerRestartPolicyCreate"];
         };
+        ContainerLogsDownloadProblem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ContainerLogsDownloadProblem.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            code: "container.logs-too-large";
+            /** Format: int64 */
+            status: number;
+        };
         ContainerMount: {
             destination: string;
             driver?: string;
@@ -9622,6 +9664,9 @@ export interface components {
             /** Format: date-time */
             detectedAt: string;
         };
+        EnvironmentLatestAgentRestart: {
+            run?: components["schemas"]["EnvironmentAgentRestartRun"];
+        };
         EnvironmentStreamEvent: {
             environments?: components["schemas"]["EnvironmentEnvironment"][] | null;
             /** Format: date-time */
@@ -10059,7 +10104,7 @@ export interface components {
         };
         ImageProblem: {
             /** @enum {string} */
-            code: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "deploy.point-unavailable" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found";
+            code: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "deploy.point-unavailable" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             message: string;
         };
         ImageProtection: {
@@ -10068,7 +10113,7 @@ export interface components {
         };
         ImagePruneItem: {
             /** @enum {string} */
-            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.permission-denied" | "update.schedule-owner-unset" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.invalid-policy" | "update.policy-changed" | "update.schedule-hub-owned" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found";
+            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.permission-denied" | "update.schedule-owner-unset" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.invalid-policy" | "update.policy-changed" | "update.schedule-hub-owned" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             id: string;
         };
         ImagePruneReport: {
@@ -10379,7 +10424,7 @@ export interface components {
             category: string;
             children?: components["schemas"]["JobscheduleJobStatus"][] | null;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             currentRun?: components["schemas"]["SchedulerRun"];
             description: string;
             enabled: boolean;
@@ -11070,7 +11115,7 @@ export interface components {
             lastCheckedAt?: string;
             notPulledImageRefs?: string[] | null;
             /** @enum {string} */
-            policyCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            policyCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             serviceUpdates?: {
                 [key: string]: components["schemas"]["ProjectServiceUpdateInfo"];
             };
@@ -11409,7 +11454,7 @@ export interface components {
         SchedulerOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             message?: string;
             status: string;
             targets?: components["schemas"]["SchedulerTargetOutcome"][] | null;
@@ -11481,7 +11526,7 @@ export interface components {
         SchedulerTargetOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             environmentId?: string;
             id: string;
             message?: string;
@@ -12168,20 +12213,26 @@ export interface components {
             /** @description Service names to update; empty updates all services */
             services?: string[] | null;
         };
+        UpdaterAppliedCandidate: {
+            manifest: string;
+            platform: string;
+            repository: string;
+            service: string;
+        };
         UpdaterAutoUpdatePolicy: {
             /** Format: date-time */
             applyCheckedAt?: string;
             /** @enum {string} */
-            applyCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            applyCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             /** Format: date-time */
             bookkeepingAt?: string;
             /** @enum {string} */
-            bookkeepingCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            bookkeepingCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             candidates: components["schemas"]["UpdaterUpdateCandidate"][] | null;
             /** Format: date-time */
             checkedAt?: string;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             environmentId: string;
             jobId: string;
             /** @enum {string} */
@@ -12202,13 +12253,14 @@ export interface components {
             autoExcluded: boolean;
             available: boolean;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             observedRevision: string;
             savedRevision: string;
             sourceRunId?: string;
             targetIdentity: string;
         };
         UpdaterContainerImageRequest: {
+            autoRestore?: boolean;
             expectedManifest?: string;
             policy?: components["schemas"]["UpdaterPolicyBinding"];
         };
@@ -12239,6 +12291,7 @@ export interface components {
              * @example /api/schemas/UpdaterLifecycleRequest.json
              */
             readonly $schema?: string;
+            autoRestore?: boolean;
             expectedManifest?: string;
             expectedRevision: string;
             pointId?: string;
@@ -12247,14 +12300,16 @@ export interface components {
             services?: string[] | null;
         };
         UpdaterLifecycleResult: {
+            applied?: components["schemas"]["UpdaterAppliedCandidate"][] | null;
             /** @enum {string} */
-            baselineCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            baselineCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             /** Format: int64 */
             httpStatus?: number;
             /** @enum {string} */
-            pointCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            pointCode?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
+            recovery?: components["schemas"]["UpdaterRecoveryResult"];
             restorePointId?: string;
             runId: string;
             verified: boolean;
@@ -12286,6 +12341,13 @@ export interface components {
             policyId: string;
             /** Format: int64 */
             revision: number;
+            suppressed?: components["schemas"]["UpdaterAppliedCandidate"][] | null;
+        };
+        UpdaterRecoveryResult: {
+            /** @enum {string} */
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
+            /** @enum {string} */
+            outcome: "restored" | "restore-failed" | "unavailable" | "not-needed" | "interrupted";
         };
         UpdaterResourceResult: {
             details?: {
@@ -12308,7 +12370,7 @@ export interface components {
         UpdaterRestorePoint: {
             available: boolean;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             /** Format: date-time */
             createdAt: string;
             failedAttempt: boolean;
@@ -12356,7 +12418,7 @@ export interface components {
         UpdaterSystemImageHint: {
             candidateVersion?: string;
             /** @enum {string} */
-            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable";
+            code?: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "autoheal.interrupted" | "autoheal.limit-reached" | "autoheal.restart-failed" | "autoheal.restarted" | "backup.copy.insufficient-space" | "backup.copy.mount-failed" | "backup.copy.write-failed" | "deploy.point-unavailable" | "feature-disabled" | "history.invalid-range" | "history.sample-invalid" | "history.sample-too-large" | "history.unavailable" | "host.restarting" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "preferences.invalid" | "preferences.no-user" | "preferences.too-large" | "preferences.unknown-section" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "volume.workspace-busy" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.request-too-large" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "candidate.deferred" | "candidate.unavailable" | "vulnerability.storage-unavailable" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             compatibleReference?: string;
             currentVersion?: string;
             /** @enum {string} */
@@ -12402,7 +12464,8 @@ export interface components {
             time: string;
         };
         UpdaterVerifiedImageRequest: {
-            expectedManifest: string;
+            autoRestore?: boolean;
+            expectedManifest?: string;
         };
         UploadConsumeRequest: {
             /**
@@ -18252,6 +18315,46 @@ export interface operations {
             };
         };
     };
+    getEnvironmentLatestAgentRestart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentLatestAgentRestart"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getEnvironmentAgentRestart: {
         parameters: {
             query?: never;
@@ -19036,6 +19139,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Edge log download exceeds 64 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerLogsDownloadProblem"];
+                };
+            };
+            /** @description Edge agent requires an update for log downloads */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessError"];
                 };
             };
             /** @description Error */
@@ -29606,6 +29727,702 @@ export interface operations {
             };
         };
     };
+    "list-volume-binds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListVolumeBind"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "measure-volume-bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeasureBindInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumeBindMeasurement"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-volume-usage-counts": {
+        parameters: {
+            query?: {
+                /** @description Include internal volumes */
+                includeInternal?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumeUsageCountsData"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "plan-volume-prune": {
+        parameters: {
+            query?: {
+                /** @description Include named volumes as well as anonymous volumes */
+                all?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "prune-volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolumePruneRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-volume-sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListVolumeSizeInfo"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Volume backup operation refused */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BackupProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-volume-backup-overview": {
         parameters: {
             query?: never;
@@ -30899,702 +31716,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseBackupHasPathResponse"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "list-volume-binds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseListVolumeBind"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "measure-volume-bind": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MeasureBindInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumeBindMeasurement"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-volume-usage-counts": {
-        parameters: {
-            query?: {
-                /** @description Include internal volumes */
-                includeInternal?: boolean;
-            };
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumeUsageCountsData"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "plan-volume-prune": {
-        parameters: {
-            query?: {
-                /** @description Include named volumes as well as anonymous volumes */
-                all?: boolean;
-            };
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "prune-volumes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VolumePruneRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RequestProblem"];
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Volume backup operation refused */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-volume-sizes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Environment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseListVolumeSizeInfo"];
                 };
             };
             /** @description Volume backup operation refused */

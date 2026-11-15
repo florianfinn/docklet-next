@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification. M21 #438: candidate scans and verified manifest binding. M24 observed own-point recovery and committed-effect point visibility.
 
 package project
 
@@ -28,17 +28,40 @@ import (
 
 func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, registration string, intent *dto.LifecycleIntent, actor user.Actor) (result *dto.LifecycleResult, resultErr error) {
 	result = &dto.LifecycleResult{RunID: run, VolumeDataIncluded: false}
+	execution := &lifecycleExecution{observed: dto.ObservedExecutionFromContext(ctx).Mode != ""}
+	ctx = context.WithValue(ctx, lifecycleExecutionKey{}, execution)
 	var rollbackSource, rollbackDesired *life.Snapshot
 	selectedImages := false
 	defer func() {
-		if resultErr != nil && selectedImages && intent != nil && intent.Request.PointID == "" {
+		var uncertain *dto.UncertainImageEffect
+		if resultErr != nil && execution.observed && execution.hadEffect && !errors.As(resultErr, &uncertain) {
+			if ctx.Err() != nil {
+				result.Recovery = &dto.RecoveryResult{Outcome: "interrupted"}
+			} else {
+				execution.recoveryRan = true
+				if err := s.recoverOwnPoint(ctx, run, registration, execution, rollbackDesired, actor, result); err != nil {
+					resultErr = err
+				}
+			}
+		}
+		if resultErr != nil && selectedImages && !execution.recoveryRan && (!execution.observed || ctx.Err() == nil && !lifecycleUncertain(resultErr)) && intent != nil && intent.Request.PointID == "" {
 			if err := s.reconcileFailedRebuild(context.WithoutCancel(ctx), run, rollbackSource, rollbackDesired, intent.Selections); err != nil {
 				resultErr = &dto.UncertainImageEffect{Cause: err}
 			}
 		}
+		if !execution.hadEffect {
+			result.RestorePointID = ""
+		}
 		if resultErr != nil && result.RestorePointID != "" {
 			if err := s.lifecycleStore().FailedAttempt(context.WithoutCancel(ctx), result.RestorePointID); err != nil {
 				resultErr = &dto.UncertainImageEffect{Cause: err}
+			}
+		}
+		if execution.observed {
+			if errors.As(resultErr, &uncertain) {
+				result.Recovery = nil
+			} else if result.Recovery == nil {
+				result.Recovery = &dto.RecoveryResult{Outcome: "not-needed"}
 			}
 		}
 		if resultErr != nil {
@@ -59,6 +82,10 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	if !intent.Request.VerifiedService() {
 		return result, lifecycleFailure("update.invalid-target")
+	}
+	intent, err = filterLifecycleCandidates(ctx, current, intent)
+	if err != nil {
+		return result, err
 	}
 	services := intent.Request.SelectedServices()
 	if err := s.verifyExpectedCandidate(ctx, intent); err != nil {
@@ -82,6 +109,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	owned := *intent
 	owned.Selections = selections
 	intent = &owned
+	if err = appliedStackCandidates(ctx, intent.Selections, result); err != nil {
+		return result, err
+	}
 
 	if err = s.preflightLifecycleWrites(ctx, p, current); err != nil {
 		return result, err
@@ -177,6 +207,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		return result, err
 	}
 	result.RestorePointID = point.ID
+	execution.point = point
 	if err = s.lifecyclePinPoint(ctx, point, source); err != nil {
 		return result, err
 	}
@@ -192,7 +223,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	release()
 	leased = false
 	if !lifecycleFilesEqual(current, desired) {
-		if err = store.Effect(ctx, run); err != nil {
+		if err = s.lifecycleEffect(ctx, run); err != nil {
 			return result, err
 		}
 		if err = s.lifecycleWrite(ctx, p, current, desired, actor); err != nil {
@@ -215,10 +246,14 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	if err = store.Invalidate(ctx, id); err != nil {
 		return result, lifecycleFailure("update.persistence-failed")
 	}
-	if err = store.Effect(ctx, run); err != nil {
+	if err = s.lifecycleEffect(ctx, run); err != nil {
 		return result, err
 	}
+	execution.enteredDeploy = true
 	if err = s.deployLifecycle(ctx, desired, intent.Request.PointID != "", current, services...); err != nil {
+		if lifecycleUncertain(err) {
+			return result, err
+		}
 		var problem *imageDTO.OperationError
 		if errors.As(err, &problem) {
 			return result, problem
@@ -257,6 +292,15 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 				code = "restore.image-mismatch"
 			}
 			return result, lifecycleFailure(code)
+		}
+	}
+	if execution.observed {
+		verdict := s.observeLifecycle(ctx, desired, false, services)
+		if !verdict.Pass {
+			if verdict.Cancelled {
+				return result, context.Canceled
+			}
+			return result, lifecycleFailure("update.unstable")
 		}
 	}
 	observed.RunID = run
@@ -308,7 +352,7 @@ func (s *ProjectService) verifyLifecycleReferences(ctx context.Context, snap *li
 }
 func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapshot, restore bool, source *life.Snapshot, services ...string) error {
 	// This model is ephemeral: actual files remain the sole source on later deploy.
-	model, orderErr := lifecycleOrderedModel(snap)
+	model, orderErr := lifecycleDeployModel(snap, services)
 	if orderErr != nil {
 		return orderErr
 	}
@@ -368,6 +412,10 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 			if err = s.verifyLifecycleReferences(ctx, snap, services...); err != nil {
 				return err
 			}
+			if err := lifecycleBeforeRecoveryEffect(ctx); err != nil {
+				return err
+			}
+			lifecycleMarkRecoveryEffect(ctx)
 			return s.lifecycleStopSignals(ctx, source, services...)
 		}, ResolveImages: func(context.Context) (projectDTO.ComposeImageOperations, error) {
 			return projectDTO.ComposeImageOperations{Exists: func(ctx context.Context, ref string) (bool, error) {

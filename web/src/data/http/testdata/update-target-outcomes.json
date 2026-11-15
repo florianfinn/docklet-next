@@ -1,0 +1,68 @@
+[
+  {
+    "code": "update.auto-restored",
+    "resourceType": "stack",
+    "id": "direct~stack~project",
+    "environmentId": "direct",
+    "targetKind": "stack",
+    "targetId": "project",
+    "status": "failed",
+    "message": "update.auto-restored",
+    "activityId": "example-run"
+  },
+  {
+    "code": "update.auto-restore-failed",
+    "resourceType": "stack",
+    "id": "direct~stack~project",
+    "environmentId": "direct",
+    "targetKind": "stack",
+    "targetId": "project",
+    "status": "failed",
+    "message": "update.auto-restore-failed",
+    "activityId": "example-run"
+  },
+  {
+    "code": "update.auto-restore-unavailable",
+    "resourceType": "stack",
+    "id": "direct~stack~project",
+    "environmentId": "direct",
+    "targetKind": "stack",
+    "targetId": "project",
+    "status": "failed",
+    "message": "update.auto-restore-unavailable",
+    "activityId": "example-run"
+  },
+  {
+    "code": "update.interrupted",
+    "resourceType": "stack",
+    "id": "direct~stack~project",
+    "environmentId": "direct",
+    "targetKind": "stack",
+    "targetId": "project",
+    "status": "failed",
+    "message": "update.interrupted",
+    "activityId": "example-run"
+  },
+  {
+    "code": "update.unstable",
+    "resourceType": "stack",
+    "id": "direct~stack~project",
+    "environmentId": "direct",
+    "targetKind": "stack",
+    "targetId": "project",
+    "status": "failed",
+    "message": "update.unstable",
+    "activityId": "example-run"
+  },
+  {
+    "code": "update.candidate-failed",
+    "resourceType": "stack",
+    "id": "direct~stack~project",
+    "environmentId": "direct",
+    "targetKind": "stack",
+    "targetId": "project",
+    "status": "skipped",
+    "message": "update.candidate-failed",
+    "activityId": "example-run"
+  }
+]

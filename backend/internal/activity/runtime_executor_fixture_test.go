@@ -33,6 +33,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/stability/stabilitytest"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
@@ -349,6 +350,9 @@ func newRuntimeServicesFixture(t *testing.T, constructRuntime ...bool) *runtimeS
 	containers := container.NewContainerService(events, dockerService, images, settingsService, projects)
 	adapter := activity.NewRuntimeServiceAdapter(projects, containers)
 
+	// Observed updates run their window on an instant clock; tests may install their own.
+	projects.UseObservationClock(stabilitytest.NewClock())
+	containers.UseObservationClock(stabilitytest.NewClock())
 	fixture := &runtimeServicesFixture{t: t, db: db, settings: settingsService, activity: activityService, projects: projects, images: images, containers: containers, adapter: adapter, docker: dockerService, http: httpFixture, dbPath: dbPath, root: root}
 	if len(constructRuntime) > 0 && !constructRuntime[0] {
 		return fixture

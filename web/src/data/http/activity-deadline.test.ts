@@ -10,6 +10,7 @@ import { activityDeadline, activityTimeout } from "./activity-deadline";
 import { createSingleFlight } from "./single-flight";
 import { createActivityReader } from "./activity-reader";
 import { activity, detail, deferred, activityFixture } from "./activity-reader.test-support";
+import { mapActivitySummary } from "./map-dto";
 
 it("aborts a held response body at 40 seconds with a typed timeout rather than cancellation", async () => {
   vi.useFakeTimers(); const reached = deferred<void>(); let signal: AbortSignal | undefined;
@@ -110,4 +111,59 @@ it("membership prerequisites abort held capability reads and permit a later call
     expect(await f.adapter.listActions()).toHaveLength(2);
     expect(f.requests.filter((path) => path.includes("/capabilities"))).toHaveLength(2);
   } finally { held.resolve(); vi.useRealTimers(); }
+});
+
+// A source read that waited for the first aggregate still applies when that aggregate published
+// and then timed out on another source.
+it.each(["invalidated", "targeted"])("applies a scoped read after its aggregate timed out on another source (%s)", async (mode) => {
+  const reached = deferred<void>();
+  let held = false;
+  let fresh = false;
+  const page = vi.fn(async (host: string) => {
+    if (held && host === "other") { reached.resolve(); return new Promise<never>(() => {}); }
+    return { items: fresh && host === "good" ? [{ ...activity("good", "run-new"), status: "failed" as const }] : [], incomplete: false };
+  });
+  const reader = createActivityReader({ hosts: async () => ["good", "other"], page, detail: async (host, id) => detail(host, id), publish: vi.fn(), unauthorized() {} });
+  if (mode === "invalidated") { await reader.load(); reader.invalidate(); }
+  held = true;
+  vi.useFakeTimers();
+  try {
+    const aggregate = reader.load().catch((error: unknown) => error);
+    await reached.promise;
+    if (mode === "targeted") reader.upsert(mapActivitySummary(activity("good", "run-targeted")));
+    fresh = true;
+    const scoped = reader.refreshHost("good").catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.mock.calls.filter(([host]) => host === "good")).toHaveLength(mode === "invalidated" ? 3 : 2);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(await aggregate).toMatchObject({ outcome: { code: "activity.read-timeout" } });
+    await scoped;
+    expect(reader.health().failures).toContainEqual({ hostId: "other", reason: "unavailable" });
+    expect(reader.runs().some((run) => run.id === "run-new")).toBe(true);
+  } finally { reader.invalidate(); vi.useRealTimers(); }
+});
+
+it("publishes a stream snapshot after a resubscribed aggregate timed out on another source", async () => {
+  const f = activityFixture(); f.state.lists.good = []; f.state.lists.bad = [];
+  await f.adapter.getCurrentUser(); await f.adapter.listActions();
+  const previous = f.adapter.subscribeActions(() => {}); previous();
+  const publications = vi.fn(); const off = f.adapter.subscribeActions(publications);
+  const reached = deferred<void>();
+  f.state.hold = async (path, response) => {
+    if (path.endsWith("/bad/activities")) { reached.resolve(); return new Promise<never>(() => {}); }
+    return response;
+  };
+  vi.useFakeTimers();
+  try {
+    const aggregate = f.adapter.listActions().catch((error: unknown) => error);
+    await reached.promise;
+    f.state.lists.good = [{ ...activity("good", "run-new"), status: "failed" }];
+    f.sources.at(-1)!.send(undefined, "good", "snapshot");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.requests.filter((path) => path.startsWith("/api/environments/good/activities?"))).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(await aggregate).toMatchObject({ outcome: { code: "activity.read-timeout" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(publications.mock.lastCall?.[0].some((run: { id: string }) => run.id === "run-new")).toBe(true);
+  } finally { off(); vi.useRealTimers(); }
 });

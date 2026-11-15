@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original standalone image update and manual previous-image restore. M21 #438: candidate scans and verified manifest binding; allow owned same-image manual recovery.
+// Deviations: Original standalone image update and manual previous-image restore. M21 #438: candidate scans and verified manifest binding; allow owned same-image manual recovery. M24 #440 #441: observed updates and suppressed failed candidates.
 
 package container
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/containerd/errdefs"
@@ -45,6 +46,11 @@ type expectedContainerImageKey struct{}
 func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name string, restore bool, actor user.Actor) (resultErr error) {
 	run := updaterDTO.ExecutionIdentityFromContext(ctx).RunID
 	result := updaterDTO.LifecycleResult{RunID: run}
+	observed := updaterDTO.ObservedExecutionFromContext(ctx)
+	var watch *observedRecreate
+	if observed.Mode != "" && !restore {
+		watch = &observedRecreate{clock: s.observedClock()}
+	}
 	defer func() {
 		if resultErr != nil {
 			p := imageDTO.Neutral(resultErr, "update.deploy-failed", 500)
@@ -55,6 +61,12 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			}
 		} else {
 			result.Verified = true
+		}
+		// A held outcome has no recovery evidence; every other observed exit
+		// that did not set one left the workload as the run proved it.
+		var uncertain interface{ RuntimeUncertain() bool }
+		if watch != nil && result.Recovery == nil && !(errors.As(resultErr, &uncertain) && uncertain.RuntimeUncertain()) {
+			result.Recovery = &updaterDTO.RecoveryResult{Outcome: "not-needed"}
 		}
 		updaterDTO.RecordLifecycleResult(ctx, result)
 	}()
@@ -128,17 +140,29 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 			return err
 		}
 		verified := updaterDTO.ExpectedManifestFromContext(ctx)
-		if verified != "" {
+		if verified != "" || observed.Mode == "scheduled" {
 			resolver, ok := s.containerImages.(interface {
 				CandidateContainerImage(context.Context, dockercontainer.InspectResponse, string) (string, string, string, error)
 			})
-			if !ok || !updaterDTO.ValidManifest(verified) {
+			if !ok || (verified != "" && !updaterDTO.ValidManifest(verified)) {
 				return imageDTO.Failure("update.check-unavailable", 503)
 			}
 			var manifest string
 			expected, platform, manifest, err = resolver.CandidateContainerImage(ctx, *old, ref)
-			if err == nil && manifest != verified {
+			if err == nil && verified != "" && manifest != verified {
 				return imageDTO.Failure("update.candidate-changed", 409)
+			}
+			// A scheduled run never applies a candidate its policy saw fail; the
+			// pull below proves the same native key, so this tuple is the applied one.
+			if err == nil && observed.Mode == "scheduled" {
+				candidate, ok := appliedContainerCandidate(ref, platform, manifest)
+				if !ok {
+					return imageDTO.Failure("update.check-unavailable", 503)
+				}
+				if slices.Contains(observed.Suppressed, candidate) {
+					return imageDTO.Failure("update.candidate-failed", 409)
+				}
+				result.Applied = []updaterDTO.AppliedCandidate{candidate}
 			}
 		} else {
 			expected, platform, err = s.containerImages.ExpectedContainerImage(ctx, *old, ref)
@@ -217,10 +241,17 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 		}
 	}
 	// Recheck before recreate, including after a slow pull or retag.
-	if _, err := s.imageUpdateInstance(ctx, c, id, name); err != nil {
+	before, err := s.imageUpdateInstance(ctx, c, id, name)
+	if err != nil {
 		return err
 	}
 	ctx = context.WithValue(ctx, expectedContainerImageKey{}, expected)
+	if watch != nil {
+		// Docker removes a running AutoRemove original when it stops, so it
+		// keeps the manual journal order and cannot be restored.
+		watch.deferred = before.HostConfig == nil || !before.HostConfig.AutoRemove || before.State == nil || !before.State.Running
+		ctx = context.WithValue(ctx, observedRecreateKey{}, watch)
+	}
 	config := *old.Config
 	config.Image = ref
 	host := dockercontainer.HostConfig{}
@@ -229,6 +260,9 @@ func (s *ContainerService) ExecuteContainerImage(ctx context.Context, id, name s
 	}
 	api := compat.DetectDockerAPIVersion(ctx, c)
 	_, err = s.recreateDurable(ctx, c, *old, name, &config, &host, buildCleanNetworkingConfigInternal(*old, api), api)
+	if watch != nil {
+		err = s.observedLifecycle(ctx, c, watch, *before, &result, err)
+	}
 	var problem *dto.Problem
 	if errors.As(err, &problem) {
 		if problem.Code == "container.recreate-recovered" {

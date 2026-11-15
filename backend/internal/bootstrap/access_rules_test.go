@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences.
+// Deviations: Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; exact hub-spec route equality guard.
 
 package bootstrap
 
@@ -86,6 +86,44 @@ func TestM15RuleCompleteness(t *testing.T) {
 	for key := range access.Rules {
 		assert.True(t, want[key], "stale rule: %s", key)
 	}
+}
+
+func TestAccessRoutesEqualHubSpec(t *testing.T) {
+	// These rows exist only in Routes: four Echo proxies and the agent draft probe.
+	exemptions := []access.Route{
+		{Method: "GET", Path: "/environments/{id}/ws/containers/{containerId}/logs", Operation: "GET /api/environments/:id/ws/containers/:containerId/logs"},
+		{Method: "GET", Path: "/environments/{id}/ws/containers/{containerId}/stats", Operation: "GET /api/environments/:id/ws/containers/:containerId/stats"},
+		{Method: "GET", Path: "/environments/{id}/ws/containers/{containerId}/terminal", Operation: "GET /api/environments/:id/ws/containers/:containerId/terminal"},
+		{Method: "GET", Path: "/environments/{id}/ws/projects/{projectId}/logs", Operation: "GET /api/environments/:id/ws/projects/:projectId/logs"},
+		{Method: "POST", Path: "/environments/{id}/volumes/backups/targets/probe", Operation: "probe-volume-backup-target"},
+	}
+	spec := map[access.Route]bool{}
+	for path, item := range api.SetupAPIForSpec().OpenAPI().Paths {
+		for method, op := range map[string]*huma.Operation{
+			"GET": item.Get, "POST": item.Post, "PUT": item.Put, "DELETE": item.Delete,
+			"PATCH": item.Patch, "HEAD": item.Head, "OPTIONS": item.Options, "TRACE": item.Trace,
+		} {
+			if op != nil {
+				spec[access.Route{Method: method, Path: path, Operation: op.OperationID}] = true
+			}
+		}
+	}
+	routes := map[access.Route]bool{}
+	for _, route := range access.Routes {
+		assert.False(t, routes[route], "duplicate route tuple: %s %s %s", route.Method, route.Path, route.Operation)
+		routes[route] = true
+	}
+	for _, route := range exemptions {
+		assert.True(t, routes[route] && !spec[route], "stale exemption: %s %s %s", route.Method, route.Path, route.Operation)
+		delete(routes, route)
+	}
+	for route := range spec {
+		assert.True(t, routes[route], "missing route tuple: %s %s %s", route.Method, route.Path, route.Operation)
+	}
+	for route := range routes {
+		assert.True(t, spec[route], "extra route tuple: %s %s %s", route.Method, route.Path, route.Operation)
+	}
+	t.Logf("hub operations=%d; access routes=%d; exact exemptions=%d", len(spec), len(access.Routes), len(exemptions))
 }
 
 func TestM17RuleCompleteness(t *testing.T) {

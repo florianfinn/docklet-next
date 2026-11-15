@@ -1,0 +1,52 @@
+[
+  {
+    "recovery": {
+      "outcome": "restored",
+      "code": "update.unstable"
+    },
+    "runId": "example-run",
+    "code": "update.unstable",
+    "verified": false,
+    "volumeDataIncluded": false
+  },
+  {
+    "recovery": {
+      "outcome": "restore-failed",
+      "code": "restore.deploy-failed"
+    },
+    "runId": "example-run",
+    "code": "update.unstable",
+    "verified": false,
+    "volumeDataIncluded": false
+  },
+  {
+    "recovery": {
+      "outcome": "unavailable",
+      "code": "restore.files-changed"
+    },
+    "runId": "example-run",
+    "code": "update.unstable",
+    "verified": false,
+    "volumeDataIncluded": false
+  },
+  {
+    "recovery": {
+      "outcome": "interrupted",
+      "code": "runtime.interrupted"
+    },
+    "runId": "example-run",
+    "code": "update.unstable",
+    "verified": false,
+    "volumeDataIncluded": false
+  },
+  {
+    "recovery": {
+      "outcome": "not-needed",
+      "code": "update.snapshot-unavailable"
+    },
+    "runId": "example-run",
+    "code": "update.unstable",
+    "verified": false,
+    "volumeDataIncluded": false
+  }
+]

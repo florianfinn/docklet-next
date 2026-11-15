@@ -198,3 +198,21 @@ not per operation.
 | RR16 | `AUTH_PROXY_LOGOUT_URL` absolute http(s), validated at startup; `logoutUrl` only in proxy mode; logout keeps Origin + CSRF | config, `/auth/mode`, logout | mutation: accept `javascript:` |
 | RR17 | #255, #268, #275, #276 per §8 | respective routes | one red proof each |
 | RR18 | a stack deleted and recreated with the same name is not granted by the old assignment; containers recreated by a deploy stay accessible | ProjectPath / ContainerPath | mutation: match by project name |
+
+## Route coverage and run-read disclosure
+
+`access.Routes` equals the complete hub OpenAPI operation set by method, path and
+operation ID. `TestAccessRoutesEqualHubSpec` checks both directions, duplicate
+rows and stale exemptions. Its only exemptions are the four Echo WebSocket
+container logs/stats/terminal and project logs proxies, and the agent-only
+`POST /environments/{id}/volumes/backups/targets/probe` operation.
+
+Echo-only administrator endpoints retain the fail-closed decision fallback.
+`TestEchoAdministratorRoutesDenyUserBeforeHandler` derives their table from the
+production router and checks authenticated simple-user refusal before handler
+entry, including the separate pprof authentication envelope.
+
+A receipt-storage failure after locating a run returns the same 404 as an unknown
+or denied run to a simple user, including its owner. Administrators receive 503;
+both outcomes log a server-side warning. Errors locating the reference retain
+their existing behavior.

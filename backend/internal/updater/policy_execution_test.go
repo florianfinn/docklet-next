@@ -2,7 +2,7 @@
 // Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Migrated hub store and synchronous effect/receipt ports prove policy boundaries.
+// Deviations: Migrated hub store and synchronous effect/receipt ports prove policy boundaries. M24 recovery evidence, validation and reason contracts.
 
 package updater
 
@@ -99,7 +99,7 @@ func newPolicyFixture(t *testing.T) *policyFixture {
 		f.admissions++
 		f.bindings = append(f.bindings, b)
 		f.targets = append(f.targets, target)
-		f.receipts[b.ChildID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
+		f.receipts[b.ChildID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess, ImageLifecycle: &dto.LifecycleResult{Verified: true}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
 		if f.afterAdmission != nil {
 			f.afterAdmission(b)
 		}
@@ -422,7 +422,7 @@ func TestImagePolicyUnknownChildBlocksLaterHostBatchesUntilReceipt(t *testing.T)
 	require.Equal(t, firstID, blocked.Targets[0].ActivityID)
 	require.Equal(t, 1, f.admissions)
 	require.Equal(t, before, f.checks, "another wrapper cannot bypass the prior child's host boundary")
-	f.receipts[firstID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
+	f.receipts[firstID] = a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess, ImageLifecycle: &dto.LifecycleResult{Verified: true}}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}
 	f.wait = nil
 	resumed := f.run(t, "auto-update", st.Run{})
 	require.Equal(t, st.Succeeded, resumed.Status)

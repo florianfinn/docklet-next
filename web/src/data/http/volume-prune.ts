@@ -29,7 +29,7 @@ export function createVolumePrune(options: VolumeTransportOptions, hosts: () => 
         if (!available.some((h) => h.id === hostId && isHostAvailable(h))) { plan.skippedHosts.push(hostId); return; }
         try {
           await require("planVolumePrune", { kind: "host", id: hostId });
-          const data = await request<Schema["VolumePrunePlan"]>(hostId, `/prune?all=${all}`);
+          const data = await request<Schema["VolumePrunePlan"]>(hostId, `/_collection/prune?all=${all}`);
           if (data.candidates !== null && !Array.isArray(data.candidates)) throw new Error("volume.invalid-plan");
           const candidates = (data.candidates ?? []).map((row) => {
             if (!row.name || !row.createdAt || !row.driver || !["unused", "unused-anonymous"].includes(row.reason)) throw new Error("volume.invalid-plan");
@@ -50,7 +50,7 @@ export function createVolumePrune(options: VolumeTransportOptions, hosts: () => 
         const own = candidates.filter((c) => c.hostId === hostId);
         try {
           await require("pruneVolumes", { kind: "host", id: hostId });
-          const data = await request<Schema["VolumePruneResult"]>(hostId, "/prune", "POST", { all, candidates: own.map(({ name, createdAt }) => ({ name, createdAt })) });
+          const data = await request<Schema["VolumePruneResult"]>(hostId, "/_collection/prune", "POST", { all, candidates: own.map(({ name, createdAt }) => ({ name, createdAt })) });
           for (const name of data.removed ?? []) result.removed.push({ id: inventoryId(hostId, name), name, hostId, sizeBytes: 0 });
           for (const row of data.skipped ?? []) result.skipped.push({ id: inventoryId(hostId, row.name), reason: row.reason });
           for (const row of data.failed ?? []) result.failed!.push({ id: inventoryId(hostId, row.name), hostId, ...row });

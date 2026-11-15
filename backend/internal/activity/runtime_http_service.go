@@ -164,7 +164,7 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		}
 		resolved, err := h.ports.PrepareTarget(ctx, environmentID, target)
 		if err != nil {
-			return empty, noRef, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
+			return empty, noRef, runtimeTargetFailure(operation, err)
 		}
 		if runtimeRecreateOperation(operation) || runtimeContainerImageOperation(operation) {
 			if h.ports.GuardContainer == nil {

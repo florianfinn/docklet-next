@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
+// Deviations: Public log-download size and capability refusals (#379); Flush-aware terminal collection across tunnel close (#416); Local module namespace; bounded runtime response assembly and pending identity protection; heartbeat admission and typed refusal classification.
 
 package edge
 
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
+	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/mo"
 )
@@ -91,12 +92,12 @@ func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTun
 		case <-ctx.Done():
 			return 0, nil, nil, ctx.Err()
 		case <-tunnel.done:
-			if done, status, headers, body, err := state.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
+			if done, status, headers, body, err := state.drainPendingTerminal(ctx, pending, method, limit); done {
 				return status, headers, body, err
 			}
 			return 0, nil, nil, fmt.Errorf("edge tunnel closed while waiting for response: %w", ErrTunnelConnectionClosed)
 		case err := <-pending.failureCh:
-			if done, status, headers, body, drainTerminalResponseErr := state.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
+			if done, status, headers, body, drainTerminalResponseErr := state.drainPendingTerminal(ctx, pending, method, limit); done {
 				return status, headers, body, drainTerminalResponseErr
 			}
 			return 0, nil, nil, err
@@ -109,6 +110,34 @@ func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTun
 			}
 			if done, status, headers, body, err := state.handleTunnelMessageInternal(method, incoming); done {
 				return status, headers, body, err
+			}
+		}
+	}
+}
+
+// Once the receive loop ends, overflow may still contain the terminal frame.
+// Wait for that owner's flush as well as reading the channel; the drainer's
+// per-message deadline bounds stalled delivery, and ctx still bounds collection.
+func (s *grpcResponseState) drainPendingTerminal(ctx context.Context, pending *PendingRequest, method string, limit int) (bool, int, map[string]string, []byte, error) {
+	flush := pending.flushed()
+	for {
+		if done, status, headers, body, err := s.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
+			return done, status, headers, body, err
+		}
+		select {
+		case <-ctx.Done():
+			return true, 0, nil, nil, ctx.Err()
+		case <-flush:
+			return s.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit)
+		case incoming, ok := <-pending.ResponseCh:
+			if !ok {
+				return true, 0, nil, nil, ErrTunnelConnectionClosed
+			}
+			if limit > 0 && incoming != nil && s.respBody.Len()+len(incoming.Body) > limit {
+				return true, 0, nil, nil, ErrCommandResponseTooLarge
+			}
+			if done, status, headers, body, err := s.handleTunnelMessageInternal(method, incoming); done {
+				return done, status, headers, body, err
 			}
 		}
 	}
@@ -264,11 +293,20 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 
 	status, respHeaders, respBody, err := ProxyRequest(proxyCtx, tunnel, req.Method, targetPath, req.URL.RawQuery, headers, body)
 	if err != nil {
+		// Expected refusals log one warning with the environment; other failures stay errors.
+		var logsProblem *containerDTO.LogsDownloadProblem
+		if errors.As(err, &logsProblem) {
+			slog.WarnContext(ctx, "Edge container log download exceeds cap", "environmentId", tunnel.EnvironmentID, "method", req.Method, "path", targetPath, "capBytes", containerDTO.MaxEdgeLogsDownloadBytes)
+			return c.JSON(http.StatusRequestEntityTooLarge, logsProblem)
+		}
+		if errors.Is(err, remenv.ErrAgentUpdateRequired) {
+			slog.WarnContext(ctx, "Edge agent requires an update for this request", "environmentId", tunnel.EnvironmentID, "method", req.Method, "path", targetPath)
+			return c.JSON(http.StatusServiceUnavailable, map[string]any{"success": false, "code": "agent.update-required"})
+		}
 		slog.ErrorContext(ctx, "Edge tunnel proxy failed",
 			"environmentId", tunnel.EnvironmentID,
 			"error", err,
 		)
-
 		if proxyCtx.Err() != nil {
 			return c.JSON(http.StatusGatewayTimeout, map[string]any{"success": false, "code": "agent.unavailable", "error": "request timed out"})
 		}

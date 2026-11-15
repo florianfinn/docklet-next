@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Keyless executor acceptance.
+// Deviations: Keyless executor acceptance. M24 recovery evidence, validation and reason contracts.
 
 package activity
 
@@ -29,6 +29,11 @@ func runtimeReceiveTxInternal(tx *gorm.DB, now time.Time, c runtimeCanonicalComm
 	if conflict != nil {
 		return nil, &GateConflict{RunID: conflict.RunID, Code: string(activitytypes.CodeRunBusy)}
 	}
+	if c.command.Target.Kind == "container" {
+		if err := replacementHoldTxInternal(tx, "0", c.replacementRunID, id.RunID); err != nil {
+			return nil, err
+		}
+	}
 	target, actor := c.command.Target, c.command.Actor
 	row := &RuntimeReceipt{RunID: id.RunID, Kind: "receipt", StoreGeneration: id.StoreGeneration,
 		ManagerID: id.ManagerID, RegistrationID: id.RegistrationID, EnvironmentID: id.EnvironmentID,
@@ -39,6 +44,9 @@ func runtimeReceiveTxInternal(tx *gorm.DB, now time.Time, c runtimeCanonicalComm
 		DispatchState: new("pending"), ExecutorState: new("pending"), FinalWriteAt: now}
 	if err := runtimeReceiverCreateTxInternal(tx, row); err != nil {
 		return nil, runtimeWriteErrorInternal(err)
+	}
+	if err := runtimeObserveAdmissionTx(tx, now, row.RunID, c.command); err != nil {
+		return nil, err
 	}
 	if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
 		return nil, err

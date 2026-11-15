@@ -2,7 +2,7 @@
 // Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion.
+// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; bound kind cache to current successful listings.
 
 package volume
 
@@ -27,6 +27,7 @@ type bindInventory struct {
 	kinds    map[string]string
 	scans    map[string]*bindScan
 	measured map[string]volumetypes.BindMeasurement
+	current  map[string]bool
 }
 
 func (s *VolumeService) bindState() *bindInventory {
@@ -49,6 +50,27 @@ func (s *VolumeService) ListBinds(ctx context.Context) ([]volumetypes.Bind, erro
 	return s.bindsFromContainers(ctx, cli, rows)
 }
 func (s *VolumeService) bindsFromContainers(ctx context.Context, cli *client.Client, rows []container.Summary) ([]volumetypes.Bind, error) {
+	// Publish membership from the successful full listing before issuing stats.
+	state := s.bindState()
+	current := map[string]bool{}
+	for _, c := range rows {
+		if bindpath.Self(c) || bindpath.Helper(c) {
+			continue
+		}
+		for _, m := range c.Mounts {
+			if m.Type == mount.TypeBind {
+				current[c.ID+"\x00"+m.Destination] = true
+			}
+		}
+	}
+	state.mu.Lock()
+	state.current = current
+	for key := range state.kinds {
+		if !current[key] {
+			delete(state.kinds, key)
+		}
+	}
+	state.mu.Unlock()
 	info, err := cli.Info(ctx, client.InfoOptions{})
 	if err != nil {
 		return nil, err
@@ -58,7 +80,6 @@ func (s *VolumeService) bindsFromContainers(ctx context.Context, cli *client.Cli
 		return nil, err
 	}
 	bySource := map[string]*volumetypes.Bind{}
-	state := s.bindState()
 	for _, c := range rows {
 		if bindpath.Self(c) || bindpath.Helper(c) {
 			continue
@@ -104,10 +125,13 @@ func (s *VolumeService) bindsFromContainers(ctx context.Context, cli *client.Cli
 					default:
 						kind = "special"
 					}
+					state.mu.Lock()
+					// A newer listing may have removed this key while stat ran.
+					if state.current[cacheKey] {
+						state.kinds[cacheKey] = kind
+					}
+					state.mu.Unlock()
 				}
-				state.mu.Lock()
-				state.kinds[cacheKey] = kind
-				state.mu.Unlock()
 			}
 			if row.Kind == "unknown" {
 				if kind == "special" {

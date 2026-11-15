@@ -2,12 +2,13 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Generic cancellation resolves durable runtime ownership before fallback; authorize single-run reads by persisted actor or current target.
+// Deviations: Generic cancellation resolves durable runtime ownership before fallback; authorize single-run reads by persisted actor or current target; mask receipt storage failures for simple users and log them.
 
 package activity
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -75,6 +76,11 @@ func (h *ActivityHandler) getRuntimeActivityInternal(ctx context.Context, input 
 		return readErr
 	})
 	if err != nil {
+		slog.WarnContext(ctx, "failed to load runtime activity receipt", "error", err)
+		ps, _ := middleware.PermissionsFromContext(ctx)
+		if access.FromPermissions(ps).IsUser() {
+			return nil, true, huma.Error404NotFound("activity not found")
+		}
 		return nil, true, huma.Error503ServiceUnavailable("Runtime evidence unavailable")
 	}
 	if !h.canReadRuntimeActivityInternal(ctx, input.EnvironmentID, receipt) {

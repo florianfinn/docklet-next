@@ -68,7 +68,8 @@ func HTTPToWebSocketURL(url string) string {
 
 // CopyBodyWithFlush streams bytes from body to w, flushing when supported.
 // Useful for progress/streaming endpoints where incremental delivery matters.
-func CopyBodyWithFlush(w http.ResponseWriter, body io.Reader) {
+// It returns the upstream read error other than io.EOF; a client write error ends the copy without one.
+func CopyBodyWithFlush(w http.ResponseWriter, body io.Reader) error {
 	buf := make([]byte, 32*1024)
 	flusher, canFlush := w.(http.Flusher)
 
@@ -76,14 +77,17 @@ func CopyBodyWithFlush(w http.ResponseWriter, body io.Reader) {
 		n, readErr := body.Read(buf)
 		if n > 0 {
 			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return
+				return nil
 			}
 			if canFlush {
 				flusher.Flush()
 			}
 		}
+		if readErr == io.EOF {
+			return nil
+		}
 		if readErr != nil {
-			return
+			return readErr
 		}
 	}
 }

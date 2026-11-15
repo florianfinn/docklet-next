@@ -1,6 +1,6 @@
 import { ChevronRight, Download, Terminal } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
-import { useTranslations } from "use-intl";
+import { useTimeZone, useTranslations } from "use-intl";
 
 import type { ActionRun } from "@/domain/model";
 import { useAdapter } from "@/data/use-adapter";
@@ -15,7 +15,7 @@ import { collapseOutput, type OutputRow } from "./output-collapse";
 import { outputFallback, useOutputView } from "./output-view-store";
 import { outputText, outputTime } from "./run-output-text";
 
-function LineView({ row }: { row: OutputRow }) {
+function LineView({ row, timeZone }: { row: OutputRow; timeZone: string }) {
   const t = useTranslations("activity.output");
   const { line, frames } = row;
   return (
@@ -34,7 +34,7 @@ function LineView({ row }: { row: OutputRow }) {
       )}
     >
       <time dateTime={line.at} className="text-muted-foreground tabular-nums">
-        {outputTime(line.at)}
+        {outputTime(line.at, timeZone)}
       </time>
       <span className="text-muted-foreground">{line.stream}</span>
       <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{line.stream === "cmd" ? `$ ${line.text}` : line.text}</span>
@@ -50,6 +50,8 @@ function LineView({ row }: { row: OutputRow }) {
  */
 export function RunOutput({ run, defaultOpen = false, fill = false, className }: { run: ActionRun; defaultOpen?: boolean; fill?: boolean; className?: string }) {
   const t = useTranslations("activity.output");
+  // The app's IntlProvider carries the effective hub zone, never the browser zone.
+  const timeZone = useTimeZone() ?? "UTC";
   const adapter = useAdapter();
   const [view, setView] = useOutputView(run.id, outputFallback(run, defaultOpen));
   const listRef = useRef<HTMLOListElement>(null);
@@ -123,7 +125,7 @@ export function RunOutput({ run, defaultOpen = false, fill = false, className }:
             className={cn("overflow-auto border-t bg-code py-1.5 font-mono text-[11.5px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring", fill ? "min-h-0 flex-1" : "max-h-80")}
           >
             {shown.map((r) => (
-              <LineView key={r.index} row={r} />
+              <LineView key={r.index} row={r} timeZone={timeZone} />
             ))}
           </ol>
         ) : (

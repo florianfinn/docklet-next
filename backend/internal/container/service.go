@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 standalone image update and restore safety.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 standalone image update and restore safety; M24 #440 observation clock.
 
 package container
 
@@ -39,6 +39,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/stability"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
@@ -54,6 +55,8 @@ type ContainerService struct {
 	projectService  *project.ProjectService
 	iconMetaCache   *hot.HotCache[string, projects.ArcaneComposeMetadata]
 	stats           *stats.Service
+	// observationClock replaces the real observation clock in tests only.
+	observationClock stability.Clock
 }
 
 const (

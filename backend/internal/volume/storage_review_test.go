@@ -27,7 +27,7 @@ func TestReview179NonRunningStatesBlockPlanAndExecute(t *testing.T) {
 				f := &pruneDockerFixture{volumes: []volume.Volume{pruneVolume("held"), pruneVolume("free")}}
 				f.containers = []container.Summary{pruneConsumer("held", state)}
 				call := pruneTransport(t, transport, pruneRouter(t, f.service(t)))
-				status, body := call("GET", "/api/environments/0/volumes/prune", "all=true", nil)
+				status, body := call("GET", "/api/environments/0/volumes/_collection/prune", "all=true", nil)
 				require.Equal(t, 200, status, string(body))
 				var plan base.ApiResponse[volumetypes.PrunePlan]
 				require.NoError(t, json.Unmarshal(body, &plan))
@@ -40,7 +40,7 @@ func TestReview179NonRunningStatesBlockPlanAndExecute(t *testing.T) {
 				// A crafted request naming the held volume must still be refused.
 				request, err := json.Marshal(volumetypes.PruneRequest{Candidates: []volumetypes.PruneCandidate{{Name: "held", CreatedAt: pruneCreated}, {Name: "free", CreatedAt: pruneCreated}}})
 				require.NoError(t, err)
-				status, body = call("POST", "/api/environments/0/volumes/prune", "", request)
+				status, body = call("POST", "/api/environments/0/volumes/_collection/prune", "", request)
 				require.Equal(t, 200, status, string(body))
 				var result base.ApiResponse[volumetypes.PruneResult]
 				require.NoError(t, json.Unmarshal(body, &result))
@@ -56,8 +56,8 @@ func TestReview179NonRunningStatesBlockPlanAndExecute(t *testing.T) {
 // never to the {volumeName} wildcard neighbours.
 func TestReview179EdgeStorageCommandNames(t *testing.T) {
 	for _, tc := range []struct{ method, path, command string }{
-		{"GET", "/api/environments/7/volumes/prune", "volume.prune.plan"},
-		{"POST", "/api/environments/7/volumes/prune", "volume.prune"},
+		{"GET", "/api/environments/7/volumes/_collection/prune", "volume.prune.plan"},
+		{"POST", "/api/environments/7/volumes/_collection/prune", "volume.prune"},
 		{"GET", "/api/environments/7/volumes/prune-me", "volume.inspect"},
 		{"POST", "/api/environments/7/volumes/data/rename", "volume.rename"},
 		{"POST", "/api/environments/7/volumes/data/backups/upload", "volume.backup.import"},
