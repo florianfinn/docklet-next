@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host registration implementation. M19 #355 online transition announced on every authenticated online write; optional-module foundation (#472).
+// Deviations: Original host registration implementation. M19 #355 online transition announced on every authenticated online write; optional-module foundation and complete Edge command admission (#472).
 
 package environment
 
@@ -11,7 +11,6 @@ import (
 	"errors"
 	"github.com/florianfinn/docklet-next/types/features"
 	"net/http"
-	"slices"
 	"sync"
 	"time"
 
@@ -87,7 +86,7 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 			return nil, nil, err
 		}
 		if module, ok := features.ForPath(path); ok {
-			if info == nil || !contract.ModuleCompatible(info.AgentContractVersion, info.AgentContractFingerprint) || (env.IsEdge && (tunnel == nil || !slices.Contains(tunnel.Capabilities, module.Capability))) {
+			if info == nil || !contract.ModuleCompatible(info.AgentContractVersion, info.AgentContractFingerprint) || (env.IsEdge && (tunnel == nil || !edge.HasModuleCommands(tunnel.Capabilities, module.ID))) {
 				cleanup()
 				return nil, nil, ErrAgentUpdateRequired
 			}
