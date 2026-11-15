@@ -25,8 +25,8 @@ export function agentFixture(spec, fixture) {
   if (!include || !summary || !recovery) throw new Error("missing activity discovery producer");
   const moduleSource = readFileSync(new URL("../types/features/features.go", import.meta.url), "utf8");
   const moduleConstant = (name) => moduleSource.match(new RegExp(`\\b${name}\\s+(?:ID\\s+)?=\\s*"([^"]+)"`))?.[1];
-  const moduleDefinitions = [...moduleSource.matchAll(/\{ID: (\w+), Kind: Module, SettingKey: (\w+), HubPrefix: "([^"]+)", HostPrefix: "([^"]+)", Capability: "([^"]+)", AgentModule: "([^"]+)"/g)]
-    .map(([, id, key, hubPrefix, hostPrefix, capability, agentModule]) => ({ id: moduleConstant(id), settingKey: moduleConstant(key), hubPrefix, hostPrefix, capability, agentModule, defaultEnabled: false }));
+  const moduleDefinitions = [...moduleSource.matchAll(/\{ID: (\w+), Kind: Module, SettingKey: (\w+), HubPrefix: "([^"]+)", HostPrefix: "([^"]+)", Capability: "([^"]+)", AgentModule: "([^"]+)"(?:, DefaultEnabled: (true|false))?/g)]
+    .map(([, id, key, hubPrefix, hostPrefix, capability, agentModule, enabled]) => ({ id: moduleConstant(id), settingKey: moduleConstant(key), hubPrefix, hostPrefix, capability, agentModule, defaultEnabled: enabled === "true" }));
   if (moduleDefinitions.length === 0 || moduleDefinitions.some((d) => !d.id || !d.settingKey)) throw new Error("missing module registry producer");
   manifest.modules = {
     definitions: moduleDefinitions,

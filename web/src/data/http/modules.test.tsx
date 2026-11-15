@@ -28,3 +28,18 @@ for(const fixture of fixtures)for(const locale of ["en","de"] as const)it(`M7 re
  await waitFor(()=>expect(screen.getByRole("alert").textContent).not.toBe("loading"));
  expect(screen.getByRole("alert").textContent).toBe(messages[locale][fixture.code as keyof typeof messages.en]);
 });
+
+it("keeps a settings write 404 out of the module decoder", async () => {
+ const { createSettingsCore } = await import("./settings-core");
+ const { createCsrfClient } = await import("./csrf-client");
+ const { ModuleProblemError } = await import("@/data/module-error");
+ const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  if ((init?.method ?? "GET") === "GET") return new Response(JSON.stringify({ success: true, data: [] }), { status: 200, headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
+  return new Response(JSON.stringify({ success: false, error: `API endpoint not found: ${String(input)}` }), { status: 404, headers: { "Content-Type": "application/json" } });
+ };
+ const settings = createSettingsCore("/api", createCsrfClient("/api", fetch as typeof globalThis.fetch));
+ const error = await settings.setBackupDefaultRetention!(3).then(() => undefined, (e: unknown) => e);
+ expect(error instanceof ModuleProblemError).toBe(false);
+ expect((error as { code?: string } | undefined)?.code).not.toBe("module-not-found");
+ expect(error instanceof Error && error.message).toBe("settings.write.404");
+});

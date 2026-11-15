@@ -17,10 +17,11 @@ export class ModuleProblemError extends AdapterOutcomeError {
   }
 }
 
-/** Hub forwarding preserves the same bounded problem body for both transports. */
-export function moduleProblem(body: unknown, status: number): ModuleProblemError | undefined {
+/** Hub forwarding preserves the same bounded problem body for both transports.
+ * A 404 means an absent module only for module requests. */
+export function moduleProblem(body: unknown, status: number, moduleRequest = true): ModuleProblemError | undefined {
   const value = body && typeof body === "object" ? body as Record<string, unknown> : {};
-  if (status === 404) return new ModuleProblemError("module-not-found", status);
+  if (status === 404) return moduleRequest ? new ModuleProblemError("module-not-found", status) : undefined;
   const code = value.code;
   if (typeof code !== "string" || !(MODULE_CODES as readonly string[]).includes(code)) return;
   if (code === "feature-disabled" && !MODULES.some((module) => module.id === value.feature)) return;

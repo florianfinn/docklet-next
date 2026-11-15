@@ -23,8 +23,8 @@ import { Skeleton } from "@/shared/ui/skeleton";
 import { Button } from "@/shared/ui/button";
 
 export function ModulesSection() {
- const version=useIdentityVersion();
- return <ModuleManagement key={version} />;
+  const version = useIdentityVersion();
+  return <ModuleManagement key={version} />;
 }
 
 function ModuleManagement() {

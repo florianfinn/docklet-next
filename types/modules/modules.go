@@ -27,7 +27,7 @@ type DeleteResult struct {
 	PendingCleanup []PendingCleanup `json:"pendingCleanup" nullable:"false"`
 }
 
-// Problem describes module admission and lifecycle refusals without exposing host files.
+// ModuleProblem describes module admission and lifecycle refusals without exposing host files.
 type ModuleProblem struct {
 	Status    int         `json:"status"`
 	Code      string      `json:"code" enum:"module-busy,module-on,feature-disabled,operation-conflict,agent.update-required"`

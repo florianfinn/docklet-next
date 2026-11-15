@@ -8,7 +8,9 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -55,12 +57,14 @@ func RegisterRoutes(api huma.API, service *Service, hosts *environment.Environme
 					reason := "agent.unavailable"
 					if env.Enabled {
 						path := "/api/environments/0/modules/" + string(input.ID) + "/data"
-						_, status, err := hosts.ProxyRequest(ctx, env.ID, "DELETE", path, nil)
+						body, status, err := hosts.ProxyRequest(ctx, env.ID, "DELETE", path, nil)
 						if err == nil && status >= 200 && status < 300 {
 							continue
 						}
 						if err != nil {
 							_, reason = remenv.AgentAccessFailure(err)
+						} else if code := refusalCode(body); code != "" {
+							reason = code
 						}
 					}
 					result.PendingCleanup = append(result.PendingCleanup, dto.PendingCleanup{ID: env.ID, Name: env.Name, Reason: reason})
@@ -73,7 +77,13 @@ func RegisterRoutes(api huma.API, service *Service, hosts *environment.Environme
 			return out(result), nil
 		})
 	}
-	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "delete-host-module-data", Method: "DELETE", Path: "/environments/{id}/modules/{module}/data", Tags: []string{"Modules"}}, authz.PermSettingsWrite, func(ctx context.Context, input *HostDeleteInput) (*handlerutil.Out[dto.DeleteResult], error) {
+	hostDelete := huma.Operation{OperationID: "delete-host-module-data", Method: "DELETE", Path: "/environments/{id}/modules/{module}/data", Tags: []string{"Modules"}}
+	if !agent {
+		// The hub deletes its own host data only through the management route, which
+		// also asks every agent; the local host form stays absent after access checks.
+		hostDelete.Middlewares = huma.Middlewares{func(ctx huma.Context, _ func(huma.Context)) { _ = middleware.APINotFound(humaecho.Unwrap(ctx)) }}
+	}
+	middleware.RegisterWithPermission(api, hostDelete, authz.PermSettingsWrite, func(ctx context.Context, input *HostDeleteInput) (*handlerutil.Out[dto.DeleteResult], error) {
 		if d, ok := features.Lookup(input.ID); !ok || d.Kind != features.Module {
 			return nil, huma.Error404NotFound("Not Found")
 		}
@@ -88,6 +98,19 @@ func RegisterRoutes(api huma.API, service *Service, hosts *environment.Environme
 			item.Delete.Responses["409"] = &huma.Response{Description: "Module must be off and idle", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: schema}}}
 		}
 	}
+}
+
+// refusalCode keeps a reachable agent's bounded module refusal as the cleanup reason.
+func refusalCode(body []byte) string {
+	var problem dto.Problem
+	if json.Unmarshal(body, &problem) != nil {
+		return ""
+	}
+	switch problem.Code {
+	case "module-on", "module-busy", "feature-disabled":
+		return problem.Code
+	}
+	return ""
 }
 
 func out[T any](data T) *handlerutil.Out[T] {

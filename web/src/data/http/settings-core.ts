@@ -57,7 +57,8 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     if (!response.ok) {
       if (/\bjson\b/i.test(response.headers.get("Content-Type") ?? "")) {
         const body: unknown = await response.json().catch(() => undefined);
- const moduleError = moduleProblem(body,response.status); if (moduleError) throw moduleError;
+        const moduleError = moduleProblem(body, response.status, false);
+        if (moduleError) throw moduleError;
  const problem = settingsProblem(body, response.status);
         if (problem instanceof SettingsProblemError) throw problem;
       } else discardResponse(response);
