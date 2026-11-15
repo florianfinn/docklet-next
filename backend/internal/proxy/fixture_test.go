@@ -34,6 +34,7 @@ type fakeRuntime struct {
 	checkErr                   error
 	rebindErr                  error
 	rebound                    bool
+	epochErr                   error
 	beforePublish              func()
 	publications, restorations int
 }
@@ -121,6 +122,10 @@ func (f *fakeRuntime) Cleanup(_ context.Context, i Intent) error {
 func (f *fakeRuntime) Epoch(context.Context, dto.Instance) (bool, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// Like DockerRuntime.Epoch, an inspect failure reports a stopped container.
+	if f.epochErr != nil {
+		return false, "", f.epochErr
+	}
 	return f.running, f.epoch, nil
 }
 

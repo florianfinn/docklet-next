@@ -38,6 +38,13 @@ type Module struct {
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 	passes      sync.Map
+	// lifeMu orders Stop against every new unit of reconciler work, so a callback
+	// already captured by the online notifier cannot start a pass after Stop.
+	lifeMu  sync.Mutex
+	stopped bool
+	// every overrides reconcileInterval and passHook observes pass start and end in tests.
+	every    time.Duration
+	passHook func(key string, finished bool)
 }
 
 // reconcileInterval bounds how long an unfinished record waits without an agent-online event.
@@ -83,7 +90,11 @@ func (m *Module) Start(ctx context.Context) error {
 		if m.Transport != nil && m.Transport.Hosts != nil {
 			subscribe = m.Transport.Hosts.SubscribeAgentOnline
 		}
-		m.startReconciler(subscribe, reconcileInterval)
+		interval := m.every
+		if interval == 0 {
+			interval = reconcileInterval
+		}
+		m.startReconciler(subscribe, interval)
 	}
 	return nil
 }
@@ -96,7 +107,9 @@ func (m *Module) startReconciler(subscribe func(func(context.Context, string)) f
 		m.unsubscribe = subscribe(func(_ context.Context, id string) { m.reconcileAsync(id) })
 	}
 	m.reconcileAsync("")
-	m.wg.Add(1)
+	if !m.admit() {
+		return
+	}
 	go func() {
 		defer m.wg.Done()
 		t := time.NewTicker(interval)
@@ -123,12 +136,30 @@ func (m *Module) reconcileAsync(environmentID string) {
 	if _, running := m.passes.LoadOrStore(key, true); running {
 		return
 	}
-	m.wg.Add(1)
+	if !m.admit() {
+		m.passes.Delete(key)
+		return
+	}
 	go func() {
 		defer m.wg.Done()
 		defer m.passes.Delete(key)
+		if m.passHook != nil {
+			m.passHook(key, false)
+			defer m.passHook(key, true)
+		}
 		m.reconcile(life, environmentID)
 	}()
+}
+
+// admit counts one unit of reconciler work unless Stop has begun.
+func (m *Module) admit() bool {
+	m.lifeMu.Lock()
+	defer m.lifeMu.Unlock()
+	if m.stopped {
+		return false
+	}
+	m.wg.Add(1)
+	return true
 }
 func reconcileKey(environmentID string) string {
 	if environmentID == "" {
@@ -365,6 +396,9 @@ func (m *Module) reconcile(ctx context.Context, environmentID string) {
 	}
 }
 func (m *Module) Stop(context.Context) error {
+	m.lifeMu.Lock()
+	m.stopped = true
+	m.lifeMu.Unlock()
 	if m.unsubscribe != nil {
 		m.unsubscribe()
 	}

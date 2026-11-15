@@ -61,6 +61,7 @@ type m27ModuleFixture struct {
 	version                    atomic.Int32
 	wrongFingerprint           atomic.Bool
 	tunnel                     *edge.AgentTunnel
+	agentServer                *httptest.Server
 }
 
 func m27Settings(t *testing.T, db *database.DB) *settings.SettingsService {
@@ -150,6 +151,7 @@ func newM27ModuleFixture(t *testing.T, mode string, probe bool, extend ...func(*
 	})
 	server := httptest.NewServer(x.agent)
 	t.Cleanup(server.Close)
+	x.agentServer = server
 	var keyID string
 	require.NoError(t, x.f.db.Table("api_keys").Select("id").Where("environment_id = ?", "example").Limit(1).Scan(&keyID).Error)
 	endpoint := server.URL

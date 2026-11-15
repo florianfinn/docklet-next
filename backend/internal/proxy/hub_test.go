@@ -32,6 +32,8 @@ type localTransport struct {
 	block             chan struct{}
 	releaseMutate     func(*dto.Operation)
 	afterRelease      func()
+	applyMutate       func(*dto.Operation)
+	fenceErr          error
 }
 
 func (t *localTransport) Registration(context.Context, string) (string, error) { return t.reg, nil }
@@ -54,6 +56,9 @@ func (t *localTransport) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Ope
 	if t.drop {
 		return dto.Operation{}, errors.New("response lost")
 	}
+	if t.applyMutate != nil {
+		t.applyMutate(&o)
+	}
 	return o, err
 }
 func (t *localTransport) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
@@ -67,6 +72,9 @@ func (t *localTransport) Query(ctx context.Context, q dto.Query) (dto.Operation,
 	return t.a.Query(ctx, q)
 }
 func (t *localTransport) Fence(ctx context.Context, q dto.Query) (dto.FenceResult, error) {
+	if t.fenceErr != nil {
+		return dto.FenceResult{}, t.fenceErr
+	}
 	r, err := t.a.Fence(ctx, q)
 	if t.fenceGeneration != "" {
 		r.Generation = t.fenceGeneration
