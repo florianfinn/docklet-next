@@ -54,7 +54,10 @@ func TestCheckAndEpochRealDockerSeam(t *testing.T) {
 			} else {
 				requireCode(t, err, tt.check)
 			}
-			running, startedAt, err := d.Epoch(t.Context(), i)
+			var running bool
+			var startedAt string
+			var err error
+			require.NotPanics(t, func() { running, startedAt, err = d.Epoch(t.Context(), i) })
 			if tt.epoch != "" {
 				requireCode(t, err, tt.epoch)
 				return

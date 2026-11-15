@@ -101,8 +101,49 @@ func TestPublishAndRestorePreserveOperatorBytes(t *testing.T) {
 			b, readErr := os.ReadFile(filepath.Join(root, i.Request.Target))
 			require.NoError(t, readErr)
 			require.Equal(t, "operator", string(b))
+			temp, readErr := os.ReadFile(filepath.Join(root, i.TempPath))
+			require.NoError(t, readErr)
+			require.Equal(t, "new", string(temp), "a refused operation writes nothing")
 		})
 	}
+}
+
+// Restore on the real file seam: an old target needs nothing, a new target gets the old bytes back.
+func TestRestoreFollowsOldAndNewTargets(t *testing.T) {
+	for _, current := range []string{"old", "new"} {
+		t.Run(current, func(t *testing.T) {
+			x := newFixture(t)
+			root := t.TempDir()
+			i := fileIntent(t, x, root)
+			require.NoError(t, os.WriteFile(filepath.Join(root, i.Request.Target), []byte(current), 0644))
+			require.NoError(t, fileSeam(t, x, root).Restore(t.Context(), i))
+			b, err := os.ReadFile(filepath.Join(root, i.Request.Target))
+			require.NoError(t, err)
+			require.Equal(t, "old", string(b))
+		})
+	}
+}
+
+// Cleanup returns an untyped Docker failure unchanged instead of trying a rebind.
+func TestCleanupKeepsUntypedWriterError(t *testing.T) {
+	x := newFixture(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if regexp.MustCompile(`^/v[0-9.]+`).ReplaceAllString(r.URL.Path, "") == "/_ping" {
+			w.Header().Set("API-Version", "1.54")
+			_, _ = w.Write([]byte("OK"))
+			return
+		}
+		w.WriteHeader(500)
+	}))
+	defer server.Close()
+	d := &DockerRuntime{Docker: dockerinternal.NewDockerClientService(t.Context(), nil, &config.Config{DockerHost: server.URL}, nil), Settings: x.settings, DB: x.db}
+	i := Intent{Request: x.request}
+	paths(&i)
+	var err error
+	require.NotPanics(t, func() { err = d.Cleanup(t.Context(), i) })
+	require.Error(t, err)
+	var p *dto.Problem
+	require.False(t, errors.As(err, &p), "the original untyped error is returned")
 }
 
 // Publish refuses a changed configuration graph although the target itself is unchanged.
@@ -153,6 +194,9 @@ func TestRebindRefusesIncompleteInspect(t *testing.T) {
 				_, _ = w.Write([]byte("OK"))
 			case strings.HasSuffix(p, "/json"):
 				_ = json.NewEncoder(w).Encode(payload)
+			case strings.HasSuffix(p, "/archive"):
+				stat, _ := json.Marshal(container.PathStat{Name: "proxy", Mode: os.ModeDir | 0755})
+				w.Header().Set("X-Docker-Container-Path-Stat", base64.StdEncoding.EncodeToString(stat))
 			default:
 				w.WriteHeader(404)
 			}
