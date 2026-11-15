@@ -706,7 +706,7 @@
           "imageLifecycle": {"$ref":"#/components/schemas/UpdaterLifecycleResult"},
           "latestMessage": {"type":"string"},
           "messageCode": {
-            "enum": ["container.recreate-recovered","container.recreate-ambiguous","container.origin-locked","runtime.idempotency-mismatch","run.request-mismatch","runtime.outcome-unknown","runtime.interrupted","runtime.cancelled","runtime.failed","runtime.wait-timeout","runtime.waiter-disconnected","runtime.parent-unresolved","runtime.target-removed","runtime.target-changed","runtime.target-unavailable","run.started","run.joined","run.fresh","run.busy","run.cancelling","activity.queued","activity.running","activity.success","activity.failed","activity.cancelled","activity.message","deploy.pull","job.queued","job.waiting","job.running","job.retrying","job.succeeded","job.partial","job.skipped","job.failed","job.needs_attention","job.canceled","container.die","container.oom","container.rename","container.unhealthy","image.untag","image.import","image.prune","volume.prune","network.prune","container.start","container.stop","container.restart","container.delete","container.create","container.scan","container.update","container.deploy","container.kill","container.pause","container.unpause","container.error","image.pull","image.load","image.tag","image.commit","image.delete","image.scan","image.error","image.vulnerability_scan","project.deploy","project.delete","project.start","project.stop","project.create","project.update","project.error","volume.create","volume.rename","volume.delete","volume.error","volume.file.create","volume.file.delete","volume.file.upload","volume.file.update","volume.workspace.update","volume.backup.create","volume.backup.delete","volume.backup.restore","volume.backup.restore_files","volume.backup.download","volume.backup.target.key_viewed","network.create","network.delete","network.connect","network.disconnect","network.error","system.prune","user.login","user.logout","system.auto_update","system.upgrade","environment.create","environment.connect","environment.disconnect","environment.update","environment.delete","environment.api_key.regenerated","environment.mtls.ca_generated","environment.mtls.cert_issued","environment.mtls.enroll","environment.mtls.download","notification.send","autoheal.restarted","autoheal.restart-failed","autoheal.limit-reached","autoheal.interrupted","notification.delivery-failed","load.sustained","container.condition.down","container.condition.unhealthy","container.condition.restart-loop","container.condition.running-again","update.self-failed","update.outcome-unknown"],
+            "enum": ["container.recreate-recovered","container.recreate-ambiguous","container.origin-locked","runtime.idempotency-mismatch","run.request-mismatch","runtime.outcome-unknown","runtime.interrupted","runtime.cancelled","runtime.failed","runtime.wait-timeout","runtime.waiter-disconnected","runtime.parent-unresolved","runtime.target-removed","runtime.target-changed","runtime.target-unavailable","run.started","run.joined","run.fresh","run.busy","run.cancelling","activity.queued","activity.running","activity.success","activity.failed","activity.cancelled","activity.message","deploy.pull","job.queued","job.waiting","job.running","job.retrying","job.succeeded","job.partial","job.skipped","job.failed","job.needs_attention","job.canceled","container.die","container.oom","container.rename","container.unhealthy","image.untag","image.import","image.prune","volume.prune","network.prune","container.start","container.stop","container.restart","container.delete","container.create","container.scan","container.update","container.deploy","container.kill","container.pause","container.unpause","container.error","image.pull","image.load","image.tag","image.commit","image.delete","image.scan","image.error","image.vulnerability_scan","project.deploy","project.delete","project.start","project.stop","project.create","project.update","project.error","volume.create","volume.rename","volume.delete","volume.error","volume.file.create","volume.file.delete","volume.file.upload","volume.file.update","volume.workspace.update","volume.backup.create","volume.backup.delete","volume.backup.restore","volume.backup.restore_files","volume.backup.download","volume.backup.target.key_viewed","network.create","network.delete","network.connect","network.disconnect","network.error","system.prune","user.login","user.logout","system.auto_update","system.upgrade","environment.create","environment.connect","environment.disconnect","environment.update","environment.delete","environment.api_key.regenerated","environment.mtls.ca_generated","environment.mtls.cert_issued","environment.mtls.enroll","environment.mtls.download","notification.send","autoheal.restarted","autoheal.restart-failed","autoheal.limit-reached","autoheal.interrupted","notification.delivery-failed","load.sustained","container.condition.down","container.condition.unhealthy","container.condition.restart-loop","container.condition.running-again","update.self-failed","update.outcome-unknown","proxy.operation.released"],
             "type": "string"
           },
           "metadata": {"additionalProperties":{},"type":"object"},
@@ -928,5 +928,66 @@
       "moduleProxyEnabled": {"enum":["true","false"],"type":["string","null"]}
     },
     "minimumContract": 19
+  },
+  "proxy": {
+    "routes": [
+      {"method":"POST","path":"/environments/{id}/modules/proxy/apply","operationId":"apply-proxy-operation","sha256":"a944cec79383f90c643a8cede801355ffe77e4df4609f71a1a84a8f00626fa58"},
+      {"method":"GET","path":"/environments/{id}/modules/proxy/discover","operationId":"discover-proxy-containers","sha256":"a3772af9367833c08ab7af4f0becd410117cf471ef3086e0997a6a85506c1333"},
+      {"method":"POST","path":"/environments/{id}/modules/proxy/fence","operationId":"fence-proxy-operation","sha256":"413613c183b1913bf65ed800dcc05d9286cf3e80f32d2eda067856534cc75b7b"},
+      {"method":"POST","path":"/environments/{id}/modules/proxy/inventory","operationId":"get-proxy-inventory","sha256":"37dc68f0818b4013356e3bf89e6d344bac0b3d4d24989372b50d9676df9ee67d"},
+      {"method":"GET","path":"/environments/{id}/modules/proxy/operations/{operationId}","operationId":"get-host-proxy-operation","sha256":"b03b95b20550d9240c72d4d137a8619f8e9b697eebccb4bbb84fb82e0462d257"},
+      {"method":"POST","path":"/environments/{id}/modules/proxy/read","operationId":"read-proxy-configuration","sha256":"e8f76fa89e400f179ef78bfb861746c174b17f01f3d2b09ccc4f9644fcbe0615"},
+      {"method":"POST","path":"/environments/{id}/modules/proxy/release","operationId":"release-host-proxy-operation","sha256":"a7f32e8509c93f2ca16e5d472a5f19129653f6ab9640cccf8f3d88f7866d46aa"},
+      {"method":"GET","path":"/modules/proxy/discover","operationId":"discover-proxy-instances","sha256":"63865221f17460c122fbc3bfbb2530ccd639c48e50f852ba3469248b959c2d2a"},
+      {"method":"GET","path":"/modules/proxy/instances","operationId":"list-proxy-instances","sha256":"6fe74ab2a18bf4ac1d97de430c226a3c91717024993beb1f948d96d6adbe8fc7"},
+      {"method":"POST","path":"/modules/proxy/instances","operationId":"create-proxy-instance","sha256":"48ea6f8954b4184f9da076290ab6a71292863b49bdcf917059e4cafb8c62eda3"},
+      {"method":"DELETE","path":"/modules/proxy/instances/{instanceId}","operationId":"remove-proxy-instance","sha256":"a059faedf82ed117f97932b468992b540f74ccfb03b25976c0e6cdd6bb53d782"},
+      {"method":"GET","path":"/modules/proxy/instances/{instanceId}","operationId":"get-proxy-instance","sha256":"22941e086c98025f525dc3dcf9ca4d657346296473dd5a37febeb0c31d25595b"},
+      {"method":"PUT","path":"/modules/proxy/instances/{instanceId}","operationId":"update-proxy-instance","sha256":"69fdeb389b6c45a49fb10b6e1c8b70ff6c95cae8d1f7adcba2306574e6b94dd5"},
+      {"method":"GET","path":"/modules/proxy/instances/{instanceId}/operations","operationId":"list-proxy-operations","sha256":"04aefdafc6956e596669d3a0e8ad1eb3449c3a78a14192537758fdff97b17600"},
+      {"method":"POST","path":"/modules/proxy/instances/{instanceId}/operations","operationId":"create-proxy-operation","sha256":"99d4e93101d4aa1645aca955210ea3ac7c5c9fe2d3d2fb597d51921c58051f37"},
+      {"method":"GET","path":"/modules/proxy/operations/{operationId}","operationId":"get-proxy-operation","sha256":"2793d54c86629ec2744f7438b41d3045b2e1e9f9b1835d18c530297449b5b85c"},
+      {"method":"POST","path":"/modules/proxy/operations/{operationId}/release","operationId":"release-proxy-operation","sha256":"810bf184043471178e7de67e42584f6f46b1409eb144a295380fec224cacd8c2"}
+    ],
+    "schemas": {
+      "ProxyAcknowledgements": {"sha256":"765ec53e86a95fcc2e04581033a6178072e96f634f0debbaf76316a74600ac51"},
+      "ProxyApplyRequest": {"sha256":"abf56f2ccd8937db8dfe16be3b36ddd1a7870e8e1558067a22a08f558d176ff4"},
+      "ProxyChange": {"sha256":"a86a09e637dd9b422156530a394a4e75303b09e8e978eac3acf49f159b30dba5"},
+      "ProxyCreateInstanceRequest": {"sha256":"a989c2c1a73a510e8bdfd84d9f697172820fef9f02d059c72a1c1cf9ee90bfba"},
+      "ProxyDiscovery": {"sha256":"54a7372468ae5a0bcc24c9399ad03321b550aa4e678e38e68cc6c3cacc9e68c0"},
+      "ProxyEligibility": {"sha256":"2283a685a47eaa2c9f07afd99753c1aa629e12a257247651924c604f5a5ff15b"},
+      "ProxyEntryPoint": {"sha256":"8e5fa9dd3c0a874f9a9639e2d1b929db00e07b8937bb43661fcdd0db2288d547"},
+      "ProxyFenceResult": {"sha256":"fd6324c64aee4ac0f8473739891510d302b840fd5db8189a86808e4ca4d6b4b2"},
+      "ProxyFile": {"sha256":"f86981bf657a800b2324cf3700b3b7c927888463ab5b4d855e27e8384943122b"},
+      "ProxyFileState": {"sha256":"bac1b28ecb93e9c0b79d0ea0cdfa1b9bcc2706af8a5af3be9deb412359e73b4e"},
+      "ProxyIdentity": {"sha256":"4d3addc6b08262c919a30fb303012f45dbf0af25863d81afb6a331ad024123ea"},
+      "ProxyInstance": {"sha256":"2e0873b9b144ee69b25d9812691e0d1e90e64c1b0d6fff69e22e3d59247eb0c4"},
+      "ProxyInventory": {"sha256":"3c668d2d1c913e23cc36ca97c2b56cdcd1f777dd9608c791dd1fb235105ab9de"},
+      "ProxyOpaqueFile": {"sha256":"39b714704935190561ed407980480b9a4a0b346b97346e0bff71fb9ace820194"},
+      "ProxyOperation": {"sha256":"4082cd5d8d87e58e3f98c831576b4b0b5f90fa41f4e0ca21b406fa4503bc1f24"},
+      "ProxyOperationRequest": {"sha256":"66dd2c1811129df4689fec5aea29602810049af3a2a7bec59fc1230b5858aba3"},
+      "ProxyProblem": {"sha256":"3908b0eb093f29acc04d7c5e822a2e37037e64c276db71939f1f8208bb79651b"},
+      "ProxyQuery": {"sha256":"0712976b0f1a1b4f24a08852f31092a370559505775492c829bb6549471f2306"},
+      "ProxyReadResult": {"sha256":"1124f383648a591276e0b797fcf53235836635365d4443c6277da6bc544a0eda"},
+      "ProxyReference": {"sha256":"47a8c593118d9bf14242aa4abade468f05f240f216c2716359273279f822e2b6"},
+      "ProxyReleaseRequest": {"sha256":"d40db29e119a2d713d81661d16c6d4e930fb63f109b3a1f67166b28b35a492fa"},
+      "ProxyRoute": {"sha256":"2172266cfe78c350310ce6708f00ae0f65a1cd7a1198b6f9cd459a5c9849437a"},
+      "ProxySettings": {"sha256":"159efd92f47b56019adb3075aaaa6ef646b4b357245b40182cc4f51b41dfc3bc"},
+      "ProxySource": {"sha256":"ec684feb6c09aa9fc38af7ee9043411de3fbf39ccaf4eafdc3ce28d520bf6c83"}
+    },
+    "edgeRoutes": [
+      {"method":"GET","path":"/api/environments/{id}/modules/proxy/discover","command":"proxy.discover"},
+      {"method":"POST","path":"/api/environments/{id}/modules/proxy/inventory","command":"proxy.inventory"},
+      {"method":"POST","path":"/api/environments/{id}/modules/proxy/read","command":"proxy.read"},
+      {"method":"POST","path":"/api/environments/{id}/modules/proxy/apply","command":"proxy.apply"},
+      {"method":"GET","path":"/api/environments/{id}/modules/proxy/operations/{operationId}","command":"proxy.operation"},
+      {"method":"POST","path":"/api/environments/{id}/modules/proxy/fence","command":"proxy.fence"},
+      {"method":"POST","path":"/api/environments/{id}/modules/proxy/release","command":"proxy.release"},
+      {"method":"DELETE","path":"/api/environments/{id}/modules/{module}/data","command":"module.data.delete"}
+    ],
+    "states": ["pending","verified","applied-unverified","rejected","restored","recovery-required","released","not-applied"],
+    "phases": ["admitted","staging","publishing","reloading","restarting","observing","marking","restoring"],
+    "reasons": ["no-observable-difference","not-observable","container-changed","logs-unavailable","generation-mismatch","operation-conflict","module-busy","stale-hash","source-read-only","unknown-operation","operation-fenced","registration-changed","journal-lost","invalid-input","input-limit","exec-failed","exec-running","proxy-rejected","restore-failed","invalid-graph","incomplete-inventory","opaque-input","single-file-mount","refused-bind","read-only-mount","unknown-source","unsupported-metadata","watch-off","unsupported-format","template-input","rule-syntax-v2","shared-across-files","persistence-off","relative-import","import-missing","acknowledgement-required","probe-unavailable","probe-option-unavailable","admin-unavailable","agent-unavailable","engine-unavailable","target-changed"],
+    "evidence": ["routing","configuration","load"]
   }
 }

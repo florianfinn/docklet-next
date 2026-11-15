@@ -37,6 +37,20 @@ export function agentFixture(spec, fixture) {
     settings: Object.fromEntries(moduleDefinitions.map((d) => [d.settingKey, schemas.SettingsUpdate.properties[d.settingKey]])),
     minimumContract: 19,
   };
+  manifest.proxy = {
+    routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+      .filter(([, op]) => op?.tags?.includes("Proxy"))
+      .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
+    schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => name.startsWith("Proxy"))
+      .map(([name, value]) => [name, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }])),
+    edgeRoutes: [...readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8").matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^\"]+)",\s*CommandName:\s*"([^\"]+)"/g)]
+      .filter((match) => /^(proxy\.|module\.data\.delete$)/.test(match[3]))
+      .map((match) => ({ method: match[1].toUpperCase(), path: match[2], command: match[3] })),
+    states: schemas.ProxyOperation.properties.state.enum,
+    phases: schemas.ProxyOperation.properties.phase.enum,
+    reasons: schemas.ProxyProblem.properties.code.enum,
+    evidence: schemas.ProxyOperation.properties.evidence.enum,
+  };
   manifest.activityDiscovery = {
     route: `GET ${path}`,
     includeParameter: include,

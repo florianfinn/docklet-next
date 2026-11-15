@@ -1,3 +1,4 @@
+import { deProxyContract } from "@/data/messages/proxy-de";
 import { deRegistries } from "@/features/registries/messages/de";
 // German interface texts follow the English base. Feature files own their texts.
 import { deActivity, deUserEvents } from "@/features/activity/messages/de";
@@ -45,6 +46,7 @@ export const messages: typeof enMessages = {
   proxyLab: import.meta.env.DEV ? deProxy : ({} as typeof deProxy),
   visual: deVisual,
   dashboard: deDashboard,
+  proxyContract: deProxyContract,
   runMessages: deRunMessages,
   stacks: deStacks,
   editor: deEditor,

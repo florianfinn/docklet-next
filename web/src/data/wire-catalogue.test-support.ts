@@ -2,8 +2,9 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M24 recovery vocabulary classification. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472).
+// Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M24 recovery vocabulary classification. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy contract foundation (#473/#474).
 
+import {PROXY_STATE_KEYS,PROXY_REASON_KEYS} from "./wire-catalogue-proxy";
 import { MODULE_CODE_KEYS } from "./wire-catalogue-modules";
 import { RECOVERY_OUTCOME_KEYS } from "./wire-catalogue-update";
 import { ADVISORY_USAGE_CODE_KEYS, REQUEST_CODE_KEYS, IMAGE_ERROR_KEYS, CONTAINER_CODE_KEYS, HOST_CODE_KEYS, ACCESS_CODE_KEYS, NETWORK_CODE_KEYS, WIDGET_CODE_KEYS } from "./wire-catalogue-errors";
@@ -15,6 +16,9 @@ import { CANDIDATE_STATE_KEYS, CANDIDATE_RUN_STATUS_KEYS, BACKUP_STATUS_KEYS, BA
 
 /** Exact property identities are pinned, including equivalent unions on different DTOs. */
 export const GUARDED_WIRE_ENUMS = [
+{name:"PROXY_STATE_KEYS",keys:PROXY_STATE_KEYS,properties:["ProxyOperation.state"]},
+{name:"PROXY_REASON_KEYS",keys:PROXY_REASON_KEYS,properties:["ProxyProblem.code"]},
+
  {name:"MODULE_CODE_KEYS",keys:MODULE_CODE_KEYS,properties:["ModulesModuleProblem.code"]},
   { name: "RECOVERY_OUTCOME_KEYS", keys: RECOVERY_OUTCOME_KEYS, properties: ["UpdaterRecoveryResult.outcome"] },
   { name: "CANDIDATE_STATE_KEYS", keys: CANDIDATE_STATE_KEYS, properties: ["VulnerabilityCandidateResult.state"] },
@@ -53,6 +57,8 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
+ ...["ProxyOperation.phase", "ProxyInstance.kind", "ProxyDiscovery.kind", "ProxyCreateInstanceRequest.kind", "ProxySource.kind", "ProxyReference.kind"].map((property) => ({ property, reason: "S2 contract foundation has no production proxy page; S5 owns these rendered consumers and their render proofs. Total typed bilingual maps are frozen in wire-catalogue-proxy.ts. Outcome state/reason consumers already have guarded render proofs." })),
+{property:"ProxyChange.kind",reason:"Request action discriminator selected by the proxy editor; action captions come from feature labels and never display this transport selector."},
  {property:"ModulesState.kind",reason:"Static registry discriminator validated by the module decoder; the module settings UI renders translated module names, never this wire selector."},
   { property: "VulnerabilityAdvisoryUpdate.state", reason: "Consumer update states are translated with security.detail.updateAvailable, noUpdate and updateUnknown in AdvisoryContent." },
   { property: "VulnerabilityAdvisoryUsage.state", reason: "Usage availability controls the explicit security.detail.usageUnavailable message in AdvisoryContent." },

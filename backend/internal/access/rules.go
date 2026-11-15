@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding; single activity reads defer to the owner/target check. M23 #435: active image summaries. M25 latest agent restart read; optional-module foundation (#472).
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M17 runtime history and personal preferences; hub widget read and administration rules; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding; single activity reads defer to the owner/target check. M23 #435: active image summaries. M25 latest agent restart read; optional-module foundation (#472). M27 proxy contract foundation (#473/#474).
 
 package access
 
@@ -41,6 +41,24 @@ type Rule struct {
 
 // Rules is an exact operation allowlist. Missing entries fail closed.
 var Rules = map[string]Rule{
+	"discover-proxy-instances":     {Kind: Admin},
+	"discover-proxy-containers":    {Kind: Admin},
+	"get-proxy-inventory":          {Kind: Admin},
+	"read-proxy-configuration":     {Kind: Admin},
+	"apply-proxy-operation":        {Kind: Admin},
+	"get-host-proxy-operation":     {Kind: Admin},
+	"fence-proxy-operation":        {Kind: Admin},
+	"release-host-proxy-operation": {Kind: Admin},
+	"list-proxy-instances":         {Kind: Admin},
+	"create-proxy-instance":        {Kind: Admin},
+	"get-proxy-instance":           {Kind: Admin},
+	"update-proxy-instance":        {Kind: Admin},
+	"remove-proxy-instance":        {Kind: Admin},
+	"create-proxy-operation":       {Kind: Admin},
+	"list-proxy-operations":        {Kind: Admin},
+	"get-proxy-operation":          {Kind: Admin},
+	"release-proxy-operation":      {Kind: Admin},
+
 	"list-modules":                                 {Kind: Admin},
 	"delete-module-data":                           {Kind: Admin},
 	"delete-host-module-data":                      {Kind: Admin},

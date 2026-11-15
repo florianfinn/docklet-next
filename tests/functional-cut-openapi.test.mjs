@@ -5,6 +5,24 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  // M27 proxy contract foundation (#473/#474).
+  ["POST /environments/{id}/modules/proxy/apply", "apply-proxy-operation"],
+  ["GET /environments/{id}/modules/proxy/discover", "discover-proxy-containers"],
+  ["POST /environments/{id}/modules/proxy/fence", "fence-proxy-operation"],
+  ["POST /environments/{id}/modules/proxy/inventory", "get-proxy-inventory"],
+  ["GET /environments/{id}/modules/proxy/operations/{operationId}", "get-host-proxy-operation"],
+  ["POST /environments/{id}/modules/proxy/read", "read-proxy-configuration"],
+  ["POST /environments/{id}/modules/proxy/release", "release-host-proxy-operation"],
+  ["GET /modules/proxy/discover", "discover-proxy-instances"],
+  ["GET /modules/proxy/instances", "list-proxy-instances"],
+  ["POST /modules/proxy/instances", "create-proxy-instance"],
+  ["DELETE /modules/proxy/instances/{instanceId}", "remove-proxy-instance"],
+  ["GET /modules/proxy/instances/{instanceId}", "get-proxy-instance"],
+  ["PUT /modules/proxy/instances/{instanceId}", "update-proxy-instance"],
+  ["GET /modules/proxy/instances/{instanceId}/operations", "list-proxy-operations"],
+  ["POST /modules/proxy/instances/{instanceId}/operations", "create-proxy-operation"],
+  ["GET /modules/proxy/operations/{operationId}", "get-proxy-operation"],
+  ["POST /modules/proxy/operations/{operationId}/release", "release-proxy-operation"],
  ["GET /modules", "list-modules"],
  ["DELETE /modules/{id}/data", "delete-module-data"],
  ["DELETE /environments/{id}/modules/{module}/data", "delete-host-module-data"],

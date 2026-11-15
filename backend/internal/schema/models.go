@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M25 frozen baseline hosts model.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M25 frozen baseline hosts model. M27 proxy contract foundation (#473/#474).
 
 package schema
 
@@ -25,6 +25,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/notification/notificationoutbox"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/runtimeintent"
@@ -52,7 +53,7 @@ func Models() []any {
 			models[i] = &environment.Environment{}
 		}
 	}
-	return append(append(models, candidates.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{})
+	return append(append(append(models, candidates.Models()...), proxy.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{})
 }
 
 // BaselineModels freezes the model list used to generate release migration 001.

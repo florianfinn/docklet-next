@@ -1,3 +1,4 @@
+import { enProxyContract } from "@/data/messages/proxy-en";
 import { enRegistries } from "@/features/registries/messages/en";
 // American English interface texts define the catalogue shape for every locale.
 import { enActivity, enUserEvents } from "@/features/activity/messages/en";
@@ -43,6 +44,7 @@ export const enMessages = {
   proxyLab: import.meta.env.DEV ? enProxy : ({} as typeof enProxy),
   visual: enVisual,
   dashboard: enDashboard,
+  proxyContract: enProxyContract,
   runMessages: enRunMessages,
   stacks: enStacks,
   editor: enEditor,

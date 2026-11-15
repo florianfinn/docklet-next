@@ -396,3 +396,6 @@ The unreleased v17 self-update recovery envelope is described in [in-app updates
 Terminal health failures use `update.self-failed`; an unconfirmed interrupted
 operation uses `update.outcome-unknown`. Both retain the existing failed activity
 status and are separate from the immutable helper phase evidence.
+
+The proxy module records a confirmed administrator override as `proxy.operation.released`.
+The audit event and reservation release commit together; actor, operation and target hashes remain available.

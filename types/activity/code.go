@@ -2,7 +2,7 @@
 // Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: Stable wire-code catalogue for runs and events; M17 runtime history and personal preferences.
+// Deviations: Stable wire-code catalogue for runs and events; M17 runtime history and personal preferences. M27 proxy contract foundation (#473/#474).
 
 package activity
 
@@ -10,6 +10,7 @@ package activity
 type Code string
 
 const (
+	CodeProxyReleased              Code = "proxy.operation.released"
 	CodeSelfUpdateFailed           Code = "update.self-failed"
 	CodeSelfUpdateUnknown          Code = "update.outcome-unknown"
 	CodeLoadSustained              Code = "load.sustained"
@@ -240,7 +241,7 @@ func Values() []Code {
 		CodeAutoHealLimitReached,
 		CodeAutoHealInterrupted,
 		CodeNotificationDeliveryFailed,
-		CodeLoadSustained, CodeConditionDown, CodeConditionUnhealthy, CodeConditionRestartLoop, CodeConditionRunningAgain, CodeSelfUpdateFailed, CodeSelfUpdateUnknown,
+		CodeLoadSustained, CodeConditionDown, CodeConditionUnhealthy, CodeConditionRestartLoop, CodeConditionRunningAgain, CodeSelfUpdateFailed, CodeSelfUpdateUnknown, CodeProxyReleased,
 	}
 }
 

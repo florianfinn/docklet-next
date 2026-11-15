@@ -2,7 +2,7 @@
 // Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
 // Retrieved: 2026-11-15
 // License: Apache-2.0
-// Deviations: Original real-router module fixture with Direct and Edge senders and receivers.
+// Deviations: Original real-router module fixture with Direct and Edge senders and receivers. M27 proxy contract foundation (#473/#474).
 
 package bootstrap
 
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,6 +50,7 @@ type m27ModuleFixture struct {
 	f                          signInRoutingFixture
 	hub                        *echo.Echo
 	agent                      http.Handler
+	agentIntercept             func(http.ResponseWriter, *http.Request, http.Handler)
 	hubSettings, agentSettings *settings.SettingsService
 	manager, agentManager      *modules.Service
 	hosts                      *environment.EnvironmentService
@@ -79,7 +81,7 @@ func m27DB(t *testing.T) *database.DB {
 
 // The test operation uses the existing bounded module cleanup command path. Its
 // test router deliberately makes it gated work, rather than management cleanup.
-func newM27ModuleFixture(t *testing.T, mode string, probe bool) *m27ModuleFixture {
+func newM27ModuleFixture(t *testing.T, mode string, probe bool, extend ...func(*m27ModuleFixture, huma.API)) *m27ModuleFixture {
 	t.Helper()
 	x := &m27ModuleFixture{f: newSignInRoutingFixture(t)}
 	x.online.Store(true)
@@ -91,6 +93,13 @@ func newM27ModuleFixture(t *testing.T, mode string, probe bool) *m27ModuleFixtur
 	agent := echo.New()
 	agentConfig := huma.DefaultConfig("module agent", "test")
 	agentConfig.Security = handlerutil.DefaultOperationSecurity()
+	agentConfig.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", func(t reflect.Type, hint string) string {
+		n := huma.DefaultSchemaNamer(t, hint)
+		if strings.Contains(t.PkgPath(), "/types/proxy") {
+			return "Proxy" + n
+		}
+		return n
+	})
 	agentAPI := humaecho.NewWithGroup(agent, agent.Group("/api"), agentConfig)
 	cfg := &config.Config{AgentMode: true, AgentToken: "example"}
 	agentAPI.UseMiddleware(auth.NewHumaMiddleware(agentAPI, &auth.AuthService{}, nil, nil, nil, cfg))
@@ -125,12 +134,19 @@ func newM27ModuleFixture(t *testing.T, mode string, probe bool) *m27ModuleFixtur
 	}) (*struct{ Body map[string]any }, error) {
 		return &struct{ Body map[string]any }{Body: map[string]any{"success": true}}, nil
 	})
+	for _, setup := range extend {
+		setup(x, agentAPI)
+	}
 	x.agent = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !x.online.Load() {
 			w.WriteHeader(503)
 			return
 		}
-		agent.ServeHTTP(w, r)
+		if x.agentIntercept != nil {
+			x.agentIntercept(w, r, agent)
+		} else {
+			agent.ServeHTTP(w, r)
+		}
 	})
 	server := httptest.NewServer(x.agent)
 	t.Cleanup(server.Close)
@@ -148,6 +164,13 @@ func newM27ModuleFixture(t *testing.T, mode string, probe bool) *m27ModuleFixtur
 	x.hub = hub
 	hubConfig := huma.DefaultConfig("module hub", "test")
 	hubConfig.Security = handlerutil.DefaultOperationSecurity()
+	hubConfig.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", func(t reflect.Type, hint string) string {
+		n := huma.DefaultSchemaNamer(t, hint)
+		if strings.Contains(t.PkgPath(), "/types/proxy") {
+			return "Proxy" + n
+		}
+		return n
+	})
 	hubAPI := humaecho.NewWithGroup(hub, hub.Group("/api"), hubConfig)
 	x.hubAPI = hubAPI
 	hubAPI.UseMiddleware(auth.NewHumaMiddleware(hubAPI, x.f.svc, x.f.keys, x.f.roles, x.hosts, x.f.cfg))

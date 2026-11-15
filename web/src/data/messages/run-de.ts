@@ -343,6 +343,7 @@ export const deRunMessages = {
       "volume_file_delete": "Datei im Volume gelöscht",
       "volume_file_upload": "Datei ins Volume hochgeladen",
       "volume_file_update": "Dateien im Volume aktualisiert",
+      "proxy_operation_released": "Proxy-Vorgang freigegeben",
       "volume_workspace_update": "Volume-Arbeitsbereich aktualisiert",
       "volume_backup_create": "Volume-Backup erstellt",
       "volume_backup_delete": "Volume-Backup gelöscht",

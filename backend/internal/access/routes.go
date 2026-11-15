@@ -2,13 +2,31 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472).
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474).
 
 package access
 
 // Routes describes the shared exported surface for pre-forwarding decisions.
 // Huma uses the matched operation and its actual parameters.
 var Routes = []Route{
+	{"GET", "/modules/proxy/discover", "discover-proxy-instances"},
+	{"GET", "/environments/{id}/modules/proxy/discover", "discover-proxy-containers"},
+	{"POST", "/environments/{id}/modules/proxy/inventory", "get-proxy-inventory"},
+	{"POST", "/environments/{id}/modules/proxy/read", "read-proxy-configuration"},
+	{"POST", "/environments/{id}/modules/proxy/apply", "apply-proxy-operation"},
+	{"GET", "/environments/{id}/modules/proxy/operations/{operationId}", "get-host-proxy-operation"},
+	{"POST", "/environments/{id}/modules/proxy/fence", "fence-proxy-operation"},
+	{"POST", "/environments/{id}/modules/proxy/release", "release-host-proxy-operation"},
+	{"GET", "/modules/proxy/instances", "list-proxy-instances"},
+	{"POST", "/modules/proxy/instances", "create-proxy-instance"},
+	{"GET", "/modules/proxy/instances/{instanceId}", "get-proxy-instance"},
+	{"PUT", "/modules/proxy/instances/{instanceId}", "update-proxy-instance"},
+	{"DELETE", "/modules/proxy/instances/{instanceId}", "remove-proxy-instance"},
+	{"POST", "/modules/proxy/instances/{instanceId}/operations", "create-proxy-operation"},
+	{"GET", "/modules/proxy/instances/{instanceId}/operations", "list-proxy-operations"},
+	{"GET", "/modules/proxy/operations/{operationId}", "get-proxy-operation"},
+	{"POST", "/modules/proxy/operations/{operationId}/release", "release-proxy-operation"},
+
 	{"GET", "/modules", "list-modules"},
 	{"DELETE", "/modules/{id}/data", "delete-module-data"},
 	{"DELETE", "/environments/{id}/modules/{module}/data", "delete-host-module-data"},

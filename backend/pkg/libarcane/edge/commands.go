@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Container log download command (#379); functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.; M26 #394 volume collection routes under _collection; optional-module foundation (#472).
+// Deviations: Container log download command (#379); functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences.; M26 #394 volume collection routes under _collection; optional-module foundation (#472).; proxy contract foundation (#473/#474).
 
 package edge
 
@@ -17,6 +17,14 @@ import (
 )
 
 var commandRoutes = withVulnerabilityRoutes([]commandRoute{
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/modules/proxy/discover", CommandName: "proxy.discover"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/inventory", CommandName: "proxy.inventory"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/read", CommandName: "proxy.read"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/apply", CommandName: "proxy.apply"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/modules/proxy/operations/{operationId}", CommandName: "proxy.operation"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/fence", CommandName: "proxy.fence"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/release", CommandName: "proxy.release"},
+
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/modules/{module}/data", CommandName: "module.data.delete"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/0/history/sample", CommandName: "history.sample"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/check", CommandName: "updater.project.check"},

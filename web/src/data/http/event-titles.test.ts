@@ -2,7 +2,7 @@
 // Revision: 531ec931838ed09c311ebb29a4624f211bb3a7a1
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original hub event title localisation tests from persisted producer shapes (M17 acceptance review M17-AR8 to AR11). M19 web consumer integration.
+// Deviations: Original hub event title localisation tests from persisted producer shapes (M17 acceptance review M17-AR8 to AR11). M19 web consumer integration. M27 proxy contract foundation (#473/#474).
 
 import { expect, it, vi } from "vitest";
 
@@ -21,6 +21,7 @@ const event = (messageCode: string, title: string, extra: Record<string, unknown
 }) as unknown as Event;
 
 it.each([
+  ["proxy.operation.released", "proxy.operation.released", { resourceName: undefined }, "Proxy-Vorgang freigegeben", "Proxy operation released"],
   ["container.start", "Container started: web", {}, "Container gestartet: web", "Container started: web"],
   ["container.die", "Docker container die: web", {}, "Container beendet: web", "Container exited: web"],
   ["network.delete", "Docker network destroy: web_default", { resourceName: "web_default" }, "Netzwerk gelöscht: web_default", "Network deleted: web_default"],
@@ -41,7 +42,7 @@ it("gives every catalogued hub event a German title instead of the hub's English
   try {
     const english = "Hub generated English title";
     const untranslated = HUB_EVENT_CODES.filter((code) => renderEvent(mapEvent(event(code, english)), "de").title.includes(english));
-    expect(HUB_EVENT_CODES.length).toBe(71);
+    expect(HUB_EVENT_CODES.length).toBe(72);
     expect(untranslated).toEqual([]);
     // Each catalogue title belongs to an event code; none is left without a producer.
     expect(Object.keys(catalogs["en-US"].runMessages.events.labels).sort()).toEqual([...HUB_EVENT_CODES.map(eventTitleKey), ...EVENT_TITLE_VARIANTS].sort());

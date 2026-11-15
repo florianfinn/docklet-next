@@ -48,6 +48,8 @@ GET /environments/{id}/job-schedules
 GET /environments/{id}/jobs
 GET /environments/{id}/jobs/{jobId}/runs
 GET /environments/{id}/jobs/{jobId}/runs/{runId}
+GET /environments/{id}/modules/proxy/discover
+GET /environments/{id}/modules/proxy/operations/{operationId}
 GET /environments/{id}/networks
 GET /environments/{id}/networks/counts
 GET /environments/{id}/networks/topology
@@ -150,6 +152,11 @@ POST /environments/{id}/jobs/{jobId}/runs/{runId}/ack
 POST /environments/{id}/jobs/{jobId}/runs/{runId}/cancel
 POST /environments/{id}/jobs/{jobId}/runs/{runId}/resolve
 POST /environments/{id}/jobs/{jobId}/runs/{runId}/retry
+POST /environments/{id}/modules/proxy/apply
+POST /environments/{id}/modules/proxy/fence
+POST /environments/{id}/modules/proxy/inventory
+POST /environments/{id}/modules/proxy/read
+POST /environments/{id}/modules/proxy/release
 POST /environments/{id}/networks
 POST /environments/{id}/networks/prune
 POST /environments/{id}/networks/{networkId}/connect

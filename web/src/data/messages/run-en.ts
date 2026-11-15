@@ -343,6 +343,7 @@ export const enRunMessages = {
       "volume_file_delete": "Volume file deleted",
       "volume_file_upload": "Volume file uploaded",
       "volume_file_update": "Volume files updated",
+      "proxy_operation_released": "Proxy operation released",
       "volume_workspace_update": "Volume workspace updated",
       "volume_backup_create": "Volume backup created",
       "volume_backup_delete": "Volume backup deleted",

@@ -2,7 +2,7 @@
 // Revision: b3607be5144101152c8eb7738d389e8c73986fba
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Bidirectional SQLite schema proof and independent retained-integrity assertions; M19 target-name collation and condition persistence.
+// Deviations: Bidirectional SQLite schema proof and independent retained-integrity assertions; M19 target-name collation and condition persistence. M27 proxy contract foundation (#473/#474).
 
 package schema
 
@@ -182,6 +182,10 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	for table := range tableSQL {
 		if table == "settings" {
 			require.Equal(t, [][]string{{"updateNotify", "false"}, {"vulnerabilityScanSchedule", `{"mode":"manual"}`}}, sqlRows(t, actual, "SELECT key,value FROM settings ORDER BY key"))
+			continue
+		}
+		if table == "proxy_generation" {
+			require.Equal(t, [][]string{{"1", "32"}}, sqlRows(t, actual, "SELECT id,length(generation) FROM proxy_generation"))
 			continue
 		}
 		if table == "docklet_database_metadata" {

@@ -2,8 +2,10 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472).
+// Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy outcome render proofs (#473/#474).
 
+import proxyFixtures from "../../../types/proxy/testdata/outcomes.json";
+import { decodeProxyOperation, proxyOutcome } from "./http/proxy-decoder";
 import { renderHook } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
 import { catalogs } from "@/app/i18n/catalog";
@@ -37,7 +39,14 @@ function activityMessage(code: "runtime.wait-timeout" | "runtime.waiter-disconne
 }
 
 // Each row names a representative property of one distinct guarded union and its real consumer.
+function proxyMessage(reason: boolean) {
+  const fixture = proxyFixtures.find((row) => row.state === "applied-unverified" && row.reason === "logs-unavailable")!;
+  const view = proxyOutcome(decodeProxyOperation(fixture.body));
+  return renderMessage({ code: reason ? view.reasonKey! : view.labelKey, params: {} }, "de");
+}
 const proofs = [
+ {property:"ProxyOperation.state",member:"applied-unverified",key:"proxyContract.states.applied-unverified",render:()=>proxyMessage(false)},
+ {property:"ProxyProblem.code",member:"logs-unavailable",key:"proxyContract.reasons.logs-unavailable",render:()=>proxyMessage(true)},
  {property:"ModulesModuleProblem.code",member:"module-on",key:"settings.modules.codes.module-on",render:()=>moduleError()},
   { property: "UpdaterRecoveryResult.outcome", member: "restored", key: "images.errors.recovery_restored", render: () => renderWithApp(<UpdateRecovery run={renderRun(mapActivityDetail({ activity: { id: "example", type: "project_update", environmentId: "example", status: "failed", startedAt: at, createdAt: at, imageLifecycle: recoveryFixture[0] as never }, messages: [], output: [], stepTrace: [], outputTruncated: false }), "de")} />).container.textContent ?? "" },
   { property: "VulnerabilityCandidateResult.state", member: "queued", key: "security.candidates.states.queued", render: () => renderWithApp(<CandidateState state="queued" />).container.textContent ?? "" },

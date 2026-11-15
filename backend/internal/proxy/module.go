@@ -1,0 +1,336 @@
+// Source: docklet-next/issues/473
+// Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
+// Retrieved: 2026-11-15
+// License: Apache-2.0
+// Deviations: Original proxy module API and lifecycle wiring.
+
+package proxy
+
+import (
+	"context"
+	"encoding/json/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	dockerinternal "github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/modules"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/volume"
+	"github.com/florianfinn/docklet-next/types/features"
+	dto "github.com/florianfinn/docklet-next/types/proxy"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"log/slog"
+)
+
+type Module struct {
+	Agent       *Agent
+	Hub         *Hub
+	Runtime     *DockerRuntime
+	Settings    *settings.SettingsService
+	Modules     *modules.Service
+	Transport   *HostTransport
+	AgentMode   bool
+	unsubscribe func()
+}
+
+func NewModule(db *database.DB, cfg *config.Config, mods *modules.Service, s *settings.SettingsService, d *dockerinternal.DockerClientService, v *volume.VolumeService, hosts *environment.EnvironmentService) (*Module, error) {
+	engines := Engines{}
+	runtime := &DockerRuntime{Docker: d, Settings: s, Volumes: v, DB: db, Engines: engines}
+	a, err := NewAgent(db.DB, runtime, engines)
+	if err != nil {
+		return nil, err
+	}
+	a.Gate = mods
+	m := &Module{Agent: a, Runtime: runtime, Settings: s, Modules: mods, AgentMode: cfg.AgentMode || cfg.EdgeAgent}
+	m.Transport = &HostTransport{Hosts: hosts, Local: m}
+	m.Hub = &Hub{DB: db.DB, Modules: mods, Transport: m.Transport}
+	err = mods.Register(features.Proxy, modules.Hooks{Unfinished: func(ctx context.Context) (string, error) {
+		id, err := unfinished(ctx, db.DB, "proxy_journal")
+		if err != nil || id != "" {
+			return id, err
+		}
+		return m.Hub.Unfinished(ctx)
+	}, DeleteData: func(ctx context.Context) error {
+		g, err := clearData(ctx, db.DB)
+		if err == nil {
+			a.generationID.Store(g)
+		}
+		return err
+	}})
+	return m, err
+}
+
+// RegisterEngine is startup-only, before Start or any request. S3/S4 construct
+// engines with Runtime and register their kind; runtime and agent share this map.
+func (m *Module) RegisterEngine(kind dto.Kind, e Engine) { m.Agent.Engines[kind] = e }
+func (m *Module) Start(ctx context.Context) error {
+	if err := m.Agent.Settle(ctx); err != nil {
+		return err
+	}
+	if !m.AgentMode {
+		if m.Transport.Hosts != nil {
+			m.unsubscribe = m.Transport.Hosts.SubscribeAgentOnline(func(ctx context.Context, id string) { m.reconcile(ctx, id) })
+		}
+		m.reconcile(ctx, "")
+	}
+	return nil
+}
+func (m *Module) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, error) {
+	if err := m.Agent.Check(ctx, i); err != nil {
+		return dto.Inventory{}, err
+	}
+	e, err := m.Agent.Engines.For(i.Kind)
+	if err != nil {
+		return dto.Inventory{}, err
+	}
+	r, err := e.Inventory(ctx, i)
+	r.Generation = m.Agent.Generation()
+	if i.Source.ReadOnly || i.Source.Kind == dto.SingleFileSource || i.Source.Kind == dto.UnknownSourceKind {
+		r.Eligibility = dto.Eligibility{Reason: i.Source.Reason}
+	}
+	return r, err
+}
+func (m *Module) Read(ctx context.Context, i dto.Instance) (dto.ReadResult, error) {
+	if err := m.Agent.Check(ctx, i); err != nil {
+		return dto.ReadResult{}, err
+	}
+	e, err := m.Agent.Engines.For(i.Kind)
+	if err != nil {
+		return dto.ReadResult{}, err
+	}
+	r, err := e.Read(ctx, i)
+	for n := range r.Files {
+		b, owned, er := m.Runtime.LastVerified(ctx, i, r.Files[n].Path)
+		if er != nil {
+			return r, er
+		}
+		r.Files[n].Owned = owned
+		if b.Present {
+			r.Files[n].LastVerifiedHash = b.Hash
+		}
+	}
+	r.Generation = m.Agent.Generation()
+	r.Inventory.Generation = m.Agent.Generation()
+	if i.Source.ReadOnly || i.Source.Kind == dto.SingleFileSource || i.Source.Kind == dto.UnknownSourceKind {
+		r.Eligibility = dto.Eligibility{Reason: i.Source.Reason}
+	}
+	return r, err
+}
+func (m *Module) Instance(ctx context.Context, id string) (dto.Instance, error) {
+	var r instanceRow
+	err := m.Hub.DB.WithContext(ctx).First(&r, "id = ?", id).Error
+	var i dto.Instance
+	if err == nil {
+		err = json.Unmarshal(r.Data, &i)
+	}
+	return i, err
+}
+func (m *Module) Instances(ctx context.Context) ([]dto.Instance, error) {
+	var rows []instanceRow
+	if err := m.Hub.DB.WithContext(ctx).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := []dto.Instance{}
+	for _, r := range rows {
+		var i dto.Instance
+		if err := json.Unmarshal(r.Data, &i); err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, nil
+}
+func (m *Module) CreateInstance(ctx context.Context, q dto.CreateInstanceRequest) (dto.Instance, error) {
+	i := dto.Instance{EnvironmentID: q.EnvironmentID, Kind: q.Kind, Identity: dto.Identity{ContainerID: q.ContainerID}, Source: dto.Source{MountTarget: q.MountTarget}, Name: q.Name, RootFile: q.RootFile, RouteDirectory: q.RouteDirectory}
+	existing, err := m.Instances(ctx)
+	if err != nil {
+		return i, err
+	}
+	for _, registered := range existing {
+		if registered.EnvironmentID == i.EnvironmentID && registered.Identity.ContainerID == i.Identity.ContainerID {
+			return i, dto.Fail(dto.OperationConflict, 409)
+		}
+	}
+	list, err := m.Transport.Discover(ctx, i.EnvironmentID)
+	if err != nil {
+		return i, err
+	}
+	found := false
+	for _, d := range list {
+		if d.Identity.ContainerID != i.Identity.ContainerID || d.Kind != i.Kind {
+			continue
+		}
+		for _, s := range d.Sources {
+			if s.MountTarget == i.Source.MountTarget {
+				i.Source = s
+				i.Identity = d.Identity
+				found = true
+			}
+		}
+	}
+	if !found {
+		return i, dto.Fail(dto.ContainerChanged, 409)
+	}
+	i.ID = uuid.NewString()
+	i.Registration, err = m.Transport.Registration(ctx, i.EnvironmentID)
+	if err != nil {
+		return i, err
+	}
+	if i.Kind == dto.Caddy {
+		i.Authority = dto.CaddyfileAuthority
+	} else {
+		i.Authority = dto.FileAuthority
+	}
+	inventory, err := m.Transport.Inventory(ctx, i)
+	if err != nil {
+		return i, err
+	}
+	i.Generation = inventory.Generation
+	i.Eligibility = inventory.Eligibility
+	err = m.Modules.Admit(ctx, features.Proxy, func(ctx context.Context) error { return m.saveInstance(ctx, i) })
+	return i, err
+}
+func (m *Module) saveInstance(ctx context.Context, i dto.Instance) error {
+	b, err := marshal(i)
+	if err != nil {
+		return err
+	}
+	return m.Hub.DB.WithContext(ctx).Save(&instanceRow{ID: i.ID, EnvironmentID: i.EnvironmentID, Data: b}).Error
+}
+func (m *Module) UpdateInstance(ctx context.Context, id string, s dto.Settings) (dto.Instance, error) {
+	i, err := m.Instance(ctx, id)
+	if err != nil {
+		return i, err
+	}
+	i.Name = s.Name
+	i.RootFile = s.RootFile
+	i.RouteDirectory = s.RouteDirectory
+	var held reservation
+	err = m.Hub.DB.WithContext(ctx).First(&held, "instance_id = ?", id).Error
+	if err == nil {
+		return i, dto.Fail(dto.ModuleBusy, 409)
+	}
+	if !missing(err) {
+		return i, err
+	}
+	inv, err := m.Transport.Inventory(ctx, i)
+	if err != nil {
+		return i, err
+	}
+	i.Eligibility = inv.Eligibility
+	i.Generation = inv.Generation
+	i.Registration, err = m.Transport.Registration(ctx, i.EnvironmentID)
+	if err != nil {
+		return i, err
+	}
+	return i, m.Modules.Admit(ctx, features.Proxy, func(ctx context.Context) error { return m.saveInstance(ctx, i) })
+}
+func (m *Module) RemoveInstance(ctx context.Context, id string) error {
+	return m.Hub.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var n int64
+		if err := tx.Model(&reservation{}).Where("instance_id = ?", id).Count(&n).Error; err != nil {
+			return err
+		}
+		if n != 0 {
+			return dto.Fail(dto.ModuleBusy, 409)
+		}
+		return tx.Delete(&instanceRow{}, "id = ?", id).Error
+	})
+}
+func (m *Module) Operations(ctx context.Context, id string) ([]dto.Operation, error) {
+	if err := prune(ctx, m.Hub.DB, nowUTC()); err != nil {
+		return nil, err
+	}
+	var rows []Record
+	if err := m.Hub.DB.WithContext(ctx).Where("instance_id = ?", id).Order("created_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := []dto.Operation{}
+	for _, r := range rows {
+		_, o, err := decodeRecord(r)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// Settlement follows admitted work while the module is off as well. Reconnects
+// query existing IDs only; they never dispatch a new Apply.
+func (m *Module) reconcile(ctx context.Context, environmentID string) {
+	var rows []Record
+	if err := m.Hub.DB.WithContext(ctx).Where("finished_at IS NULL").Find(&rows).Error; err != nil {
+		return
+	}
+	for _, row := range rows {
+		if ctx.Err() != nil {
+			return
+		}
+		request, _, err := decodeRecord(row)
+		if err != nil {
+			continue
+		}
+		if environmentID != "" && request.Instance.EnvironmentID != environmentID {
+			continue
+		}
+		if _, err = m.Hub.Query(ctx, row.ID); err != nil {
+			slog.WarnContext(ctx, "Proxy operation settlement postponed", "operationId", row.ID, "code", dto.AgentUnavailable)
+		}
+	}
+}
+func (m *Module) Stop(context.Context) error {
+	if m.unsubscribe != nil {
+		m.unsubscribe()
+	}
+	return nil
+}
+
+// Discovery combines the host-owned projection with hub-owned registrations.
+func (m *Module) Discover(ctx context.Context, environmentID string) ([]dto.Discovery, error) {
+	rows, err := m.Transport.Discover(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	instances, err := m.Instances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for n := range rows {
+		for _, i := range instances {
+			if i.EnvironmentID == environmentID && i.Identity.ContainerID == rows[n].Identity.ContainerID {
+				rows[n].InstanceID = i.ID
+			}
+		}
+	}
+	return rows, nil
+}
+
+// A new operation uses a fresh authenticated executor binding. Historical
+// records keep their original binding, including after credential rotation.
+func (m *Module) CreateOperation(ctx context.Context, id string, input dto.OperationRequest) (dto.Operation, error) {
+	instance, err := m.Instance(ctx, id)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	inventory, err := m.Transport.Inventory(ctx, instance)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	registration, err := m.Transport.Registration(ctx, instance.EnvironmentID)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	instance.Generation = inventory.Generation
+	instance.Registration = registration
+	instance.Eligibility = inventory.Eligibility
+	if err = Eligibility(instance); err != nil {
+		return dto.Operation{}, err
+	}
+	if err = m.Modules.Admit(ctx, features.Proxy, func(ctx context.Context) error { return m.saveInstance(ctx, instance) }); err != nil {
+		return dto.Operation{}, err
+	}
+	request := dto.ApplyRequest{ID: uuid.NewString(), Instance: instance, Generation: instance.Generation, Registration: registration, Target: input.Target, Expected: input.Expected, GraphHashes: input.GraphHashes, Change: input.Change, Acknowledgements: input.Acknowledgements}
+	return m.Hub.Apply(ctx, request)
+}

@@ -2,7 +2,7 @@
 // Revision: b5068aff3da7eac11f208d1f4d8c9068d4a8c073
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original total catalogue maps for rendered contract enums.
+// Deviations: Original total catalogue maps for rendered contract enums. M27 proxy contract foundation (#473/#474).
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -13,6 +13,7 @@ const HOST_CREDENTIAL_MESSAGE = "environment.api_key.regenerated" satisfies Cata
 const HOST_CREDENTIAL_EVENT_TITLE = "runMessages.events.labels.environment_host_key_regenerated" satisfies CatalogueKey;
 
 export const MESSAGE_CODE_KEYS = {
+"proxy.operation.released":"runMessages.events.labels.proxy_operation_released",
   "update.self-failed": "images.errors.update_self-failed",
   "update.outcome-unknown": "images.errors.update_outcome-unknown",
   "container.recreate-recovered": "images.errors.container_recreate-recovered",
@@ -148,8 +149,9 @@ export const MESSAGE_CODE_KEYS = {
 >, CatalogueKey>;
 
 // Hub events have distinct title wording from direct messages with the same wire code.
-type HubEventCode = Exclude<Extract<Schema["EventEvent"]["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
+type HubEventCode = Exclude<Extract<Schema["EventEvent"]["messageCode"], `${"container" | "image" | "project" | "volume" | "network" | "system" | "user" | "environment" | "proxy"}.${string}`>, `container.condition.${string}` | "container.recreate-recovered" | "container.recreate-ambiguous" | "container.origin-locked">;
 export const HUB_EVENT_TITLE_KEYS = {
+"proxy.operation.released":"runMessages.events.labels.proxy_operation_released",
   "container.start": "runMessages.events.labels.container_start",
   "container.stop": "runMessages.events.labels.container_stop",
   "container.restart": "runMessages.events.labels.container_restart",
