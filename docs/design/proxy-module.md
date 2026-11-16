@@ -37,7 +37,9 @@ the journal unfinished for a later query; an epoch that cannot be read around th
 observation gives `applied-unverified` (`not-observable`), never `verified` or
 `container-changed`, and a requested restore still runs. A failed read or call while
 preparing, staging, validating or publishing is not a graph refusal either: the
-journal keeps its phase and the recovery table settles it from the actual target.
+journal keeps its phase and the recovery table settles it from the actual target. A
+static read the display shows as incomplete inventory stays such a failure in the
+publication graph checks (`proxy.IncompleteRead`).
 
 | Need | Path |
 | --- | --- |
@@ -70,8 +72,8 @@ Known limits of the first version:
   Recreating a container with the same name and the same configuration mount
   makes it releasable again.
 - The pinned tools image cannot prove that a file has no extended attributes,
-  ACLs or extra hard links, so sources written through the helper fail closed at
-  staging with zero effects.
+  ACLs or extra hard links, so helper-only sources (named volumes, allowed binds)
+  are read-only at setup with `unsupported-metadata`; no write reaches staging.
 
 ## Agent operations
 

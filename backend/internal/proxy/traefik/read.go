@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"go.yaml.in/yaml/v4"
@@ -180,6 +181,9 @@ func (e *engine) Read(ctx context.Context, i dto.Instance) (dto.ReadResult, erro
 				g.result.Routes = append(g.result.Routes, route)
 			}
 		}
+	}
+	if g.readErr != nil {
+		return g.result, &proxy.IncompleteRead{Err: g.readErr}
 	}
 	return g.result, nil
 }

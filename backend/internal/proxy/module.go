@@ -9,6 +9,7 @@ package proxy
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerinternal "github.com/florianfinn/docklet-next/backend/internal/docker"
@@ -199,6 +200,9 @@ func (m *Module) Read(ctx context.Context, i dto.Instance) (dto.ReadResult, erro
 		return dto.ReadResult{}, err
 	}
 	r, err := e.Read(ctx, i)
+	if _, ok := errors.AsType[*IncompleteRead](err); ok {
+		err = nil // shown as incomplete inventory
+	}
 	for n := range r.Files {
 		b, owned, er := m.Runtime.LastVerified(ctx, i, r.Files[n].Path)
 		if er != nil {

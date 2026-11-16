@@ -78,6 +78,14 @@ type Observation struct {
 	Restore     bool
 }
 
+// IncompleteRead marks a Read result shown as incomplete inventory that rests on
+// a failed infrastructure read: displays use the result, publication checks
+// keep Err (a transient error, see Transient).
+type IncompleteRead struct{ Err error }
+
+func (e *IncompleteRead) Error() string { return e.Err.Error() }
+func (e *IncompleteRead) Unwrap() error { return e.Err }
+
 // Engines receive immutable intent values. Validate may use StagingPath; Cleanup
 // must remove engine staging, and Runtime removes temporary and marker files.
 type Engine interface {
