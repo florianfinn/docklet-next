@@ -35,13 +35,39 @@ jobs:
           node-version: 24
       - name: Check static build contract
         run: node --test tests/tools-image.test.mjs
+      - name: Read BusyBox source pins
+        id: busybox
+        run: |
+          node --input-type=module - <<'NODE' >> "$GITHUB_OUTPUT"
+          import { inputs } from "./deploy/tools/build.mjs";
+          const pins = inputs();
+          console.log(`version=${pins.BUSYBOX_VERSION}`);
+          console.log(`sha256=${pins.BUSYBOX_SHA256}`);
+          NODE
+      - name: Cache verified BusyBox source
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/docklet-tools-busybox/busybox.tar.bz2
+          key: busybox-source-${{ steps.busybox.outputs.version }}-${{ steps.busybox.outputs.sha256 }}
+      - name: Fetch and verify BusyBox source
+        env:
+          BUSYBOX_VERSION: ${{ steps.busybox.outputs.version }}
+          BUSYBOX_SHA256: ${{ steps.busybox.outputs.sha256 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/docklet-tools-busybox"
+          cd "$RUNNER_TEMP/docklet-tools-busybox"
+          if [ ! -f busybox.tar.bz2 ]; then
+            curl -fsSL --retry 3 --retry-all-errors --retry-max-time 180 --connect-timeout 15 --max-time 45 \
+              "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" -o busybox.tar.bz2
+          fi
+          echo "$BUSYBOX_SHA256  busybox.tar.bz2" | sha256sum -c -
       - name: Build and exercise the runtime
         run: |
-          node deploy/tools/build.mjs --platform "linux/$ARCH" --load --tag "docklet-tools:ci-$ARCH"
+          node deploy/tools/build.mjs --platform "linux/$ARCH" --build-context "busybox-cache=$RUNNER_TEMP/docklet-tools-busybox" --load --tag "docklet-tools:ci-$ARCH"
           node deploy/tools/contract.mjs "docklet-tools:ci-$ARCH"
       - name: Build the matching complete corresponding source image
         run: |
-          node deploy/tools/build.mjs --platform "linux/$ARCH" --target corresponding-source --load --tag "docklet-tools-source:ci-$ARCH"
+          node deploy/tools/build.mjs --platform "linux/$ARCH" --target corresponding-source --build-context "busybox-cache=$RUNNER_TEMP/docklet-tools-busybox" --load --tag "docklet-tools-source:ci-$ARCH"
           node deploy/tools/source-contract.mjs "docklet-tools:ci-$ARCH" "docklet-tools-source:ci-$ARCH"
           mkdir -p bundle
           docker image save "docklet-tools:ci-$ARCH" "docklet-tools-source:ci-$ARCH" --output bundle/images.tar

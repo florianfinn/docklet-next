@@ -32,6 +32,9 @@ RUN --network=none case "$TARGETARCH" in amd64|arm64) ;; *) exit 1 ;; esac && \
     cp /src/acfs/LICENSE /out/usr/share/licenses/docklet-tools/acfs-BSD-3-Clause.txt && \
     cp /src/kit/LICENSE /out/usr/share/licenses/docklet-tools/kit-BSD-3-Clause.txt
 
+# CI overrides this empty context with a checksum-verified source archive.
+FROM scratch AS busybox-cache
+
 FROM ${BUILD_IMAGE} AS busybox
 ARG BUSYBOX_VERSION
 ARG BUSYBOX_SHA256
@@ -40,7 +43,13 @@ ARG GCC_PACKAGE
 RUN apk add --no-cache build-base bzip2 curl linux-headers perl "musl-dev=$MUSL_PACKAGE" "gcc=$GCC_PACKAGE"
 WORKDIR /work
 COPY deploy/tools/Dockerfile deploy/tools/build.mjs deploy/tools/inputs.env deploy/tools/busybox.config deploy/tools/applets.txt /recipe/
-RUN curl -fsSL "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" -o busybox.tar.bz2 && \
+RUN --mount=type=bind,from=busybox-cache,target=/busybox-cache \
+    if [ -f /busybox-cache/busybox.tar.bz2 ]; then \
+      cp /busybox-cache/busybox.tar.bz2 busybox.tar.bz2; \
+    else \
+      curl -fsSL --retry 3 --retry-all-errors --retry-max-time 180 --connect-timeout 15 --max-time 45 \
+        "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" -o busybox.tar.bz2; \
+    fi && \
     echo "$BUSYBOX_SHA256  busybox.tar.bz2" | sha256sum -c - && \
     mkdir source && tar -xjf busybox.tar.bz2 -C source --strip-components=1
 WORKDIR /work/source

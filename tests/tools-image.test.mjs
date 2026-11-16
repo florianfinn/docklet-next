@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { inputs } from "../deploy/tools/build.mjs";
 import { dependencies, digest, requiredNotices } from "../deploy/tools/license-contract.mjs";
@@ -120,4 +124,75 @@ test("tools publication refuses existing tags, release assets and uncertain regi
     assert.throws(() => assertVersionAvailable("ghcr.io/example/tools", "1.2.3", "example/tools", (program) =>
       program === "gh" ? absent(program) : { status: 1, stderr }));
   assert.throws(() => assertVersionAvailable("ghcr.io/example/tools", "1.2.3", "example/tools", () => ({ status: 1 })), /release asset lookup failed/);
+});
+
+function busyboxFetchScript(kind, cache) {
+  if (kind === "CI") {
+    const workflow = readFileSync(".github/workflows/tools-image.yml", "utf8");
+    const step = workflow.split("      - name: Fetch and verify BusyBox source\n")[1];
+    assert.ok(step, "CI must fetch and verify source before building");
+    return step.split("        run: |\n")[1].split(/^      - /m)[0].replace(/^          /gm, "");
+  }
+  const instruction = executable.split("\n").find((line) => line.startsWith("RUN ") && line.includes('"$BUSYBOX_SHA256  busybox.tar.bz2"'));
+  assert.ok(instruction, "Docker build must verify BusyBox source");
+  return instruction.replace(/^RUN (?:--mount=\S+ )?/, "").replaceAll("/busybox-cache", cache)
+    .split("    mkdir source &&")[0].replace(/&&\s*$/, "");
+}
+
+for (const kind of ["CI", "Docker"]) {
+  for (const state of ["miss", "hit", "corrupt", "unavailable"]) {
+    test(`tools ${kind} BusyBox source ${state} preserves download and verification behaviour`, (t) => {
+      const root = mkdtempSync(join(tmpdir(), "tools-source-"));
+      t.after(() => rmSync(root, { recursive: true, force: true }));
+      const cache = join(root, kind === "CI" ? "docklet-tools-busybox" : "cache");
+      const bin = join(root, "bin");
+      mkdirSync(cache); mkdirSync(bin);
+      const archive = "synthetic pinned source archive";
+      if (["hit", "corrupt"].includes(state)) writeFileSync(join(cache, "busybox.tar.bz2"), state === "hit" ? archive : "corrupt");
+      // Exercise the recipe shell with a deterministic downloader; checksum verification stays real.
+      writeFileSync(join(bin, "curl"), `#!/bin/sh
+printf '%s\\n' "$*" >> "$FETCH_LOG"
+if [ "$FETCH_STATE" = unavailable ]; then exit 28; fi
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -o ]; then shift; printf '%s' "$FETCH_ARCHIVE" > "$1"; exit 0; fi
+  shift
+done
+exit 1
+`, { mode: 0o755 });
+      const script = busyboxFetchScript(kind, cache);
+      const result = spawnSync("sh", ["-eu", "-c", script], { cwd: root, encoding: "utf8", env: {
+        ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: root,
+        BUSYBOX_VERSION: pins.BUSYBOX_VERSION, BUSYBOX_SHA256: createHash("sha256").update(archive).digest("hex"),
+        FETCH_LOG: join(root, "fetch.log"), FETCH_ARCHIVE: archive, FETCH_STATE: state,
+      } });
+      assert.equal(result.status, state === "unavailable" ? 28 : state === "corrupt" ? 1 : 0,
+        result.stdout + result.stderr);
+      if (["hit", "corrupt"].includes(state)) {
+        assert.throws(() => readFileSync(join(root, "fetch.log")), { code: "ENOENT" });
+      } else {
+        const args = readFileSync(join(root, "fetch.log"), "utf8");
+        for (const flag of ["--retry 3", "--retry-all-errors", "--retry-max-time 180", "--connect-timeout 15", "--max-time 45"])
+          assert.ok(args.includes(flag), flag);
+        assert.doesNotMatch(args, /--retry-delay/, "curl default exponential backoff");
+        assert.match(args, /https:\/\/busybox[.]net\/downloads\/busybox-/);
+      }
+      if (["hit", "miss"].includes(state)) assert.match(result.stdout, /busybox[.]tar[.]bz2: OK/);
+      if (state === "corrupt") assert.match(result.stdout + result.stderr, /FAILED/);
+    });
+  }
+}
+
+test("tools CI keys verified source by version and hash and supplies both build targets", () => {
+  const workflow = readFileSync(".github/workflows/tools-image.yml", "utf8");
+  const cache = workflow.split("      - name: Cache verified BusyBox source\n")[1]?.split("      - name:")[0];
+  assert.ok(cache);
+  assert.match(cache, /uses: actions\/cache@[a-f0-9]{40}/);
+  assert.match(cache, /key: busybox-source-\$\{\{ steps[.]busybox[.]outputs[.]version \}\}-\$\{\{ steps[.]busybox[.]outputs[.]sha256 \}\}/);
+  assert.match(cache, /path: \$\{\{ runner[.]temp \}\}\/docklet-tools-busybox\/busybox[.]tar[.]bz2/);
+  assert.doesNotMatch(cache, /restore-keys|secrets[.]/);
+  const builds = workflow.split("\n").filter((line) => line.includes("node deploy/tools/build.mjs --platform"));
+  assert.equal(builds.length, 2);
+  for (const build of builds) assert.ok(build.includes('--build-context "busybox-cache=$RUNNER_TEMP/docklet-tools-busybox"'));
+  assert.match(dockerfile, /FROM scratch AS busybox-cache/);
+  assert.match(dockerfile, /RUN --mount=type=bind,from=busybox-cache,target=\/busybox-cache/);
 });
