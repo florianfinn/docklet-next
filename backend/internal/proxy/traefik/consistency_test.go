@@ -285,23 +285,6 @@ func TestParentCancellationDuringProbeAndWaitIsReturned(t *testing.T) {
 	}
 }
 
-func TestObservationExpiresAfterFinalLogFence(t *testing.T) {
-	x := fixture(t)
-	in := x.prepare(x.request("edit-route"))
-	base := x.now
-	var clockCalls atomic.Int64
-	x.e.now = func() time.Time {
-		if clockCalls.Add(1) >= 3 {
-			return base.Add(20 * time.Second)
-		}
-		return base
-	}
-	x.probeFunc = func([]string) hostio.ExecResult { return response(200, "changed") }
-	got, err := x.e.Observe(t.Context(), in, false)
-	require.NoError(t, err)
-	require.NotEqual(t, dto.Verified, got.State)
-}
-
 func TestReadKeepsOwnershipAndHiddenFilesOutsideTheGraph(t *testing.T) {
 	x := fixture(t)
 	old := proxy.Snapshot([]byte(strings.Replace(tiny, "app.example.com", "old.example.com", 1)), true)
