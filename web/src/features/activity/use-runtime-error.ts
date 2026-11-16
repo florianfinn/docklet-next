@@ -22,6 +22,8 @@ export function useRuntimeError() {
     const code = outcome.kind === "conflict" || outcome.kind === "error" ? outcome.code : outcome.kind === "not-available" ? outcome.reasonCode : "unavailable";
     // Request problems have their own catalogue text in the command formatter.
     if (Object.hasOwn(REQUEST_CODE_KEYS, code)) return false;
+    // A named blocking stack has its own text in the command formatter.
+    if (outcome.kind === "error" && outcome.code === "runtime.target-unavailable" && outcome.blocker) return false;
     const specific = operationReasonKey(code);
     if (specific) { report(operation(specific)); return true; }
     const key = code === "run.busy" ? "busy" : code === "run.cancelling" ? "cancellingConflict" : code === "run.request-mismatch" ? "mismatch" :

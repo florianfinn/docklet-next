@@ -11,6 +11,7 @@ import { catalogs } from "@/app/i18n/catalog";
 import { runtimeResponseError } from "./http/runtime-mapping";
 import { useCommandError } from "./use-command-error";
 import { useImageError } from "@/features/images/use-image-error";
+import { useRuntimeError } from "@/features/activity/use-runtime-error";
 
 function Refusal({ error }: { error: unknown }) {
  const command = useCommandError(), image = useImageError();
@@ -26,6 +27,22 @@ it.each(["en-US", "de"] as const)("names an archived blocking stack and its reas
  expect(text).toMatch(locale === "de" ? /Compose-Auswahl/i : /Compose selection/i);
  expect(view.container.textContent).not.toContain("private diagnostic");
  expect(view.container.querySelectorAll("p")[1]?.textContent).toBe(text);
+});
+
+// Stack and container command guards ask the runtime formatter first and fall back to the command formatter.
+function GuardedRefusal({ error }: { error: unknown }) {
+ const runtime = useRuntimeError(), command = useCommandError();
+ const reported: string[] = [];
+ if (!runtime(error, (message) => { reported.push(message); return ""; })) reported.push(command(error));
+ return <p role="alert">{reported.join(" ")}</p>;
+}
+
+it.each(["en-US", "de"] as const)("names the blocking stack through the command guard order in %s", (locale) => {
+ const error = runtimeResponseError({success:false,error:{code:"runtime.target-unavailable",message:"private diagnostic",blocker:{name:"example-peer",reason:"compose.identity-unreadable",archived:false}}},409);
+ render(<IntlProvider locale={locale} messages={catalogs[locale]}><GuardedRefusal error={error}/></IntlProvider>);
+ const text = screen.getByRole("alert").textContent ?? "";
+ expect(text).toContain("example-peer");
+ expect(text).not.toContain("private diagnostic");
 });
 
 it.each([

@@ -2,7 +2,7 @@
 // Revision: 4b718d5ec47f383122c59a1dbcbb7f44a15e6261
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original workspace implementation and contract coverage for issue #182.
+// Deviations: Original workspace implementation and contract coverage for issue #182; typed path policy refusals (#466).
 
 import type { WorkspaceGesture, WorkspaceTree, WorkspaceContent } from "@/data/api";
 import { BackupError, backupCodeKey } from "@/data/backup-error";
@@ -94,6 +94,8 @@ export function createWorkspaceTransport({ baseUrl, client, capability, generati
       if (result.status === 409) throw new WorkspaceConflictError();
       if (code === "volume.helper-incompatible") throw new WorkspaceError("helper-incompatible", result.status);
       if (code === "volume.helper-unavailable") throw new WorkspaceError("helper-unavailable", result.status);
+      // Typed path policy refusals keep the permission text rather than generic validation.
+      if (code === "project.workspace-protected-path" || code === "project.workspace-path-refused") throw new WorkspaceError("forbidden", result.status);
       throw new WorkspaceError(result.status === 403 ? "forbidden" : result.status === 404 ? "not-found" : result.status === 413 ? "too-large" : result.status === 400 || result.status === 422 ? "invalid" : "unavailable", result.status);
     }
     return result;
