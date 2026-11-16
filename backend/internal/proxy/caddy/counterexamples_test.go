@@ -312,3 +312,75 @@ func TestGlobalOptionsThroughTheRelativeRouteImport(t *testing.T) {
 	require.True(t, inv.AdminOff)
 	require.True(t, inv.Eligibility.Writable)
 }
+
+func TestRawGraphBudgetIncludesOrphansAndDeduplicatesImports(t *testing.T) {
+	for _, duplicate := range []bool{false, true} {
+		t.Run(map[bool]string{false: "orphans", true: "deduplication"}[duplicate], func(t *testing.T) {
+			x := fixture(t)
+			root := strings.TrimSuffix(rootText, "import /etc/caddy/routes/*.caddy\n")
+			size := 16
+			if duplicate {
+				size = 14
+				x.put("shared.caddy", "#"+strings.Repeat("a", hostio.MaxFileBytes-2)+"\n")
+				root += "import /etc/caddy/shared.caddy\nimport /etc/caddy/shared.caddy\n"
+			}
+			x.put("Caddyfile", root)
+			for n := 0; n < size; n++ {
+				x.put(fmt.Sprintf("routes/orphan-%02d.caddy", n), "#"+strings.Repeat("a", hostio.MaxFileBytes-2)+"\n")
+			}
+			r, err := readChecked(t, x.e, x.i)
+			if duplicate {
+				require.NoError(t, err)
+				require.True(t, r.Eligibility.Writable)
+				require.Equal(t, dto.ImportMissing, r.Eligibility.Reason)
+			} else {
+				require.ErrorContains(t, err, "input-limit")
+			}
+		})
+	}
+}
+func TestNonResumeInventoryDoesNotWarnFromAdminDivergence(t *testing.T) {
+	x := fixture(t)
+	s := baseSite()
+	x.execFn = func(args []string) hostio.ExecResult {
+		if args[0] == "wget" {
+			return httpResult(200, configFor(s))
+		}
+		return hostio.ExecResult{Stdout: []byte("{}")}
+	}
+	inv, err := inventoryChecked(t, x.e, x.i)
+	require.NoError(t, err)
+	require.False(t, inv.RunningDiverged)
+	require.Empty(t, x.commands)
+}
+func TestReadbackNestedHostAndPathConstraintsRemainConjunctive(t *testing.T) {
+	s := baseSite()
+	s.Path = "/api"
+	for _, outer := range []string{`"host":["other.example.net"]`, `"host":["app.example.com"],"path":["/other*"]`} {
+		raw := `{"apps":{"http":{"servers":{"example":{"routes":[{"match":[{` + outer + `}],"handle":[{"handler":"subroute","routes":[{"match":[{"host":["app.example.com"],"path":["/api*"]}],"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"192.0.2.80:8080"}]}]}]}]}]}}}}}`
+		var config map[string]any
+		require.NoError(t, json.Unmarshal([]byte(raw), &config))
+		require.False(t, containsSite(config, s, true))
+	}
+}
+func TestReadbackNullTLSIsNotAnHTTPSUpstream(t *testing.T) {
+	handler := map[string]any{"upstreams": []any{map[string]any{"dial": "example.com:443"}}, "transport": map[string]any{"tls": nil}}
+	require.False(t, upstreamsEqual(handler, []string{"https://example.com"}))
+	handler["upstreams"] = []any{map[string]any{"dial": "example.com:80"}}
+	require.True(t, upstreamsEqual(handler, []string{"http://example.com"}))
+}
+
+func TestReadbackNonHTTPTransportCannotProveAnHTTPUpstream(t *testing.T) {
+	handler := map[string]any{"upstreams": []any{map[string]any{"dial": "example.com:80"}}, "transport": map[string]any{"protocol": "fastcgi"}}
+	require.False(t, upstreamsEqual(handler, []string{"http://example.com"}))
+	handler["transport"] = map[string]any{"protocol": "http"}
+	require.True(t, upstreamsEqual(handler, []string{"http://example.com"}))
+}
+
+func TestDefaultObservationClockWaitHonorsCancellation(t *testing.T) {
+	e := New(nil).(*engine)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, e.wait(ctx, time.Hour), context.Canceled)
+	require.NoError(t, e.wait(t.Context(), 0))
+}

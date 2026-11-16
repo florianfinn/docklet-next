@@ -248,10 +248,16 @@ func containsSite(config map[string]any, s Site, targets bool) bool {
 				match := object(m)
 				h, p := host, pathOK
 				if hosts, ok := match["host"]; ok {
-					h = stringsIn(hosts, s.Domain)
+					if !stringsIn(hosts, s.Domain) {
+						continue
+					}
+					h = true
 				}
 				if paths, ok := match["path"]; ok {
-					p = s.Path != "" && stringsIn(paths, s.Path+"*")
+					if s.Path == "" || !stringsIn(paths, s.Path+"*") {
+						continue
+					}
+					p = true
 				}
 				restricted := false
 				for key := range match {
@@ -316,6 +322,10 @@ func upstreamsEqual(handler map[string]any, want []string) bool {
 	}
 	slices.Sort(got)
 	slices.Sort(expected)
-	_, hasTLS := object(handler["transport"])["tls"]
+	transport := object(handler["transport"])
+	if protocol, ok := transport["protocol"]; ok && protocol != "http" {
+		return false
+	}
+	hasTLS := object(transport["tls"]) != nil
 	return slices.Equal(got, expected) && tls == hasTLS
 }

@@ -280,6 +280,9 @@ func TestImportCyclesDepthAndStagingIsolation(t *testing.T) {
 				if which == "depth" {
 					require.ErrorContains(t, err, "input-limit")
 				}
+				if which == "cycle" {
+					require.ErrorContains(t, err, "invalid-graph")
+				}
 				if which == "glob-directory" {
 					require.ErrorContains(t, err, "unsupported-format")
 				}
