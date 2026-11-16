@@ -384,3 +384,11 @@ func TestDefaultObservationClockWaitHonorsCancellation(t *testing.T) {
 	require.ErrorIs(t, e.wait(ctx, time.Hour), context.Canceled)
 	require.NoError(t, e.wait(t.Context(), 0))
 }
+
+func TestReadbackUnrestrictedSiteDoesNotAcquireAPathMatcher(t *testing.T) {
+	s := baseSite()
+	raw := strings.Replace(configFor(s), `"host":["app.example.com"]`, `"host":["app.example.com"],"path":["*"]`, 1)
+	var config map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &config))
+	require.False(t, containsSite(config, s, true))
+}
