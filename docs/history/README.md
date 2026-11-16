@@ -29,3 +29,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M24 scheduled update recovery acceptance](m24-scheduled-update-recovery-acceptance.md) | Merged package, sandbox-found defects, maintainer matrix decisions, method and limits on 2026-11-13 |
 | [M25 host operations and Edge correctness acceptance](m25-host-edge-correctness-acceptance.md) | Merged package with its acceptance fix, sandbox-found defects, method and limits on 2026-11-13 |
 | [M26 backup, access and security follow-ups acceptance](m26-backup-access-security-acceptance.md) | Merged package, review rounds, sandbox method and kit findings, maintainer matrix decision, method and limits on 2026-11-14 |
+| [M27 optional modules and proxy route management acceptance](m27-optional-modules-proxy-acceptance.md) | Merged package, review rounds, smoke and sandbox-found defects, maintainer decisions, method and limits on 2026-11-16 |
