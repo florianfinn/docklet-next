@@ -107,9 +107,7 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		if j.Digest != digest {
 			return o, dto.Fail(dto.OperationConflict, 409)
 		}
-		if err := a.Check(ctx, q.Instance); err != nil {
-			return o, err
-		}
+		// A recorded receipt is returned whatever the container's current identity.
 		return o, nil
 	}
 	if !missing(err) {
@@ -228,6 +226,9 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 	}
 	if i.Restart {
 		_, i.StartedBefore, err = a.Runtime.Epoch(ctx, q.Instance)
+		if Transient(err) {
+			return o, err // nothing written yet; recovery rejects an unchanged target
+		}
 		if err != nil {
 			return a.finish(ctx, i, o, dto.Rejected, reason(err, dto.ContainerChanged), "")
 		}

@@ -8,6 +8,7 @@ package proxy
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	dto "github.com/florianfinn/docklet-next/types/proxy"
@@ -109,7 +110,12 @@ func TestApplyEpochGuards(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.want, o.State)
 			if tt.want == dto.AppliedUnverified {
-				require.Equal(t, dto.ContainerChanged, o.Reason)
+				// An unreadable epoch is unconfirmed identity, not an observed change (closing review C-B2).
+				want := dto.ContainerChanged
+				if strings.HasPrefix(tt.name, "epoch unreadable") {
+					want = dto.NotObservable
+				}
+				require.Equal(t, want, o.Reason)
 			}
 		})
 	}

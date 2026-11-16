@@ -34,8 +34,8 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 		}
 		return a.restore(ctx, i, o, e, r)
 	}
-	running, epoch, epochErr := a.Runtime.Epoch(ctx, i.Request.Instance)
-	if epochErr != nil || !running || (!i.Restart && epoch != i.Request.Instance.Identity.StartedAt) {
+	epoch, changed, unknown := a.observedEpoch(ctx, i.Request.Instance)
+	if changed || (!i.Restart && !unknown && epoch != i.Request.Instance.Identity.StartedAt) {
 		return a.finish(ctx, i, o, dto.AppliedUnverified, dto.ContainerChanged, "")
 	}
 	var observed Observation
@@ -68,12 +68,15 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 		}
 		return a.finish(ctx, i, o, dto.AppliedUnverified, r, "")
 	}
-	_, currentEpoch, epochErr := a.Runtime.Epoch(ctx, i.Request.Instance)
-	if epochErr != nil || currentEpoch != epoch {
+	current, changed, unread := a.observedEpoch(ctx, i.Request.Instance)
+	if changed || (!unknown && !unread && current != epoch) {
 		return a.finish(ctx, i, o, dto.AppliedUnverified, dto.ContainerChanged, "")
 	}
 	if observed.Restore {
 		return a.restore(ctx, i, o, e, observed.Reason)
+	}
+	if unknown || unread { // identity unconfirmed: never verified, never a claimed change
+		return a.finish(ctx, i, o, dto.AppliedUnverified, dto.NotObservable, "")
 	}
 	if observed.State != dto.Verified && observed.State != dto.AppliedUnverified {
 		return a.finish(ctx, i, o, dto.RecoveryRequired, dto.InvalidInput, "")
@@ -156,6 +159,9 @@ func (a *Agent) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
 	defer a.inactive(q.ID)
 	ctx = context.WithoutCancel(ctx)
 	if err = a.Check(ctx, i.Request.Instance); err != nil {
+		if Transient(err) {
+			return o, err // retry on a later query; the journal stays unfinished
+		}
 		return a.finish(ctx, i, o, dto.RecoveryRequired, reason(err, dto.ContainerChanged), "")
 	}
 	return a.recover(ctx, i, o)
@@ -167,6 +173,9 @@ func (a *Agent) recover(ctx context.Context, i Intent, o dto.Operation) (dto.Ope
 	}
 	b, err := a.Runtime.Target(ctx, i.Request.Instance, i.Request.Target)
 	if err != nil {
+		if Transient(err) {
+			return o, err // an unreadable target is not changed bytes
+		}
 		return a.finish(ctx, i, o, dto.RecoveryRequired, reason(err, dto.TargetChanged), "")
 	}
 	old, newSide := b.FileState == i.Old.FileState, b.FileState == i.New.FileState
@@ -197,6 +206,9 @@ func (a *Agent) recover(ctx context.Context, i Intent, o dto.Operation) (dto.Ope
 			return a.finish(ctx, i, o, dto.RecoveryRequired, dto.TargetChanged, "")
 		}
 		running, started, er := a.Runtime.Epoch(ctx, i.Request.Instance)
+		if er != nil && Transient(er) {
+			return o, er
+		}
 		if er != nil {
 			return a.finish(ctx, i, o, dto.RecoveryRequired, reason(er, dto.ContainerChanged), "")
 		}
@@ -358,4 +370,25 @@ func (a *Agent) releaseUndecodable(ctx context.Context, j Journal, q dto.Release
 		return o, dto.Fail(dto.JournalLost, 409)
 	}
 	return o, nil
+}
+
+// Transient reports a failure to look (daemon, transport, context) rather than a typed
+// condition the runtime observed; it must never settle an operation by itself.
+func Transient(err error) bool {
+	_, typed := errors.AsType[*dto.Problem](err)
+	return err != nil && !typed && !errors.Is(err, errCrash)
+}
+
+// observedEpoch returns the running container's StartedAt. changed is true only for an
+// observed difference (typed refusal or a stopped container); unknown marks a transient
+// read, which is neither a change nor a confirmed identity.
+func (a *Agent) observedEpoch(ctx context.Context, i dto.Instance) (epoch string, changed, unknown bool) {
+	running, epoch, err := a.Runtime.Epoch(ctx, i)
+	if Transient(err) {
+		return "", false, true
+	}
+	if err != nil || !running {
+		return "", true, false
+	}
+	return epoch, false, false
 }

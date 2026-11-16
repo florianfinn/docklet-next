@@ -123,6 +123,9 @@ func (d *DockerRuntime) Check(ctx context.Context, i dto.Instance) error {
 }
 func (d *DockerRuntime) Epoch(ctx context.Context, i dto.Instance) (bool, string, error) {
 	c, err := d.inspect(ctx, i.Identity.ContainerName)
+	if errdefs.IsNotFound(err) {
+		return false, "", dto.Fail(dto.ContainerChanged, 409) // removed: an observed change
+	}
 	if err != nil {
 		return false, "", err
 	}
@@ -433,8 +436,11 @@ func (d *DockerRuntime) Rebind(ctx context.Context, i dto.Instance) (dto.Instanc
 		return i, nil
 	}
 	c, err := d.inspect(ctx, i.Identity.ContainerName)
-	if err != nil {
+	if errdefs.IsNotFound(err) {
 		c, err = d.inspect(ctx, i.Identity.ContainerID)
+	}
+	if err != nil && !errdefs.IsNotFound(err) {
+		return i, err // a daemon failure is not a container change
 	}
 	if err != nil || c.State == nil {
 		return i, dto.Fail(dto.ContainerChanged, 409)

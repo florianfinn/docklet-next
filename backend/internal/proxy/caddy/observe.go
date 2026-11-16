@@ -150,7 +150,15 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 	defer cancel()
 	// Runtime.Epoch and Logs fence real Docker identity. For an acknowledged
 	// restart, capture the new epoch rather than trusting the registration epoch.
+	// A transient read is no evidence: without a restart the registration epoch is
+	// expected; after one, the first successful round read fixes it.
 	running, epoch, err := e.runtime.Epoch(ctx, i.Request.Instance)
+	if proxy.Transient(err) {
+		running, epoch, err = true, "", nil
+		if !i.Restart {
+			epoch = i.Request.Instance.Identity.StartedAt
+		}
+	}
 	if err != nil || !running {
 		return unverified(dto.ContainerChanged), nil
 	}
@@ -188,7 +196,8 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 			if probeErr != nil {
 				probeReason, probeFailed = reason(probeErr, dto.NotObservable), true
 			} else {
-				routed = routing(s.Before, after, i.Request.Change.Kind)
+				// Routing evidence needs a successful baseline probe, not a failed exec.
+				routed = s.ProbeReason == "" && routing(s.Before, after, i.Request.Change.Kind)
 				if probeFailed {
 					lastReason, probeFailed = dto.NoObservableDifference, false
 				}
@@ -226,6 +235,19 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		currentRunning, currentEpoch, epochErr := e.runtime.Epoch(ctx, i.Request.Instance)
 		if epochErr != nil && ctx.Err() != nil && parent.Err() == nil {
 			return unverified(lastReason), nil // the window ended, identity is unknown
+		}
+		if proxy.Transient(epochErr) {
+			// Identity unconfirmed this round: no verification from it.
+			if err = e.wait(ctx, 100*time.Millisecond); err != nil {
+				if parent.Err() == nil {
+					return unverified(lastReason), nil
+				}
+				return proxy.Observation{}, err
+			}
+			continue
+		}
+		if epoch == "" && epochErr == nil && currentRunning {
+			epoch = currentEpoch
 		}
 		if epochErr != nil || !currentRunning || currentEpoch != epoch {
 			return unverified(dto.ContainerChanged), nil

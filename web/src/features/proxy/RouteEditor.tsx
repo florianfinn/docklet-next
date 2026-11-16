@@ -23,6 +23,9 @@ import {
 import { newCaddySite, patchCaddySite } from "./caddy-draft";
 import type { Acknowledgements, Change, Instance, Inventory, ReadResult, Route } from "./types";
 
+// The "keep current TLS" choice; a NUL cannot occur in a Traefik resolver name (YAML key).
+const PRESERVE = "\u0000preserve";
+
 export function RouteEditor({
   instance,
   inventory,
@@ -55,7 +58,7 @@ export function RouteEditor({
   const [entryPoints, setEntryPoints] = useState(route?.entryPoints ?? []);
   // One name per line: Traefik names may contain commas.
   const [middlewares, setMiddlewares] = useState((route?.references ?? []).map(r => r.name).join("\n"));
-  const [resolver, setResolver] = useState("preserve"),
+  const [resolver, setResolver] = useState(PRESERVE),
     [tls, setTls] = useState(true);
   const [ack, setAck] = useState(emptyAcknowledgements);
   const originalText = (read.files ?? []).find(f => f.path === route?.file)?.content ?? "";
@@ -81,8 +84,9 @@ export function RouteEditor({
       ),
     ]),
   ];
-  // A name containing a line break cannot be shown one per line; such a list stays exactly as read.
-  const multiline = (route?.references ?? []).some(r => r.name.includes("\n"));
+  // A name that is empty or contains a line break cannot be shown one per line; such a
+  // list stays exactly as read and its field and picker are disabled.
+  const multiline = (route?.references ?? []).some(r => r.name === "" || r.name.includes("\n"));
   const names = multiline ? (route?.references ?? []).map(r => r.name) : splitNames(middlewares);
   const unresolved = names.filter(n => !known.includes(n) && !route?.references?.some(r => r.name === n));
   const exactHostRule = !rule || /^Host\([`"]([^`"]+)[`"]\)$/.test(rule);
@@ -120,9 +124,13 @@ export function RouteEditor({
       if (route ? Number(priority) !== route.priority : Number(priority) !== 0) change.priority = Number(priority);
       if (route ? JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []) : entryPoints.length > 0)
         change.entryPoints = entryPoints;
-      if (route ? JSON.stringify(names) !== JSON.stringify((route.references ?? []).map(ref => ref.name)) : names.length > 0)
+      if (
+        route
+          ? JSON.stringify(names) !== JSON.stringify((route.references ?? []).map(ref => ref.name))
+          : names.length > 0
+      )
         change.middlewares = names;
-      if (resolver !== "preserve") change.resolver = resolver;
+      if (resolver !== PRESERVE) change.resolver = resolver;
       if (!opaqueService && !shared && (!route || upstream !== route.upstreams?.[0]))
         change.upstreams = [upstream, ...(route?.upstreams?.slice(1) ?? [])];
     }
@@ -215,7 +223,7 @@ export function RouteEditor({
                       value={resolver}
                       onChange={setResolver}
                       options={[
-                        { value: "preserve", label: t("preserveTls") },
+                        { value: PRESERVE, label: t("preserveTls") },
                         ...(inventory.resolvers ?? []).map(r => ({ value: r, label: r })),
                       ]}
                     />
@@ -223,7 +231,15 @@ export function RouteEditor({
                       <p className="text-xs text-muted-foreground">
                         {route.resolver
                           ? t("tlsResolver", { name: route.resolver })
-                          : t(route.tls ? "tlsOn" : !entryTLS ? "tlsOff" : implicitEntryPoints ? "tlsDefaultEntryPoints" : "tlsEntryPoint")}
+                          : t(
+                              route.tls
+                                ? "tlsOn"
+                                : !entryTLS
+                                  ? "tlsOff"
+                                  : implicitEntryPoints
+                                    ? "tlsDefaultEntryPoints"
+                                    : "tlsEntryPoint",
+                            )}
                       </p>
                     )}
                     <div className="grid min-w-0 gap-2">
@@ -250,10 +266,11 @@ export function RouteEditor({
                         label={t("existingMiddleware")}
                         value=""
                         placeholder={t("selectMiddleware")}
+                        disabled={multiline}
                         onChange={v => {
                           if (!names.includes(v)) setMiddlewares([...names, v].join("\n"));
                         }}
-                        options={known.filter(n => !n.includes("\n")).map(n => ({ value: n, label: n }))}
+                        options={known.filter(n => n !== "" && !n.includes("\n")).map(n => ({ value: n, label: n }))}
                       />
                     )}
                   </>
@@ -308,7 +325,7 @@ export function RouteEditor({
                     value={resolver}
                     onChange={setResolver}
                     options={[
-                      { value: "preserve", label: t("preserveTls") },
+                      { value: PRESERVE, label: t("preserveTls") },
                       ...(inventory.resolvers ?? []).map(r => ({ value: r, label: r })),
                     ]}
                   />

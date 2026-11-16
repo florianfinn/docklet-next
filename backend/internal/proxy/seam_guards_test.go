@@ -210,7 +210,8 @@ func TestRebindRefusesIncompleteInspect(t *testing.T) {
 		i := x.request.Instance
 		i.Source = dto.Source{Kind: dto.ProjectSource, Canonical: root, MountTarget: "/etc/proxy"}
 		_, err = d.Rebind(t.Context(), i)
-		requireCode(t, err, dto.ContainerChanged)
+		// The partial container is never followed; the decode failure stays an error (C-B2).
+		require.Error(t, err)
 	})
 }
 
@@ -256,7 +257,7 @@ func TestObservationEpochErrorWithEmptyEpoch(t *testing.T) {
 	o, err := x.a.Apply(t.Context(), x.request)
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, o.State)
-	require.Equal(t, dto.ContainerChanged, o.Reason)
+	require.Equal(t, dto.NotObservable, o.Reason) // unread identity is unconfirmed, not changed (C-B2)
 }
 
 // latchValidate holds Apply in Validate until release; it reports when Validate was reached.
