@@ -314,7 +314,7 @@ func TestP6P7DelayedEvidenceAndFirstResponse(t *testing.T) {
 		require.False(t, routing(st.Before, hostio.Response{Status: code}, "create-route"))
 	}
 	redirected := httpResult(302, "later-body")
-	redirected.Stderr = []byte("  HTTP/1.1 404 Not Found\n\n  HTTP/1.1 200 OK\n\n")
+	redirected.Stderr = []byte("  HTTP/1.1 404 Not Found\n  Server: Caddy\n\n  HTTP/1.1 200 OK\n\n")
 	x.execFn = func(args []string) hostio.ExecResult { return redirected }
 	x.waits = 0
 	o, err = x.e.Observe(t.Context(), i, false)

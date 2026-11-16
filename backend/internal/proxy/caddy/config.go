@@ -348,7 +348,11 @@ func (e *engine) load(ctx context.Context, i dto.Instance) (graph, error) {
 			return g, err
 		}
 	}
-	directives, err := scan(g.files[root].Content)
+	optionsText, err := g.optionsText()
+	if err != nil {
+		return g, err
+	}
+	directives, err := scan(optionsText)
 	if err != nil {
 		return g, err
 	}
@@ -359,6 +363,10 @@ func (e *engine) load(ctx context.Context, i dto.Instance) (graph, error) {
 			continue
 		}
 		if !global || d.depth != 1 {
+			continue
+		}
+		if (d.words[0] == "admin" || d.words[0] == "persist_config") && strings.ContainsAny(strings.Join(d.words[1:], " "), "{}") {
+			g.inventory.Eligibility = refused(dto.IncompleteInventory, root)
 			continue
 		}
 		if len(d.words) == 2 && d.words[0] == "admin" {
@@ -466,4 +474,52 @@ func importToken(value string) string {
 		return value
 	}
 	return strconv.Quote(value)
+}
+
+// optionsText expands only already-consumed readable imports, retaining their
+// lexical scope. Global options may live in an absolute import before the sites.
+func (g graph) optionsText() (string, error) {
+	paths := []string{}
+	for p := range g.files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	total := 0
+	var expand func(string, int) (string, error)
+	expand = func(p string, depth int) (string, error) {
+		text := g.files[p].Content
+		total += len(text)
+		if depth > hostio.MaxDepth || total > hostio.MaxTotalBytes {
+			return "", problem(dto.InputLimit, p, 0, "expanded import graph")
+		}
+		ds := g.imports[p]
+		for n := len(ds) - 1; n >= 0; n-- {
+			d := ds[n]
+			pattern := d.words[1]
+			if !path.IsAbs(pattern) {
+				pattern = path.Join(path.Dir(p), pattern)
+			}
+			var replacement strings.Builder
+			for _, other := range paths {
+				matches, err := path.Match(pattern, other)
+				if err != nil {
+					return "", err
+				}
+				if !matches {
+					continue
+				}
+				part, err := expand(other, depth+1)
+				if err != nil {
+					return "", err
+				}
+				replacement.WriteString(part)
+				if !strings.HasSuffix(part, "\n") {
+					replacement.WriteByte('\n')
+				}
+			}
+			text = text[:d.start] + replacement.String() + text[d.end:]
+		}
+		return text, nil
+	}
+	return expand(g.root, 0)
 }

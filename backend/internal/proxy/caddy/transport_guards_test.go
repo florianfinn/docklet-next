@@ -161,7 +161,7 @@ func TestBeforeProbeReasonAndWildcardRefusalPersist(t *testing.T) {
 func TestRestartObservationUsesActivationDeadline(t *testing.T) {
 	x := fixture(t)
 	s := baseSite()
-	b, _ := json.Marshal(state{Root: "/etc/caddy/Caddyfile", AdminOff: true, NewSite: &s})
+	b, _ := json.Marshal(state{Root: "/etc/caddy/Caddyfile", AdminOff: true, Before: hostio.Response{Status: 404, Headers: map[string]string{"server": "Caddy"}}, NewSite: &s})
 	i := proxy.Intent{Request: dto.ApplyRequest{ID: "restart-deadline", Instance: x.i, Acknowledgements: dto.Acknowledgements{Restart: true}, Change: dto.Change{Kind: "create-route"}}, Engine: b, Restart: true}
 	require.NoError(t, x.e.Restart(t.Context(), i))
 	x.now = x.now.Add(2 * time.Second)

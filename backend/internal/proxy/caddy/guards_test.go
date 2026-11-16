@@ -152,7 +152,7 @@ func TestPrepareTargetIdentityAndOwnershipGuards(t *testing.T) {
 func TestP6DeadlineBeginsAtActivation(t *testing.T) {
 	x := fixture(t)
 	s := baseSite()
-	data, _ := json.Marshal(state{Root: "/etc/caddy/Caddyfile", AdminOff: true, NewSite: &s})
+	data, _ := json.Marshal(state{Root: "/etc/caddy/Caddyfile", AdminOff: true, Before: hostio.Response{Status: 404, Headers: map[string]string{"server": "Caddy"}}, NewSite: &s})
 	i := proxy.Intent{Request: dto.ApplyRequest{ID: "deadline", Instance: x.i, Change: dto.Change{Kind: "create-route"}}, Engine: data}
 	require.NoError(t, x.e.Reload(t.Context(), i))
 	x.now = x.now.Add(2 * time.Second)
@@ -279,6 +279,9 @@ func TestImportCyclesDepthAndStagingIsolation(t *testing.T) {
 				require.Error(t, err)
 				if which == "depth" {
 					require.ErrorContains(t, err, "input-limit")
+				}
+				if which == "glob-directory" {
+					require.ErrorContains(t, err, "unsupported-format")
 				}
 				return
 			}

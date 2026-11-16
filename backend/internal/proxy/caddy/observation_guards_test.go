@@ -25,7 +25,7 @@ func TestRoutingDecisionTable(t *testing.T) {
 		before, after int
 		want          bool
 	}{
-		{"edit-route", 200, 200, false}, {"edit-route", 200, 0, false}, {"edit-route", 200, 401, true}, {"create-route", 0, 200, true}, {"create-route", 200, 201, false}, {"create-route", 404, 0, false}, {"create-route", 404, 404, false}, {"create-route", 404, 401, true}, {"delete-route", 0, 404, false}, {"delete-route", 404, 0, false}, {"delete-route", 200, 0, true}, {"delete-route", 200, 404, true}, {"delete-route", 200, 201, false},
+		{"edit-route", 200, 200, false}, {"edit-route", 200, 0, false}, {"edit-route", 200, 401, true}, {"create-route", 0, 200, true}, {"create-route", 200, 201, false}, {"create-route", 404, 0, false}, {"create-route", 404, 404, false}, {"create-route", 404, 401, true}, {"delete-route", 0, 404, false}, {"delete-route", 404, 0, true}, {"delete-route", 200, 0, true}, {"delete-route", 200, 404, true}, {"delete-route", 200, 201, false},
 	} {
 		require.Equal(t, tt.want, routing(hostio.Response{Status: tt.before}, hostio.Response{Status: tt.after}, tt.kind), "%+v", tt)
 	}

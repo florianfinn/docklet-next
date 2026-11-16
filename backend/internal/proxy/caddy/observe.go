@@ -115,9 +115,9 @@ func routing(before, after hostio.Response, kind string) bool {
 	}
 	switch kind {
 	case "create-route":
-		return (before.Status == 0 || before.Status == 404) && after.Status != 0 && after.Status != 404
+		return (before.Status == 0 || before.Status == 404) && after.Status != 0
 	case "delete-route":
-		return before.Status != 0 && before.Status != 404 && (after.Status == 0 || after.Status == 404)
+		return before.Status != 0 && (after.Status == 0 || after.Status == 404)
 	default:
 		return after.Status != 0
 	}

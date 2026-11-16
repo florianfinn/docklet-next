@@ -79,7 +79,7 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 	if err != nil {
 		return g.inventory, err
 	}
-	if g.inventory.Resume && !g.inventory.AdminOff && g.inventory.PersistConfig {
+	if g.inventory.Eligibility.Writable && g.inventory.Resume && !g.inventory.AdminOff && g.inventory.PersistConfig {
 		diverged, err := e.diverged(ctx, i, g.inventory)
 		if err != nil {
 			g.inventory.Eligibility = refused(dto.AdminUnavailable, g.root)
