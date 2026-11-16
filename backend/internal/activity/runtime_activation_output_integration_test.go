@@ -35,8 +35,17 @@ func TestRuntimeActivationLegacyLossMarkerIsNDJSON(t *testing.T) {
 				require.Equal(t, 202, status, string(response))
 				run := activationRunID(t, response)
 				activationJoinRun(t, hub, executor, env, run)
-				releaseAppend := activity.DelayRuntimeOutputAppendForTest(t, hub.remote, run)
 				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				if env != "0" {
+					// A rate-limited Refresh can still be active; join terminal evidence before stopping.
+					ref, found, err := hub.services.runtime.Reference(ctx, env, run)
+					require.NoError(t, err)
+					require.True(t, found)
+					snapshot, err := hub.remote.Wait(ctx, ref, nil)
+					require.NoError(t, err)
+					require.Equal(t, activitytypes.StatusSuccess, snapshot.Status)
+				}
+				releaseAppend := activity.DelayRuntimeOutputAppendForTest(t, hub.remote, run)
 				require.NoError(t, hub.remote.Close(ctx))
 				cancel()
 				before := runtimeEffectEvents(executor.services.http.snapshot())

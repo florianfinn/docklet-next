@@ -47,6 +47,9 @@ func TestRuntimeActivationFxRetriesSettlementAfterSQLiteContention(t *testing.T)
 	hub := activationApp(t, false, "", activationSetup{BeforeStart: func(f *runtimeServicesFixture, _ *activity.RuntimeHTTPService, _ *activity.RuntimeReceiver) {
 		pool, err := f.db.SQLDB()
 		require.NoError(t, err)
+		// The pool has one connection; retain real SQLite Busy retries without its 2.5s delay.
+		_, err = pool.ExecContext(t.Context(), "PRAGMA busy_timeout = 5")
+		require.NoError(t, err)
 		observed = &activationObservedPool{DB: pool, exhausted: make(chan struct{})}
 		f.db.Config.ConnPool = observed
 		f.db.Statement.ConnPool = observed

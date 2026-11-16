@@ -208,13 +208,15 @@ func TestActivityListLaterPageFailures(t *testing.T) {
 					_, _ = w.Write([]byte(`{"data":[],"pagination":{"totalItems":"invalid"}}`))
 				}
 			})
-			client := server.Client()
-			client.Timeout = time.Second
+			// The proxy owns the request deadline; Client.Timeout does not bound these reads.
+			transport := &http.Transport{ResponseHeaderTimeout: time.Second}
+			t.Cleanup(transport.CloseIdleConnections)
+			client := &http.Client{Transport: transport}
 			f := newActivityListFixture(t, false, server.URL, client)
 			older := f.seed(t, activityListHost)
 			f.seed(t, activityListHost)
 			rec := f.request(t, activityListHost, "?start=1&limit=100")
-			// A client timeout does not join the agent handler.
+			// A transport timeout does not join the agent handler.
 			startsMu.Lock()
 			actualStarts := append([]string(nil), starts...)
 			startsMu.Unlock()

@@ -41,12 +41,13 @@ func TestActivityListDirectOutageAndRecovery(t *testing.T) {
 					}
 					writeActivityAgentPage(t, w, []activity.Activity{}, 0)
 				})
-				transport := &http.Transport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				// The proxy owns the request deadline; bound this stalled fixture at the transport.
+				transport := &http.Transport{ResponseHeaderTimeout: time.Second, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 					dials.Add(1)
 					return (&net.Dialer{}).DialContext(ctx, network, address)
 				}}
 				t.Cleanup(transport.CloseIdleConnections)
-				client := &http.Client{Transport: transport, Timeout: time.Second}
+				client := &http.Client{Transport: transport}
 				endpoint := server.URL
 				if mode == "refusal" {
 					// Reserve then close a real listener: the actual native dial must refuse.
