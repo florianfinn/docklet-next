@@ -341,6 +341,7 @@ func TestMarkerAtProviderRootAndLongThrottle(t *testing.T) {
 	r.Change.RouteID = "routes.yml#app"
 	in := x.prepare(r)
 	in.MarkerPath = "docklet-check-example-op.yml"
+	in.TempPath = ".docklet-example-op.tmp"
 	require.NoError(t, x.e.Mark(t.Context(), in))
 	require.Contains(t, x.read(in.MarkerPath), "Host(`example-op.docklet-check.invalid`)")
 	require.NoError(t, x.d.Cleanup(t.Context(), in))

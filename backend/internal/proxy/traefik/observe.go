@@ -250,5 +250,10 @@ func (e *engine) Mark(ctx context.Context, in proxy.Intent) error {
 	if err != nil {
 		return err
 	}
-	return w.Write(ctx, in.MarkerPath, []byte(text), 0644)
+	// Reuse the protocol-owned temporary name after target publication. A file
+	// provider must never observe a partially written marker.
+	if err = w.Write(ctx, in.TempPath, []byte(text), 0644); err != nil {
+		return err
+	}
+	return w.Replace(ctx, in.TempPath, in.MarkerPath)
 }
