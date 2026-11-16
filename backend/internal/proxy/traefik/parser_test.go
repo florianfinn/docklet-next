@@ -437,3 +437,14 @@ func TestPinnedTraefikMatcherArityAndASCIIParity(t *testing.T) {
 		require.Equal(t, tt.class, routes[0].Class)
 	}
 }
+
+func TestSyntaxAndDuplicateDiagnosticsKeepTheirActualLine(t *testing.T) {
+	for _, text := range []string{"# heading\nhttp:\n  routers: ]\n", "# heading\nhttp: {}\nhttp: {}\n"} {
+		_, err := parseDocument(text, "bad.yml")
+		var p *dto.Problem
+		require.ErrorAs(t, err, &p)
+		require.Equal(t, "bad.yml", p.Path)
+		require.Equal(t, 3, p.Line)
+		require.NotEmpty(t, p.Detail)
+	}
+}

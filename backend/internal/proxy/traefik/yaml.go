@@ -8,6 +8,7 @@ package traefik
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -19,6 +20,25 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"go.yaml.in/yaml/v4"
 )
+
+type sourceError struct {
+	line  int
+	cause error
+}
+
+func (e sourceError) Error() string { return e.cause.Error() }
+func (e sourceError) Unwrap() error { return e.cause }
+func yamlLine(err error) int {
+	var load *yaml.LoadError
+	if errors.As(err, &load) {
+		return max(1, load.Mark.Line)
+	}
+	var source sourceError
+	if errors.As(err, &source) {
+		return max(1, source.line)
+	}
+	return 1
+}
 
 type document struct {
 	text  string
@@ -44,7 +64,7 @@ func parseDocument(text, p string) (*document, error) {
 	var root yaml.Node
 	dec := yaml.NewDecoder(strings.NewReader(text))
 	if err := dec.Decode(&root); err != nil {
-		return nil, problem(dto.InvalidGraph, p, 1, err.Error())
+		return nil, problem(dto.InvalidGraph, p, yamlLine(err), err.Error())
 	}
 	var extra yaml.Node
 	if err := dec.Decode(&extra); err != io.EOF {
@@ -55,7 +75,7 @@ func parseDocument(text, p string) (*document, error) {
 	}
 	d := &document{text: text, root: root.Content[0], spans: map[*yaml.Node]span{}}
 	if err := d.walk(d.root, false); err != nil {
-		return nil, problem(dto.UnsupportedFormat, p, 1, err.Error())
+		return nil, problem(dto.UnsupportedFormat, p, yamlLine(err), err.Error())
 	}
 	return d, nil
 }
@@ -76,14 +96,14 @@ func (d *document) offset(n *yaml.Node) int {
 }
 func (d *document) walk(n *yaml.Node, flow bool) error {
 	if n.Anchor != "" || n.Kind == yaml.AliasNode || n.Style&yaml.TaggedStyle != 0 {
-		return fmt.Errorf("YAML indirection or explicit tag")
+		return sourceError{n.Line, fmt.Errorf("YAML indirection or explicit tag")}
 	}
 	if n.Kind == yaml.MappingNode {
 		seen := map[string]bool{}
 		for i := 0; i < len(n.Content); i += 2 {
 			k := n.Content[i]
 			if k.Kind != yaml.ScalarNode || k.Tag != "!!str" || seen[k.Value] {
-				return fmt.Errorf("duplicate or non-string mapping key")
+				return sourceError{k.Line, fmt.Errorf("duplicate or non-string mapping key")}
 			}
 			seen[k.Value] = true
 		}
@@ -105,13 +125,13 @@ func (d *document) walk(n *yaml.Node, flow bool) error {
 			end, err = tokenEnd(d.text, start, flow)
 		}
 		if err != nil {
-			return err
+			return sourceError{n.Line, err}
 		}
 	}
 	if n.Kind == yaml.ScalarNode && start < end {
 		var token yaml.Node
 		if err := yaml.Unmarshal([]byte(d.text[start:end]), &token); err != nil || len(token.Content) != 1 || token.Content[0].Value != n.Value {
-			return fmt.Errorf("scalar source span does not match parsed value")
+			return sourceError{n.Line, fmt.Errorf("scalar source span does not match parsed value")}
 		}
 	}
 	d.spans[n] = span{start, end}
