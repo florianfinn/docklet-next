@@ -64,7 +64,7 @@ func TestP14OpaqueFilesAndP22Eligibility(t *testing.T) {
 	x.put("dynamic/nested/AUTH.SECRET.YAML", "must-not-project")
 	x.put("dynamic/nested.secret/routes.yml", "must-not-project")
 	require.NoError(t, os.Symlink("/nonexistent", filepath.Join(x.root, "dynamic", "link.secret.yml")))
-	read, err := x.e.Read(t.Context(), x.i)
+	read, err := x.readResult()
 	require.NoError(t, err)
 	require.Len(t, read.OpaqueFiles, 3)
 	b, err := json.Marshal(read)
@@ -84,7 +84,7 @@ func TestP14OpaqueFilesAndP22Eligibility(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			x.put("dynamic/"+tt.name, tt.content)
-			read, err := x.e.Read(t.Context(), x.i)
+			read, err := x.readResult()
 			require.NoError(t, err)
 			require.False(t, read.Eligibility.Writable)
 			require.Equal(t, tt.want, read.Eligibility.Reason)
@@ -94,7 +94,7 @@ func TestP14OpaqueFilesAndP22Eligibility(t *testing.T) {
 		})
 	}
 	x.put("dynamic/routes.yml", strings.Replace(tiny, "      service: app", "      ruleSyntax: v2\n      service: app", 1))
-	read, err = x.e.Read(t.Context(), x.i)
+	read, err = x.readResult()
 	require.NoError(t, err)
 	require.Equal(t, "text-only", read.Routes[0].Class)
 	require.Equal(t, dto.RuleSyntaxV2, read.Routes[0].Eligibility.Reason)
@@ -135,7 +135,7 @@ func TestInventorySourcesAndWatchGuard(t *testing.T) {
 		{"bad-watch", "--providers.file.watch=unknown", dto.IncompleteInventory},
 		{"throttle", "--providers.providersThrottleDuration=bad", dto.IncompleteInventory},
 		{"negative-throttle", "--providers.providersThrottleDuration=-1s", dto.IncompleteInventory},
-		{"long-throttle", "--providers.providersThrottleDuration=2m", dto.IncompleteInventory},
+		{"overflow-throttle", "--providers.providersThrottleDuration=2500000h", dto.IncompleteInventory},
 		{"port", "--entrypoints.web.address=bad", dto.IncompleteInventory},
 		{"zero-port", "--entrypoints.web.address=:0", dto.IncompleteInventory},
 		{"high-port", "--entrypoints.web.address=:65536", dto.IncompleteInventory},
@@ -174,7 +174,12 @@ func TestP25SharedServiceDependantsAndCrossFileGuard(t *testing.T) {
 	require.Equal(t, strings.Replace(shared(t), "http://192.0.2.12:8080", "http://192.0.2.22:8080", 1), string(in.New.Content))
 	s, err := state(in)
 	require.NoError(t, err)
-	require.Len(t, s.Probes, 3)
+	require.Len(t, s.Probes, 9)
+	for _, p := range s.Probes {
+		require.NotEmpty(t, p.URL)
+		require.Empty(t, p.Reason)
+		require.Contains(t, p.URL, "https://127.0.0.1:")
+	}
 	routes := map[string]bool{}
 	for _, p := range s.Probes {
 		routes[p.Route] = true
@@ -190,7 +195,7 @@ func TestP25SharedServiceDependantsAndCrossFileGuard(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, dto.Verified, obs.State, "one unchanged dependant prevents routing verification")
 	x.put("dynamic/other.yml", "http: {routers: {other: {rule: 'Host(`other.example.net`)', service: shared@file}}}\n")
-	read, err := x.e.Read(t.Context(), x.i)
+	read, err := x.readResult()
 	require.NoError(t, err)
 	route, ok := findRoute(read.Routes, r.Change.RouteID, r.Target)
 	require.True(t, ok)
@@ -486,12 +491,12 @@ func TestPrepareInvalidRequestsRefuseWithoutEffects(t *testing.T) {
 }
 func TestLabelRoutesLinkOnlyToManagedStack(t *testing.T) {
 	x := fixture(t)
-	r, err := x.e.Read(t.Context(), x.i)
+	r, err := x.readResult()
 	require.NoError(t, err)
 	require.Equal(t, "label-read-only", r.Routes[len(r.Routes)-1].Class)
 	require.Empty(t, r.Routes[len(r.Routes)-1].ProjectID)
 	require.NoError(t, x.db.Exec("INSERT INTO projects(id,name,path,status,is_archived) VALUES(?,?,?,?,?)", "example-id", "example-stack", "/example/projects/example-stack", "running", false).Error)
-	r, err = x.e.Read(t.Context(), x.i)
+	r, err = x.readResult()
 	require.NoError(t, err)
 	route := r.Routes[len(r.Routes)-1]
 	require.Equal(t, "example-id", route.ProjectID)

@@ -140,6 +140,9 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 					}
 				}
 				if r.Change.Upstreams != nil {
+					if r.Change.Service != "" && r.Change.Service != route.Service {
+						return in, dto.Fail(dto.InvalidInput, 422)
+					}
 					if len(r.Change.Upstreams) == 0 || route.ServiceFile != r.Target {
 						return in, dto.Fail(dto.UnsupportedFormat, 422)
 					}

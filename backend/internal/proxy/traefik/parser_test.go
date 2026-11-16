@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
 )
@@ -237,4 +238,54 @@ func TestBlockListResizePreservesCommentPositions(t *testing.T) {
 		}
 		require.Equal(t, tt.want, out)
 	}
+}
+
+func TestNoRouteHeadersAndResponseClasses(t *testing.T) {
+	require.True(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/plain; charset=utf-8"}}))
+	require.False(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "42", "content-type": "text/plain"}}))
+	require.False(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/html"}}))
+	require.False(t, routingEvidence("edit-route", hostio.Response{}, hostio.Response{Status: 200}))
+	require.False(t, routingEvidence("edit-route", hostio.Response{Status: 200}, hostio.Response{}))
+}
+
+func TestProbeSelectionAndProviderLogCorpus(t *testing.T) {
+	inv := dto.Inventory{EntryPoints: []dto.EntryPoint{{Name: "web", Address: ":80"}, {Name: "secure", Address: ":443", TLS: true}, {Name: "dns", Address: ":53/udp"}}}
+	probes := routeProbes(dto.Route{ID: "a", Rule: "Host(`app.example.com`) && PathPrefix(`/api`)"}, inv)
+	require.Len(t, probes, 2)
+	require.Equal(t, "http://127.0.0.1:80/api", probes[0].URL)
+	require.Equal(t, "https://127.0.0.1:443/api", probes[1].URL)
+	probes = routeProbes(dto.Route{ID: "a", Rule: "Host(`app.example.com`)", EntryPoints: []string{"secure"}}, inv)
+	require.Len(t, probes, 1)
+	require.Equal(t, "https://127.0.0.1:443/", probes[0].URL)
+	probes = routeProbes(dto.Route{Rule: "HostRegexp(`^[a-z0-9-]+\\.example\\.com$`)"}, inv)
+	require.Equal(t, "docklet-probe.example.com", probes[0].Host)
+	for _, rule := range []string{"Unknown(`a`)", "HostRegexp(`.*`)", "HostRegexp(`^[a-z0-9-]+\\.example\\.com`)", "HostRegexp(`abc$`)"} {
+		probes = routeProbes(dto.Route{Rule: rule}, inv)
+		require.Equal(t, dto.NotObservable, probes[0].Reason)
+	}
+	probes = routeProbes(dto.Route{Rule: "Host(`app.example.com`)"}, dto.Inventory{EntryPoints: []dto.EntryPoint{{Name: "bad", Address: "invalid"}}})
+	require.Equal(t, dto.NotObservable, probes[0].Reason)
+	marker := markerProbe("a", inv)
+	require.Equal(t, "http://127.0.0.1:80/", marker.URL)
+	marker = markerProbe("a", dto.Inventory{EntryPoints: []dto.EntryPoint{{Name: "dns", Address: ":53/udp"}}})
+	require.Equal(t, dto.NotObservable, marker.Reason)
+	for _, line := range []string{
+		`{"error":"bad","providerName":"file"}`, `time ERR rejected routerName=app@file`, `level=error msg=rejected routerName=app@file`, `{"level":"error","message":"bad","routerName":"app@file"}`, `ERR rejected routerName=app@file`, `time error="bad file provider"`, `time error="bad configuration file"`,
+	} {
+		require.True(t, providerError(line), line)
+	}
+	for _, line := range []string{`INF Configuration loaded providerName=file`, `{"level":"info","message":"Configuration loaded","providerName":"file"}`, `ERR error="unrelated docker failure" providerName=docker`} {
+		require.False(t, providerError(line), line)
+	}
+}
+
+func TestNoRouteCannotVerifyChangedRouting(t *testing.T) {
+	missing := hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/plain"}}
+	backend := hostio.Response{Status: 404, Headers: map[string]string{"content-length": "42", "content-type": "text/plain"}}
+	require.False(t, noRoute(hostio.Response{Status: 200, Headers: missing.Headers}))
+	require.False(t, routingEvidence("create-route", missing, missing))
+	require.False(t, routingEvidence("delete-route", hostio.Response{}, missing))
+	require.False(t, routingEvidence("delete-route", missing, missing))
+	require.False(t, routingEvidence("delete-route", backend, backend))
+	require.False(t, routingEvidence("edit-route", hostio.Response{Status: 200}, missing))
 }

@@ -21,15 +21,35 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
-func readonly(v *dto.Inventory, code dto.Reason, p string) {
+type staticInventory struct {
+	dto.Inventory
+	single bool
+}
+
+func readonly(v *staticInventory, code dto.Reason, p string) {
 	if v.Eligibility.Writable {
 		v.Eligibility = dto.Eligibility{Reason: code, Path: p}
 	}
 }
 func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, error) {
-	v := dto.Inventory{Identity: i.Identity, Generation: i.Generation, Watch: true, ThrottleMillis: 2000, EntryPoints: []dto.EntryPoint{}, Resolvers: []string{}, Providers: []string{}, Plugins: []string{}, Imports: []string{}, Eligibility: dto.Eligibility{Writable: true}}
+	v, err := e.inventory(ctx, i)
+	return v.Inventory, err
+}
+
+func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory, error) {
+	v := staticInventory{Inventory: dto.Inventory{Identity: i.Identity, Generation: i.Generation, Watch: true, ThrottleMillis: 2000, EntryPoints: []dto.EntryPoint{}, Resolvers: []string{}, Providers: []string{}, Plugins: []string{}, Imports: []string{}, Eligibility: dto.Eligibility{Writable: true}}}
 	if i.Source.ReadOnly || i.Source.Kind == dto.UnknownSourceKind || i.Source.Kind == dto.SingleFileSource {
-		readonly(&v, dto.SourceReadOnly, "")
+		code := i.Source.Reason
+		if code == "" {
+			code = dto.SourceReadOnly
+			if i.Source.Kind == dto.SingleFileSource {
+				code = dto.SingleFileMount
+			}
+			if i.Source.Kind == dto.UnknownSourceKind {
+				code = dto.UnknownSource
+			}
+		}
+		readonly(&v, code, "")
 	}
 	c, err := e.run.InspectContainer(ctx, i)
 	if err != nil {
@@ -150,7 +170,7 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 		case len(bits) >= 2 && bits[0] == "providers":
 			if bits[1] == "providersthrottleduration" {
 				d, err := time.ParseDuration(val)
-				if err != nil || d < 0 || d > time.Minute {
+				if err != nil || d < 0 || d > (time.Duration(1<<63-1)-10*time.Second)/2 {
 					readonly(&v, dto.IncompleteInventory, "")
 				} else {
 					v.ThrottleMillis = d.Milliseconds()
@@ -188,6 +208,7 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 	v.FileProvider = directory
 	if fileName != "" {
 		v.FileProvider = fileName
+		v.single = true
 		readonly(&v, dto.SingleFileMount, fileName)
 	}
 	if directory == "" && fileName == "" {

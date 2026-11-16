@@ -26,16 +26,20 @@ type graph struct {
 
 func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 	g := graph{docs: map[string]*document{}}
-	inv, err := e.Inventory(ctx, i)
-	g.result = dto.ReadResult{Inventory: inv, Eligibility: inv.Eligibility, Files: []dto.File{}, OpaqueFiles: []dto.OpaqueFile{}, Routes: []dto.Route{}}
+	inv, err := e.inventory(ctx, i)
+	g.result = dto.ReadResult{Inventory: inv.Inventory, Eligibility: inv.Eligibility, Files: []dto.File{}, OpaqueFiles: []dto.OpaqueFile{}, Routes: []dto.Route{}}
 	if err != nil {
 		return g, err
 	}
 	dir := routeDirectory(i)
+	single := inv.single
+	if single {
+		dir = inv.FileProvider
+	}
 	if !path.IsAbs(dir) || !within(i.Source.MountTarget, dir) {
 		return g, dto.Fail(dto.InvalidInput, 422)
 	}
-	files, opaque, err := e.run.CopyHeaders(ctx, i, dir, false, func(h hostio.FileHeader) error {
+	files, opaque, err := e.run.CopyHeaders(ctx, i, dir, single, func(h hostio.FileHeader) error {
 		if consumed(h.Path) || hostio.Secret(h.Path) {
 			if h.ModifiedAt.After(g.newest) {
 				g.newest = h.ModifiedAt
@@ -46,7 +50,14 @@ func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 	if err != nil {
 		return g, err
 	}
-	prefix := strings.TrimPrefix(strings.TrimPrefix(dir, i.Source.MountTarget), "/")
+	containerDir := dir
+	if single {
+		containerDir = path.Dir(dir)
+	}
+	prefix := strings.TrimPrefix(strings.TrimPrefix(containerDir, i.Source.MountTarget), "/")
+	if single && dir == i.Source.MountTarget {
+		prefix = ""
+	}
 	for _, o := range opaque {
 		o.Path = path.Join(prefix, o.Path)
 		g.result.OpaqueFiles = append(g.result.OpaqueFiles, o)
@@ -96,7 +107,7 @@ func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 		p := err.(*dto.Problem)
 		denyGraph(&g, p.Code, p.Path, p.Line, p.Detail)
 	}
-	g.result.Routes = classify(g.docs, g.result.OpaqueFiles, inv)
+	g.result.Routes = classify(g.docs, g.result.OpaqueFiles, inv.Inventory)
 	return g, nil
 }
 func denyGraph(g *graph, code dto.Reason, p string, line int, detail string) {

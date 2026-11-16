@@ -10,7 +10,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"net/url"
 	"regexp"
@@ -44,20 +43,11 @@ func routeProbes(r dto.Route, inv dto.Inventory) []probe {
 		}
 	}
 	out := []probe{}
-	tls := false
-	for _, ep := range inv.EntryPoints {
-		if ep.TLS && contains(r.EntryPoints, ep.Name) {
-			tls = true
-		}
-	}
 	for _, ep := range inv.EntryPoints {
 		if len(r.EntryPoints) > 0 && !contains(r.EntryPoints, ep.Name) {
 			continue
 		}
 		if strings.HasSuffix(ep.Address, "/udp") {
-			continue
-		}
-		if len(r.EntryPoints) == 0 && ep.TLS != tls {
 			continue
 		}
 		_, port, err := net.SplitHostPort(strings.TrimSuffix(ep.Address, "/tcp"))
@@ -142,7 +132,7 @@ func routingEvidence(kind string, before, after hostio.Response) bool {
 	case "delete-route":
 		return before.Status != 0 && !noRoute(before) && noRoute(after)
 	default:
-		return before.Status != 0 && hostio.Differs(before, after)
+		return before.Status != 0 && !noRoute(after) && hostio.Differs(before, after)
 	}
 }
 func unverified(code dto.Reason) proxy.Observation {
@@ -251,7 +241,11 @@ func (e *engine) Mark(ctx context.Context, in proxy.Intent) error {
 	if !strings.HasSuffix(in.MarkerPath, "/"+expected) && in.MarkerPath != expected {
 		return dto.Fail(dto.InvalidInput, 422)
 	}
-	text := fmt.Sprintf("http:\n  routers:\n    docklet-check-%s:\n      rule: Host(`%s`)\n      entryPoints: [%s]\n      service: docklet-check-%s\n  services:\n    docklet-check-%s:\n      loadBalancer:\n        servers:\n          - url: http://127.0.0.1:1\n", in.Request.ID, s.Marker.Host, s.Marker.Route, in.Request.ID, in.Request.ID)
+	text, err := render(map[string]any{"http": map[string]any{"routers": map[string]any{"docklet-check-" + in.Request.ID: map[string]any{"rule": "Host(`" + s.Marker.Host + "`)", "entryPoints": []string{s.Marker.Route}, "service": "docklet-check-" + in.Request.ID}}, "services": map[string]any{"docklet-check-" + in.Request.ID: backend([]string{"http://127.0.0.1:1"})}}}, 0)
+	if err != nil {
+		return err
+	}
+	text += "\n"
 	w, err := e.run.Writer(ctx, in.Request.Instance)
 	if err != nil {
 		return err

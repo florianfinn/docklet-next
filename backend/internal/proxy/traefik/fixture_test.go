@@ -46,22 +46,24 @@ var epoch = time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
 const tiny = "http:\n  routers:\n    app:\n      rule: Host(`app.example.com`)\n      entryPoints: [web]\n      service: app\n  services:\n    app:\n      loadBalancer:\n        servers: [{url: 'http://192.0.2.1:8080'}]\n"
 
 type seam struct {
-	t         *testing.T
-	mu        sync.Mutex
-	root      string
-	db        *database.DB
-	d         *proxy.DockerRuntime
-	e         *engine
-	i         dto.Instance
-	inspect   container.InspectResponse
-	now       time.Time
-	execs     map[string]hostio.ExecResult
-	calls     [][]string
-	archives  []string
-	logs      string
-	logSince  []string
-	probeFunc func([]string) hostio.ExecResult
-	logStatus int
+	inspectFailures int
+	t               *testing.T
+	mu              sync.Mutex
+	root            string
+	db              *database.DB
+	d               *proxy.DockerRuntime
+	e               *engine
+	i               dto.Instance
+	inspect         container.InspectResponse
+	now             time.Time
+	execs           map[string]hostio.ExecResult
+	calls           [][]string
+	archives        []string
+	logs            string
+	logSince        []string
+	probeFunc       func([]string) hostio.ExecResult
+	logStatus       int
+	archiveStatus   map[string]int
 }
 
 func fixture(t *testing.T) *seam {
@@ -88,10 +90,10 @@ func fixture(t *testing.T) *seam {
 	waits := 0
 	x.e.wait = func(ctx context.Context, d time.Duration) error {
 		waits++
-		if waits > 250 {
+		if waits > 50 {
 			return fmt.Errorf("observation exceeded injected clock budget")
 		}
-		x.now = x.now.Add(max(d, 5*time.Second))
+		x.now = x.now.Add(max(d, 14*time.Second))
 		return ctx.Err()
 	}
 	x.put("dynamic/routes.yml", tiny)
@@ -111,7 +113,9 @@ func (x *seam) read(p string) string {
 }
 func (x *seam) request(kind string) dto.ApplyRequest {
 	x.t.Helper()
-	g, err := x.d.Graph(x.t.Context(), x.i)
+	var g map[string]string
+	var err error
+	require.NotPanics(x.t, func() { g, err = x.d.Graph(x.t.Context(), x.i) }, "graph reads must refuse input without crashing")
 	require.NoError(x.t, err)
 	b, err := x.d.Target(x.t.Context(), x.i, "dynamic/routes.yml")
 	require.NoError(x.t, err)
@@ -119,7 +123,9 @@ func (x *seam) request(kind string) dto.ApplyRequest {
 }
 func (x *seam) prepare(r dto.ApplyRequest) proxy.Intent {
 	x.t.Helper()
-	in, err := x.e.Prepare(x.t.Context(), r)
+	var in proxy.Intent
+	var err error
+	require.NotPanics(x.t, func() { in, err = x.e.Prepare(x.t.Context(), r) }, "preparation must refuse input without crashing")
 	require.NoError(x.t, err, "%+v", err)
 	in.TempPath = "dynamic/.docklet-" + r.ID + ".tmp"
 	in.MarkerPath = "dynamic/docklet-check-" + r.ID + ".yml"
@@ -137,9 +143,18 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 	case p == "/containers/json":
 		_ = json.NewEncoder(w).Encode([]container.Summary{{ID: "example-labelled", Names: []string{"/example-app"}, Labels: map[string]string{"traefik.http.routers.label.rule": "Host(`label.example.com`)", "traefik.http.routers.label.service": "label", "com.docker.compose.project": "example-stack"}}})
 	case p == "/containers/example-proxy/json" || p == "/containers/example-container/json":
+		if x.inspectFailures > 0 {
+			x.inspectFailures--
+			http.Error(w, `{"message":"container unavailable"}`, 503)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(x.inspect)
 	case strings.HasSuffix(p, "/archive"):
 		source := r.URL.Query().Get("path")
+		if status := x.archiveStatus[source]; status != 0 {
+			http.Error(w, `{"message":"archive unavailable"}`, status)
+			return
+		}
 		local := filepath.Join(x.root, strings.TrimPrefix(strings.TrimPrefix(source, "/etc/traefik"), "/"))
 		st, err := os.Stat(local)
 		if err != nil {
@@ -162,7 +177,12 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			rel, _ := filepath.Rel(filepath.Dir(local), file)
+			rel, _ := filepath.Rel(local, file)
+			if rel == "." {
+				rel = path.Base(source)
+			} else {
+				rel = path.Join(path.Base(source), filepath.ToSlash(rel))
+			}
 			h, err := tar.FileInfoHeader(info, "")
 			if err != nil {
 				return err
@@ -253,5 +273,11 @@ func frame(w io.Writer, stream byte, b []byte) (int, error) {
 func (x *seam) inventory() (v dto.Inventory, err error) {
 	x.t.Helper()
 	require.NotPanics(x.t, func() { v, err = x.e.Inventory(x.t.Context(), x.i) }, "inventory rejects incomplete input without crashing")
+	return v, err
+}
+
+func (x *seam) readResult() (v dto.ReadResult, err error) {
+	x.t.Helper()
+	require.NotPanics(x.t, func() { v, err = x.e.Read(x.t.Context(), x.i) }, "graph reads must refuse input without crashing")
 	return v, err
 }
