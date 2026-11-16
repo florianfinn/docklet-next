@@ -68,6 +68,8 @@ export const EXEMPT_WIRE_ENUMS = [
   { property: "HistoryCondition.reason", reason: "Transport evidence for runtime conditions, never rendered: web/src/data/http/runtime-conditions.ts." },
   { property: "HistoryContainerSample.state", reason: "Transport sample input for hub aggregation, never rendered." },
   { property: "ImagePullProgressFrame.status", reason: "Mapped to a domain progress phase before display: web/src/data/http/image-mapping.ts." },
+  { property: "ImageRuntimeIdentityBlocker.reason", reason: "Validated by web/src/data/runtime-blocker.ts and mapped to two fixed blocker texts in web/src/data/use-command-error.ts." },
+  { property: "ProjectWorkspaceProblem.code", reason: "Mapped to the workspace permission text in web/src/data/http/workspace.ts; the code itself is never rendered." },
   { property: "ImageUpdateInfo.state", reason: "Mapped to a domain update variant before display: web/src/data/http/update-mapping.ts." },
   { property: "ImageupdateResponse.state", reason: "Mapped to a domain update variant before display: web/src/data/http/update-mapping.ts." },
   { property: "NotificationDispatchAutoHeal.outcome", reason: "Outbound notification transport only, never rendered by the web." },
