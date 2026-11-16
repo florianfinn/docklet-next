@@ -64,38 +64,35 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 	if saveErr == nil && status == activitytypes.StatusFailed {
 		s.notifier.Terminal(context.WithoutCancel(workCtx), backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
 	}
+	var expired []*backuptypes.SystemBackupRun
 	var retentionErr error
 	if err == nil && saveErr == nil && run.Trigger == backuptypes.SystemBackupTriggerScheduled {
 		policy, loadErr := s.store.Policy(workCtx, run.PolicyID)
 		if loadErr != nil || policy == nil {
 			retentionErr = ErrSystemBackupRetention
-		} else {
-			retentionErr = s.applyPendingRetention(workCtx, run.PolicyID, policy.RetentionCount)
+		} else if expired, retentionErr = s.expiredRuns(workCtx, run.PolicyID, policy.RetentionCount); retentionErr != nil {
+			expired = nil
 		}
 		if retentionErr != nil {
 			code = "backup.retention_failed"
 		}
 	}
-	completed, activityErr := s.activityService.CompleteActivity(workCtx, run.ActivityID, status, code, detail)
-	if err == nil && saveErr == nil {
-		if activityErr != nil || completed == nil || completed.Status != activitytypes.StatusSuccess {
-			run.Status, run.ErrorCode = backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupErrorInterrupted
-			_ = s.store.SaveRun(context.WithoutCancel(workCtx), run)
-			return errors.New("backup.failed")
+	if err != nil || saveErr != nil {
+		_, _ = s.activityService.CompleteActivity(workCtx, run.ActivityID, status, code, detail)
+		if err != nil {
+			return errors.New(code)
 		}
-		run.Status = backuptypes.SystemBackupStatusSucceeded
-		if saveErr = s.store.SaveRun(context.WithoutCancel(workCtx), run); saveErr == nil {
-			s.notifier.Terminal(context.WithoutCancel(workCtx), backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
-		}
-	}
-	if err != nil {
-		return errors.New(code)
-	}
-	if saveErr != nil {
 		return errors.New("backup.failed")
 	}
-	if activityErr != nil {
+	// Success becomes visible in the transaction that releases the run gate.
+	if committed, _ := s.commitRun(workCtx, run, status, code, detail, expired); !committed {
+		s.discardRun(context.WithoutCancel(workCtx), run)
 		return errors.New("backup.failed")
+	}
+	run.Status = backuptypes.SystemBackupStatusSucceeded
+	s.notifier.Terminal(context.WithoutCancel(workCtx), backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
+	if removeErr := s.removeExpiredArchives(context.WithoutCancel(workCtx), expired); removeErr != nil && retentionErr == nil {
+		retentionErr = removeErr
 	}
 	if copyErr != nil {
 		return copyErr
@@ -103,5 +100,5 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 	if retentionErr != nil {
 		return ErrSystemBackupRetention
 	}
-	return activityErr
+	return nil
 }

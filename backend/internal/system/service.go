@@ -154,8 +154,13 @@ func NewSystemService(
 	return s
 }
 
-// ReconcileInterruptedBackups fails system backup runs left running by the previous process.
+// ReconcileInterruptedBackups settles system backup runs left running by the previous process. A running
+// row with an archive crashed after validation and keeps it; storage reconciliation then checks the file.
 func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, _ ...string) error {
+	validated := s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("status = ? AND archive_name IS NOT NULL AND archive_name <> ''", SystemBackupStatusRunning)
+	if err := validated.Update("status", SystemBackupStatusSucceeded).Error; err != nil {
+		return err
+	}
 	query := s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("status = ?", SystemBackupStatusRunning)
 	if err := query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorInterrupted}).Error; err != nil {
 		return err
@@ -466,6 +471,16 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 		SaveRun: func(ctx context.Context, dto *backuptypes.SystemBackupRun) error {
 			run := systemBackupRunFromDTOInternal(*dto)
 			return s.db.WithContext(ctx).Save(&run).Error
+		},
+		CommitRunTx: func(tx *gorm.DB, dto *backuptypes.SystemBackupRun, expired []string) error {
+			run := systemBackupRunFromDTOInternal(*dto)
+			if err := tx.Save(&run).Error; err != nil {
+				return err
+			}
+			if len(expired) == 0 {
+				return nil
+			}
+			return tx.Where("id IN ?", expired).Delete(&SystemBackupRun{}).Error
 		},
 		FailRun: func(ctx context.Context, id, _ string) error {
 			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorFailed}).Error

@@ -14,6 +14,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,6 +29,7 @@ func TestHubCopyFailureUsesPruningPartialOutcome(t *testing.T) {
 		Policy:        func(context.Context, string) (*dto.SystemBackupPolicy, error) { return policy, nil },
 		CreateRun:     func(_ context.Context, r *dto.SystemBackupRun) error { saved = *r; return nil },
 		SaveRun:       func(_ context.Context, r *dto.SystemBackupRun) error { saved = *r; return nil },
+		CommitRunTx:   func(_ *gorm.DB, r *dto.SystemBackupRun, _ []string) error { saved = *r; return nil },
 		ExpiredRunIDs: func(context.Context, string, int) ([]string, error) { return nil, nil },
 	}})
 	outcome, err := s.runScheduledBackup(t.Context(), policy.ID)

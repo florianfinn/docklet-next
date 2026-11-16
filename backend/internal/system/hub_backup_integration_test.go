@@ -18,6 +18,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	backupstore "github.com/florianfinn/docklet-next/backend/internal/backup"
@@ -104,7 +105,7 @@ func TestHubBackupStoreQueriesAfterArchiveMigration(t *testing.T) {
 	db := newMigratedHubBackupDB(t)
 	store := (&SystemService{db: db}).backupStoreInternal()
 	// A new callback must be added to this schema exercise.
-	require.Equal(t, 15, reflect.TypeOf(store).NumField())
+	require.Equal(t, 16, reflect.TypeOf(store).NumField())
 	ctx := t.Context()
 	run := &backuptypes.SystemBackupRun{
 		ID: "archive", CreatedAt: time.Now().UTC(), Status: backuptypes.SystemBackupStatusRunning,
@@ -114,6 +115,9 @@ func TestHubBackupStoreQueriesAfterArchiveMigration(t *testing.T) {
 	run.Status = backuptypes.SystemBackupStatusSucceeded
 	run.ArchiveName = "archive.tar"
 	require.NoError(t, store.SaveRun(ctx, run))
+	require.NoError(t, db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return store.CommitRunTx(tx, run, []string{"expired-example"})
+	}))
 	_, err := store.Run(ctx, run.ID)
 	require.NoError(t, err)
 	params := pagination.QueryParams{SearchQuery: pagination.SearchQuery{Search: "archive"}, SortParams: pagination.SortParams{Sort: "createdAt", Order: pagination.SortDesc}, Params: pagination.Params{Limit: 10}}

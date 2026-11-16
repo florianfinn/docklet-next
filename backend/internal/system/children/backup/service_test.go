@@ -130,9 +130,10 @@ func TestRetentionKeepsManualArchive(t *testing.T) {
 	for _, name := range []string{"scheduled.tar", "manual.tar"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("image"), 0600))
 	}
-	deleted := []string{}
+	offset := -1
 	service := &Service{config: &config.Config{BackupDir: dir}, store: Store{
-		ExpiredRunIDs: func(context.Context, string, int) ([]string, error) {
+		ExpiredRunIDs: func(_ context.Context, _ string, keep int) ([]string, error) {
+			offset = keep
 			return []string{"scheduled", "manual"}, nil
 		},
 		Run: func(_ context.Context, id string) (*backuptypes.SystemBackupRun, error) {
@@ -142,11 +143,14 @@ func TestRetentionKeepsManualArchive(t *testing.T) {
 			}
 			return &backuptypes.SystemBackupRun{ID: id, PolicyID: "daily", Trigger: trigger, ArchiveName: id + ".tar"}, nil
 		},
-		DeleteRun: func(_ context.Context, id string) error { deleted = append(deleted, id); return nil },
 	}}
-	require.NoError(t, service.applyRetention(t.Context(), "daily", 1))
-	require.Equal(t, []string{"scheduled"}, deleted)
-	_, err := os.Stat(filepath.Join(dir, "scheduled.tar"))
+	expired, err := service.expiredRuns(t.Context(), "daily", 1)
+	require.NoError(t, err)
+	require.Zero(t, offset, "the running current archive takes one keep slot")
+	require.Len(t, expired, 1)
+	require.Equal(t, "scheduled", expired[0].ID)
+	require.NoError(t, service.removeExpiredArchives(t.Context(), expired))
+	_, err = os.Stat(filepath.Join(dir, "scheduled.tar"))
 	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = os.Stat(filepath.Join(dir, "manual.tar"))
 	require.NoError(t, err)

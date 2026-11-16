@@ -35,8 +35,6 @@ import (
 	"uuid"
 )
 
-const systemAdmissionID = "system"
-
 var (
 	ErrSystemBackupAlreadyRunning    = errors.New("run.busy")
 	ErrSystemBackupUnavailable       = errors.New("backup.storage_unavailable")
@@ -50,6 +48,7 @@ var (
 type Store struct {
 	CreateRun                 func(context.Context, *backuptypes.SystemBackupRun) error
 	SaveRun                   func(context.Context, *backuptypes.SystemBackupRun) error
+	CommitRunTx               RunCommitTx
 	FailRun                   func(context.Context, string, string) error
 	DeleteRun                 func(context.Context, string) error
 	Run                       func(context.Context, string) (*backuptypes.SystemBackupRun, error)

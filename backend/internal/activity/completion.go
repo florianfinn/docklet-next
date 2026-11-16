@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; atomic terminal write and final message.
+// Deviations: Local module namespace; atomic terminal write and final message; optional in-transaction completion hook.
 
 package activity
 
@@ -21,6 +21,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// CompletionHook runs inside the terminal transaction after the activity left its active state, with the
+// effective status. Its writes commit together with the terminal status, which releases the run gate.
+type CompletionHook func(tx *gorm.DB, status activity.Status) error
+
+// ErrCompletionHook marks a terminal write that rolled back because its hook failed; the activity stays active.
+var ErrCompletionHook = errors.New("activity completion hook failed")
+
 func (
 	s *ActivityService,
 ) CompleteActivity(
@@ -34,6 +41,15 @@ func (
 	*activity.Activity,
 	error,
 ) {
+	return s.completeActivityInternal(ctx, activityID, status, finalMessage, errMessage, nil, finalStep...)
+}
+
+// CompleteActivityWithHook is CompleteActivity with a hook that writes dependent state in the same transaction.
+func (s *ActivityService) CompleteActivityWithHook(ctx context.Context, activityID string, status activity.Status, finalMessage string, errMessage *string, hook CompletionHook) (*activity.Activity, error) {
+	return s.completeActivityInternal(ctx, activityID, status, finalMessage, errMessage, hook)
+}
+
+func (s *ActivityService) completeActivityInternal(ctx context.Context, activityID string, status activity.Status, finalMessage string, errMessage *string, hook CompletionHook, finalStep ...string) (*activity.Activity, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return nil, err
 	}
@@ -122,6 +138,11 @@ func (
 				final = &ActivityMessage{ActivityID: activityID, Level: level, Message: strings.TrimSpace(finalMessage), Code: code, Step: step, CreatedAt: now}
 				if err := tx.Create(final).Error; err != nil {
 					return fmt.Errorf("failed to append final activity message: %w", err)
+				}
+			}
+			if completed && hook != nil {
+				if err := hook(tx, status); err != nil {
+					return fmt.Errorf("%w: %w", ErrCompletionHook, err)
 				}
 			}
 			if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
