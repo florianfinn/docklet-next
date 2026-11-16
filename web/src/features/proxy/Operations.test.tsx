@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { Operations } from "./Operations";
-import { fixture, operation, Providers, changedHash } from "./proxy.test-support";
+import { fixture, operation, Providers, changedHash, hash } from "./proxy.test-support";
 import { InstanceWorkspace } from "./InstanceWorkspace";
 import { instance } from "./proxy.test-support";
 
@@ -34,11 +34,11 @@ describe("operation receipts through HTTP decoder to production renderer", () =>
     expect((screen.getByText(evidence === "routing" ? "Routing evidence" : "Load evidence").textContent?.length ?? 0) > 0).toBe(true);
   });
   it("requires release confirmation and sends the displayed current presence/hash", async () => {
-    const f = fixture(); f.state.operations = [operation({ state: "recovery-required", current: { present: true, hash: changedHash } })];
+    const f = fixture(); f.state.operations = [operation({ state: "recovery-required", current: { present: true, hash } })]; f.state.next = operation({ state: "recovery-required", current: { present: true, hash: changedHash } });
     render(<Providers><InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => {}} /></Providers>);
     const user = userEvent.setup(); await user.click(await screen.findByRole("button", { name: "Release" }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(`Present: ${changedHash}`).textContent).toBe(`Present: ${changedHash}`);
+    expect(dialog.textContent?.includes(`Present: ${changedHash}`)).toBe(true);
     const submit = within(dialog).getByRole("button", { name: "Release" });
     expect(submit.hasAttribute("disabled")).toBe(true); fireEvent.click(submit);
     expect(f.writes.filter(w => w.path.endsWith("/release")).length).toBe(0);

@@ -34,7 +34,7 @@ export function fixture() {
     if (path.endsWith("/release")) { const op = operation({ state: "released" }); state.operations = [op]; return json(op); }
     if (path.endsWith("/operations") && method === "POST") { state.operations = [state.next]; if (state.lost) throw new TypeError("lost-response"); return json(state.next); }
     if (path.endsWith("/operations")) return json(state.operations);
-    if (path.includes("/operations/")) { state.operationReads++; state.operations = [state.next]; return json(state.next); }
+    if (path.includes("/operations/")) { state.operationReads++; const recovery = state.operations.find(o => o.state === "recovery-required"); if (recovery) return json(state.next.state === "recovery-required" ? state.next : recovery); state.operations = [state.next]; return json(state.next); }
     if (method === "PUT") return json({ ...instance, ...(body as object) });
     if (method === "DELETE") return json(true);
     throw new Error(`unexpected-request:${method}:${path}`);

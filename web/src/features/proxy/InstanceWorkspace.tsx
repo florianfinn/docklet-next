@@ -24,7 +24,7 @@ export function InstanceWorkspace({ instance, api, updated, removed }: { instanc
   const [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), lock = useRef(false), active = useRef(false);
   const [editor, setEditor] = useState<{ route?: Route; snapshot: Snapshot }>(), [action, setAction] = useState<{ value: ChangeAction; snapshot: Snapshot }>();
   const refresh = useCallback(async () => {
-    const [configuration, operations] = await Promise.allSettled([Promise.all([api.read(instance), api.inventory(instance)]), api.operations(instance.id)]);
+    const [configuration, operations] = await Promise.allSettled([Promise.all([api.read(instance), api.inventory(instance)]), api.operations(instance.id).then(rows => Promise.all(rows.map(row => row.state === "recovery-required" ? api.operation(row.id) : row)))]);
     if (!active.current) return false;
     if (operations.status === "fulfilled") setRows(operations.value);
     if (configuration.status === "fulfilled") { const [read, inventory] = configuration.value; setSnapshot({ read, inventory }); }
