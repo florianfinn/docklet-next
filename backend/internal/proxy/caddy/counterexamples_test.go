@@ -406,3 +406,18 @@ func TestCaddyRefusesTraefikAndUnknownOperationKindsBeforeExec(t *testing.T) {
 	}
 	require.Empty(t, x.commands)
 }
+
+func TestReadbackRequiresTheRequestedHostAndPathMatchers(t *testing.T) {
+	s := baseSite()
+	s.Path = "/api"
+	raw := configFor(s)
+	for _, which := range []string{"host", "path"} {
+		var config map[string]any
+		require.NoError(t, json.Unmarshal([]byte(raw), &config))
+		servers := object(object(object(config["apps"])["http"])["servers"])
+		route := object(array(object(servers["example"])["routes"])[0])
+		matcher := object(array(route["match"])[0])
+		delete(matcher, which)
+		require.False(t, containsSite(config, s, true), which)
+	}
+}
