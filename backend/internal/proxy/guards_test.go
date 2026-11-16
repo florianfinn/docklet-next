@@ -246,6 +246,10 @@ func dockerSeam(t *testing.T, x *fixture, c *container.InspectResponse) *DockerR
 		case p == "/_ping":
 			w.Header().Set("API-Version", "1.54")
 			_, _ = w.Write([]byte("OK"))
+		case p == "/info": // bind sources run the real bind-path rules
+			_, _ = w.Write([]byte(`{"DockerRootDir":"/example/docker"}`))
+		case p == "/containers/json":
+			_ = json.NewEncoder(w).Encode([]container.Summary{})
 		case strings.HasSuffix(p, "/json") && c != nil:
 			_ = json.NewEncoder(w).Encode(c)
 		case strings.HasSuffix(p, "/archive") && c != nil:

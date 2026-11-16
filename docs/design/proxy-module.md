@@ -26,7 +26,11 @@ M27 kickoff (2026-11-15) are listed in the last section.
 The agent container mounts the Docker socket, its data directory and the projects
 directory at the same path; it never reads other host paths. Every entry point
 (including a query by a persisted ID) re-inspects the container and its mounts
-and refuses when the identity, the mount source or its kind changed.
+and refuses when the identity, the mount source or its kind changed. A restart
+between operations keeps the registration (same container ID and source): each new
+operation fences the `StartedAt` the inventory reads at admission. A transient
+Docker error while classifying a source is an error, not a read-only source; only a
+missing path and a bind-rule refusal classify.
 
 | Need | Path |
 | --- | --- |
@@ -265,7 +269,7 @@ response before it (probed at admission, same request):
 | Deleted route | The reverse. |
 | Destination or middleware change | The first response's status, selected headers or body hash differs from before, and is not a gateway error (502, 503, 504). |
 | Caddy new or deleted route | Caddy has no distinctive no-route answer: an unmatched host gets an empty 200 (`Server: Caddy`, baseline B0) and a catch-all site answers with its own response. A create or delete therefore counts like an edit: the first response differs from before and is not a gateway error (a delete needs an answer before the change, a create one after it). |
-| Caddy site | Additionally the active configuration read from the admin endpoint inside the container contains the route's host, matcher and upstreams. For a site that cannot be probed (HTTPS through an IP URL fails in Caddy), this readback alone gives `verified` with evidence `configuration`. The same holds for a pure rename (the site differs only in its `# docklet-route:` name), which cannot change the routing answer. An Epoch error after the observation window has ended reports the last reason, not `container-changed`. |
+| Caddy site | Additionally the active configuration read from the admin endpoint inside the container contains the route's host, matcher and upstreams. For a site that cannot be probed (HTTPS through an IP URL fails in Caddy), this readback alone gives `verified` with evidence `configuration`. The same holds for a pure rename (the site differs only in its `# docklet-route:` name), which cannot change the routing answer. An Epoch error after the observation window has ended reports the last reason, not `container-changed`; a later successful probe in the window clears a reason an earlier failed probe set. |
 
 The outcome records its evidence kind: `routing` (first response),
 `configuration` (Caddy readback) or `load` (Traefik marker). For Traefik, an

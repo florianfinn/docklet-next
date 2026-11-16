@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
+	"github.com/florianfinn/docklet-next/types/backup"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
@@ -58,6 +59,9 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 		return source, err
 	}
 	st, err := cli.ContainerStatPath(ctx, c.ID, client.ContainerStatPathOptions{Path: m.Destination})
+	if err != nil && !errdefs.IsNotFound(err) {
+		return source, err // a transient Docker error is not a classification
+	}
 	if err != nil {
 		source.Reason = dto.UnknownSource
 		source.ReadOnly = true
@@ -77,7 +81,11 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 			source.Kind = dto.ProjectSource
 		} else {
 			source.Kind = dto.BindSource
-			if _, err = bindpath.Check(ctx, cli, d.DB, volumetypes.BindKey(m.Source)); err != nil {
+			var refused *backup.Problem
+			if _, err = bindpath.Check(ctx, cli, d.DB, volumetypes.BindKey(m.Source)); err != nil && !errors.As(err, &refused) {
+				return source, err
+			}
+			if err != nil {
 				source.ReadOnly = true
 				source.Reason = dto.RefusedBind
 			}

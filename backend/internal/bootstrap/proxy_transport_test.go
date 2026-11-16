@@ -261,6 +261,29 @@ func TestM27ProxyRefreshesBindingBeforeNewOperation(t *testing.T) {
 	}
 }
 
+// Candidate run F4: after a proxy restart (same container, new StartedAt) a new operation
+// fences the current epoch from the inventory, not the registration's stale one.
+func TestM27ProxyNewOperationFencesTheCurrentEpoch(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			x, _, tr, q := proxyWireFixture(t, mode)
+			stale := q.Instance
+			stale.Identity.StartedAt = "2026-11-14T00:00:00Z"
+			require.NotEqual(t, q.Instance.Identity.StartedAt, stale.Identity.StartedAt)
+			raw, err := json.Marshal(stale)
+			require.NoError(t, err)
+			require.NoError(t, x.f.db.Exec("INSERT INTO proxy_instances(id,environment_id,data) VALUES (?,?,?)", stale.ID, stale.EnvironmentID, raw).Error)
+			m := &p.Module{Hub: &p.Hub{DB: x.f.db.DB, Modules: x.manager, Transport: tr}, Modules: x.manager, Transport: tr}
+			got, err := m.CreateOperation(t.Context(), stale.ID, dto.OperationRequest{Target: q.Target, Expected: q.Expected, GraphHashes: q.GraphHashes, Change: q.Change})
+			require.NoError(t, err)
+			require.Equal(t, dto.Verified, got.State)
+			saved, err := m.Instance(t.Context(), stale.ID)
+			require.NoError(t, err)
+			require.Equal(t, q.Instance.Identity.StartedAt, saved.Identity.StartedAt)
+		})
+	}
+}
+
 func TestM27ProxyAdmissionRaceUsesHubUnknownEnvelope(t *testing.T) {
 	x, a, tr, q := proxyWireFixture(t, "direct")
 	raw, err := json.Marshal(q.Instance)

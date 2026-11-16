@@ -110,3 +110,32 @@ func TestEpochErrorAtWindowEndIsNotContainerChanged(t *testing.T) {
 	require.Equal(t, dto.AppliedUnverified, o.State)
 	require.NotEqual(t, dto.ContainerChanged, o.Reason)
 }
+
+// Candidate run F3: one failed probe early in an admin-off window must not decide the
+// final reason when later probes in the window answer unchanged.
+func TestLaterProbeClearsAnEarlierProbeFailureReason(t *testing.T) {
+	x := fixture(t)
+	i := observationIntent(x, baseSite(), true, "edit-route")
+	probes, creates := 0, 0
+	x.execFn = func([]string) hostio.ExecResult { probes++; return httpResult(200, "") }
+	x.fault = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/exec") {
+			if creates++; creates == 1 {
+				http.Error(w, `{"message":"container is restarting"}`, http.StatusConflict)
+				return true
+			}
+		}
+		return false
+	}
+	x.e.wait = func(context.Context, time.Duration) error {
+		if probes >= 2 {
+			x.now = x.now.Add(5 * time.Second)
+		}
+		return nil
+	}
+	o, err := x.e.Observe(t.Context(), i, false)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, creates, 1)
+	require.GreaterOrEqual(t, probes, 2)
+	require.Equal(t, proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference}, o)
+}

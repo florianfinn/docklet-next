@@ -477,7 +477,10 @@ func TestCleanupKeepsTypedSourceRefusal(t *testing.T) {
 	defer server.Close()
 	d := &DockerRuntime{Docker: dockerinternal.NewDockerClientService(t.Context(), nil, &config.Config{DockerHost: server.URL}, nil), Settings: x.settings, DB: x.db}
 	err := d.Cleanup(t.Context(), i)
-	requireCode(t, err, dto.SourceReadOnly)
+	// The transient stat error stays an error (not a classification) and is not a container change.
+	require.Error(t, err)
+	p, typed := errors.AsType[*dto.Problem](err)
+	require.False(t, typed && p.Code == dto.ContainerChanged)
 	b, err := os.ReadFile(filepath.Join(root, i.TempPath))
 	require.NoError(t, err)
 	require.Equal(t, "new", string(b))

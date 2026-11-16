@@ -57,6 +57,10 @@ func TestP17SourceSelectionAndReinspection(t *testing.T) {
 				case p == "/_ping":
 					w.Header().Set("API-Version", "1.54")
 					_, _ = w.Write([]byte("OK"))
+				case p == "/info":
+					_, _ = w.Write([]byte(`{"DockerRootDir":"/example/docker"}`))
+				case p == "/containers/json":
+					_ = json.NewEncoder(w).Encode([]container.Summary{})
 				case strings.HasSuffix(p, "/json") && strings.Contains(p, "/containers/"):
 					_ = json.NewEncoder(w).Encode(c)
 				case strings.HasSuffix(p, "/archive"):
@@ -66,10 +70,6 @@ func TestP17SourceSelectionAndReinspection(t *testing.T) {
 					}
 					raw, _ := json.Marshal(container.PathStat{Name: path.Base(r.URL.Query().Get("path")), Mode: mode})
 					w.Header().Set("X-Docker-Container-Path-Stat", base64.StdEncoding.EncodeToString(raw))
-				case p == "/info":
-					_, _ = w.Write([]byte(`{"DockerRootDir":"/example/docker"}`))
-				case p == "/containers/json":
-					_ = json.NewEncoder(w).Encode([]container.Summary{})
 				default:
 					w.WriteHeader(404)
 				}

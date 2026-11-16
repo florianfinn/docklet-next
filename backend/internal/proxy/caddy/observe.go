@@ -162,6 +162,7 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		site = s.OldSite
 	}
 	lastReason := dto.NoObservableDifference
+	probeFailed := false // a later successful probe clears a reason a failed probe set
 	for {
 		if !e.now().Before(deadline) {
 			return unverified(lastReason), nil
@@ -182,9 +183,12 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 			after, probeErr := e.probe(ctx, i.Request.Instance, *site)
 			unobservable = probeErr == nil && after.Status == 0 || reason(probeErr, "") == dto.NotObservable
 			if probeErr != nil {
-				probeReason = reason(probeErr, dto.NotObservable)
+				probeReason, probeFailed = reason(probeErr, dto.NotObservable), true
 			} else {
 				routed = routing(s.Before, after, i.Request.Change.Kind)
+				if probeFailed {
+					lastReason, probeFailed = dto.NoObservableDifference, false
+				}
 			}
 		}
 		configOK := s.AdminOff

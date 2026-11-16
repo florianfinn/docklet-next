@@ -176,6 +176,14 @@ func (m *Module) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 		return dto.Inventory{}, err
 	}
 	r, err := e.Inventory(ctx, i)
+	if err != nil {
+		return r, err
+	}
+	// The current epoch of the same container: an operation fences it, not the registration's.
+	if _, r.Identity.StartedAt, err = m.Agent.Runtime.Epoch(ctx, i); err != nil {
+		return dto.Inventory{}, err
+	}
+	r.Identity.ContainerID, r.Identity.ContainerName = i.Identity.ContainerID, i.Identity.ContainerName
 	r.Generation = m.Agent.Generation()
 	if i.Source.ReadOnly || i.Source.Kind == dto.SingleFileSource || i.Source.Kind == dto.UnknownSourceKind {
 		r.Eligibility = dto.Eligibility{Reason: i.Source.Reason}
@@ -446,6 +454,9 @@ func (m *Module) CreateOperation(ctx context.Context, id string, input dto.Opera
 	}
 	instance.Generation = inventory.Generation
 	instance.Registration = registration
+	if inventory.Identity.ContainerID == instance.Identity.ContainerID && inventory.Identity.StartedAt != "" {
+		instance.Identity.StartedAt = inventory.Identity.StartedAt // a restart keeps container and source
+	}
 	instance.Eligibility = inventory.Eligibility
 	if err = Eligibility(instance); err != nil {
 		return dto.Operation{}, err
