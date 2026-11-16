@@ -158,7 +158,8 @@ in every row.
 
 | Last committed phase | Target is old | Target is new | Target is third |
 | --- | --- | --- | --- |
-| `admitted`, `staging` | `rejected` | Treated as `publishing` with new | `recovery-required` |
+| `admitted` | `rejected` | `recovery-required` (committed before the snapshot, so new bytes are not yet known and cannot be told from third) | `recovery-required` |
+| `staging` | `rejected` | Treated as `publishing` with new | `recovery-required` |
 | `publishing` | `rejected` (the rename did not happen) | Traefik: `observing` with a fresh deadline. Caddy: `reloading` | `recovery-required` |
 | `reloading` | Caddy: `recovery-required` (the reload may have applied new bytes that are no longer on disk) | Caddy: reload again, then `observing` | `recovery-required` |
 | `restarting` | `recovery-required` | Container running with a `StartedAt` after the recorded one: `observing`. Not running: `restoring` | `recovery-required` |
