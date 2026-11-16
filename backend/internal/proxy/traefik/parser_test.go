@@ -170,3 +170,49 @@ func TestClassifierPrototypeParityAndAcceptedExtensions(t *testing.T) {
 		})
 	}
 }
+
+func TestRuleAndSourceLimits(t *testing.T) {
+	for _, s := range []string{strings.Repeat("!", 130) + "Host(`app.example.com`)", strings.Repeat(" ", 16385), "Host(`app.example.com`", "Host(\"unterminated)", "Header(`x` `y`)", "Method(``)", "Host(`app.example.com/`)", "Host(`a\x00b`)"} {
+		require.NotPanics(t, func() { _, err := parseRule(s); require.Error(t, err) })
+	}
+	for _, s := range []string{"http: null\n", "http: !!str x\n", "http: &base {}\n", "http: {routers: {a: {rule: |\n  text}}}", "http: {routers: {app: {rule: 'a'\n service: app}}}", "http:\n  routers:\n    app:\n      rule: Host(`app.example.com`)\n        && PathPrefix(`/`)\n"} {
+		require.NotPanics(t, func() {
+			_, err := parseDocument(s, "")
+			if err == nil {
+				d, _ := parseDocument(s, "")
+				err = validateDocument(d, "")
+			}
+			require.Error(t, err)
+		})
+	}
+}
+func TestSchemaWrongFieldTypes(t *testing.T) {
+	for _, s := range []string{
+		"http: {routers: {app: {rule: 'Host(`app.example.com`)', service: app, entryPoints: [1]}}}",
+		"http: {routers: {app: {rule: 'Host(`app.example.com`)', service: app, middlewares: auth}}}",
+		"http: {routers: {app: {rule: 'Host(`app.example.com`)', service: app, priority: many}}}",
+		"http: {routers: {app: {rule: 'Host(`app.example.com`)', service: app, tls: true}}}",
+		"http: {routers: {app: {rule: 'Host(`app.example.com`)'}}}",
+		"http: {routers: {app: {service: app}}}",
+		"http: {services: {app: {loadBalancer: {servers: [7]}}}}",
+		"http: {services: {app: {loadBalancer: {servers: [{url: 'ftp://example.com'}]}}}}",
+		"http: {services: {app: {}}}",
+		"http: {middlewares: {m: {headers: {frameDeny: 'yes'}}}}",
+		"http: {middlewares: {m: {headers: {}, compress: {}}}}",
+		"http: {middlewares: {m: {plugin: {p: true}}}}",
+		"http: {middlewares: {m: {unknown: {}}}}",
+		"tls: {options: {strict: {sniStrict: 'yes'}}}",
+		"tls: {certificates: [{certFile: 7}]}",
+	} {
+		t.Run(s, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				d, err := parseDocument(s, "candidate.yml")
+				require.NoError(t, err)
+				require.Error(t, validateDocument(d, "candidate.yml"))
+			})
+		})
+	}
+	for _, u := range []string{"", "ftp://example.com", "http://", "http://user@example.com", "http://example.com/#fragment", "http://example.com/\n"} {
+		require.False(t, validURL(u), u)
+	}
+}

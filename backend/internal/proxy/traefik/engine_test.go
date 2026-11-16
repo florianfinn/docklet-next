@@ -453,3 +453,46 @@ func TestDelayedRoutingWaitsForActualEffect(t *testing.T) {
 	require.True(t, waited)
 	require.Equal(t, dto.Verified, obs.State)
 }
+
+func TestMarkerWithoutAnswerAndUnchangedCatchAllIsUnverified(t *testing.T) {
+	x := fixture(t)
+	r := x.request("edit-route")
+	r.Change.Priority = new(10)
+	in := x.prepare(r)
+	require.NoError(t, x.e.Mark(t.Context(), in))
+	for _, res := range []hostio.ExecResult{{ExitCode: 1, Stderr: []byte("no connection")}, response(404, "404 page not found\n"), response(200, "old")} {
+		x.probeFunc = func([]string) hostio.ExecResult { return res }
+		obs, err := x.e.Observe(t.Context(), in, true)
+		require.NoError(t, err)
+		require.Equal(t, dto.AppliedUnverified, obs.State)
+		require.Equal(t, dto.NotObservable, obs.Reason)
+	}
+}
+func TestPrepareInvalidRequestsRefuseWithoutEffects(t *testing.T) {
+	x := fixture(t)
+	for _, change := range []dto.Change{{Kind: "unknown"}, {Kind: "create-route", Name: "bad/name", Rule: "Host(`a.example.com`)", Upstreams: []string{"http://192.0.2.1"}}, {Kind: "edit-route", RouteID: "missing"}, {Kind: "edit-route", RouteID: "app", Name: "bad/name"}, {Kind: "edit-route", RouteID: "app", Rule: "Unknown(`x`)"}, {Kind: "edit-route", RouteID: "app", Upstreams: []string{}}, {Kind: "edit-route", RouteID: "app", Resolver: "new-resolver"}, {Kind: "edit-route", RouteID: "app", Upstreams: []string{"file:///etc/example"}}} {
+		r := x.request("edit-route")
+		r.Change = change
+		require.NotPanics(t, func() { _, err := x.e.Prepare(t.Context(), r); require.Error(t, err) })
+		require.Equal(t, tiny, x.read(r.Target))
+	}
+	for _, target := range []string{"../routes.yml", "dynamic/auth.secret.yml", "dynamic/config.toml", "outside/routes.yml", "dynamic/data.txt"} {
+		r := x.request("edit-route")
+		r.Target = target
+		_, err := x.e.Prepare(t.Context(), r)
+		require.Error(t, err)
+	}
+}
+func TestLabelRoutesLinkOnlyToManagedStack(t *testing.T) {
+	x := fixture(t)
+	r, err := x.e.Read(t.Context(), x.i)
+	require.NoError(t, err)
+	require.Equal(t, "label-read-only", r.Routes[len(r.Routes)-1].Class)
+	require.Empty(t, r.Routes[len(r.Routes)-1].ProjectID)
+	require.NoError(t, x.db.Exec("INSERT INTO projects(id,name,path,status,is_archived) VALUES(?,?,?,?,?)", "example-id", "example-stack", "/example/projects/example-stack", "running", false).Error)
+	r, err = x.e.Read(t.Context(), x.i)
+	require.NoError(t, err)
+	route := r.Routes[len(r.Routes)-1]
+	require.Equal(t, "example-id", route.ProjectID)
+	require.Equal(t, "example-app", route.ContainerName)
+}

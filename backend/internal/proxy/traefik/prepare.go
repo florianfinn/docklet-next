@@ -233,7 +233,11 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 	for _, route := range selected {
 		inv := s.Inventory
 		inv.EntryPoints = append([]dto.EntryPoint{}, inv.EntryPoints...)
-		if doc := nextDocs[route.File]; doc != nil {
+		doc := nextDocs[route.File]
+		if doc == nil || at(doc.root, "http", "routers", route.Name) == nil {
+			doc = g.docs[route.File]
+		}
+		if doc != nil {
 			if at(doc.root, "http", "routers", route.Name, "tls") != nil {
 				for j := range inv.EntryPoints {
 					if len(route.EntryPoints) == 0 || contains(route.EntryPoints, inv.EntryPoints[j].Name) {
