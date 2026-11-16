@@ -35,6 +35,9 @@ describe("proxy editor snapshot and identity ownership", () => {
     fireEvent.change(screen.getByLabelText("Rule (Traefik v3)"), { target: { value: 'Host(`app.example.com`) && PathPrefix(`/api`)' } });
     fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "50" } });
     const resolver = screen.getByRole("combobox", { name: "TLS resolver" }); resolver.focus(); await user.keyboard("{ArrowDown}"); await user.click(await screen.findByRole("option", { name: "existing-resolver" }));
+    await user.click(screen.getByRole("tab", { name: "Easy" }));
+    expect((screen.getByLabelText("Host / domain") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText('Host(`app.example.com`) && PathPrefix(`/api`)').textContent).toBe('Host(`app.example.com`) && PathPrefix(`/api`)');
     await user.click(screen.getByRole("button", { name: "Save" })); await waitFor(() => expect(writes(f).length).toBe(1));
     expect((writes(f)[0]!.body as { change: object }).change).toMatchObject({ rule: 'Host(`app.example.com`) && PathPrefix(`/api`)', priority: 50, resolver: "existing-resolver" });
   });
