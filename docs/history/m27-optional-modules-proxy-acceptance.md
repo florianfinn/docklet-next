@@ -25,7 +25,7 @@ on every pushed head.
 | #472 | S1 module foundation: module setting, access-then-gate order, agent admission fence and reservations | R1 failed with one blocker (admission fence without a red proof); its correction was verified with S2. |
 | #473 #474 | S2 proxy contract foundation: DTOs and codes, routes, agent contract 19, migration `005_proxy.sql`, journal and recovery table | R1 failed with four blockers (caller cancellation, identity wedge, startup settlement, intent fields). Verify rounds R2 to R5 failed with 3, 6, 4 and 1 blockers; R4 and R5 found proof gaps, not production defects, and decision AUTO-2 closed the guard-proof criterion. R6 passed with no findings. |
 | #473 | S3 Traefik engine | R1 failed with three blockers (no-route response shape, log scope, hidden files). The first verify failed, the second passed. |
-| #474 | S4 Caddy engine | R1 failed with three blockers (stale test, package-graph pin, Caddy no-route response). R2 passed with one non-blocker, fixed. |
+| #474 | S4 Caddy engine | R1 failed with three blockers (stale test, package-graph pin, Caddy no-route response). R2 passed with one non-blocker, fixed. A separate review of the main thread's integration corrections failed with three blockers (lost restore and eligibility diagnostics, a stale package-graph pin); its verify passed with no findings. |
 | #471 | S5 production web | R1 failed with one blocker (rewritten backend URL). Two verify rounds failed on round-trip edge cases; decision AUTO-14 moved that class to the closing review. |
 | #471 | Closing integration (#490) | The closing review failed with four blockers (round-trip edge values, transient read errors treated as classifications, a failed baseline probe accepted as routing evidence, guards without red proofs). Verify rounds 1 to 3 failed with 2, 1 and 2 blockers in the same classes; verify round 4 passed with no findings. The Claude review of the Codex-written tests failed with three blockers (conditional assertions); its verify passed with three non-blockers, tracked in #504. |
 
@@ -96,7 +96,7 @@ PX10 was dropped at kickoff and replaced by PX18 and PX22.
 | `e4ca973c` (delta 3) | **Accepted**, 11/11 | After the closing review fixes: PX3, PX4, PX8, PX15, PX17, PX18, PX19, PX22, F4, PX12, REG |
 | `7c55a030` (delta 4) | **Accepted**, 6/6 | MOD1 and PX16 under the maintainer decisions; PX1, PX4, PX8, PX12 |
 | `21d66386` (delta 5) | **Accepted**, 4/4 | PX1, PX4, PX8, PX16 after the last closing review fix |
-| `d6381215` (exact main) | **Accepted**, 29/29 | Tree equals `21d66386`; deploy, REG on H, D and E in English and German, one Traefik create and delete on D, one Caddy create and delete on E; logs clear |
+| `d6381215` (exact main) | **Accepted**, 29/29 | Tree equals `21d66386`; deploy, REG on H, D and E in English and German, one Traefik create and delete on D, one Caddy create and delete on E; the log scan found no product failure, only advisory Edge request cancellations |
 
 Unchanged passing cells carry their evidence forward, so the exact-main
 denominator counts all 29 cells, not 29 newly executed ones. The U-cells passed
