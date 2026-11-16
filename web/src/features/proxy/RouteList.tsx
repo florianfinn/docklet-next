@@ -37,7 +37,7 @@ export function RouteList({
         <span>{ui("name")}</span>
         <span>{ui("domain")}</span>
         <span>{ui("service")}</span>
-        <span>{ui("routes")}</span>
+        <span>{ui("actionsHeader")}</span>
       </div>
       {routes.length === 0 && <p className="p-5 text-sm">{ui("empty")}</p>}
       {routes.map(r => (

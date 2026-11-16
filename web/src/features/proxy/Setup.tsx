@@ -10,16 +10,18 @@ import type { ProxyApi } from "@/data/http/proxy-api";
 import { Button } from "@/shared/ui/button";
 import { TextField } from "@/shared/components/form-field";
 import { Choice, ErrorView, Reason } from "./controls";
-import type { CreateInstance, Discovery } from "./types";
+import type { CreateInstance, Discovery, Instance } from "./types";
 
 type Host = { id: string; name: string };
 function Candidate({
   candidate: c,
+  assigned,
   environment,
   busy,
   create,
 }: {
   candidate: Discovery;
+  assigned?: string;
   environment: string;
   busy: boolean;
   create: (input: CreateInstance) => void;
@@ -38,7 +40,7 @@ function Candidate({
         <p className="text-sm">
           {c.image} {c.version}
         </p>
-        {c.instanceId && <p>{t("assigned", { name: c.instanceId })}</p>}
+        {c.instanceId && <p>{t("assigned", { name: assigned ?? c.instanceId })}</p>}
       </div>
       <fieldset disabled={busy || !!c.instanceId} className="grid min-w-0 gap-4">
         <Choice
@@ -86,11 +88,13 @@ function Candidate({
 export function Setup({
   api,
   hosts,
+  instances = [],
   create,
   busy,
 }: {
   api: ProxyApi;
   hosts: Host[];
+  instances?: Instance[];
   create: (input: CreateInstance) => void;
   busy: boolean;
 }) {
@@ -145,6 +149,7 @@ export function Setup({
           <Candidate
             key={`${environment}:${c.identity.containerId}`}
             candidate={c}
+            assigned={instances.find(i => i.id === c.instanceId)?.name}
             environment={environment}
             busy={busy}
             create={create}

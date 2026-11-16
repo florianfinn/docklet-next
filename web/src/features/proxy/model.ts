@@ -61,11 +61,14 @@ export const splitNames = (value: string) =>
     .split(/[\n,]/)
     .map(x => x.trim())
     .filter(Boolean);
+/** Split a backend URL as written: the port and any path stay byte for byte; Caddy may omit the scheme. */
 export function backendParts(value: string) {
-  try {
-    const u = new URL(value);
-    return { scheme: u.protocol.slice(0, -1), host: u.hostname, port: u.port };
-  } catch {
-    return { scheme: "http", host: "", port: "" };
-  }
+  const m = /^(?:([A-Za-z][A-Za-z0-9+.-]*):\/\/)?(\[[^\]]*\]|[^/:?#]*)(?::(\d*))?(.*)$/.exec(value);
+  return value && m
+    ? { scheme: m[1] ?? "", host: m[2]!, port: m[3] ?? "", rest: m[4]! }
+    : { scheme: "http", host: "", port: "", rest: "" };
+}
+/** Rebuild a backend URL; with the lossless split above an untouched value comes back byte for byte. */
+export function backendURL(parts: ReturnType<typeof backendParts>) {
+  return `${parts.scheme ? `${parts.scheme}://` : ""}${parts.host}${parts.port ? `:${parts.port}` : ""}${parts.rest}`;
 }

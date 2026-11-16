@@ -1,0 +1,167 @@
+// Source: docklet-next/issues/473
+// Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
+// Retrieved: 2026-11-16
+// License: Apache-2.0
+// Deviations: Original production proxy Manager tests for the S5 R1 findings.
+
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { decodeProxyData } from "@/data/http/proxy-read-decoder";
+import { InstanceWorkspace } from "./InstanceWorkspace";
+import ProxyPage from "./ProxyPage";
+import { fixture, instance, operation, Providers, read, route } from "./proxy.test-support";
+import type { Instance } from "./types";
+
+const measured = "http://whoami-a:80";
+const writes = (f: ReturnType<typeof fixture>) => f.writes.filter(w => w.path.endsWith("/operations"));
+const change = (f: ReturnType<typeof fixture>) => (writes(f)[0]!.body as { change: Record<string, unknown> }).change;
+function show(f: ReturnType<typeof fixture>, i: Instance = instance) {
+  render(
+    <Providers>
+      <InstanceWorkspace instance={i} api={f.api} updated={() => {}} removed={() => {}} />
+    </Providers>,
+  );
+}
+async function edit() {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Actions for app" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Edit route" }));
+  return user;
+}
+
+describe("proxy editor keeps server values the operator did not change", () => {
+  it("never rewrites an untouched Traefik backend URL and keeps its written port", async () => {
+    const f = fixture();
+    f.state.read.routes![0] = { ...route, upstreams: [measured] };
+    show(f);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "renamed" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect("upstreams" in change(f)).toBe(false);
+  });
+  it("changes only the edited part of a backend URL", async () => {
+    const f = fixture();
+    f.state.read.routes![0] = { ...route, upstreams: [measured + "/base?x=1"] };
+    show(f);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "whoami-b" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect(change(f).upstreams).toEqual(["http://whoami-b:80/base?x=1"]);
+  });
+  it("keeps a Caddy reverse_proxy target when only the name changes", async () => {
+    const f = fixture(),
+      i = { ...instance, kind: "caddy" as const };
+    const text = `# docklet-route: app\napp.example.com {\n  route {\n    reverse_proxy ${measured}\n  }\n}\n`;
+    f.state.read.routes = [{ ...route, id: "routes/app.caddy", file: "routes/app.caddy", rule: "app.example.com", upstreams: [measured] }];
+    f.state.read.files = [{ ...f.state.read.files![0]!, path: "routes/app.caddy", content: text }];
+    show(f, i);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "renamed" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect(change(f).advanced).toBe(text.replace("# docklet-route: app", "# docklet-route: renamed"));
+  });
+  it("keeps a scheme-less Caddy upstream byte for byte", async () => {
+    const f = fixture(),
+      i = { ...instance, kind: "caddy" as const };
+    const text = "# docklet-route: app\napp.example.com {\n  reverse_proxy whoami-a:80\n}\n";
+    f.state.read.routes = [{ ...route, id: "routes/app.caddy", file: "routes/app.caddy", rule: "app.example.com", upstreams: ["whoami-a:80"] }];
+    f.state.read.files = [{ ...f.state.read.files![0]!, path: "routes/app.caddy", content: text }];
+    show(f, i);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Host / domain"), { target: { value: "next.example.com" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect(change(f).advanced).toBe(text.replace("app.example.com {", "next.example.com {"));
+  });
+  it("omits empty defaults when creating a Traefik route", async () => {
+    const f = fixture();
+    show(f);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "New route" }));
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "fresh" } });
+    fireEvent.change(screen.getByLabelText("Host / domain"), { target: { value: "fresh.example.com" } });
+    fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "whoami-a" } });
+    await user.click(screen.getByRole("checkbox", { name: /web/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    const sent = change(f);
+    expect(["priority" in sent, "entryPoints" in sent, "middlewares" in sent]).toEqual([false, true, false]);
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+describe("proxy refusals and blocking states", () => {
+  it("names the instance a discovered container is assigned to", async () => {
+    const f = fixture();
+    f.state.instances = [{ ...instance, id: "configured-instance", name: "Edge proxy" }];
+    vi.stubGlobal("fetch", f.fetcher);
+    render(
+      <Providers>
+        <ProxyPage />
+      </Providers>,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Add instance" }));
+    screen.getByRole("combobox", { name: "Host" }).focus();
+    await user.keyboard("{ArrowDown}");
+    await user.click(await screen.findByRole("option", { name: "Example host" }));
+    await screen.findAllByRole("article");
+    expect(screen.queryByText("Assigned to Edge proxy") !== null).toBe(true);
+  });
+  it("says when TLS comes from the route's entry point", async () => {
+    const f = fixture();
+    f.state.inventory.entryPoints = [{ name: "websecure", address: ":443", tls: true }];
+    f.state.read.routes![0] = { ...route, entryPoints: ["websecure"], tls: false };
+    show(f);
+    await edit();
+    expect(screen.queryByText("Current TLS: provided by the entry point.") !== null).toBe(true);
+  });
+  it("keeps the editor open beside a rejected receipt's reason and diagnostic", async () => {
+    const f = fixture();
+    f.state.next = operation({ state: "rejected", reason: "invalid-graph", diagnostic: { path: route.file, line: 4, detail: "unknown v3 matcher" } });
+    show(f);
+    const user = await edit();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    // Synchronise on the refresh that follows the receipt in every outcome, then assert.
+    await waitFor(() => expect(f.state.operations.length).toBe(1));
+    await act(async () => {});
+    const dialog = screen.queryByRole("dialog");
+    expect(dialog !== null).toBe(true);
+    expect(within(dialog!).queryByText(/unknown v3 matcher/) !== null).toBe(true);
+    expect(within(dialog!).queryByRole("button", { name: "Save" }) !== null).toBe(true);
+  });
+  it("blocks new writes while an operation is pending or needs recovery", async () => {
+    for (const state of ["pending", "recovery-required"] as const) {
+      const f = fixture();
+      f.state.operations = [operation({ state, phase: "observing" })];
+      f.state.next = operation({ state });
+      const { unmount } = render(
+        <Providers>
+          <InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => {}} />
+        </Providers>,
+      );
+      await screen.findByRole("heading", { name: "Routes" });
+      await waitFor(() => expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true));
+      unmount();
+    }
+  });
+  it("names the assigned instance and uses the Caddy delete hint", async () => {
+    const f = fixture();
+    f.state.read.routes = [{ ...route, upstreams: [measured] }];
+    show(f, { ...instance, kind: "caddy" });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Actions for app" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete route" }));
+    expect(screen.queryByText(/Its owned site block file is removed/) !== null).toBe(true);
+    expect(screen.queryByText(/Traefik services/) === null).toBe(true);
+  });
+  it("rejects an unknown route class from the producer", () => {
+    const body = { success: true, data: { ...read, routes: [{ ...route, class: "editable-ish" }] } };
+    expect(() => decodeProxyData("read", body)).toThrow("proxy.invalid-response");
+    expect(decodeProxyData("read", { success: true, data: read }).routes?.length).toBe(1);
+  });
+});

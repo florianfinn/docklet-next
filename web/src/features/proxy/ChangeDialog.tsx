@@ -9,7 +9,7 @@ import { useTranslations } from "use-intl";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 import { Label } from "@/shared/ui/label";
-import { AcknowledgementFields, ConfirmCheck, ProxyDialog } from "./controls";
+import { AcknowledgementFields, RefusalView, ConfirmCheck, ProxyDialog } from "./controls";
 import { acknowledgementsReady, emptyAcknowledgements } from "./model";
 import type { Acknowledgements, Change, Inventory, Route } from "./types";
 
@@ -22,12 +22,16 @@ export function ChangeDialog({
   action,
   inventory,
   busy,
+  caddy = false,
+  refusal,
   submit,
   close,
 }: {
   action: ChangeAction;
   inventory: Inventory;
   busy: boolean;
+  caddy?: boolean;
+  refusal?: unknown;
   submit: (target: string, change: Change, ack: Acknowledgements) => void;
   close: () => void;
 }) {
@@ -47,7 +51,9 @@ export function ChangeDialog({
     action.kind === "edit-service"
       ? "sharedServiceHint"
       : action.kind === "delete-route"
-        ? "deleteHint"
+        ? caddy
+          ? "deleteHintCaddy"
+          : "deleteHint"
         : action.kind === "insert-import"
           ? "insertHint"
           : "restoreHint";
@@ -98,6 +104,7 @@ export function ChangeDialog({
       >
         {t("confirm")}
       </Button>
+      <RefusalView refusal={refusal} />
     </ProxyDialog>
   );
 }

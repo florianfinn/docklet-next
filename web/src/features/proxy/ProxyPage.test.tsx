@@ -270,10 +270,11 @@ describe("production proxy Manager HTTP integration", () => {
     fireEvent.change(screen.getByLabelText("Host / domain"), { target: { value: "new.example.com" } });
     fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "backend.example.com" } });
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await screen.findByText(/Write outcome is not confirmed/);
-    expect(operationWrites(f).length).toBe(1);
-    expect(screen.queryByRole("dialog") === null).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    // Asserted before any text wait: the unknown outcome blocks further writes.
     expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true);
+    expect(operationWrites(f).length).toBe(1);
+    expect(screen.queryByText(/Write outcome is not confirmed/) !== null).toBe(true);
     expect(
       f.fetcher.mock.calls.filter(([u, init]) => String(u).endsWith("/operations") && !init?.body).length,
     ).toBeGreaterThan(1);
@@ -291,9 +292,21 @@ describe("production proxy Manager HTTP integration", () => {
     );
     await workspace(f);
     const user = await openEdit();
+    const reads = () =>
+      f.fetcher.mock.calls.filter(([u, init]) => String(u).endsWith("/operations") && !init?.body).length;
+    const before = reads();
     await user.click(screen.getByRole("button", { name: "Save" }));
-    await screen.findByText("A configuration file changed.");
+    // Every outcome re-reads operations; assert on the settled state, not on a text wait.
+    await waitFor(() => expect(reads()).toBeGreaterThan(before));
+    await act(async () => {});
+    // The definite refusal stays beside the open draft so it can be corrected.
+    const dialog = screen.queryByRole("dialog");
+    expect(dialog !== null).toBe(true);
+    expect(within(dialog!).queryByText("A configuration file changed.") !== null).toBe(true);
+    expect(within(dialog!).queryByRole("button", { name: "Save" }) !== null).toBe(true);
     expect(screen.queryByText(/Write outcome is not confirmed/) === null).toBe(true);
+    await user.click(within(dialog!).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
     expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(false);
     expect(
       f.fetcher.mock.calls.filter(([url, init]) => String(url).endsWith("/operations") && init?.method === "POST")

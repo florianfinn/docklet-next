@@ -229,3 +229,16 @@ func TestReadSummarisesTLSAndListsMiddlewareDefinitions(t *testing.T) {
 	require.Empty(t, plain.Resolver)
 	require.Equal(t, []dto.Reference{{Name: "zeta", Kind: "local", File: "dynamic/mw.yml"}, {Name: "alpha", Kind: "local", File: "dynamic/mw.yml"}}, read.Middlewares, "paths sorted, definitions in document order")
 }
+
+func TestResolverChangeKeepsTLSDomains(t *testing.T) {
+	x := fixture(t)
+	x.inspect.Config.Cmd = append(x.inspect.Config.Cmd, "--certificatesresolvers.primary.acme.email=operator@example.com", "--certificatesresolvers.secondary.acme.email=operator@example.com")
+	x.put("dynamic/routes.yml", strings.Replace(tiny, "      service: app\n", "      service: app\n      tls:\n        certResolver: primary\n        domains:\n          - main: example.com # Base\n            sans: ['*.example.com']\n", 1))
+	r := x.request("edit-route")
+	r.Change.Resolver = "secondary"
+	in := x.prepare(r)
+	text := string(in.New.Content)
+	require.Contains(t, text, "certResolver: secondary")
+	require.Contains(t, text, "          - main: example.com # Base\n            sans: ['*.example.com']\n", "domains and their comment stay byte for byte")
+	require.NotContains(t, text, "primary")
+}

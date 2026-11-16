@@ -39,7 +39,8 @@ export function InstanceWorkspace({
     lock = useRef(false),
     active = useRef(false);
   const [editor, setEditor] = useState<{ route?: Route; snapshot: Snapshot }>(),
-    [action, setAction] = useState<{ value: ChangeAction; snapshot: Snapshot }>();
+    [action, setAction] = useState<{ value: ChangeAction; snapshot: Snapshot }>(),
+    [refusal, setRefusal] = useState<unknown>();
   const refresh = useCallback(async () => {
     const [configuration, operations] = await Promise.allSettled([
       Promise.all([api.read(instance), api.inventory(instance)]),
@@ -109,13 +110,18 @@ export function InstanceWorkspace({
       return true;
     } catch (e) {
       if (active.current) {
+        const definite = e instanceof ProxyError && e.status !== undefined && e.status < 500;
         if (isOperation) {
-          setUncertain(!(e instanceof ProxyError) || e.status === undefined || e.status >= 500);
-          setEditor(undefined);
-          setAction(undefined);
+          setUncertain(!definite);
+          // A definite refusal keeps the draft open beside its reason; an unknown outcome closes it.
+          if (definite) setRefusal(e);
+          else {
+            setEditor(undefined);
+            setAction(undefined);
+          }
           await refresh();
         }
-        setError(e);
+        if (!isOperation || !definite) setError(e);
       }
       return false;
     } finally {
@@ -124,12 +130,16 @@ export function InstanceWorkspace({
     }
   };
   const write = (held: Snapshot, target: string, change: Change, ack: Acknowledgements) => {
+    setRefusal(undefined);
     void run(async () => {
       const op = await api.operate(instance.id, operationRequest(held.read, target, change, ack));
       if (active.current) {
         setRows(old => [op, ...old.filter(r => r.id !== op.id)]);
-        setEditor(undefined);
-        setAction(undefined);
+        if (op.state === "rejected") setRefusal(op);
+        else {
+          setEditor(undefined);
+          setAction(undefined);
+        }
       }
     }, true);
   };
@@ -282,7 +292,11 @@ export function InstanceWorkspace({
           read={editor.snapshot.read}
           route={editor.route}
           busy={busy}
-          close={() => setEditor(undefined)}
+          refusal={refusal}
+          close={() => {
+            setEditor(undefined);
+            setRefusal(undefined);
+          }}
           submit={(target, change, ack) => write(editor.snapshot, target, change, ack)}
         />
       )}
@@ -291,7 +305,12 @@ export function InstanceWorkspace({
           action={action.value}
           inventory={action.snapshot.inventory}
           busy={busy}
-          close={() => setAction(undefined)}
+          caddy={instance.kind === "caddy"}
+          refusal={refusal}
+          close={() => {
+            setAction(undefined);
+            setRefusal(undefined);
+          }}
           submit={(target, change, ack) => write(action.snapshot, target, change, ack)}
         />
       )}

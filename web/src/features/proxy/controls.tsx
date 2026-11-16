@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { PROXY_REASON_KEYS } from "@/data/wire-catalogue-proxy";
 import { ProxyError } from "@/data/http/proxy-api";
-import type { Acknowledgements, Eligibility, Inventory } from "./types";
+import type { Acknowledgements, Eligibility, Inventory, Operation } from "./types";
 
 export function Choice({
   id,
@@ -112,7 +112,7 @@ export function ProxyDialog({
 export function Diagnostic({ value }: { value?: { path?: string; line?: number; detail?: string } }) {
   const t = useTranslations("proxyContract.ui");
   return value ? (
-    <div aria-label={t("diagnostic")} className="min-w-0 break-words text-sm">
+    <div role="group" aria-label={t("diagnostic")} className="min-w-0 break-words text-sm">
       <p>
         {value.path}
         {value.line ? `:${value.line}` : ""}
@@ -149,6 +149,20 @@ export function ErrorView({ error }: { error: unknown }) {
           <Diagnostic value={error.diagnostic} />
         </>
       )}
+    </div>
+  );
+}
+/** A definite refusal shown inside the open dialog so the draft can be corrected. */
+export function RefusalView({ refusal }: { refusal?: unknown }) {
+  const t = useTranslations("proxyContract.ui");
+  if (refusal === undefined) return null;
+  if (refusal instanceof Error) return <ErrorView error={refusal} />;
+  const op = refusal as Operation;
+  return (
+    <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 p-3 text-sm">
+      <p>{t("refused")}</p>
+      <Reason code={op.reason} />
+      <Diagnostic value={op.diagnostic} />
     </div>
   );
 }

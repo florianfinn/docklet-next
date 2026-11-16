@@ -11,8 +11,15 @@ import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 import { Label } from "@/shared/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
-import { AcknowledgementFields, Choice, ConfirmCheck, ProxyDialog } from "./controls";
-import { acknowledgementsReady, backendParts, emptyAcknowledgements, relativeTarget, splitNames } from "./model";
+import { AcknowledgementFields, RefusalView, Choice, ConfirmCheck, ProxyDialog } from "./controls";
+import {
+  acknowledgementsReady,
+  backendParts,
+  backendURL,
+  emptyAcknowledgements,
+  relativeTarget,
+  splitNames,
+} from "./model";
 import { newCaddySite, patchCaddySite } from "./caddy-draft";
 import type { Acknowledgements, Change, Instance, Inventory, ReadResult, Route } from "./types";
 
@@ -22,6 +29,7 @@ export function RouteEditor({
   read,
   route,
   busy,
+  refusal,
   submit,
   close,
 }: {
@@ -30,6 +38,7 @@ export function RouteEditor({
   read: ReadResult;
   route?: Route;
   busy: boolean;
+  refusal?: unknown;
   submit: (target: string, change: Change, ack: Acknowledgements) => void;
   close: () => void;
 }) {
@@ -51,7 +60,8 @@ export function RouteEditor({
   const originalText = (read.files ?? []).find(f => f.path === route?.file)?.content ?? "";
   const [advanced, setAdvanced] = useState(originalText),
     [textChanged, setTextChanged] = useState(false);
-  const upstream = `${backend.scheme}://${backend.host}${backend.port ? `:${backend.port}` : ""}`;
+  const upstream = backendURL(backend);
+  const entryTLS = (inventory.entryPoints ?? []).some(ep => ep.tls && (route?.entryPoints ?? []).includes(ep.name));
   const opaqueService = !!route && !route.upstreams?.length && !!route.serviceFile;
   const shared = !caddy && (route?.dependants?.length ?? 0) > 1;
   const known = [
@@ -95,10 +105,11 @@ export function RouteEditor({
       change = { kind: route ? "edit-route" : "create-route", ...(route ? { routeId: route.id } : {}) };
       if (!route || name !== route.name) change.name = name;
       if (!route || rule !== route.rule) change.rule = rule;
-      if (!route || Number(priority) !== route.priority) change.priority = Number(priority);
-      if (!route || JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []))
+      // A new route omits empty defaults; an edit sends only changed leaves.
+      if (route ? Number(priority) !== route.priority : Number(priority) !== 0) change.priority = Number(priority);
+      if (route ? JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []) : entryPoints.length > 0)
         change.entryPoints = entryPoints;
-      if (!route || JSON.stringify(names) !== JSON.stringify((route.references ?? []).map(ref => ref.name)))
+      if (route ? JSON.stringify(names) !== JSON.stringify((route.references ?? []).map(ref => ref.name)) : names.length > 0)
         change.middlewares = names;
       if (resolver !== "preserve") change.resolver = resolver;
       if (!opaqueService && !shared && (!route || upstream !== route.upstreams?.[0]))
@@ -152,7 +163,10 @@ export function RouteEditor({
                       label={t("scheme")}
                       value={backend.scheme}
                       onChange={v => setBackend(b => ({ ...b, scheme: v }))}
-                      options={["http", "https"].map(v => ({ value: v, label: v }))}
+                      options={[...new Set(["http", "https", ...(backend.scheme ? [backend.scheme] : [])])].map(v => ({
+                        value: v,
+                        label: v,
+                      }))}
                     />
                     <TextField
                       id="backend-host"
@@ -198,7 +212,7 @@ export function RouteEditor({
                       <p className="text-xs text-muted-foreground">
                         {route.resolver
                           ? t("tlsResolver", { name: route.resolver })
-                          : t(route.tls ? "tlsOn" : "tlsOff")}
+                          : t(route.tls ? "tlsOn" : entryTLS ? "tlsEntryPoint" : "tlsOff")}
                       </p>
                     )}
                     <TextField
@@ -290,6 +304,7 @@ export function RouteEditor({
             onChange={setAck}
           />
         </fieldset>
+        <RefusalView refusal={refusal} />
         <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={close}>
             {t("cancel")}

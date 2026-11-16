@@ -146,6 +146,7 @@ function Manager() {
                 key={instances.length}
                 api={api}
                 hosts={hosts.data ?? []}
+                instances={instances ?? []}
                 create={input => {
                   void create(input);
                 }}
