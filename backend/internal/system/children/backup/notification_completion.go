@@ -39,7 +39,7 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 		}
 		detail = &code
 	} else {
-		run.Status = backuptypes.SystemBackupStatusSucceeded
+		run.Status = backuptypes.SystemBackupStatusRunning
 		run.ArchiveName, run.Size, run.MigrationVersion, run.ArchiveVersion = archive, size, migration, archiveVersion
 	}
 	saveErr := s.store.SaveRun(context.WithoutCancel(workCtx), run)
@@ -61,7 +61,7 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 	}
 	// The cancelled status marks interrupted work; a determined failure notifies even when
 	// shutdown arrives while it is saved.
-	if saveErr == nil && status != activitytypes.StatusCancelled {
+	if saveErr == nil && status == activitytypes.StatusFailed {
 		s.notifier.Terminal(context.WithoutCancel(workCtx), backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
 	}
 	var retentionErr error
@@ -70,13 +70,24 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 		if loadErr != nil || policy == nil {
 			retentionErr = ErrSystemBackupRetention
 		} else {
-			retentionErr = s.applyRetention(workCtx, run.PolicyID, policy.RetentionCount)
+			retentionErr = s.applyPendingRetention(workCtx, run.PolicyID, policy.RetentionCount)
 		}
 		if retentionErr != nil {
 			code = "backup.retention_failed"
 		}
 	}
-	_, activityErr := s.activityService.CompleteActivity(workCtx, run.ActivityID, status, code, detail)
+	completed, activityErr := s.activityService.CompleteActivity(workCtx, run.ActivityID, status, code, detail)
+	if err == nil && saveErr == nil {
+		if activityErr != nil || completed == nil || completed.Status != activitytypes.StatusSuccess {
+			run.Status, run.ErrorCode = backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupErrorInterrupted
+			_ = s.store.SaveRun(context.WithoutCancel(workCtx), run)
+			return errors.New("backup.failed")
+		}
+		run.Status = backuptypes.SystemBackupStatusSucceeded
+		if saveErr = s.store.SaveRun(context.WithoutCancel(workCtx), run); saveErr == nil {
+			s.notifier.Terminal(context.WithoutCancel(workCtx), backupnotify.Run{ID: run.ID, Operation: "backup", Volume: "hub-database", Status: string(run.Status), Reason: code, ActivityID: run.ActivityID})
+		}
+	}
 	if err != nil {
 		return errors.New(code)
 	}

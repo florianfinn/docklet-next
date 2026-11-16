@@ -28,7 +28,6 @@ import (
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -234,27 +233,6 @@ func (s *Service) CreateBackup(ctx context.Context, actor usertypes.Actor, trigg
 		return nil, err
 	}
 	return run, s.finishRun(workCtx, run)
-}
-
-func (s *Service) OpenArchive(ctx context.Context, id string) (io.ReadCloser, int64, string, error) {
-	name, err := backuptypes.ArchiveNameForID(id)
-	if err != nil {
-		return nil, 0, "", ErrSystemBackupNotFound
-	}
-	run, err := s.store.Run(ctx, id)
-	if err != nil || run == nil || run.Status != backuptypes.SystemBackupStatusSucceeded || run.ArchiveName != name {
-		return nil, 0, "", ErrSystemBackupNotFound
-	}
-	file, err := os.Open(filepath.Join(s.backupDir(), name))
-	if err != nil {
-		return nil, 0, "", ErrSystemBackupNotFound
-	}
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() != run.Size {
-		_ = file.Close()
-		return nil, 0, "", ErrSystemBackupNotFound
-	}
-	return file, info.Size(), name, nil
 }
 
 func (s *Service) DeleteBackup(ctx context.Context, id string) (*backuptypes.SystemBackupOperation, error) {

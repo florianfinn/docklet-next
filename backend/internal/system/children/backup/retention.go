@@ -19,6 +19,18 @@ func (s *Service) applyRetention(ctx context.Context, policyID string, keep int)
 	if keep < 1 {
 		return errors.New("backup.invalid_retention")
 	}
+	return s.pruneRetention(ctx, policyID, keep)
+}
+
+// The current archive is still running until gate completion and already owns one retention slot.
+func (s *Service) applyPendingRetention(ctx context.Context, policyID string, keep int) error {
+	if keep < 1 {
+		return errors.New("backup.invalid_retention")
+	}
+	return s.pruneRetention(ctx, policyID, keep-1)
+}
+
+func (s *Service) pruneRetention(ctx context.Context, policyID string, keep int) error {
 	ids, err := s.store.ExpiredRunIDs(ctx, policyID, keep)
 	if err != nil {
 		return err

@@ -144,7 +144,7 @@ func (s *Service) writeArchiveCopy(ctx context.Context, run *dto.SystemBackupRun
 	if _, _, err = exec(ctx, session.ID, "", []string{"mkdir", "-p", "--", dir}); err != nil {
 		return errors.New(copyCode(ctx, err, "write"))
 	}
-	file, size, _, err := s.OpenArchive(ctx, run.ID)
+	file, size, _, err := s.openArchiveFile(run, name)
 	if err != nil {
 		return errors.New(copyCode(ctx, err, "write"))
 	}

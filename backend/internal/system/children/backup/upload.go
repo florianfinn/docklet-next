@@ -62,7 +62,7 @@ func (s *Service) UploadArchive(ctx context.Context, actor usertypes.Actor, read
 		run.Status, run.ErrorCode = backuptypes.SystemBackupStatusFailed, uploadErrorCode(err)
 		status, code = activitytypes.StatusFailed, run.ErrorCode
 	} else {
-		run.Status = backuptypes.SystemBackupStatusSucceeded
+		run.Status = backuptypes.SystemBackupStatusRunning
 		run.ArchiveName, run.Size, run.ArchiveVersion, run.MigrationVersion = name, info.size, archiveVersion, info.migration
 	}
 	if saveErr := s.store.SaveRun(context.WithoutCancel(workCtx), run); saveErr != nil {
@@ -71,7 +71,18 @@ func (s *Service) UploadArchive(ctx context.Context, actor usertypes.Actor, read
 		}
 		status, code, err = activitytypes.StatusFailed, "backup.failed", errors.New("backup.failed")
 	}
-	_, completeErr := s.activityService.CompleteActivity(workCtx, answer.Run.ID, status, code, nil)
+	completed, completeErr := s.activityService.CompleteActivity(workCtx, answer.Run.ID, status, code, nil)
+	if err == nil {
+		if completeErr != nil || completed == nil || completed.Status != activitytypes.StatusSuccess {
+			run.Status, run.ErrorCode = backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupErrorInterrupted
+			_ = s.store.SaveRun(context.WithoutCancel(workCtx), run)
+			return nil, errors.New("backup.failed")
+		}
+		run.Status = backuptypes.SystemBackupStatusSucceeded
+		if saveErr := s.store.SaveRun(context.WithoutCancel(workCtx), run); saveErr != nil {
+			return nil, errors.New("backup.failed")
+		}
+	}
 	if completeErr != nil {
 		return nil, errors.New("backup.failed")
 	}
