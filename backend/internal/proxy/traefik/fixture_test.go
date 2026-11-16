@@ -67,6 +67,7 @@ type seam struct {
 	probeFunc       func([]string) hostio.ExecResult
 	logStatus       int
 	archiveStatus   map[string]int
+	archiveFaults   int // archive requests answered from archiveStatus
 }
 
 func fixture(t *testing.T) *seam {
@@ -163,6 +164,7 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(p, "/archive"):
 		source := r.URL.Query().Get("path")
 		if status := x.archiveStatus[source]; status != 0 {
+			x.archiveFaults++
 			http.Error(w, `{"message":"archive unavailable"}`, status)
 			return
 		}

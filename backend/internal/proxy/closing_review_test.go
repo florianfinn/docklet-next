@@ -99,12 +99,12 @@ func TestClosingReviewerTransientFinalEpochDoesNotAbandonRejectedBytes(t *testin
 	x.a.Runtime = &reviewerEpochRuntime{Runtime: x.f, at: 2}
 	x.e.observe = func() Observation { return Observation{Restore: true, Reason: dto.ProxyRejected} }
 	got, err := x.a.Apply(t.Context(), x.request)
-	if err == nil && got.State.Final() {
-		require.Equal(t, dto.Restored, got.State, "do not release an operation while the proxy-rejected new snapshot remains on disk")
-		after, er := x.f.Target(t.Context(), x.request.Instance, x.request.Target)
-		require.NoError(t, er)
-		require.Equal(t, x.request.Expected, after.FileState)
-	}
+	// The requested restore runs first; never a final release with the rejected bytes on disk.
+	require.NoError(t, err)
+	require.Equal(t, dto.Restored, got.State)
+	after, er := x.f.Target(t.Context(), x.request.Instance, x.request.Target)
+	require.NoError(t, er)
+	require.Equal(t, x.request.Expected, after.FileState)
 }
 
 // C-B2 sweep: the remaining Epoch/inspect readers keep transient failures as errors.

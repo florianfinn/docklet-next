@@ -7,7 +7,6 @@
 package traefik
 
 import (
-	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
@@ -49,5 +48,4 @@ func TestClosingReviewerPreserveResolverProducer(t *testing.T) {
 	next, err := parseDocument(string(in.New.Content), r.Target)
 	require.NoError(t, err)
 	require.Equal(t, "preserve", str(at(next.root, "http", "routers", "app", "tls", "certResolver")))
-	_ = dto.Traefik
 }

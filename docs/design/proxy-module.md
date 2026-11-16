@@ -169,7 +169,7 @@ in every row.
 | `staging` | `rejected` | Treated as `publishing` with new | `recovery-required` |
 | `publishing` | `rejected` (the rename did not happen) | Traefik: `observing` with a fresh deadline. Caddy: `reloading` | `recovery-required` |
 | `reloading` | Caddy: `recovery-required` (the reload may have applied new bytes that are no longer on disk) | Caddy: reload again, then `observing` | `recovery-required` |
-| `restarting` | `recovery-required` | Container running with a `StartedAt` after the recorded one: `observing`. Not running: `restoring` | `recovery-required` |
+| `restarting` | `recovery-required` | Container running with a `StartedAt` after the recorded one: `observing`. Not running: `restoring`. Running without a later `StartedAt`: `recovery-required` (`container-changed`) | `recovery-required` |
 | `marking` | `recovery-required` | Remove the marker, then `observing` with a fresh deadline | `recovery-required` |
 | `observing` | Traefik: `recovery-required` (published bytes were reverted on disk). Caddy: `recovery-required` | `observing` with a fresh deadline (Caddy reloads first; `admin off`: no restart, the running epoch is observed) | `recovery-required` |
 | `restoring` | Traefik: `restored`. Caddy: reload (`admin off`: restart); `restored` on exit 0 or a running container, else `recovery-required` | Restore again | `recovery-required` |

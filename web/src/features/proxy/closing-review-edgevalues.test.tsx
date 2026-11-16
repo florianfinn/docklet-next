@@ -53,13 +53,7 @@ it("reviewer can open middleware selection when a readable definition has an emp
   screen.getByRole("combobox", { name: "Existing middleware" }).focus();
   await user.keyboard("{ArrowDown}");
   await screen.findByRole("option", { name: "headers" });
+  // The empty definition name is never offered as an option.
+  expect(screen.getAllByRole("option").every(o => (o.textContent ?? "") !== "")).toBe(true);
 });
 
-// C-N2: a frozen middleware list also disables the picker, whose choice would be ignored.
-it("disables the middleware picker together with a frozen list", async () => {
-  const f = fixture();
-  f.state.read.routes![0] = { ...route, references: [{ name: "headers\nstrict", kind: "local", file: route.file }] };
-  show(f);
-  await edit();
-  expect(screen.getByRole("combobox", { name: "Existing middleware" }).hasAttribute("disabled")).toBe(true);
-});

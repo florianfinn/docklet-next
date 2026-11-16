@@ -53,7 +53,9 @@ func TestP4EveryRealCrashBoundaryAndTargetSide(t *testing.T) {
 							}
 							x.e.new = newSide
 							x.request.Expected = old.FileState
-							x.request.GraphHashes, _ = x.f.Graph(t.Context(), x.request.Instance)
+							var graphErr error
+							x.request.GraphHashes, graphErr = x.f.Graph(t.Context(), x.request.Instance)
+							require.NoError(t, graphErr)
 							if phase == dto.Restoring {
 								x.e.observe = func() Observation { return Observation{Restore: true, Reason: dto.ProxyRejected} }
 							}

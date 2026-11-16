@@ -25,9 +25,12 @@ func TestVerifyTransientPrepareArchiveReadIsNotInvalidGraph(t *testing.T) {
 	q.Change.Name = "renamed"
 	x.archiveStatus = map[string]int{"/etc/traefik/dynamic": http.StatusServiceUnavailable}
 	got, err := a.Apply(t.Context(), q)
+	require.Positive(t, x.archiveFaults, "the injected archive fault was actually served")
 	require.Equal(t, tiny, x.read("dynamic/routes.yml"))
 	stored, queryErr := a.Query(t.Context(), dto.Query{ID: q.ID, Instance: q.Instance, Generation: q.Generation, Registration: q.Registration})
 	require.NoError(t, queryErr)
 	t.Logf("state=%s reason=%s error=%v persisted-state=%s persisted-reason=%s", got.State, got.Reason, err, stored.State, stored.Reason)
 	require.Error(t, err, "failed baseline archive read must remain an error, not a durable invalid graph refusal")
+	require.NotEqual(t, dto.InvalidGraph, stored.Reason)
+	require.NotEqual(t, dto.IncompleteInventory, stored.Reason)
 }

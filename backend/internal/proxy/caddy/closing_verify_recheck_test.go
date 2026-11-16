@@ -59,6 +59,9 @@ func TestVerifyTransientValidationAndFinalFenceReadsAreNotInvalidGraph(t *testin
 			require.NoError(t, queryErr)
 			t.Logf("stage=%s state=%s reason=%s error=%v persisted-state=%s persisted-reason=%s", stage, got.State, got.Reason, err, stored.State, stored.Reason)
 			require.Error(t, err, "an unreadable validation graph or final fence is not an observed invalid graph")
+			// Recovery settles the unchanged target as rejected without the false graph reason.
+			require.Equal(t, dto.Rejected, stored.State)
+			require.NotEqual(t, dto.InvalidGraph, stored.Reason)
 		})
 	}
 }

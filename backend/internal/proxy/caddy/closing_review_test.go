@@ -114,9 +114,8 @@ func TestClosingReviewerTransientEpochIsNotContainerChange(t *testing.T) {
 			}
 			o, err := x.e.Observe(t.Context(), i, false)
 			require.True(t, failed)
-			if err == nil {
-				require.NotEqual(t, dto.ContainerChanged, o.Reason, "an inspect transport failure does not prove a new identity")
-			}
+			require.NoError(t, err)
+			require.NotEqual(t, dto.ContainerChanged, o.Reason, "an inspect transport failure does not prove a new identity")
 		})
 	}
 }
