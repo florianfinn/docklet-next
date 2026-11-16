@@ -231,6 +231,10 @@ func TestP22P23EligibilityFromRealCommandMountsAndSecretArchive(t *testing.T) {
 			x.c.Config.Cmd = append(x.c.Config.Cmd, "--resume")
 			x.put("Caddyfile", strings.Replace(rootText, "admin localhost:2019", "persist_config off", 1))
 		}, dto.PersistenceOff},
+		{"resume-admin-off", func(x *dockerFixture) {
+			x.c.Config.Cmd = append(x.c.Config.Cmd, "--resume")
+			x.put("Caddyfile", strings.Replace(rootText, "admin localhost:2019", "admin off", 1))
+		}, dto.AdminUnavailable},
 		{"relative-import", func(x *dockerFixture) { x.put("Caddyfile", rootText+"import snippets/extra.caddy\n") }, dto.RelativeImport},
 		{"secret", func(x *dockerFixture) { x.put("routes/hidden.SECRET.caddy", "secret payload") }, dto.OpaqueInput},
 		{"missing-directory", func(x *dockerFixture) { require.NoError(t, os.Remove(filepath.Join(x.root, "routes"))) }, dto.ImportMissing},

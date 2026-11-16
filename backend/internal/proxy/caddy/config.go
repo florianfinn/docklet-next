@@ -384,6 +384,11 @@ func (e *engine) load(ctx context.Context, i dto.Instance) (graph, error) {
 	if resume && !g.inventory.PersistConfig {
 		g.inventory.Eligibility = refused(dto.PersistenceOff, root)
 	}
+	// --resume needs the running configuration to compare with the Caddyfile; with
+	// admin off it cannot be read, so the instance is read-only (AUTO-3).
+	if resume && g.inventory.AdminOff && g.inventory.Eligibility.Writable {
+		g.inventory.Eligibility = refused(dto.AdminUnavailable, root)
+	}
 	if !g.inventory.ImportPresent && g.inventory.Eligibility.Writable {
 		g.inventory.Eligibility = refused(dto.ImportMissing, root)
 		// The framework admits the root operation through the same source lock.
