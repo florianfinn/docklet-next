@@ -24,6 +24,7 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
+	"gorm.io/gorm"
 )
 
 func TestDeadlinePreservesTheSpecificCapabilityReason(t *testing.T) {
@@ -591,4 +592,28 @@ func TestCollidingInsertionsAndEarlierScalarSpliceHaveStableOrder(t *testing.T) 
 	out, err := d.apply(edits)
 	require.NoError(t, err)
 	require.Equal(t, strings.Replace(source, "app.example.com", "new.example.com", 1)+"        - auth\n      priority: 10\n", out)
+}
+
+func TestCreateTargetRefusalsKeepTheirTypedBoundary(t *testing.T) {
+	x := fixture(t)
+	r := x.request("create-route")
+	r.Change = dto.Change{Kind: "create-route", Name: "new", Rule: "Host(`new.example.com`)", Upstreams: []string{"http://192.0.2.2:8080"}}
+	for _, target := range []string{"dynamic//new.yml", "dynamic/new.secret.yml", "dynamic/new.toml"} {
+		r.Target = target
+		_, err := x.attempt(r)
+		requireCode(t, err, dto.InvalidInput)
+	}
+}
+
+func TestRestorePreservesAStoreFailureAfterReadingTheGraph(t *testing.T) {
+	x := fixture(t)
+	r := x.request("restore-owned")
+	var queries atomic.Int64
+	require.NoError(t, x.db.Callback().Query().Before("gorm:query").Register("example_restore_store_failure", func(tx *gorm.DB) {
+		if tx.Statement.Table == "proxy_verified_files" && queries.Add(1) == 2 {
+			require.NoError(t, x.db.Exec("DROP TABLE proxy_verified_files").Error)
+		}
+	}))
+	_, err := x.attempt(r)
+	require.ErrorContains(t, err, "no such table")
 }
