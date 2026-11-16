@@ -87,7 +87,7 @@ func fixture(t *testing.T) *dockerFixture {
 	t.Cleanup(server.Close)
 	x.d = &proxy.DockerRuntime{Docker: dockerinternal.NewDockerClientService(t.Context(), nil, &config.Config{DockerHost: "tcp://" + strings.TrimPrefix(server.URL, "http://")}, nil), Settings: s, DB: db}
 	x.e = New(x.d).(*engine)
-	x.e.now = func() time.Time { return x.now }
+	x.e.now = func() time.Time { x.mu.Lock(); defer x.mu.Unlock(); return x.now }
 	x.e.wait = func(ctx context.Context, d time.Duration) error { x.waits++; x.now = x.now.Add(d); return ctx.Err() }
 	x.d.Engines = proxy.Engines{dto.Caddy: x.e}
 	x.a, err = proxy.NewAgent(db.DB, x.d, x.d.Engines)
@@ -109,11 +109,13 @@ func (x *dockerFixture) bytes(p string) string {
 func (x *dockerFixture) request(kind string, s Site) dto.ApplyRequest {
 	x.t.Helper()
 	target := "routes/app.caddy"
-	g, err := x.d.Graph(x.t.Context(), x.i)
+	var g map[string]string
+	var err error
+	require.NotPanics(x.t, func() { g, err = x.d.Graph(x.t.Context(), x.i) })
 	require.NoError(x.t, err)
 	old, err := x.d.Target(x.t.Context(), x.i, target)
 	require.NoError(x.t, err)
-	text, err := s.Render()
+	text, err := renderChecked(x.t, s)
 	require.NoError(x.t, err)
 	return dto.ApplyRequest{ID: fmt.Sprintf("example-operation-%d", len(x.commands)), Instance: x.i, Generation: x.a.Generation(), Registration: x.i.Registration, Target: target, Expected: old.FileState, GraphHashes: g, Change: dto.Change{Kind: kind, RouteID: target, Advanced: text}}
 }
@@ -191,7 +193,7 @@ func (x *dockerFixture) serve(w http.ResponseWriter, r *http.Request) {
 		if x.restartFn != nil {
 			x.restartFn()
 		} else {
-			x.c.State.StartedAt = nextEpoch
+			x.c.State.StartedAt = fmt.Sprintf("2026-11-16T%02d:00:00Z", x.restarts+1)
 			x.c.State.Running = true
 		}
 		w.WriteHeader(204)

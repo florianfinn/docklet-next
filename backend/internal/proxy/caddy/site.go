@@ -268,7 +268,8 @@ func ParseSite(text string) (Site, error) {
 	if take() != "route {" {
 		return s, invalidSite()
 	}
-	for {
+	// The grammar has only three distinct middleware handlers.
+	for attempts := 0; attempts <= len(middlewareLines); attempts++ {
 		found := ""
 		for m, l := range middlewareLines {
 			if peek() == l {

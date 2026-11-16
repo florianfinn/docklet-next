@@ -206,7 +206,7 @@ func (e *engine) load(ctx context.Context, i dto.Instance) (graph, error) {
 	}
 	// A route directory must resolve through a directory mount. Source() performs
 	// the actual stat, bind policy and read-only checks at the Docker seam.
-	if !hostio.Relative(fileKey(i, g.routes)) {
+	if g.routes != i.Source.MountTarget && !hostio.Relative(fileKey(i, g.routes)) {
 		inv.Eligibility = refused(dto.SourceReadOnly, g.routes)
 	}
 	mounted := false
@@ -396,6 +396,9 @@ func (e *engine) load(ctx context.Context, i dto.Instance) (graph, error) {
 	return g, nil
 }
 func (e *engine) expand(ctx context.Context, i dto.Instance, pattern string) ([]string, []dto.OpaqueFile, error) {
+	if _, err := path.Match(pattern, ""); err != nil {
+		return nil, nil, problem(dto.InvalidGraph, pattern, 0, err.Error())
+	}
 	if !strings.ContainsAny(pattern, "*?[") {
 		return []string{pattern}, nil, nil
 	}

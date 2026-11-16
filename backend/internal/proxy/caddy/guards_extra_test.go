@@ -27,6 +27,7 @@ import (
 func TestScannerQuotedWhitespaceAndBalancedPrefix(t *testing.T) {
 	ds, err := scan("example.com {\n\trespond\t`a\\b # c`\r\n}\r\n")
 	require.NoError(t, err)
+	require.Len(t, ds, 3)
 	require.Equal(t, []string{"respond", `a\b # c`}, ds[1].words)
 	_, err = scan("}\nexample.com {\n")
 	require.Error(t, err)
@@ -48,7 +49,7 @@ func TestGraphGlobalBudgets(t *testing.T) {
 				}
 				x.put("Caddyfile", root)
 			}
-			_, err := x.e.Read(t.Context(), x.i)
+			_, err := readChecked(t, x.e, x.i)
 			require.ErrorContains(t, err, "input-limit")
 			x.noTransient()
 		})
@@ -78,14 +79,14 @@ func TestNestedMountMappingAndRootImportRefusals(t *testing.T) {
 		if target == "Caddyfile" {
 			x.c.Mounts = append(x.c.Mounts, container.MountPoint{Type: mount.TypeBind, Source: filepath.Join(x.root, "Caddyfile"), Destination: "/etc/caddy/Caddyfile", RW: true})
 		}
-		_, err := x.e.Prepare(t.Context(), q)
+		_, err := prepareChecked(t, x.e, q)
 		require.Error(t, err)
 	}
 }
 func TestPrepareReadAndValidateErrors(t *testing.T) {
 	x := fixture(t)
 	q := x.request("create-route", baseSite())
-	i, err := x.e.Prepare(t.Context(), q)
+	i, err := prepareChecked(t, x.e, q)
 	require.NoError(t, err)
 	for _, p := range []string{"/absolute/staging", "routes/ordinary"} {
 		i.StagingPath = p
@@ -94,7 +95,7 @@ func TestPrepareReadAndValidateErrors(t *testing.T) {
 	i.StagingPath = "routes/.docklet-staging-example"
 	x.put("routes/extra.secret.caddy", "secret payload")
 	require.ErrorContains(t, x.e.Validate(t.Context(), i), "opaque-input")
-	r, err := x.e.Read(t.Context(), x.i)
+	r, err := readChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.NotEmpty(t, r.OpaqueFiles)
 	for _, f := range r.Files {
@@ -106,14 +107,14 @@ func TestPrepareReadAndValidateErrors(t *testing.T) {
 	require.Error(t, x.e.Validate(t.Context(), i))
 	x.i.RootFile = "/etc/caddy/Caddyfile"
 	x.put("routes/foreign.caddy", "foreign.example.net {\n respond ok\n}\n")
-	r, err = x.e.Read(t.Context(), x.i)
+	r, err = readChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.Equal(t, "text-only", r.Routes[len(r.Routes)-1].Class)
 	x.c.ID = "example-recreated"
-	_, err = x.e.Read(t.Context(), x.i)
+	_, err = readChecked(t, x.e, x.i)
 	require.ErrorContains(t, err, "container-changed")
-	_, err = x.e.Prepare(t.Context(), q)
-	require.Error(t, err)
+	_, err = prepareChecked(t, x.e, q)
+	require.ErrorContains(t, err, "container-changed")
 	require.Error(t, x.e.Validate(t.Context(), i))
 }
 func TestResumeRefusesBadAdminAndAdaptJSON(t *testing.T) {
@@ -145,7 +146,7 @@ func TestResumeRefusesBadAdminAndAdaptJSON(t *testing.T) {
 			}
 			q := x.request("create-route", baseSite())
 			q.Acknowledgements.Restart = true
-			_, err := x.e.Prepare(t.Context(), q)
+			_, err := prepareChecked(t, x.e, q)
 			require.Error(t, err)
 		})
 	}
@@ -158,7 +159,9 @@ func TestReadbackRejectsMissingHostPathAndWrongHandler(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(strings.Replace(configFor(s), pair[0], pair[1], 1)), &config))
 		require.False(t, containsSite(config, s, true))
 	}
-	require.False(t, upstreamsEqual(map[string]any{}, []string{"http://["}))
+	var safe bool
+	require.NotPanics(t, func() { safe = upstreamsEqual(map[string]any{}, []string{"http://["}) })
+	require.False(t, safe)
 	// OR branches preserve each complete matcher; an unrelated branch cannot
 	// supply the missing host of another branch.
 	raw := `{"apps":{"http":{"servers":{"example":{"routes":[{"match":[{"host":["other.example.net"],"path":["/api*"]},{"host":["app.example.com"],"path":["/other*"]}],"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"192.0.2.80:8080"}]}]}]}}}}}`
@@ -202,7 +205,7 @@ func TestInventoryImportLocationAndDiagnostics(t *testing.T) {
 		require.False(t, inv.ImportPresent)
 		require.Equal(t, dto.ImportMissing, inv.Eligibility.Reason)
 		q := x.request("create-route", baseSite())
-		_, err = x.e.Prepare(t.Context(), q)
+		_, err = prepareChecked(t, x.e, q)
 		require.ErrorContains(t, err, "import-missing")
 	}
 	x.put("Caddyfile", rootText+"import /etc/caddy/{$FILE}\n")
@@ -220,7 +223,7 @@ func TestReadErrorDiagnosticsAtTheRealDockerSeam(t *testing.T) {
 	x := fixture(t)
 	for _, text := range []string{"example.com {\n", rootText + "import /etc/caddy/missing.caddy\n"} {
 		x.put("Caddyfile", text)
-		_, err := x.e.Read(t.Context(), x.i)
+		_, err := readChecked(t, x.e, x.i)
 		require.Error(t, err)
 		if text == "example.com {\n" {
 			var p *dto.Problem
@@ -232,11 +235,11 @@ func TestReadErrorDiagnosticsAtTheRealDockerSeam(t *testing.T) {
 		}
 	}
 	require.NoError(t, os.Remove(filepath.Join(x.root, "Caddyfile")))
-	_, err := x.e.Read(t.Context(), x.i)
+	_, err := readChecked(t, x.e, x.i)
 	require.True(t, errdefs.IsNotFound(err))
 	x.put("Caddyfile", rootText)
 	x.c.Config.Cmd = []string{"run", "--adapter", "json"}
-	_, err = x.e.Read(t.Context(), x.i)
+	_, err = readChecked(t, x.e, x.i)
 	var p *dto.Problem
 	require.ErrorAs(t, err, &p)
 	require.Equal(t, dto.UnsupportedFormat, p.Code)
@@ -253,7 +256,7 @@ func TestCopyFailureIsNotMisreportedAsMissingImport(t *testing.T) {
 		}
 		return false
 	}
-	_, err := x.e.Read(t.Context(), x.i)
+	_, err := readChecked(t, x.e, x.i)
 	require.ErrorContains(t, err, "temporary failure")
 }
 func TestOrphanedFilesAndMissingRouteDirectoryStayReadOnly(t *testing.T) {
@@ -271,7 +274,7 @@ func TestOrphanedFilesAndMissingRouteDirectoryStayReadOnly(t *testing.T) {
 	require.Equal(t, dto.OpaqueInput, inv.Eligibility.Reason)
 	require.NoError(t, os.Remove(filepath.Join(x.root, "routes/extra.secret.caddy")))
 	x.put("routes/bad.caddy", "example.com {\n")
-	_, err = x.e.Read(t.Context(), x.i)
+	_, err = readChecked(t, x.e, x.i)
 	require.ErrorContains(t, err, "invalid-graph")
 }
 func TestGlobalOptionsIgnoreUnusedSnippetsAndSiteBlocks(t *testing.T) {

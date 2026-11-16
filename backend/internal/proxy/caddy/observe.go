@@ -201,12 +201,6 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		if epochErr != nil || !currentRunning || currentEpoch != epoch {
 			return unverified(dto.ContainerChanged), nil
 		}
-		if configOK && routed {
-			return proxy.Observation{State: dto.Verified, Evidence: dto.Routing}, nil
-		}
-		if !s.AdminOff && configOK && unobservable {
-			return proxy.Observation{State: dto.Verified, Evidence: dto.Configuration}, nil
-		}
 		if probeReason != "" {
 			lastReason = probeReason
 		}
@@ -215,6 +209,12 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		}
 		if !e.now().Before(deadline) {
 			return unverified(lastReason), nil
+		}
+		if configOK && routed {
+			return proxy.Observation{State: dto.Verified, Evidence: dto.Routing}, nil
+		}
+		if !s.AdminOff && configOK && unobservable {
+			return proxy.Observation{State: dto.Verified, Evidence: dto.Configuration}, nil
 		}
 		if err = e.wait(ctx, 100*time.Millisecond); err != nil {
 			return proxy.Observation{}, err

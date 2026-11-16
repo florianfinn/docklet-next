@@ -59,11 +59,11 @@ func TestP15OwnedRouteCRUDPreservesEveryOtherByte(t *testing.T) {
 	x.serving()
 	s := baseSite()
 	q := x.request("create-route", s)
-	o, err := x.a.Apply(t.Context(), q)
+	o, err := applyChecked(t, x.a, q)
 	require.NoError(t, err)
 	require.Equal(t, dto.Verified, o.State)
 	require.Equal(t, dto.Routing, o.Evidence)
-	text, _ := s.Render()
+	text, _ := renderChecked(t, s)
 	require.Equal(t, text, x.bytes(q.Target))
 	require.Equal(t, rootText, x.bytes("Caddyfile"))
 	x.noTransient()
@@ -71,7 +71,7 @@ func TestP15OwnedRouteCRUDPreservesEveryOtherByte(t *testing.T) {
 	s.Upstreams = []string{"http://192.0.2.81:8080"}
 	q = x.request("edit-route", s)
 	q.Change.Advanced = strings.Replace(q.Change.Advanced, "  route {", "\t route {", 1)
-	o, err = x.a.Apply(t.Context(), q)
+	o, err = applyChecked(t, x.a, q)
 	require.NoError(t, err)
 	require.Equal(t, dto.Verified, o.State)
 	require.Equal(t, q.Change.Advanced, x.bytes(q.Target))
@@ -79,9 +79,10 @@ func TestP15OwnedRouteCRUDPreservesEveryOtherByte(t *testing.T) {
 	require.Equal(t, "# untouched sibling\nother.example.net {\n respond ok\n}\n", x.bytes("routes/foreign.caddy"))
 	x.noTransient()
 	q = x.request("delete-route", s)
-	o, err = x.a.Apply(t.Context(), q)
+	o, err = applyChecked(t, x.a, q)
 	require.NoError(t, err)
 	require.Equal(t, dto.Verified, o.State)
+	require.Equal(t, dto.Routing, o.Evidence)
 	_, err = os.Stat(filepath.Join(x.root, q.Target))
 	require.True(t, os.IsNotExist(err))
 	x.noTransient()
@@ -123,7 +124,7 @@ func TestP1P2P23StagedGraphRejectsInvalidCandidateAndSibling(t *testing.T) {
 				return hostio.ExecResult{}
 			}
 			q := x.request("create-route", s)
-			o, err := x.a.Apply(t.Context(), q)
+			o, err := applyChecked(t, x.a, q)
 			require.NoError(t, err)
 			require.Equal(t, dto.Rejected, o.State)
 			require.Equal(t, dto.InvalidGraph, o.Reason)
@@ -171,11 +172,11 @@ func TestP9ResumeNormalizesJSONAndRequiresDivergenceAcknowledgement(t *testing.T
 	require.NoError(t, err)
 	require.True(t, inv.RunningDiverged)
 	q := x.request("create-route", baseSite())
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "acknowledgement-required")
 	x.noTransient()
 	q.Acknowledgements.ReplaceRunningConfig = true
-	i, err := x.e.Prepare(t.Context(), q)
+	i, err := prepareChecked(t, x.e, q)
 	require.NoError(t, err)
 	require.True(t, i.Reload)
 	require.False(t, i.Restart)
@@ -189,7 +190,7 @@ func TestP10AdminOffRefusesBeforeWritesAndRestoresFailedRestart(t *testing.T) {
 			x.put("Caddyfile", strings.Replace(rootText, "admin localhost:2019", "admin off", 1))
 			x.serving()
 			q := x.request("create-route", baseSite())
-			o, err := x.a.Apply(t.Context(), q)
+			o, err := applyChecked(t, x.a, q)
 			require.NoError(t, err)
 			require.Equal(t, dto.Rejected, o.State)
 			require.Equal(t, dto.AcknowledgementRequired, o.Reason)
@@ -201,7 +202,7 @@ func TestP10AdminOffRefusesBeforeWritesAndRestoresFailedRestart(t *testing.T) {
 				x.c.State.Running = x.restarts == 2 && !secondFails
 				x.c.State.StartedAt = fmt.Sprintf("2026-11-16T%02d:00:00Z", x.restarts+1)
 			}
-			o, err = x.a.Apply(t.Context(), q)
+			o, err = applyChecked(t, x.a, q)
 			require.NoError(t, err)
 			require.Equal(t, 2, x.restarts)
 			if secondFails {
@@ -246,7 +247,7 @@ func TestP22P23EligibilityFromRealCommandMountsAndSecretArchive(t *testing.T) {
 			require.False(t, inv.Eligibility.Writable)
 			require.Equal(t, tt.reason, inv.Eligibility.Reason)
 			r := dto.ApplyRequest{Instance: x.i, Target: "routes/app.caddy", Change: dto.Change{Kind: "create-route"}}
-			_, err = x.e.Prepare(t.Context(), r)
+			_, err = prepareChecked(t, x.e, r)
 			require.Error(t, err)
 			require.Empty(t, x.commands)
 			x.noTransient()
@@ -266,7 +267,7 @@ func TestP28ImportInsertionAndReinsertionOnlyAppendsOneTopLevelLine(t *testing.T
 		g, err := x.d.Graph(t.Context(), x.i)
 		require.NoError(t, err)
 		q := dto.ApplyRequest{ID: fmt.Sprintf("insert-%d", n), Instance: x.i, Generation: x.a.Generation(), Registration: x.i.Registration, Target: "Caddyfile", Expected: proxy.Snapshot([]byte(without), true).FileState, GraphHashes: g, Change: dto.Change{Kind: "insert-import"}}
-		o, err := x.a.Apply(t.Context(), q)
+		o, err := applyChecked(t, x.a, q)
 		require.NoError(t, err)
 		require.Equal(t, dto.Verified, o.State)
 		require.Equal(t, rootText, x.bytes("Caddyfile"))
@@ -353,7 +354,7 @@ func TestP10AcknowledgedRestartVerifiesNewEpoch(t *testing.T) {
 	x.serving()
 	q := x.request("create-route", baseSite())
 	q.Acknowledgements.Restart = true
-	o, err := x.a.Apply(t.Context(), q)
+	o, err := applyChecked(t, x.a, q)
 	require.NoError(t, err)
 	require.Equal(t, dto.Verified, o.State)
 	require.Equal(t, dto.Routing, o.Evidence)
@@ -378,7 +379,7 @@ func TestP28FailedReloadRestoresExactRoot(t *testing.T) {
 		}
 		return hostio.ExecResult{}
 	}
-	o, err := x.a.Apply(t.Context(), q)
+	o, err := applyChecked(t, x.a, q)
 	require.NoError(t, err)
 	require.Equal(t, dto.Restored, o.State)
 	require.Equal(t, 2, reloads)
@@ -388,7 +389,7 @@ func TestP28FailedReloadRestoresExactRoot(t *testing.T) {
 func TestP23CrashAfterStagingRemovesCandidateGraph(t *testing.T) {
 	x := fixture(t)
 	q := x.request("create-route", baseSite())
-	i, err := x.e.Prepare(t.Context(), q)
+	i, err := prepareChecked(t, x.e, q)
 	require.NoError(t, err)
 	i.TempPath = "routes/.docklet-" + q.ID + ".tmp"
 	i.StagingPath = "routes/.docklet-staging-" + q.ID

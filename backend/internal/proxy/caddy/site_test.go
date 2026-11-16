@@ -24,15 +24,15 @@ func TestSiteGrammarParity(t *testing.T) {
 				s.CertFile = "/certs/archive.crt"
 				s.KeyFile = "/certs/archive.key"
 			}
-			text, err := s.Render()
+			text, err := renderChecked(t, s)
 			require.NoError(t, err)
 			require.Contains(t, text, "path /api*")
 			require.NotContains(t, text, "handle_path")
 			require.Contains(t, text, "lb_policy round_robin")
-			got, err := ParseSite(text)
+			got, err := parseChecked(t, text)
 			require.NoError(t, err)
 			require.Equal(t, s, got)
-			again, err := got.Render()
+			again, err := renderChecked(t, got)
 			require.NoError(t, err)
 			require.Equal(t, text, again)
 		})
@@ -46,19 +46,19 @@ func TestSiteGrammarParity(t *testing.T) {
 			s.Provider = "cloudflare"
 			s.Credential = "DNS_API_TOKEN"
 			s.CertificateDomain = "example.com"
-			text, err := s.Render()
+			text, err := renderChecked(t, s)
 			require.NoError(t, err)
 			require.Contains(t, text, "dns cloudflare {env.DNS_API_TOKEN}")
 			require.Contains(t, text, "example.com")
 			require.Contains(t, text, "*.example.com")
-			got, err := ParseSite(text)
+			got, err := parseChecked(t, text)
 			require.NoError(t, err)
 			require.Equal(t, s, got)
 		})
 	}
 	s := baseSite()
 	s.Middlewares = []string{"compress"}
-	text, err := s.Render()
+	text, err := renderChecked(t, s)
 	require.NoError(t, err)
 	changes := []func(string) string{
 		func(v string) string { return v + "extra.example.net { respond ok }\n" },
@@ -81,7 +81,7 @@ func TestSiteGrammarParity(t *testing.T) {
 		},
 	}
 	for n, change := range changes {
-		t.Run(string(rune('a'+n)), func(t *testing.T) { _, err := ParseSite(change(text)); require.Error(t, err) })
+		t.Run(string(rune('a'+n)), func(t *testing.T) { _, err := parseChecked(t, change(text)); require.Error(t, err) })
 	}
 }
 func TestSiteInvalidFields(t *testing.T) {
@@ -101,6 +101,58 @@ func TestSiteInvalidFields(t *testing.T) {
 		func(s *Site) { s.TLS = "auto"; s.Domain = "*.example.com" },
 	}
 	for n, change := range changes {
-		t.Run(string(rune('a'+n)), func(t *testing.T) { s := baseSite(); change(&s); _, err := s.Render(); require.Error(t, err) })
+		t.Run(string(rune('a'+n)), func(t *testing.T) { s := baseSite(); change(&s); _, err := renderChecked(t, s); require.Error(t, err) })
+	}
+}
+
+func TestSiteBoundaryAndTLSVariants(t *testing.T) {
+	s := baseSite()
+	s.TLS = "auto"
+	text, err := renderChecked(t, s)
+	require.NoError(t, err)
+	require.Contains(t, text, "\napp.example.com {\n")
+	require.NotContains(t, text, "*.app.example.com")
+	s.Domain = "*.example.com"
+	s.Provider = "cloudflare"
+	s.Credential = "TOKEN"
+	text, err = renderChecked(t, s)
+	require.NoError(t, err)
+	require.Contains(t, text, "*.example.com, example.com {")
+	s.CertificateDomain = "example.net"
+	_, err = renderChecked(t, s)
+	require.Error(t, err)
+	s = baseSite()
+	s.Domain = strings.TrimSuffix(strings.Repeat(strings.Repeat("a", 63)+".", 5), ".")
+	_, err = renderChecked(t, s)
+	require.Error(t, err)
+	s = baseSite()
+	s.Upstreams = []string{"https://example.com/"}
+	text, err = renderChecked(t, s)
+	require.NoError(t, err)
+	_, err = parseChecked(t, text)
+	require.NoError(t, err)
+	s.Upstreams = []string{"http://example.com/#"}
+	_, err = renderChecked(t, s)
+	require.Error(t, err)
+	s = baseSite()
+	s.Resolver = "dns-example"
+	text, err = renderChecked(t, s)
+	require.NoError(t, err)
+	require.NotContains(t, text, "docklet-issuer")
+	s.TLS = "custom"
+	s.CertFile = "/certs/example.crt"
+	s.KeyFile = "/certs/example.key"
+	s.Provider = "cloudflare"
+	s.Credential = "TOKEN"
+	text, err = renderChecked(t, s)
+	require.NoError(t, err)
+	require.NotContains(t, text, "tls {")
+	s = baseSite()
+	text, err = renderChecked(t, s)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	for n := 0; n < len(lines); n++ {
+		_, err = parseChecked(t, strings.Join(lines[:n], "\n"))
+		require.Error(t, err, "truncation %d", n)
 	}
 }

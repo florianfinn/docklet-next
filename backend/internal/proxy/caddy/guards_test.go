@@ -57,17 +57,17 @@ func TestScannerAndImportSpans(t *testing.T) {
 }
 func TestAdminURLRefusals(t *testing.T) {
 	for _, address := range []string{"localhost:2019", ":2019", "0.0.0.0:2019", "[::1]:2019", "[::]:2019", "http://127.0.0.1:2019/"} {
-		u, err := adminURL(address)
+		u, err := adminURLChecked(t, address)
 		require.NoError(t, err)
 		require.Equal(t, "http://127.0.0.1:2019/config/", u)
 	}
 	for _, address := range []string{"http://127.0.0.1", "localhost"} {
-		u, err := adminURL(address)
+		u, err := adminURLChecked(t, address)
 		require.NoError(t, err)
 		require.Equal(t, "http://127.0.0.1:2019/config/", u)
 	}
 	for _, address := range []string{"%", "https://localhost:2019", "http://user@localhost:2019", "localhost:2019?query=1", "localhost:2019#fragment", "localhost:2019/path", "example.com:2019", "unix//admin.sock"} {
-		_, err := adminURL(address)
+		_, err := adminURLChecked(t, address)
 		require.Error(t, err, address)
 	}
 }
@@ -101,9 +101,9 @@ func TestReadbackRequiresOneMatchingBranch(t *testing.T) {
 func TestPrepareTargetIdentityAndOwnershipGuards(t *testing.T) {
 	x := fixture(t)
 	s := baseSite()
-	text, _ := s.Render()
+	text, _ := renderChecked(t, s)
 	x.put("routes/foreign.caddy", text)
-	r, err := x.e.Read(t.Context(), x.i)
+	r, err := readChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.Len(t, r.Routes, 2)
 	require.Equal(t, "text-only", r.Routes[1].Class)
@@ -111,42 +111,42 @@ func TestPrepareTargetIdentityAndOwnershipGuards(t *testing.T) {
 	for _, target := range []string{"../app.caddy", "/etc/caddy/app.caddy", "routes/hidden.secret.caddy", "elsewhere/app.caddy", "routes/app.txt", "Caddyfile"} {
 		bad := q
 		bad.Target = target
-		_, err := x.e.Prepare(t.Context(), bad)
+		_, err := prepareChecked(t, x.e, bad)
 		require.Error(t, err, target)
 	}
 	for _, kind := range []string{"edit-route", "delete-route", "edit-service", "restore-owned"} {
 		bad := q
 		bad.Change.Kind = kind
-		_, err := x.e.Prepare(t.Context(), bad)
+		_, err := prepareChecked(t, x.e, bad)
 		require.Error(t, err, kind)
 	}
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "invalid-input", "duplicate name")
 	q.Target = "routes/foreign.caddy"
 	q.Change.Kind = "edit-route"
 	q.Change.RouteID = q.Target
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "source-read-only")
 	require.NoError(t, x.d.DB.Exec("DELETE FROM proxy_verified_files").Error)
 	x.owned("routes/app.caddy", text)
 	q.Target = "routes/app.caddy"
 	q.Change.RouteID = "wrong"
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "invalid-input")
 	q.Change.Kind = "create-route"
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "invalid-input")
 	q.Change.Kind = "edit-route"
 	q.Change.RouteID = q.Target
 	q.Change.Advanced = "invalid"
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "invalid-input")
 	x.put("routes/app.caddy", "app.example.com {\n respond unknown\n}\n")
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "unsupported-format")
 	x.put("Caddyfile", strings.TrimSuffix(rootText, "import /etc/caddy/routes/*.caddy\n"))
 	q.Change.Kind = "create-route"
-	_, err = x.e.Prepare(t.Context(), q)
+	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "import-missing")
 }
 func TestP6DeadlineBeginsAtActivation(t *testing.T) {
@@ -166,6 +166,7 @@ func TestP6DeadlineBeginsAtActivation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, o.State)
 	require.Len(t, x.commands, before)
+	require.Equal(t, dto.NoObservableDifference, o.Reason)
 	require.NoError(t, x.e.Cleanup(t.Context(), i))
 	_, ok := x.e.activated.Load(i.Request.ID)
 	require.False(t, ok)
@@ -208,6 +209,9 @@ func TestObserveLogsAdminErrorsAndGatewayAreNeverSuccess(t *testing.T) {
 			o, err := x.e.Observe(t.Context(), i, false)
 			require.NoError(t, err)
 			require.Equal(t, dto.AppliedUnverified, o.State)
+			if which != "logs" && which != "gateway" {
+				require.Equal(t, dto.AdminUnavailable, o.Reason)
+			}
 		})
 	}
 }
@@ -271,7 +275,7 @@ func TestImportCyclesDepthAndStagingIsolation(t *testing.T) {
 				x.put("Caddyfile", rootText+"import /etc/caddy/*/*.caddy\n")
 			}
 			if which != "absolute" {
-				_, err := x.e.Read(t.Context(), x.i)
+				_, err := readChecked(t, x.e, x.i)
 				require.Error(t, err)
 				if which == "depth" {
 					require.ErrorContains(t, err, "input-limit")
@@ -279,7 +283,7 @@ func TestImportCyclesDepthAndStagingIsolation(t *testing.T) {
 				return
 			}
 			q := x.request("create-route", baseSite())
-			i, err := x.e.Prepare(t.Context(), q)
+			i, err := prepareChecked(t, x.e, q)
 			require.NoError(t, err)
 			i.StagingPath = "routes/.docklet-staging-example"
 			require.NoError(t, x.e.Validate(t.Context(), i))
@@ -297,7 +301,7 @@ func TestSiteStructuralGrammarRefusals(t *testing.T) {
 	s.Path = "/api"
 	s.Middlewares = []string{"compress", "strip-api", "custom-headers"}
 	s.Upstreams = append(s.Upstreams, "http://192.0.2.81:8080")
-	text, err := s.Render()
+	text, err := renderChecked(t, s)
 	require.NoError(t, err)
 	// Every structural line is required. Whitespace is the only normalization.
 	for n, line := range strings.Split(strings.TrimSpace(text), "\n") {
@@ -306,24 +310,24 @@ func TestSiteStructuralGrammarRefusals(t *testing.T) {
 		}
 		lines := strings.Split(strings.TrimSpace(text), "\n")
 		lines[n] = "invalid_directive"
-		_, err := ParseSite(strings.Join(lines, "\n"))
+		_, err := parseChecked(t, strings.Join(lines, "\n"))
 		require.Error(t, err, "line %d", n)
 	}
 	for _, pair := range [][2]string{{"# docklet-route: example-app", "# docklet-route: bad name"}, {"# docklet-certificate-domain: example.com", "# docklet-certificate-domain: bad"}, {"dns cloudflare {env.DNS_API_TOKEN}", "dns cloudflare {env.bad-token}"}, {"path /api*", "path /api"}, {"host app.example.com", "host other.example.net"}, {"lb_policy round_robin", "lb_policy random"}, {"reverse_proxy http://192.0.2.80:8080 http://192.0.2.81:8080 {", "reverse_proxy http://192.0.2.80:8080 {"}} {
-		_, err := ParseSite(strings.Replace(text, pair[0], pair[1], 1))
+		_, err := parseChecked(t, strings.Replace(text, pair[0], pair[1], 1))
 		require.Error(t, err)
 	}
 	plain := baseSite()
 	plain.TLS = "custom"
 	plain.CertFile = "/certs/a.crt"
 	plain.KeyFile = "/certs/a.key"
-	custom, err := plain.Render()
+	custom, err := renderChecked(t, plain)
 	require.NoError(t, err)
 	for _, pair := range [][2]string{{"tls /certs/a.crt /certs/a.key", "tls /certs/a.crt"}, {"app.example.com {", "http://app.example.com {"}, {"tls /certs/a.crt /certs/a.key", "tls bad { secret }"}} {
-		_, err := ParseSite(strings.Replace(custom, pair[0], pair[1], 1))
+		_, err := parseChecked(t, strings.Replace(custom, pair[0], pair[1], 1))
 		require.Error(t, err)
 	}
 	auto := strings.Replace(text, "app.example.com, example.com, *.example.com {", "http://app.example.com, example.com, *.example.com {", 1)
-	_, err = ParseSite(auto)
+	_, err = parseChecked(t, auto)
 	require.Error(t, err)
 }
