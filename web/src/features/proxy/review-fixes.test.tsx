@@ -56,7 +56,9 @@ describe("proxy editor keeps server values the operator did not change", () => {
     const f = fixture(),
       i = { ...instance, kind: "caddy" as const };
     const text = `# docklet-route: app\napp.example.com {\n  route {\n    reverse_proxy ${measured}\n  }\n}\n`;
-    f.state.read.routes = [{ ...route, id: "routes/app.caddy", file: "routes/app.caddy", rule: "app.example.com", upstreams: [measured] }];
+    f.state.read.routes = [
+      { ...route, id: "routes/app.caddy", file: "routes/app.caddy", rule: "app.example.com", upstreams: [measured] },
+    ];
     f.state.read.files = [{ ...f.state.read.files![0]!, path: "routes/app.caddy", content: text }];
     show(f, i);
     const user = await edit();
@@ -69,7 +71,15 @@ describe("proxy editor keeps server values the operator did not change", () => {
     const f = fixture(),
       i = { ...instance, kind: "caddy" as const };
     const text = "# docklet-route: app\napp.example.com {\n  reverse_proxy whoami-a:80\n}\n";
-    f.state.read.routes = [{ ...route, id: "routes/app.caddy", file: "routes/app.caddy", rule: "app.example.com", upstreams: ["whoami-a:80"] }];
+    f.state.read.routes = [
+      {
+        ...route,
+        id: "routes/app.caddy",
+        file: "routes/app.caddy",
+        rule: "app.example.com",
+        upstreams: ["whoami-a:80"],
+      },
+    ];
     f.state.read.files = [{ ...f.state.read.files![0]!, path: "routes/app.caddy", content: text }];
     show(f, i);
     const user = await edit();
@@ -123,7 +133,11 @@ describe("proxy refusals and blocking states", () => {
   });
   it("keeps the editor open beside a rejected receipt's reason and diagnostic", async () => {
     const f = fixture();
-    f.state.next = operation({ state: "rejected", reason: "invalid-graph", diagnostic: { path: route.file, line: 4, detail: "unknown v3 matcher" } });
+    f.state.next = operation({
+      state: "rejected",
+      reason: "invalid-graph",
+      diagnostic: { path: route.file, line: 4, detail: "unknown v3 matcher" },
+    });
     show(f);
     const user = await edit();
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -146,7 +160,9 @@ describe("proxy refusals and blocking states", () => {
         </Providers>,
       );
       await screen.findByRole("heading", { name: "Routes" });
-      await waitFor(() => expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true),
+      );
       unmount();
     }
   });
@@ -228,4 +244,74 @@ describe("verify round trip sweep (v-s5-fix1)", () => {
     expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true);
     expect(calls).toBe(1);
   });
+});
+
+describe("verify 2 round trip sweep (v2-s5-fix)", () => {
+  it("keeps an empty port separator when only the host changes", async () => {
+    const f = fixture();
+    f.state.read.routes![0] = { ...route, upstreams: ["http://backend.example.com:/api?x=1"] };
+    show(f);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "next.example.com" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect(change(f).upstreams).toEqual(["http://next.example.com:/api?x=1"]);
+  });
+  it.each([" headers ", "headers\nstrict"])("keeps producer middleware name %j on rename", async name => {
+    const f = fixture();
+    f.state.read.routes![0] = { ...route, references: [{ name, kind: "local", file: route.file }] };
+    f.state.read.middlewares = [{ name, kind: "local", file: route.file }];
+    show(f);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "renamed" } });
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect("middlewares" in change(f)).toBe(false);
+  });
+  it.each(["name", "domain"])("patches an indented Caddy %s leaf", async leaf => {
+    const f = fixture(),
+      i = { ...instance, kind: "caddy" as const };
+    const text =
+      "  # docklet-route: app\n  app.example.com {\n    route {\n      reverse_proxy http://whoami-a:80\n    }\n  }\n";
+    f.state.read.routes = [
+      {
+        ...route,
+        id: "routes/app.caddy",
+        file: "routes/app.caddy",
+        rule: "app.example.com",
+        upstreams: ["http://whoami-a:80"],
+      },
+    ];
+    f.state.read.files = [{ ...f.state.read.files![0]!, path: "routes/app.caddy", content: text }];
+    show(f, i);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText(leaf === "name" ? "Name" : "Host / domain", { selector: "input" }), {
+      target: { value: leaf === "name" ? "renamed" : "next.example.com" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect(change(f).advanced).toBe(
+      leaf === "name"
+        ? text.replace("docklet-route: app", "docklet-route: renamed")
+        : text.replace("app.example.com {", "next.example.com {"),
+    );
+  });
+});
+
+it("reviewer keeps the untouched shared upstream line bytes", async () => {
+  const f = fixture();
+  const old = "http://backend.example.com/api ";
+  f.state.read.routes = [{ ...route, upstreams: [old, "http://other.example.com:80"], dependants: ["app", "two"] }];
+  show(f);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Actions for app" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Edit shared service" }));
+  fireEvent.change(screen.getByLabelText("Upstreams (one URL per line)"), {
+    target: { value: old + "\nhttp://next.example.com:80" },
+  });
+  await user.click(screen.getByRole("checkbox", { name: "Confirm" }));
+  await user.click(screen.getByRole("button", { name: "Confirm" }));
+  await waitFor(() => expect(writes(f).length).toBe(1));
+  expect(change(f).upstreams).toEqual([old, "http://next.example.com:80"]);
 });

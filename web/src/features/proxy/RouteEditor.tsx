@@ -81,7 +81,9 @@ export function RouteEditor({
       ),
     ]),
   ];
-  const names = splitNames(middlewares);
+  // A name containing a line break cannot be shown one per line; such a list stays exactly as read.
+  const multiline = (route?.references ?? []).some(r => r.name.includes("\n"));
+  const names = multiline ? (route?.references ?? []).map(r => r.name) : splitNames(middlewares);
   const unresolved = names.filter(n => !known.includes(n) && !route?.references?.some(r => r.name === n));
   const exactHostRule = !rule || /^Host\([`"]([^`"]+)[`"]\)$/.test(rule);
   const caddyText = route
@@ -187,7 +189,7 @@ export function RouteEditor({
                       id="backend-port"
                       label={t("port")}
                       value={backend.port}
-                      onChange={v => setBackend(b => ({ ...b, port: v }))}
+                      onChange={v => setBackend(b => ({ ...b, port: v, colon: v !== "" }))}
                     />
                   </div>
                 )}
@@ -230,6 +232,7 @@ export function RouteEditor({
                         id="route-middlewares"
                         className="min-h-20 font-mono text-xs"
                         value={middlewares}
+                        disabled={multiline}
                         aria-describedby="route-middlewares-desc"
                         spellCheck={false}
                         onChange={e => {
@@ -250,7 +253,7 @@ export function RouteEditor({
                         onChange={v => {
                           if (!names.includes(v)) setMiddlewares([...names, v].join("\n"));
                         }}
-                        options={known.map(n => ({ value: n, label: n }))}
+                        options={known.filter(n => !n.includes("\n")).map(n => ({ value: n, label: n }))}
                       />
                     )}
                   </>

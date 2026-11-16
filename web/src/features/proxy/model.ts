@@ -57,18 +57,16 @@ export function operationRequest(
   };
 }
 export const splitNames = (value: string) =>
-  value
-    .split("\n")
-    .map(x => x.trim())
-    .filter(Boolean);
+  value.split("\n").filter(x => x !== "");
 /** Split a backend URL as written: the port and any path stay byte for byte; Caddy may omit the scheme. */
 export function backendParts(value: string) {
   const m = /^(?:([A-Za-z][A-Za-z0-9+.-]*):\/\/)?(\[[^\]]*\]|[^/:?#]*)(?::(\d*))?(.*)$/.exec(value);
   return value && m
-    ? { scheme: m[1] ?? "", host: m[2]!, port: m[3] ?? "", rest: m[4]! }
-    : { scheme: "http", host: "", port: "", rest: "" };
+    ? { scheme: m[1] ?? "", host: m[2]!, port: m[3] ?? "", colon: m[3] !== undefined, rest: m[4]! }
+    : { scheme: "http", host: "", port: "", colon: false, rest: "" };
 }
 /** Rebuild a backend URL; with the lossless split above an untouched value comes back byte for byte. */
 export function backendURL(parts: ReturnType<typeof backendParts>) {
-  return `${parts.scheme ? `${parts.scheme}://` : ""}${parts.host}${parts.port ? `:${parts.port}` : ""}${parts.rest}`;
+  // An explicit empty port (`host:`) keeps its separator until the port itself is edited.
+  return `${parts.scheme ? `${parts.scheme}://` : ""}${parts.host}${parts.port || parts.colon ? `:${parts.port}` : ""}${parts.rest}`;
 }

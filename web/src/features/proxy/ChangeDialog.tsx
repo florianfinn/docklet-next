@@ -91,10 +91,8 @@ export function ChangeDialog({
                 ...(action.kind === "edit-service"
                   ? {
                       service: action.route?.service,
-                      upstreams: upstreams
-                        .split("\n")
-                        .map(s => s.trim())
-                        .filter(Boolean),
+                      // Lines are sent as written; untouched URLs keep their bytes.
+                      upstreams: upstreams.split("\n").filter(s => s !== ""),
                     }
                   : {}),
               },

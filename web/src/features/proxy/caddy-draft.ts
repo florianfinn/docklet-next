@@ -13,9 +13,13 @@ export function newCaddySite(name: string, domain: string, upstream: string, tls
 /** Change only displayed leaves; keep unrepresented directives, TLS and additional upstreams. */
 export function patchCaddySite(text: string, route: Route, name: string, domain: string, upstream: string): string {
   let next = text;
-  if (name !== route.name) next = next.replace(/^# docklet-route: .*$/m, `# docklet-route: ${name}`);
+  // Indentation is accepted by the engine's site grammar, so both patterns keep it.
+  if (name !== route.name)
+    next = next.replace(/^([ \t]*)# docklet-route: .*$/m, (_line, indent: string) => `${indent}# docklet-route: ${name}`);
   if (domain !== route.rule) {
-    next = next.replace(/^(?!\s|#)([^\n]+) \{$/m, line => line.replace(route.rule, domain));
+    // The site header is the first line that is neither blank nor a comment.
+    const header = /^(?![ \t]*(?:#|$))[^\n]*\{[ \t]*$/m;
+    next = next.replace(header, line => line.replace(route.rule, domain));
     next = next.replace(
       /^(\s*host )([^\n]+)$/m,
       (_line, prefix: string, hosts: string) =>
