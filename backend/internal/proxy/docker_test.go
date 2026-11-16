@@ -139,3 +139,20 @@ func TestP21ProjectionCopiesSharedInventory(t *testing.T) {
 	wg.Wait()
 	require.True(t, reflect.DeepEqual(before, rows[0].Mounts), "shared coalesced rows must remain unchanged")
 }
+
+func TestImageKindIgnoresRegistryPorts(t *testing.T) {
+	for image, want := range map[string]dto.Kind{
+		"traefik:3.7.16":                 dto.Traefik,
+		"docker.io/library/caddy:2.10.2": dto.Caddy,
+		// Measured sandbox mirror form: registry port plus digest.
+		"127.0.0.1:55413/fixtures/m27/traefik@sha256:" + strings.Repeat("a", 64): dto.Traefik,
+		"registry.example.com:5000/proxy/caddy:2.10.2":                           dto.Caddy,
+		"localhost:5000/traefik":                                                 dto.Traefik,
+		"caddy@sha256:" + strings.Repeat("b", 64):                                dto.Caddy,
+		"registry.example.com:5000/traefik-proxy:1":                              "",
+		"registry.example.com:5000/other:traefik":                                "",
+		"sha256:" + strings.Repeat("c", 64):                                      "",
+	} {
+		require.Equal(t, want, imageKind(image), image)
+	}
+}

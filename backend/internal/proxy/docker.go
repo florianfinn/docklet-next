@@ -335,20 +335,27 @@ func (d *DockerRuntime) Discover(ctx context.Context) ([]dto.Discovery, error) {
 	return d.ProjectDiscovery(ctx, rows)
 }
 
+// imageKind names the engine from an image reference's repository base. A tag
+// colon follows the last slash; a colon before it is a registry port.
+func imageKind(image string) dto.Kind {
+	repo, _, _ := strings.Cut(strings.ToLower(image), "@")
+	if i := strings.LastIndex(repo, ":"); i > strings.LastIndex(repo, "/") {
+		repo = repo[:i]
+	}
+	switch path.Base(repo) {
+	case "traefik":
+		return dto.Traefik
+	case "caddy":
+		return dto.Caddy
+	}
+	return ""
+}
+
 // ProjectDiscovery never mutates the shared coalesced listing or its nested mounts.
 func (d *DockerRuntime) ProjectDiscovery(ctx context.Context, rows []container.Summary) ([]dto.Discovery, error) {
 	out := []dto.Discovery{}
 	for _, r := range rows {
-		k := dto.Kind("")
-		image := strings.ToLower(r.Image)
-		repo := strings.Split(image, "@")[0]
-		repo = strings.Split(repo, ":")[0]
-		switch path.Base(repo) {
-		case "traefik":
-			k = dto.Traefik
-		case "caddy":
-			k = dto.Caddy
-		}
+		k := imageKind(r.Image)
 		if k == "" {
 			continue
 		}
