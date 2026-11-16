@@ -82,14 +82,14 @@ func (r *hubBackupRig) uploadArchive(t *testing.T) []byte {
 	return archive
 }
 
-func (r *hubBackupRig) run(t *testing.T, operation string) (*dto.SystemBackupRun, error) {
+// run performs the operation; upload needs an archive prepared before observers are registered.
+func (r *hubBackupRig) run(t *testing.T, operation string, archive []byte) (*dto.SystemBackupRun, error) {
 	switch operation {
 	case "create":
 		return r.service().CreateBackup(t.Context(), user.SystemUser, dto.SystemBackupTriggerManual, dto.CreateSystemBackupRequest{})
 	case "scheduled":
 		return r.service().CreateBackup(t.Context(), user.SystemUser, dto.SystemBackupTriggerScheduled, dto.CreateSystemBackupRequest{PolicyID: "daily"})
 	default:
-		archive := r.uploadArchive(t)
 		answer, err := r.service().UploadArchive(t.Context(), user.SystemUser, bytes.NewReader(archive))
 		if answer == nil {
 			return nil, err
@@ -103,6 +103,10 @@ func TestHubBackupSuccessFollowsGateRelease(t *testing.T) {
 	for _, operation := range []string{"create", "upload"} {
 		t.Run(operation, func(t *testing.T) {
 			r := newHubBackupRig(t)
+			var archive []byte
+			if operation == "upload" {
+				archive = r.uploadArchive(t)
+			}
 			var mu sync.Mutex
 			var admissions sync.WaitGroup
 			var results []error
@@ -126,7 +130,7 @@ func TestHubBackupSuccessFollowsGateRelease(t *testing.T) {
 				case <-time.After(200 * time.Millisecond):
 				}
 			})
-			_, err := r.run(t, operation)
+			_, err := r.run(t, operation, archive)
 			require.NoError(t, err)
 			admissions.Wait()
 			require.NotEmpty(t, results, "no succeeded backup write observed")
@@ -162,7 +166,7 @@ func TestHubBackupFailedCompletionKeepsRetention(t *testing.T) {
 					return commit(tx, run, expired)
 				}
 			}
-			run, err := r.run(t, "scheduled")
+			run, err := r.run(t, "scheduled", nil)
 			require.NotNil(t, run)
 			stored, loadErr := r.store.Run(t.Context(), run.ID)
 			require.NoError(t, loadErr)
