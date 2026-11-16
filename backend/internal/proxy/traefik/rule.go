@@ -8,7 +8,7 @@ package traefik
 
 import (
 	"fmt"
-	"net/netip"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -144,9 +144,9 @@ func (p *ruleParser) atom() error {
 func checkMatcher(name string, a []string) error {
 	n := 1
 	switch name {
-	case "Header", "HeaderRegexp", "QueryRegexp":
+	case "Header", "HeaderRegexp":
 		n = 2
-	case "Query":
+	case "Query", "QueryRegexp":
 		if len(a) == 1 {
 			n = 1
 		} else {
@@ -164,11 +164,15 @@ func checkMatcher(name string, a []string) error {
 			return fmt.Errorf("control character in matcher")
 		}
 	}
-	switch name {
-	case "Host":
-		if a[0] == "" || strings.ContainsAny(a[0], " /:{}") {
-			return fmt.Errorf("invalid Host")
+	// Matcher arities and ASCII requirements follow Traefik v3.7.16's HTTP muxer.
+	if name == "Host" || name == "HostRegexp" {
+		for _, r := range a[0] {
+			if r > 127 {
+				return fmt.Errorf("non-ASCII host matcher")
+			}
 		}
+	}
+	switch name {
 	case "Path", "PathPrefix":
 		if !strings.HasPrefix(a[0], "/") {
 			return fmt.Errorf("path must start with slash")
@@ -181,19 +185,18 @@ func checkMatcher(name string, a []string) error {
 			return err
 		}
 	case "HeaderRegexp", "QueryRegexp":
-		if _, err := regexp.Compile(a[1]); err != nil {
-			return err
-		}
-	case "ClientIP":
-		if _, err := netip.ParsePrefix(a[0]); err != nil {
-			if _, err = netip.ParseAddr(a[0]); err != nil {
+		if len(a) == 2 {
+			if _, err := regexp.Compile(a[1]); err != nil {
 				return err
 			}
 		}
-	case "Method":
-		if a[0] == "" || strings.IndexFunc(a[0], func(r rune) bool { return r < 'A' || r > 'Z' }) >= 0 {
-			return fmt.Errorf("invalid method")
+	case "ClientIP":
+		if _, _, err := net.ParseCIDR(a[0]); err != nil {
+			if net.ParseIP(a[0]) == nil {
+				return err
+			}
 		}
+
 	}
 	return nil
 }

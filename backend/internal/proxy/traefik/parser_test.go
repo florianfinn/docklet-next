@@ -21,7 +21,7 @@ func TestP26V3RuleGrammar(t *testing.T) {
 	for _, rule := range valid {
 		t.Run("valid/"+rule, func(t *testing.T) { _, err := parseRule(rule); require.NoError(t, err) })
 	}
-	invalid := []string{"", "Unknown(`value`)", "Headers(`X-Example`, `on`)", "Host(`a.example.com`, `b.example.com`)", "HostRegexp(`{subdomain:[a-z]+}.example.com`)", "PathRegexp(`[`)", "HeaderRegexp(`X`, `[`)", "ClientIP(`bad`)", "Method(`get`)", "Path(`relative`)", "Host('app.example.com')", "Host(`app.example.com`) &&", "(Host(`app.example.com`)", "Host(`app.example.com`))", "Host(`app.example.com`) + Path(`/`)", "Host(\"bad\\q\")", "Host(`a\nexample.com`)", "Header(`X`)", "QueryRegexp(`x`)", "Host(``)", "ClientIP(`999.0.0.1`)", "Host(`a.example.com`) trailing", "!"}
+	invalid := []string{"", "Unknown(`value`)", "Headers(`X-Example`, `on`)", "Host(`a.example.com`, `b.example.com`)", "HostRegexp(`{subdomain:[a-z]+}.example.com`)", "PathRegexp(`[`)", "HeaderRegexp(`X`, `[`)", "ClientIP(`bad`)", "Path(`relative`)", "Host('app.example.com')", "Host(`app.example.com`) &&", "(Host(`app.example.com`)", "Host(`app.example.com`))", "Host(`app.example.com`) + Path(`/`)", "Host(\"bad\\q\")", "Host(`a\nexample.com`)", "Header(`X`)", "ClientIP(`999.0.0.1`)", "Host(`a.example.com`) trailing", "!"}
 	for _, rule := range invalid {
 		t.Run("invalid/"+rule, func(t *testing.T) {
 			_, err := parseRule(rule)
@@ -173,7 +173,7 @@ func TestClassifierPrototypeParityAndAcceptedExtensions(t *testing.T) {
 }
 
 func TestRuleAndSourceLimits(t *testing.T) {
-	for _, s := range []string{strings.Repeat("!", 130) + "Host(`app.example.com`)", strings.Repeat(" ", 16385), "Host(`app.example.com`", "Host(\"unterminated)", "Header(`x` `y`)", "Method(``)", "Host(`app.example.com/`)", "Host(`a\x00b`)"} {
+	for _, s := range []string{strings.Repeat("!", 130) + "Host(`app.example.com`)", strings.Repeat(" ", 16385), "Host(`app.example.com`", "Host(\"unterminated)", "Header(`x` `y`)", "Host(`a\x00b`)"} {
 		require.NotPanics(t, func() { _, err := parseRule(s); require.Error(t, err) })
 	}
 	for _, s := range []string{"http: null\n", "http: !!str x\n", "http: &base {}\n", "http: {routers: {a: {rule: |\n  text}}}", "http: {routers: {app: {rule: 'a'\n service: app}}}", "http:\n  routers:\n    app:\n      rule: Host(`app.example.com`)\n        && PathPrefix(`/`)\n"} {
@@ -420,4 +420,20 @@ func TestListGrowthAtEOFAndQuotedCommentTokens(t *testing.T) {
 	require.NotContains(t, out, "# data")
 	require.Equal(t, 1, strings.Count(out, "# First handler"))
 	require.Equal(t, 1, strings.Count(out, "# Second handler"))
+}
+
+func TestPinnedTraefikMatcherArityAndASCIIParity(t *testing.T) {
+	for _, rule := range []string{"Method(`get`)", "Method(`M-SEARCH`)", "Method(``)", "QueryRegexp(`enabled`)", "Host(`*`)", "Host(``)", "Host(`[2001:db8::1]`)"} {
+		_, err := parseRule(rule)
+		require.NoError(t, err, rule)
+	}
+	for _, rule := range []string{"Host(`ä.example.com`)", "HostRegexp(`ä.*`)", "ClientIP(`2001:db8::1%eth0`)"} {
+		_, err := parseRule(rule)
+		require.Error(t, err, rule)
+	}
+	for _, tt := range []struct{ rule, class string }{{"Host(`app.example.com`) && HostRegexp(`.*`)", "editable"}, {"Host(`*`)", "infrastructure"}, {"HostRegexp(\"^.*$\")", "infrastructure"}} {
+		doc := mustDocument(t, strings.Replace(tiny, "Host(`app.example.com`)", tt.rule, 1))
+		routes := classify(map[string]*document{"routes.yml": doc}, nil, dto.Inventory{})
+		require.Equal(t, tt.class, routes[0].Class)
+	}
 }

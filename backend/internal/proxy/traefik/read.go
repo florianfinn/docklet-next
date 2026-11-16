@@ -302,7 +302,7 @@ func classify(docs map[string]*document, opaque []dto.OpaqueFile, inv dto.Invent
 			if tls != nil && !onlyKeys(tls, "certResolver", "domains") {
 				refuse(dto.UnsupportedFormat)
 			}
-			catchAll := strings.TrimSpace(r.Rule) == "PathPrefix(`/`)" || strings.TrimSpace(r.Rule) == "PathPrefix(\"/\")" || strings.Contains(r.Rule, "HostRegexp(`.*`)") || strings.Contains(r.Rule, "HostRegexp(`^.*$`)")
+			catchAll := contains([]string{"PathPrefix(`/`)", "PathPrefix(\"/\")", "HostRegexp(`.*`)", "HostRegexp(\".*\")", "HostRegexp(`^.*$`)", "HostRegexp(\"^.*$\")", "Host(`*`)", "Host(\"*\")"}, strings.TrimSpace(r.Rule))
 			redirect := false
 			for _, name := range list(field(n, "middlewares")) {
 				for _, def := range definitions(docs, "middlewares", name) {
