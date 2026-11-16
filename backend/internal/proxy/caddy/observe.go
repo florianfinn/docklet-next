@@ -20,35 +20,41 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 )
 
-func adminURL(address string) (string, error) {
+// adminURL returns the loopback URL and the Host header Caddy's admin endpoint
+// accepts: its listen authority (host and port), e.g. localhost:2019.
+func adminURL(address string) (string, string, error) {
 	if !strings.Contains(address, "://") {
 		address = "http://" + address
 	}
 	u, err := url.Parse(address)
 	if err != nil {
-		return "", dto.Fail(dto.AdminUnavailable, 409)
+		return "", "", dto.Fail(dto.AdminUnavailable, 409)
 	}
 	if u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" {
-		return "", dto.Fail(dto.AdminUnavailable, 409)
+		return "", "", dto.Fail(dto.AdminUnavailable, 409)
 	}
 	host := u.Hostname()
 	if host != "localhost" && host != "127.0.0.1" && host != "0.0.0.0" && host != "" && host != "::1" && host != "::" {
-		return "", dto.Fail(dto.AdminUnavailable, 409)
+		return "", "", dto.Fail(dto.AdminUnavailable, 409)
 	}
 	port := u.Port()
 	if port == "" {
 		port = "2019"
 	}
+	authority := host
+	if authority == "" || authority == "0.0.0.0" || authority == "::" {
+		authority = "localhost"
+	}
 	u.Host = net.JoinHostPort("127.0.0.1", port)
 	u.Path = "/config/"
-	return u.String(), nil
+	return u.String(), net.JoinHostPort(authority, port), nil
 }
 func (e *engine) admin(ctx context.Context, i dto.Instance, address string) (map[string]any, error) {
-	u, err := adminURL(address)
+	u, authority, err := adminURL(address)
 	if err != nil {
 		return nil, err
 	}
-	res, err := e.runtime.Exec(ctx, i, "admin", "", "localhost", u)
+	res, err := e.runtime.Exec(ctx, i, "admin", "", authority, u)
 	if err != nil {
 		if reason(err, "") == dto.ExecRunning {
 			return nil, err
@@ -139,6 +145,7 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 	if remaining <= 0 {
 		return unverified(dto.NoObservableDifference), nil
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, remaining)
 	defer cancel()
 	// Runtime.Epoch and Logs fence real Docker identity. For an acknowledged
@@ -163,6 +170,9 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		// Validate/reload decide rejection; logs still fence availability/epoch.
 		err = e.runtime.Logs(ctx, i.Request.Instance, i.PublishedAt, func(string) error { return nil })
 		if err != nil {
+			if ctx.Err() != nil && parent.Err() == nil {
+				return unverified(lastReason), nil
+			}
 			return unverified(reason(err, dto.LogsUnavailable)), nil
 		}
 		routed := false
@@ -217,6 +227,10 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 			return proxy.Observation{State: dto.Verified, Evidence: dto.Configuration}, nil
 		}
 		if err = e.wait(ctx, 100*time.Millisecond); err != nil {
+			// The observation window ended; only a cancelled operation context is uncertain.
+			if parent.Err() == nil {
+				return unverified(lastReason), nil
+			}
 			return proxy.Observation{}, err
 		}
 	}

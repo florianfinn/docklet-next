@@ -26,7 +26,7 @@ import (
 
 func adminURLChecked(t *testing.T, address string) (value string, err error) {
 	t.Helper()
-	require.NotPanics(t, func() { value, err = adminURL(address) })
+	require.NotPanics(t, func() { value, _, err = adminURL(address) })
 	return
 }
 func TestAdminReadbackGuardsAtRealExecSeam(t *testing.T) {

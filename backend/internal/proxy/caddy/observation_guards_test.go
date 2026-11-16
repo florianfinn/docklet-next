@@ -100,8 +100,10 @@ func TestInitialEpochAndWaitFailuresCannotVerify(t *testing.T) {
 		x.now = x.now.Add(6 * time.Second)
 		return context.Canceled
 	}
-	_, err = x.e.Observe(t.Context(), i, false)
-	require.ErrorIs(t, err, context.Canceled)
+	// A failed wait inside a live operation ends the window: never verified, never uncertain.
+	o, err = x.e.Observe(t.Context(), i, false)
+	require.NoError(t, err)
+	require.Equal(t, dto.AppliedUnverified, o.State)
 }
 func TestAdminOffUnobservableAndAdminOnMismatchCannotUseConfigurationEvidence(t *testing.T) {
 	for _, adminOff := range []bool{false, true} {

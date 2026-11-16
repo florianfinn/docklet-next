@@ -242,3 +242,27 @@ func TestResolverChangeKeepsTLSDomains(t *testing.T) {
 	require.Contains(t, text, "          - main: example.com # Base\n            sans: ['*.example.com']\n", "domains and their comment stay byte for byte")
 	require.NotContains(t, text, "primary")
 }
+
+// Early smoke 3: Traefik v3.7.16 rejects `routers:` followed by an empty mapping
+// ("routers cannot be a standalone element"); deleting the last router drops the section.
+func TestDeletingTheLastRouterDropsTheRoutersSection(t *testing.T) {
+	x := fixture(t)
+	r := x.request("delete-route")
+	in := x.prepare(r)
+	text := string(in.New.Content)
+	require.NotContains(t, text, "routers")
+	require.NotContains(t, text, "{}")
+	require.Contains(t, text, "  services:\n    app:\n", "the service and the file stay")
+	// A router whose service lives in an opaque file stays editable (kickoff); its file may hold only routers.
+	x.put("dynamic/svc.secret.yml", "opaque")
+	x.put("dynamic/only.yml", "http:\n  routers:\n    solo:\n      rule: Host(`solo.example.com`)\n      service: hidden@file\n")
+	r = x.request("delete-route")
+	r.Target, r.Change.RouteID = "dynamic/only.yml", "dynamic/only.yml#solo"
+	b, err := x.d.Target(t.Context(), x.i, r.Target)
+	require.NoError(t, err)
+	r.Expected = b.FileState
+	r.GraphHashes, err = x.d.Graph(t.Context(), x.i)
+	require.NoError(t, err)
+	in = x.prepare(r)
+	require.NotContains(t, string(in.New.Content), "http", "an emptied http section is dropped too")
+}

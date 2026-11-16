@@ -120,11 +120,20 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 			var edits []edit
 			switch r.Change.Kind {
 			case "delete-route":
-				routers := at(d.root, "http", "routers")
-				for j := 0; j < len(routers.Content); j += 2 {
-					if routers.Content[j].Value == route.Name {
+				// Traefik refuses an empty routers mapping ("routers cannot be a standalone
+				// element", measured v3.7.16), so removing the last router drops the section,
+				// and an emptied http section with it; services and the file stay.
+				parent, key := at(d.root, "http", "routers"), route.Name
+				if len(parent.Content) == 2 {
+					parent, key = at(d.root, "http"), "routers"
+					if len(parent.Content) == 2 {
+						parent, key = d.root, "http"
+					}
+				}
+				for j := 0; j < len(parent.Content); j += 2 {
+					if parent.Content[j].Value == key {
 						var ed edit
-						ed, err = d.remove(routers, j)
+						ed, err = d.remove(parent, j)
 						edits = append(edits, ed)
 					}
 				}
