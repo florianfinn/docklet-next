@@ -239,7 +239,10 @@ Caddyfile with the line appended at top level.
 
 The first request of every probe goes to the selected container: BusyBox `wget`
 to `127.0.0.1` on the entry point's container port with the route's `Host`
-header, `-S`, `-T` and a 64 KiB body limit. The pinned BusyBox builds follow
+header, `-S`, `-T`, `-Y off` (a proxy variable in the container environment never
+redirects the probe) and a 64 KiB body limit. `hostio.ParseProbe` reads that output
+for both engines; a non-zero exit with a status line is an ordinary HTTP answer,
+because BusyBox exits 1 on 4xx and 5xx. The pinned BusyBox builds follow
 redirects and can neither disable that nor choose SNI independently of the URL
 (baseline B0, 2026-11-15). A backend that redirects therefore causes a
 follow-up request to the redirect target; the module evaluates only the first

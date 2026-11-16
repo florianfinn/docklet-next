@@ -104,7 +104,7 @@ func TestP16ArgumentAllowlistAndExit(t *testing.T) {
 	require.ErrorContains(t, err, "input-limit")
 	argv, _, err := Args(dto.Traefik, "probe", "", "example.com", "http://127.0.0.1:8080/path")
 	require.NoError(t, err)
-	require.Equal(t, []string{"wget", "-S", "-T", "10", "-O", "-", "--header", "Host: example.com", "http://127.0.0.1:8080/path"}, argv)
+	require.Equal(t, []string{"wget", "-Y", "off", "-S", "-T", "10", "-O", "-", "--header", "Host: example.com", "http://127.0.0.1:8080/path"}, argv)
 }
 func TestP8LogBatchAndSettlementFence(t *testing.T) {
 	epoch := Epoch{ContainerID: "example-container", StartedAt: "epoch-one", Running: true}

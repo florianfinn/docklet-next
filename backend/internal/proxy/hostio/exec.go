@@ -62,7 +62,8 @@ func Args(kind dto.Kind, action, file, host, rawURL string) ([]string, time.Dura
 		if strings.ContainsAny(host, " /\\") {
 			return fail()
 		}
-		a := []string{"wget", "-S", "-T", "10", "-O", "-", "--header", "Host: " + host}
+		// -Y off: a proxy variable in the container environment never redirects the probe.
+		a := []string{"wget", "-Y", "off", "-S", "-T", "10", "-O", "-", "--header", "Host: " + host}
 		if u.Scheme == "https" {
 			a = append(a, "--no-check-certificate")
 		}
