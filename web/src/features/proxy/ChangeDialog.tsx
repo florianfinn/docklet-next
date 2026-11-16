@@ -13,12 +13,91 @@ import { AcknowledgementFields, ConfirmCheck, ProxyDialog } from "./controls";
 import { acknowledgementsReady, emptyAcknowledgements } from "./model";
 import type { Acknowledgements, Change, Inventory, Route } from "./types";
 
-export type ChangeAction = { kind: "delete-route" | "insert-import" | "restore-owned" | "edit-service"; target: string; route?: Route };
-export function ChangeDialog({ action, inventory, busy, submit, close }: { action: ChangeAction; inventory: Inventory; busy: boolean; submit: (target: string, change: Change, ack: Acknowledgements) => void; close: () => void }) {
-  const t = useTranslations("proxyContract.ui"), [confirmed, setConfirmed] = useState(false), [ack, setAck] = useState(emptyAcknowledgements);
+export type ChangeAction = {
+  kind: "delete-route" | "insert-import" | "restore-owned" | "edit-service";
+  target: string;
+  route?: Route;
+};
+export function ChangeDialog({
+  action,
+  inventory,
+  busy,
+  submit,
+  close,
+}: {
+  action: ChangeAction;
+  inventory: Inventory;
+  busy: boolean;
+  submit: (target: string, change: Change, ack: Acknowledgements) => void;
+  close: () => void;
+}) {
+  const t = useTranslations("proxyContract.ui"),
+    [confirmed, setConfirmed] = useState(false),
+    [ack, setAck] = useState(emptyAcknowledgements);
   const [upstreams, setUpstreams] = useState(action.route?.upstreams?.join("\n") ?? "");
-  const title = action.kind === "edit-service" ? "editService" : action.kind === "delete-route" ? "delete" : action.kind === "insert-import" ? "insertImport" : "restore";
-  const hint = action.kind === "edit-service" ? "sharedServiceHint" : action.kind === "delete-route" ? "deleteHint" : action.kind === "insert-import" ? "insertHint" : "restoreHint";
-  const ready = confirmed && acknowledgementsReady(inventory, [], ack) && (action.kind !== "edit-service" || !!upstreams.trim());
-  return <ProxyDialog title={t(title)} description={t(hint)} onClose={close} busy={busy}><p className="break-all font-mono text-xs">{action.target}</p>{action.kind === "insert-import" && <pre className="whitespace-pre-wrap break-all">{inventory.importLine}</pre>}{action.kind === "edit-service" && <><h3 className="font-medium">{t("dependants")}</h3><ul className="list-inside list-disc break-all">{action.route?.dependants?.map(r => <li key={r}>{r}</li>)}</ul><Label htmlFor="service-upstreams">{t("upstreams")}</Label><Textarea id="service-upstreams" value={upstreams} onChange={e => setUpstreams(e.target.value)} /></>}<ConfirmCheck checked={confirmed} onChange={setConfirmed}>{t("confirm")}</ConfirmCheck><AcknowledgementFields inventory={inventory} value={ack} onChange={setAck} /><Button disabled={!ready || busy} onClick={() => { if (ready && !busy) submit(action.target, { kind: action.kind, ...(action.route ? { routeId: action.route.id } : {}), ...(action.kind === "edit-service" ? { service: action.route?.service, upstreams: upstreams.split("\n").map(s => s.trim()).filter(Boolean) } : {}) }, ack); }}>{t("confirm")}</Button></ProxyDialog>;
+  const title =
+    action.kind === "edit-service"
+      ? "editService"
+      : action.kind === "delete-route"
+        ? "delete"
+        : action.kind === "insert-import"
+          ? "insertImport"
+          : "restore";
+  const hint =
+    action.kind === "edit-service"
+      ? "sharedServiceHint"
+      : action.kind === "delete-route"
+        ? "deleteHint"
+        : action.kind === "insert-import"
+          ? "insertHint"
+          : "restoreHint";
+  const ready =
+    confirmed && acknowledgementsReady(inventory, [], ack) && (action.kind !== "edit-service" || !!upstreams.trim());
+  return (
+    <ProxyDialog title={t(title)} description={t(hint)} onClose={close} busy={busy}>
+      <p className="break-all font-mono text-xs">{action.target}</p>
+      {action.kind === "insert-import" && <pre className="whitespace-pre-wrap break-all">{inventory.importLine}</pre>}
+      {action.kind === "edit-service" && (
+        <>
+          <h3 className="font-medium">{t("dependants")}</h3>
+          <ul className="list-inside list-disc break-all">
+            {action.route?.dependants?.map(r => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+          <Label htmlFor="service-upstreams">{t("upstreams")}</Label>
+          <Textarea id="service-upstreams" value={upstreams} onChange={e => setUpstreams(e.target.value)} />
+        </>
+      )}
+      <ConfirmCheck checked={confirmed} onChange={setConfirmed}>
+        {t("confirm")}
+      </ConfirmCheck>
+      <AcknowledgementFields inventory={inventory} value={ack} onChange={setAck} />
+      <Button
+        disabled={!ready || busy}
+        onClick={() => {
+          if (ready && !busy)
+            submit(
+              action.target,
+              {
+                kind: action.kind,
+                ...(action.route ? { routeId: action.route.id } : {}),
+                ...(action.kind === "edit-service"
+                  ? {
+                      service: action.route?.service,
+                      upstreams: upstreams
+                        .split("\n")
+                        .map(s => s.trim())
+                        .filter(Boolean),
+                    }
+                  : {}),
+              },
+              ack,
+            );
+        }}
+      >
+        {t("confirm")}
+      </Button>
+    </ProxyDialog>
+  );
 }

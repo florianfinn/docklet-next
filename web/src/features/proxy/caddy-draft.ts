@@ -16,9 +16,26 @@ export function patchCaddySite(text: string, route: Route, name: string, domain:
   if (name !== route.name) next = next.replace(/^# docklet-route: .*$/m, `# docklet-route: ${name}`);
   if (domain !== route.rule) {
     next = next.replace(/^(?!\s|#)([^\n]+) \{$/m, line => line.replace(route.rule, domain));
-    next = next.replace(/^(\s*host )([^\n]+)$/m, (_line, prefix: string, hosts: string) => prefix + hosts.split(" ").map(h => h === route.rule ? domain : h).join(" "));
+    next = next.replace(
+      /^(\s*host )([^\n]+)$/m,
+      (_line, prefix: string, hosts: string) =>
+        prefix +
+        hosts
+          .split(" ")
+          .map(h => (h === route.rule ? domain : h))
+          .join(" "),
+    );
   }
   const old = route.upstreams?.[0];
-  if (old && old !== upstream) next = next.replace(/^(\s*reverse_proxy )([^\n]+)$/m, (_line, prefix: string, targets: string) => prefix + targets.split(" ").map(u => u === old ? upstream : u).join(" "));
+  if (old && old !== upstream)
+    next = next.replace(
+      /^(\s*reverse_proxy )([^\n]+)$/m,
+      (_line, prefix: string, targets: string) =>
+        prefix +
+        targets
+          .split(" ")
+          .map(u => (u === old ? upstream : u))
+          .join(" "),
+    );
   return next;
 }
