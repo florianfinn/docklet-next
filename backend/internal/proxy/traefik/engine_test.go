@@ -113,7 +113,7 @@ func TestInventorySourcesAndWatchGuard(t *testing.T) {
 				x.inspect.Config.Cmd = nil
 				x.put("traefik.yml", "providers:\n  file:\n    directory: /etc/traefik/dynamic\n    watch: true\n  providersThrottleDuration: 3s\nentryPoints:\n  web:\n    address: ':80'\ncertificatesResolvers:\n  primary:\n    acme: {}\nexperimental:\n  plugins:\n    example:\n      moduleName: example.com/plugin\n")
 			}
-			inv, err := x.e.Inventory(t.Context(), x.i)
+			inv, err := x.inventory()
 			require.NoError(t, err)
 			require.True(t, inv.Eligibility.Writable, inv)
 			require.Equal(t, int64(3000), inv.ThrottleMillis)
@@ -145,7 +145,7 @@ func TestInventorySourcesAndWatchGuard(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := fixture(t)
 			x.inspect.Config.Cmd = append(x.inspect.Config.Cmd, tt.arg)
-			inv, err := x.e.Inventory(t.Context(), x.i)
+			inv, err := x.inventory()
 			require.NoError(t, err)
 			require.False(t, inv.Eligibility.Writable)
 			require.Equal(t, tt.want, inv.Eligibility.Reason)
@@ -157,7 +157,7 @@ func TestInventorySourcesAndWatchGuard(t *testing.T) {
 		x := fixture(t)
 		x.inspect.Config.Cmd = nil
 		x.put("traefik.toml", "[entryPoints.web]\naddress=\":80\"\n")
-		inv, err := x.e.Inventory(t.Context(), x.i)
+		inv, err := x.inventory()
 		require.NoError(t, err)
 		require.False(t, inv.Eligibility.Writable)
 		require.Equal(t, dto.UnsupportedFormat, inv.Eligibility.Reason)
@@ -502,18 +502,18 @@ func TestInventoryIncompleteAndCaseSensitiveNames(t *testing.T) {
 	x := fixture(t)
 	x.inspect.Config.Cmd = []string{"--providers.file.directory", "/etc/traefik/dynamic", "--entrypoints.webSecure.address=:443", "--entrypoints.webSecure.http.tls=false", "--certificatesresolvers.DnsPrimary.acme.email=operator@example.com", "--providers.docker"}
 	x.inspect.Config.Entrypoint = []string{"traefik"}
-	v, err := x.e.Inventory(t.Context(), x.i)
+	v, err := x.inventory()
 	require.NoError(t, err)
 	require.True(t, v.Eligibility.Writable)
 	require.Equal(t, "webSecure", v.EntryPoints[0].Name)
 	require.False(t, v.EntryPoints[0].TLS)
 	require.Equal(t, []string{"DnsPrimary"}, v.Resolvers)
 	x.inspect.Config = nil
-	v, err = x.e.Inventory(t.Context(), x.i)
+	v, err = x.inventory()
 	require.NoError(t, err)
 	require.False(t, v.Eligibility.Writable)
 	x.i.Identity.ContainerID = "other"
-	_, err = x.e.Inventory(t.Context(), x.i)
+	_, err = x.inventory()
 	require.Error(t, err)
 }
 func TestInvalidIntentAndMarkerGuards(t *testing.T) {

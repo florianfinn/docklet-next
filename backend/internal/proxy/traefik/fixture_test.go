@@ -249,3 +249,9 @@ func frame(w io.Writer, stream byte, b []byte) (int, error) {
 	}
 	return w.Write(b)
 }
+
+func (x *seam) inventory() (v dto.Inventory, err error) {
+	x.t.Helper()
+	require.NotPanics(x.t, func() { v, err = x.e.Inventory(x.t.Context(), x.i) }, "inventory rejects incomplete input without crashing")
+	return v, err
+}
