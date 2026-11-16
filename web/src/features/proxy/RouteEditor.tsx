@@ -1,0 +1,59 @@
+// Source: docklet-next/issues/473
+// Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
+// Retrieved: 2026-11-16
+// License: Apache-2.0
+// Deviations: Original production proxy Manager implementation.
+
+import { useState } from "react";
+import { useTranslations } from "use-intl";
+import { TextField } from "@/shared/components/form-field";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
+import { Label } from "@/shared/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { AcknowledgementFields, Choice, ConfirmCheck, ProxyDialog } from "./controls";
+import { acknowledgementsReady, backendParts, emptyAcknowledgements, relativeTarget, splitNames } from "./model";
+import { newCaddySite, patchCaddySite } from "./caddy-draft";
+import type { Acknowledgements, Change, Instance, Inventory, ReadResult, Route } from "./types";
+
+export function RouteEditor({ instance, inventory, read, route, busy, submit, close }: { instance: Instance; inventory: Inventory; read: ReadResult; route?: Route; busy: boolean; submit: (target: string, change: Change, ack: Acknowledgements) => void; close: () => void }) {
+  const t = useTranslations("proxyContract.ui"), caddy = instance.kind === "caddy";
+  const [mode, setMode] = useState("easy");
+  const [name, setName] = useState(route?.name ?? ""), [domain, setDomain] = useState(caddy ? route?.rule ?? "" : route?.rule.match(/^Host\([`"]([^`"]+)[`"]\)$/)?.[1] ?? "");
+  const [rule, setRule] = useState(route?.rule ?? ""), [priority, setPriority] = useState(String(route?.priority ?? 0));
+  const [backend, setBackend] = useState(() => backendParts(route?.upstreams?.[0] ?? ""));
+  const [entryPoints, setEntryPoints] = useState(route?.entryPoints ?? []);
+  const [middlewares, setMiddlewares] = useState((route?.references ?? []).map(r => r.name).join(", "));
+  const [resolver, setResolver] = useState("preserve"), [tls, setTls] = useState(true);
+  const [ack, setAck] = useState(emptyAcknowledgements);
+  const originalText = (read.files ?? []).find(f => f.path === route?.file)?.content ?? "";
+  const [advanced, setAdvanced] = useState(originalText), [textChanged, setTextChanged] = useState(false);
+  const upstream = `${backend.scheme}://${backend.host}${backend.port ? `:${backend.port}` : ""}`;
+  const opaqueService = !!route && !(route.upstreams?.length) && !!route.serviceFile;
+  const shared = !caddy && (route?.dependants?.length ?? 0) > 1;
+  const known = [...new Set((read.routes ?? []).flatMap(r => (r.references ?? []).filter(ref => !["opaque", "unresolved"].includes(ref.kind)).map(ref => ref.name)))];
+  const names = splitNames(middlewares);
+  const unresolved = names.filter(n => !known.includes(n) && !route?.references?.some(r => r.name === n));
+  const exactHostRule = !route || /^Host\([`"]([^`"]+)[`"]\)$/.test(route.rule);
+  const caddyText = route ? patchCaddySite(originalText, route, name, domain, upstream) : newCaddySite(name, domain, upstream, tls);
+  const enterMode = (value: string) => { if (caddy && value === "advanced" && !textChanged) setAdvanced(caddyText); setMode(value); };
+  const target = route?.file ?? relativeTarget(instance, `${instance.routeDirectory.replace(/\/$/, "")}/${name}.${caddy ? "caddy" : "yml"}`);
+  const valid = acknowledgementsReady(inventory, caddy ? [] : unresolved, ack) && (caddy && mode === "advanced" ? !!name.trim() && !!advanced.trim() : !!name.trim() && (caddy ? !!domain.trim() : mode === "advanced" || !exactHostRule ? !!rule.trim() : !!domain.trim()) && (opaqueService || shared || !!backend.host.trim()));
+  const save = () => {
+    if (!valid || busy) return;
+    let change: Change;
+    if (caddy) change = { kind: route ? "edit-route" : "create-route", routeId: route?.id, advanced: mode === "advanced" || textChanged ? advanced : caddyText };
+    else {
+      change = { kind: route ? "edit-route" : "create-route", routeId: route?.id, name, rule, priority: Number(priority), entryPoints, middlewares: names, ...(resolver !== "preserve" ? { resolver } : {}) };
+      if (!opaqueService && !shared && (!route || upstream !== route.upstreams?.[0])) change.upstreams = [upstream, ...(route?.upstreams?.slice(1) ?? [])];
+    }
+    submit(target, change, ack);
+  };
+  return <ProxyDialog title={t(route ? "edit" : "newRoute")} description={t("serverValidation")} onClose={close} busy={busy}><form onSubmit={e => { e.preventDefault(); save(); }} className="grid min-w-0 gap-4"><fieldset disabled={busy} className="grid min-w-0 gap-4"><TextField id="route-name" label={t("name")} disabled={caddy && textChanged} value={name} onChange={setName} /><Tabs value={mode} onValueChange={enterMode}><TabsList><TabsTrigger value="easy">{t("easy")}</TabsTrigger><TabsTrigger value="advanced">{t("advanced")}</TabsTrigger></TabsList><TabsContent value="easy" className="grid min-w-0 gap-4 pt-3"><fieldset className="grid min-w-0 gap-4" disabled={caddy && textChanged}>
+    <TextField id="route-domain" label={t("domain")} value={domain} disabled={!caddy && !exactHostRule} onChange={v => { setDomain(v); if (!caddy) setRule(`Host(\`${v}\`)`); }} />
+    {opaqueService ? <p className="text-sm">{t("opaqueService", { name: route.serviceFile! })}</p> : shared ? <p className="text-sm">{t("sharedServiceHint")}</p> : <div className="grid min-w-0 gap-3 sm:grid-cols-[1fr_2fr_1fr]"><Choice id="backend-scheme" label={t("scheme")} value={backend.scheme} onChange={v => setBackend(b => ({ ...b, scheme: v }))} options={["http", "https"].map(v => ({ value: v, label: v }))} /><TextField id="backend-host" label={t("backendHost")} value={backend.host} onChange={v => setBackend(b => ({ ...b, host: v }))} /><TextField id="backend-port" label={t("port")} value={backend.port} onChange={v => setBackend(b => ({ ...b, port: v }))} /></div>}
+    {!caddy && <><fieldset className="grid gap-2"><legend className="mb-2 text-sm font-medium">{t("entryPoints")}</legend>{(inventory.entryPoints ?? []).map(ep => <ConfirmCheck key={ep.name} checked={entryPoints.includes(ep.name)} onChange={v => setEntryPoints(old => v ? [...old, ep.name] : old.filter(n => n !== ep.name))}>{ep.name} · {ep.address}</ConfirmCheck>)}</fieldset><Choice id="route-resolver" label={t("resolver")} value={resolver} onChange={setResolver} options={[{ value: "preserve", label: t("preserveTls") }, ...(inventory.resolvers ?? []).map(r => ({ value: r, label: r }))]} />{route && <p className="text-xs text-muted-foreground">{t("tlsUnknown")}</p>}
+    <TextField id="route-middlewares" label={t("middlewares")} value={middlewares} onChange={v => { setMiddlewares(v); setAck(a => ({ ...a, unresolvedReferences: [] })); }} description={t("middlewareHint")} />{known.length > 0 && <Choice id="known-middleware" label={t("existingMiddleware")} value="" placeholder={t("selectMiddleware")} onChange={v => { if (!names.includes(v)) setMiddlewares([...names, v].join(", ")); }} options={known.map(n => ({ value: n, label: n }))} />}</>}
+    {caddy && <><p className="text-sm text-muted-foreground">{t("caddyEasyHint")}</p>{!route && <ConfirmCheck checked={tls} onChange={setTls}>{t("tls")}</ConfirmCheck>}</>}
+  </fieldset></TabsContent><TabsContent value="advanced" className="grid min-w-0 gap-4 pt-3">{caddy ? <div className="grid min-w-0 gap-2"><Label htmlFor="site-block">{t("siteBlock")}</Label><Textarea id="site-block" className="min-h-64 font-mono text-xs" value={advanced} onChange={e => { setAdvanced(e.target.value); setTextChanged(true); }} /></div> : <><TextField id="route-rule" label={t("rule")} value={rule} onChange={setRule} /><TextField id="route-priority" label={t("priority")} type="number" value={priority} onChange={setPriority} /><Choice id="advanced-resolver" label={t("resolver")} value={resolver} onChange={setResolver} options={[{ value: "preserve", label: t("preserveTls") }, ...(inventory.resolvers ?? []).map(r => ({ value: r, label: r }))]} /></>}</TabsContent></Tabs><AcknowledgementFields inventory={inventory} unresolved={caddy ? [] : unresolved} value={ack} onChange={setAck} /></fieldset><div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={close}>{t("cancel")}</Button><Button type="submit" disabled={!valid || busy}>{t("save")}</Button></div></form></ProxyDialog>;
+}
