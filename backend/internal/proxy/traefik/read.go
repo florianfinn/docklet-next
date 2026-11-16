@@ -111,6 +111,11 @@ func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 		denyGraph(&g, p.Code, p.Path, p.Line, p.Detail)
 	}
 	g.result.Routes = classify(g.docs, g.result.OpaqueFiles, inv.Inventory)
+	for _, p := range sortedPaths(g.docs) {
+		for _, key := range keys(at(g.docs[p].root, "http", "middlewares")) {
+			g.result.Middlewares = append(g.result.Middlewares, dto.Reference{Name: key, Kind: "local", File: p})
+		}
+	}
 	for j, r := range g.result.Routes {
 		if r.File != "" && !watched(i, r.File) && r.Eligibility.Writable {
 			g.result.Routes[j].Class = "text-only"
@@ -240,13 +245,17 @@ func resolve(docs map[string]*document, opaque []dto.OpaqueFile, inv dto.Invento
 	}
 	return r
 }
-func classify(docs map[string]*document, opaque []dto.OpaqueFile, inv dto.Inventory) []dto.Route {
-	routes := []dto.Route{}
+func sortedPaths(docs map[string]*document) []string {
 	paths := []string{}
 	for p := range docs {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
+	return paths
+}
+func classify(docs map[string]*document, opaque []dto.OpaqueFile, inv dto.Inventory) []dto.Route {
+	routes := []dto.Route{}
+	paths := sortedPaths(docs)
 	for _, p := range paths {
 		routers := at(docs[p].root, "http", "routers")
 		for _, key := range keys(routers) {
@@ -309,6 +318,7 @@ func classify(docs map[string]*document, opaque []dto.OpaqueFile, inv dto.Invent
 				r.References = append(r.References, resolve(docs, opaque, inv, "middlewares", name))
 			}
 			tls := field(n, "tls")
+			r.TLS, r.Resolver = tls != nil && tls.Tag != "!!null", str(field(tls, "certResolver"))
 			if tls != nil && !onlyKeys(tls, "certResolver", "domains") {
 				refuse(dto.UnsupportedFormat)
 			}

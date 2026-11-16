@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 9b7764f0b794e5ecdabe8973197067356fbf9b79c304ccd4857bd30f2aa943c6
+// Revision: 2b45e157c0cc5e80dfd37622be523107703b88aaccbbfc04d2a88c91152abf7a
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11786,6 +11786,7 @@ export interface components {
             files: components["schemas"]["ProxyFile"][] | null;
             generation: string;
             inventory: components["schemas"]["ProxyInventory"];
+            middlewares?: components["schemas"]["ProxyReference"][] | null;
             opaqueFiles: components["schemas"]["ProxyOpaqueFile"][] | null;
             routes: components["schemas"]["ProxyRoute"][] | null;
         };
@@ -11823,9 +11824,11 @@ export interface components {
             priority: number;
             projectId?: string;
             references: components["schemas"]["ProxyReference"][] | null;
+            resolver?: string;
             rule: string;
             service: string;
             serviceFile?: string;
+            tls?: boolean;
             upstreams: string[] | null;
         };
         ProxySettings: {

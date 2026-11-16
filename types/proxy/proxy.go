@@ -134,6 +134,9 @@ type Route struct {
 	Dependants    []string    `json:"dependants"`
 	ProjectID     string      `json:"projectId,omitempty"`
 	ContainerName string      `json:"containerName,omitempty"`
+	// TLS and Resolver summarise a Traefik router's tls section; Caddy leaves them empty.
+	TLS      bool   `json:"tls,omitempty"`
+	Resolver string `json:"resolver,omitempty"`
 }
 type ReadResult struct {
 	Generation  string       `json:"generation"`
@@ -142,6 +145,8 @@ type ReadResult struct {
 	OpaqueFiles []OpaqueFile `json:"opaqueFiles"`
 	Routes      []Route      `json:"routes"`
 	Eligibility Eligibility  `json:"eligibility"`
+	// Middlewares lists definitions readable in the graph for selection (Traefik).
+	Middlewares []Reference `json:"middlewares,omitempty"`
 }
 type FileState struct {
 	Present bool   `json:"present"`

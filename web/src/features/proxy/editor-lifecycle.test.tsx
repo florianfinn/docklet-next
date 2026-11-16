@@ -29,6 +29,21 @@ describe("proxy editor snapshot and identity ownership", () => {
     await waitFor(() => expect(writes(f).length).toBe(1));
     expect((writes(f)[0]!.body as { expected: object }).expected).toEqual({ present: true, hash });
   });
+  it("shows the route's current TLS and offers unused middleware definitions", async () => {
+    const f = fixture(); f.state.read.routes![0] = { ...route, tls: true, resolver: "existing-resolver" }; f.state.read.middlewares = [{ name: "unused-auth", kind: "local", file: "routes/auth.yml" }];
+    render(<Providers><InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => {}} /></Providers>);
+    const user = await edit();
+    expect(screen.queryByText("Current TLS: certificates from resolver existing-resolver.") !== null).toBe(true);
+    const known = screen.getByRole("combobox", { name: "Existing middleware" }); known.focus(); await user.keyboard("{ArrowDown}");
+    await screen.findByRole("option", { name: "headers" });
+    expect(screen.queryByRole("option", { name: "unused-auth" }) !== null).toBe(true);
+    await user.click(screen.getByRole("option", { name: "unused-auth" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    const body = writes(f)[0]!.body as { change: { middlewares?: string[] }; acknowledgements: { unresolvedReferences: string[] } };
+    expect(body.change.middlewares).toEqual(["headers", "unused-auth"]);
+    expect(body.acknowledgements.unresolvedReferences).toEqual([]);
+  });
   it("sends Advanced v3 rule and priority unchanged for server validation", async () => {
     const f = fixture(); render(<Providers><InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => {}} /></Providers>);
     const user = await edit(); await user.click(screen.getByRole("tab", { name: "Advanced" }));

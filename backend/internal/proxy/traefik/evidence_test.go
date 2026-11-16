@@ -210,3 +210,22 @@ func TestLogScopeComparesNamesByteForByte(t *testing.T) {
 		require.Equal(t, tt.want, providerError(tt.line, []string{tt.scope}), "%s / %s", tt.line, tt.scope)
 	}
 }
+
+func TestReadSummarisesTLSAndListsMiddlewareDefinitions(t *testing.T) {
+	x := fixture(t)
+	x.inspect.Config.Cmd = append(x.inspect.Config.Cmd, "--certificatesresolvers.primary.acme.email=operator@example.com")
+	x.put("dynamic/routes.yml", strings.Replace(tiny, "      service: app\n", "      service: app\n      tls:\n        certResolver: primary\n", 1))
+	x.put("dynamic/plain.yml", strings.Replace(strings.ReplaceAll(tiny, "app", "plain"), "      service: plain\n", "      service: plain\n      tls:\n", 1))
+	x.put("dynamic/mw.yml", "http:\n  middlewares:\n    zeta:\n      headers: {frameDeny: true}\n    alpha:\n      headers: {frameDeny: true}\n")
+	read, err := x.readResult()
+	require.NoError(t, err)
+	app, ok := findRoute(read.Routes, "dynamic/routes.yml#app", "dynamic/routes.yml")
+	require.True(t, ok)
+	require.True(t, app.TLS)
+	require.Equal(t, "primary", app.Resolver)
+	plain, ok := findRoute(read.Routes, "dynamic/plain.yml#plain", "dynamic/plain.yml")
+	require.True(t, ok)
+	require.False(t, plain.TLS, "an empty tls key is a null section")
+	require.Empty(t, plain.Resolver)
+	require.Equal(t, []dto.Reference{{Name: "zeta", Kind: "local", File: "dynamic/mw.yml"}, {Name: "alpha", Kind: "local", File: "dynamic/mw.yml"}}, read.Middlewares, "paths sorted, definitions in document order")
+}
