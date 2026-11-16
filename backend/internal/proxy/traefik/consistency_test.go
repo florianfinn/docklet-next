@@ -617,3 +617,116 @@ func TestRestorePreservesAStoreFailureAfterReadingTheGraph(t *testing.T) {
 	_, err := x.attempt(r)
 	require.ErrorContains(t, err, "no such table")
 }
+
+func TestMarkerLoadAllowsKnownReferencesAndAnsweredAcknowledgedReferences(t *testing.T) {
+	for _, acknowledged := range []bool{false, true} {
+		x := fixture(t)
+		r := x.request("edit-route")
+		if acknowledged {
+			r.Change.Middlewares = []string{"missing@file"}
+			r.Acknowledgements.UnresolvedReferences = []string{"missing@file"}
+		}
+		in := x.prepare(r)
+		require.NoError(t, x.e.Mark(t.Context(), in))
+		x.probeFunc = func(args []string) hostio.ExecResult {
+			if strings.Contains(strings.Join(args, " "), "docklet-check.invalid") {
+				return response(502, "closed")
+			}
+			if acknowledged {
+				return response(200, "old")
+			}
+			return response(404, "404 page not found\n")
+		}
+		got, err := x.e.Observe(t.Context(), in, true)
+		require.NoError(t, err)
+		require.Equal(t, dto.Verified, got.State)
+		require.Equal(t, dto.Load, got.Evidence)
+	}
+}
+
+func TestMarkerProbeRetainsItsCapabilityFailure(t *testing.T) {
+	x := fixture(t)
+	in := x.prepare(x.request("edit-route"))
+	require.NoError(t, x.e.Mark(t.Context(), in))
+	x.probeFunc = func(args []string) hostio.ExecResult {
+		if strings.Contains(strings.Join(args, " "), "docklet-check.invalid") {
+			return hostio.ExecResult{ExitCode: 127, Stderr: []byte("wget: not found")}
+		}
+		return response(200, "old")
+	}
+	got, err := x.e.Observe(t.Context(), in, true)
+	require.NoError(t, err)
+	require.Equal(t, dto.AppliedUnverified, got.State)
+	require.Equal(t, dto.ProbeUnavailable, got.Reason)
+}
+
+func TestFlowRouteRemovalAndCorruptRestoreKeepTypedDiagnostics(t *testing.T) {
+	x := fixture(t)
+	x.put("dynamic/routes.yml", "http: {routers: {app: {rule: 'Host(`app.example.com`)', service: app}}, services: {app: {loadBalancer: {servers: [{url: 'http://192.0.2.1:8080'}]}}}}\n")
+	_, err := x.attempt(x.request("delete-route"))
+	requireCode(t, err, dto.UnsupportedFormat)
+	x.put("dynamic/routes.yml", tiny)
+	require.NoError(t, x.db.Exec("INSERT INTO proxy_verified_files(source,path,hash,content) VALUES(?,?,?,?)", "host\x00"+x.i.Source.Canonical, "dynamic/routes.yml", "recorded", []byte("http: [")).Error)
+	_, err = x.attempt(x.request("restore-owned"))
+	requireCode(t, err, dto.InvalidGraph)
+}
+
+func TestRenameWithSharedServiceRetainsEveryDependantIdentity(t *testing.T) {
+	x := fixture(t)
+	x.put("dynamic/routes.yml", strings.Replace(tiny, "  routers:\n", "  routers:\n    second:\n      rule: Host(`second.example.com`)\n      service: app\n      entryPoints: [web]\n      middlewares: [existing@file]\n", 1))
+	r := x.request("edit-route")
+	r.Change.Name = "renamed"
+	r.Change.Upstreams = []string{"http://192.0.2.2:8080"}
+	in := x.prepare(r)
+	s, err := state(in)
+	require.NoError(t, err)
+	ids := []string{}
+	for _, p := range s.Probes {
+		ids = append(ids, p.Route)
+	}
+	require.ElementsMatch(t, []string{"dynamic/routes.yml#renamed", "dynamic/routes.yml#second"}, ids)
+	x.put("dynamic/routes.yml", strings.Replace(tiny, "  routers:\n", "  routers:\n    \"\":\n      rule: Host(`empty.example.com`)\n      service: app\n", 1))
+	r = x.request("edit-route")
+	r.Change.Priority = new(10)
+	in = x.prepare(r)
+	s, err = state(in)
+	require.NoError(t, err)
+	require.Len(t, s.Probes, 1)
+	require.Equal(t, "dynamic/routes.yml#app", s.Probes[0].Route)
+}
+
+func TestStructuredServiceAndListenerChangesReachTheCandidate(t *testing.T) {
+	x := fixture(t)
+	x.put("dynamic/routes.yml", tiny+"    other:\n      loadBalancer:\n        servers: [{url: 'http://192.0.2.2:8080'}]\n")
+	r := x.request("edit-route")
+	r.Change.Service = "other"
+	r.Change.EntryPoints = []string{"websecure"}
+	in := x.prepare(r)
+	d, err := parseDocument(string(in.New.Content), "")
+	require.NoError(t, err)
+	require.Equal(t, "other", str(at(d.root, "http", "routers", "app", "service")))
+	require.Equal(t, []string{"websecure"}, list(at(d.root, "http", "routers", "app", "entryPoints")))
+}
+
+func TestBeforeProbeCapabilityIsPreservedAfterLaterRecovery(t *testing.T) {
+	x := fixture(t)
+	r := x.request("edit-route")
+	x.probeFunc = func(args []string) hostio.ExecResult {
+		if !strings.Contains(strings.Join(args, " "), "docklet-check.invalid") {
+			return hostio.ExecResult{ExitCode: 1, Stderr: []byte("wget: invalid option")}
+		}
+		return response(200, "old")
+	}
+	in := x.prepare(r)
+	require.NoError(t, x.e.Mark(t.Context(), in))
+	x.probeFunc = func(args []string) hostio.ExecResult {
+		if strings.Contains(strings.Join(args, " "), "docklet-check.invalid") {
+			return response(404, "404 page not found\n")
+		}
+		return response(200, "recovered")
+	}
+	got, err := x.e.Observe(t.Context(), in, true)
+	require.NoError(t, err)
+	require.Equal(t, dto.AppliedUnverified, got.State)
+	require.Equal(t, dto.ProbeOptionUnavailable, got.Reason)
+}
