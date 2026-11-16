@@ -566,7 +566,7 @@ func TestMapReplacementRemovalAndEOFInsertionsKeepSourceContracts(t *testing.T) 
 
 func TestRemovalRetainsOnlyRealCommentsAndHandlesQuotedEOF(t *testing.T) {
 	prefix := "http:\n  middlewares:\n    h:\n      headers:\n        customResponseHeaders:\n          Keep: value\n"
-	for _, value := range []string{"'it''s # literal' # Retained", `"a # literal" # Retained`, "'end'"} {
+	for _, value := range []string{"'it''s # literal' # Retained", `"a # literal" # Retained`, "'end\\' # Retained", "'end'"} {
 		source := prefix + "          Remove: " + value
 		d, err := parseDocument(source, "")
 		require.NoError(t, err)
@@ -742,4 +742,62 @@ func TestReferenceProviderSuffixAndDuplicateNamespacesStayDistinct(t *testing.T)
 	require.NoError(t, err)
 	docs["other.yml"] = other
 	require.Equal(t, "unresolved", resolve(docs, []dto.OpaqueFile{{Path: "auth.secret.yml"}}, dto.Inventory{}, "services", "app").Kind)
+}
+
+func TestCrossFileServiceAndExternalDependantsRemainTextOnly(t *testing.T) {
+	x := fixture(t)
+	split := strings.Index(tiny, "  services:")
+	x.put("dynamic/routes.yml", tiny[:split])
+	x.put("dynamic/services.yml", "http:\n"+tiny[split:])
+	read, err := x.readResult()
+	require.NoError(t, err)
+	require.Equal(t, "text-only", read.Routes[0].Class)
+	require.Equal(t, dto.SharedAcrossFiles, read.Routes[0].Eligibility.Reason)
+	d, err := parseDocument(strings.Replace(tiny, "service: app", "service: api@internal", 1), "")
+	require.NoError(t, err)
+	routes := classify(map[string]*document{"routes.yml": d}, nil, dto.Inventory{})
+	require.Empty(t, routes[0].Dependants)
+}
+
+func TestNodeReadersDoNotCoerceIncompatibleShapes(t *testing.T) {
+	d, err := parseDocument("number: 123\npair: [rule, value]\nmap: {rule: value}\n", "")
+	require.NoError(t, err)
+	require.Equal(t, "", str(field(d.root, "number")))
+	require.Empty(t, list(field(d.root, "map")))
+	require.Empty(t, keys(field(d.root, "pair")))
+	require.Nil(t, field(field(d.root, "pair"), "rule"))
+	require.NotPanics(t, func() { require.Nil(t, value(field(d.root, "missing"))) })
+}
+
+func TestGenericSpanReplacementPreservesTheRequestedShape(t *testing.T) {
+	for _, tt := range []struct {
+		source      string
+		replacement any
+		tag         string
+	}{
+		{"field: old\n", map[string]any{"key": "value"}, "!!map"},
+		{"field:\n  old: value\n", []any{"first", "second"}, "!!seq"},
+		{"field:\n  old: value\n", []string{"first", "second"}, "!!seq"},
+		{"field:\n  old: value\n", []string{"first"}, "!!seq"},
+		{"field:\n  - first\n  - second\n", []any{}, "!!seq"},
+	} {
+		d, err := parseDocument(tt.source, "")
+		require.NoError(t, err)
+		var edits []edit
+		require.NotPanics(t, func() { require.NoError(t, d.patch(d.root, map[string]any{"field": tt.replacement}, &edits)) })
+		out, err := d.apply(edits)
+		require.NoError(t, err)
+		next, err := parseDocument(out, "")
+		require.NoError(t, err)
+		require.Equal(t, tt.tag, field(next.root, "field").Tag)
+		expected := tt.replacement
+		if strings, ok := expected.([]string); ok {
+			items := []any{}
+			for _, value := range strings {
+				items = append(items, value)
+			}
+			expected = items
+		}
+		require.Equal(t, expected, value(field(next.root, "field")))
+	}
 }
