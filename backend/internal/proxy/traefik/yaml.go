@@ -63,7 +63,12 @@ func parseDocument(text, p string) (*document, error) {
 	}
 	var root yaml.Node
 	dec := yaml.NewDecoder(strings.NewReader(text))
-	if err := dec.Decode(&root); err != nil {
+	err := dec.Decode(&root)
+	if err == io.EOF {
+		// Traefik loads an empty or comment-only file as an empty configuration.
+		return &document{text: text, root: &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}, spans: map[*yaml.Node]span{}}, nil
+	}
+	if err != nil {
 		return nil, problem(dto.InvalidGraph, p, yamlLine(err), err.Error())
 	}
 	var extra yaml.Node

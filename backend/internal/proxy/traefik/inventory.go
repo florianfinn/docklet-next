@@ -85,13 +85,14 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 		}
 	}
 	env := map[string]string{}
+	envConfig := ""
 	for _, s := range c.Config.Env {
 		k, val, ok := strings.Cut(s, "=")
 		if ok && strings.HasPrefix(k, "TRAEFIK_") {
 			k = strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(k, "TRAEFIK_"), "_", "."))
 			env[k] = val
-			if k == "configfile" && configFile == "" {
-				configFile = val
+			if k == "configfile" {
+				envConfig = val
 			}
 		}
 	}
@@ -99,7 +100,8 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 	static := map[string]string{}
 	candidates := []string{configFile}
 	if configFile == "" {
-		candidates = []string{"/etc/traefik/traefik.yml", "/etc/traefik/traefik.yaml", "/etc/traefik/traefik.toml"}
+		// Traefik's file finder order (pkg/cli/loader_file.go).
+		candidates = []string{"/etc/traefik/traefik.toml", "/etc/traefik/traefik.yaml", "/etc/traefik/traefik.yml"}
 	}
 	for _, p := range candidates {
 		if !path.IsAbs(p) || path.Clean(p) != p {
@@ -130,6 +132,11 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 		}
 		flatten(doc.root, "", static)
 		break
+	}
+	// Traefik reads the configuration file location from flags only; without a
+	// found file an environment location is ignored, against the operator's intent.
+	if len(static) == 0 && envConfig != "" {
+		readonly(&v, dto.IncompleteInventory, envConfig)
 	}
 	selected := static
 	if len(static) == 0 {
@@ -170,6 +177,10 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 		case len(bits) >= 2 && bits[0] == "providers":
 			if bits[1] == "providersthrottleduration" {
 				d, err := time.ParseDuration(val)
+				// Traefik durations accept a plain integer as seconds.
+				if seconds, intErr := strconv.ParseInt(val, 10, 64); intErr == nil && seconds >= 0 && seconds < 1<<31 {
+					d, err = time.Duration(seconds)*time.Second, nil
+				}
 				if err != nil || d < 0 || d > (time.Duration(1<<63-1)-10*time.Second)/2 {
 					readonly(&v, dto.IncompleteInventory, "")
 				} else {
@@ -198,7 +209,7 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 			if bits[1] == "docker" && val != "false" {
 				providers["docker"] = true
 			}
-		case len(bits) >= 3 && bits[0] == "experimental" && bits[1] == "plugins":
+		case len(bits) >= 3 && bits[0] == "experimental" && (bits[1] == "plugins" || bits[1] == "localplugins"):
 			plugins[bits[2]] = true
 		}
 	}
@@ -293,7 +304,7 @@ func optionKey(s string) string {
 		if j == 1 && (strings.EqualFold(parts[0], "entrypoints") || strings.EqualFold(parts[0], "certificatesresolvers")) {
 			continue
 		}
-		if j == 2 && strings.EqualFold(parts[0], "experimental") && strings.EqualFold(parts[1], "plugins") {
+		if j == 2 && strings.EqualFold(parts[0], "experimental") && (strings.EqualFold(parts[1], "plugins") || strings.EqualFold(parts[1], "localplugins")) {
 			continue
 		}
 		parts[j] = strings.ToLower(parts[j])

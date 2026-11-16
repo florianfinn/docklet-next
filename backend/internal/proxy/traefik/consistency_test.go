@@ -285,18 +285,35 @@ func TestParentCancellationDuringProbeAndWaitIsReturned(t *testing.T) {
 	}
 }
 
-func TestReadKeepsOwnershipAndHiddenFilesOutsideTheGraph(t *testing.T) {
+func TestReadKeepsOwnershipAndConsumesHiddenFiles(t *testing.T) {
 	x := fixture(t)
 	old := proxy.Snapshot([]byte(strings.Replace(tiny, "app.example.com", "old.example.com", 1)), true)
 	require.NoError(t, x.db.Exec("INSERT INTO proxy_verified_files(source,path,hash,content) VALUES(?,?,?,?)", "host\x00"+x.i.Source.Canonical, "dynamic/routes.yml", old.Hash, old.Content).Error)
-	x.put("dynamic/.hidden.yml", "invalid: [")
-	x.put("dynamic/.hidden/nested.yml", "invalid: [")
+	x.put("dynamic/.docklet-op.tmp", "invalid: [")
 	read, err := x.readResult()
 	require.NoError(t, err)
 	require.True(t, read.Eligibility.Writable)
 	require.Len(t, read.Files, 1)
 	require.True(t, read.Files[0].Owned)
 	require.Equal(t, old.Hash, read.Files[0].LastVerifiedHash)
+	// Traefik's loader reads hidden files and directories; one invalid file blocks the directory.
+	for _, hidden := range []string{"dynamic/.hidden.yml", "dynamic/.hidden/nested.yml"} {
+		y := fixture(t)
+		y.put(hidden, "invalid: [")
+		read, err = y.readResult()
+		require.NoError(t, err)
+		require.False(t, read.Eligibility.Writable, hidden)
+		require.Equal(t, hidden, read.Eligibility.Path)
+		r := y.request("edit-route")
+		r.Change.Rule = "Host(`next.example.com`)"
+		_, err = y.attempt(r)
+		require.Error(t, err, hidden)
+	}
+	z := fixture(t)
+	z.put("dynamic/.legacy.toml", "[http.routers]\n")
+	read, err = z.readResult()
+	require.NoError(t, err)
+	require.False(t, read.Eligibility.Writable, "a hidden consumed TOML file makes the instance read-only")
 	x.put("dynamic/duplicate.yml", tiny)
 	read, err = x.readResult()
 	require.NoError(t, err)
@@ -329,9 +346,9 @@ func TestOpaqueHealthEpochUsesConsumedHeaderTimesOnly(t *testing.T) {
 	for _, changed := range []string{"routes.yml", "auth.secret.txt"} {
 		x := fixture(t)
 		x.put("dynamic/auth.secret.txt", "opaque")
-		x.put("dynamic/.hidden.yml", "ignored")
+		x.put("dynamic/notes.txt", "ignored")
 		update := epoch.Add(20 * time.Minute)
-		x.archiveModified = map[string]time.Time{"dynamic/" + changed: update, "dynamic/.hidden.yml": epoch.Add(24 * time.Hour)}
+		x.archiveModified = map[string]time.Time{"dynamic/" + changed: update, "dynamic/notes.txt": epoch.Add(24 * time.Hour)}
 		x.logs = update.Add(-time.Second).Format(time.RFC3339Nano) + ` ERR error="old" providerName=file` + "\n"
 		r := x.request("edit-route")
 		r.Change.Priority = new(10)

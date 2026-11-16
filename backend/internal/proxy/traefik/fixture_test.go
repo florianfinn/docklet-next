@@ -265,13 +265,21 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message":"not found"}`, 404)
 	}
 }
+
+// response mirrors BusyBox wget -S: on 4xx/5xx it stops at the status line, so
+// such answers have no headers and no body (measured B0, c-invalid step 28).
 func response(status int, body string) hostio.ExecResult {
-	exit := 0
 	if status >= 400 {
-		exit = 1
+		line := fmt.Sprintf("HTTP/1.1 %d %s", status, http.StatusText(status))
+		return hostio.ExecResult{ExitCode: 1, Stderr: []byte("Connecting to 127.0.0.1 (127.0.0.1:80)\n  " + line + "\nwget: server returned error: " + line + "\n")}
 	}
-	return hostio.ExecResult{ExitCode: exit, Stdout: []byte(body), Stderr: []byte(fmt.Sprintf("  HTTP/1.1 %d Answer\n  Content-Type: text/plain\n\n", status))}
+	return hostio.ExecResult{Stdout: []byte(body), Stderr: []byte(fmt.Sprintf("  HTTP/1.1 %d Answer\n  Content-Type: text/plain\n\n", status))}
 }
+
+// measuredACME is the B0 record of an unrelated router's failing ACME issuance,
+// logged again after every reload.
+const measuredACME = `{"level":"error","providerName":"dns-primary.acme","acmeCA":"http://127.0.0.1:9/directory","routerName":"wildcard@file","rule":"HostRegexp(` + "`^[a-z0-9-]+\\\\.example\\\\.com$`" + `)","error":"cannot get ACME client get directory","domains":["example.com","*.example.com"],"message":"Unable to obtain ACME certificate for domains"}`
+
 func requireCode(t *testing.T, err error, code dto.Reason) {
 	t.Helper()
 	var p *dto.Problem

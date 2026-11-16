@@ -241,9 +241,11 @@ func TestBlockListResizePreservesCommentPositions(t *testing.T) {
 }
 
 func TestNoRouteHeadersAndResponseClasses(t *testing.T) {
-	require.True(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/plain; charset=utf-8"}}))
-	require.False(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "42", "content-type": "text/plain"}}))
-	require.False(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/html"}}))
+	require.True(t, noRoute(hostio.Response{Status: 404}))
+	require.False(t, noRoute(hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/plain"}}), "a 404 with headers is not BusyBox's no-route shape")
+	require.False(t, noRoute(hostio.Response{Status: 404, BodyHash: "a"}))
+	require.False(t, noRoute(hostio.Response{Status: 404, Followed: true}))
+	require.False(t, noRoute(hostio.Response{Status: 200}))
 	require.False(t, routingEvidence("edit-route", hostio.Response{}, hostio.Response{Status: 200}))
 	require.False(t, routingEvidence("edit-route", hostio.Response{Status: 200}, hostio.Response{}))
 }
@@ -274,17 +276,21 @@ func TestProbeSelectionAndProviderLogCorpus(t *testing.T) {
 	for _, line := range []string{
 		`{"error":"bad","providerName":"file"}`, `time ERR rejected routerName=app@file`, `level=error msg=rejected routerName=app@file`, `{"level":"error","message":"bad","routerName":"app@file"}`, `ERR rejected routerName=app@file`, `time error="bad file provider"`, `time error="bad configuration file"`,
 	} {
-		require.True(t, providerError(line), line)
+		require.True(t, providerError(line, []string{"app@file"}), line)
 	}
-	for _, line := range []string{`INF Configuration loaded providerName=file`, `{"level":"info","message":"Configuration loaded","providerName":"file"}`, `ERR error="unrelated docker failure" providerName=docker`} {
-		require.False(t, providerError(line), line)
+	for _, line := range []string{`INF Configuration loaded providerName=file`, `{"level":"info","message":"Configuration loaded","providerName":"file"}`, `ERR error="unrelated docker failure" providerName=docker`,
+		// Measured B0 record: ACME issuance of an unrelated router fails after every reload.
+		measuredACME, `{"level":"error","routerName":"other@file","error":"middleware \"gone@file\" does not exist"}`, `ERR rejected routerName=myapp@file`, `ERR rejected routerName=app@file-old`,
+	} {
+		require.False(t, providerError(line, []string{"app@file"}), line)
 	}
+	require.False(t, providerError(`{"level":"error","routerName":"app@file","error":"bad"}`, nil), "the opaque health check counts aggregate file-provider errors only")
 }
 
 func TestNoRouteCannotVerifyChangedRouting(t *testing.T) {
-	missing := hostio.Response{Status: 404, Headers: map[string]string{"content-length": "19", "content-type": "text/plain"}}
+	missing := hostio.Response{Status: 404}
 	backend := hostio.Response{Status: 404, Headers: map[string]string{"content-length": "42", "content-type": "text/plain"}}
-	require.False(t, noRoute(hostio.Response{Status: 200, Headers: missing.Headers}))
+	require.False(t, noRoute(hostio.Response{Status: 200}))
 	require.False(t, routingEvidence("create-route", missing, missing))
 	require.False(t, routingEvidence("delete-route", hostio.Response{}, missing))
 	require.False(t, routingEvidence("delete-route", missing, missing))
@@ -423,11 +429,11 @@ func TestListGrowthAtEOFAndQuotedCommentTokens(t *testing.T) {
 }
 
 func TestPinnedTraefikMatcherArityAndASCIIParity(t *testing.T) {
-	for _, rule := range []string{"Method(`get`)", "Method(`M-SEARCH`)", "Method(``)", "QueryRegexp(`enabled`)", "Host(`*`)", "Host(``)", "Host(`[2001:db8::1]`)"} {
+	for _, rule := range []string{"Method(`get`)", "Method(`M-SEARCH`)", "QueryRegexp(`enabled`)", "Host(`*`)", "Host(`[2001:db8::1]`)"} {
 		_, err := parseRule(rule)
 		require.NoError(t, err, rule)
 	}
-	for _, rule := range []string{"Host(`ä.example.com`)", "HostRegexp(`ä.*`)", "ClientIP(`2001:db8::1%eth0`)"} {
+	for _, rule := range []string{"Host(`ä.example.com`)", "HostRegexp(`ä.*`)", "ClientIP(`2001:db8::1%eth0`)", "Method(``)", "Host(``)"} {
 		_, err := parseRule(rule)
 		require.Error(t, err, rule)
 	}

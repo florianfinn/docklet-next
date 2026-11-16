@@ -135,11 +135,26 @@ func (p *ruleParser) atom() error {
 			return fmt.Errorf("expected comma or parenthesis")
 		}
 	}
+	name = canonicalMatcher(name)
 	if err := checkMatcher(name, args); err != nil {
 		return err
 	}
 	p.calls = append(p.calls, matcher{name, args})
 	return nil
+}
+
+var matchers = []string{"Host", "HostRegexp", "Path", "PathPrefix", "PathRegexp", "Method", "ClientIP", "Header", "HeaderRegexp", "Query", "QueryRegexp"}
+
+// canonicalMatcher accepts the spellings Traefik v3.7.16 registers per matcher:
+// exact, lower, upper and title case (rules.NewParser).
+func canonicalMatcher(name string) string {
+	for _, m := range matchers {
+		lower := strings.ToLower(m)
+		if name == m || name == lower || name == strings.ToUpper(m) || name == strings.ToUpper(lower[:1])+lower[1:] {
+			return m
+		}
+	}
+	return name
 }
 func checkMatcher(name string, a []string) error {
 	n := 1
@@ -160,6 +175,9 @@ func checkMatcher(name string, a []string) error {
 		return fmt.Errorf("%s expects %d arguments", name, n)
 	}
 	for _, s := range a {
+		if s == "" {
+			return fmt.Errorf("empty args for matcher %s", name)
+		}
 		if strings.ContainsAny(s, "\r\n\x00") {
 			return fmt.Errorf("control character in matcher")
 		}

@@ -111,6 +111,12 @@ func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 		denyGraph(&g, p.Code, p.Path, p.Line, p.Detail)
 	}
 	g.result.Routes = classify(g.docs, g.result.OpaqueFiles, inv.Inventory)
+	for j, r := range g.result.Routes {
+		if r.File != "" && !watched(i, r.File) && r.Eligibility.Writable {
+			g.result.Routes[j].Class = "text-only"
+			g.result.Routes[j].Eligibility = dto.Eligibility{TextOnly: true, Reason: dto.WatchOff, Path: r.File}
+		}
+	}
 	return g, nil
 }
 func denyGraph(g *graph, code dto.Reason, p string, line int, detail string) {
@@ -118,12 +124,16 @@ func denyGraph(g *graph, code dto.Reason, p string, line int, detail string) {
 		g.result.Eligibility = dto.Eligibility{Reason: code, Path: p, Line: line, Detail: detail}
 	}
 }
+
+// watched reports whether Traefik's file watcher sees p: it watches the
+// provider directory and its top-level files, not subdirectories.
+func watched(i dto.Instance, p string) bool {
+	return path.Dir(path.Join(i.Source.MountTarget, p)) == routeDirectory(i)
+}
+
+// consumed follows Traefik's directory loader: every file and subdirectory,
+// hidden ones included, filtered only by extension.
 func consumed(p string) bool {
-	for _, s := range strings.Split(p, "/") {
-		if strings.HasPrefix(s, ".") {
-			return false
-		}
-	}
 	switch strings.ToLower(path.Ext(p)) {
 	case ".yml", ".yaml", ".toml":
 		return true

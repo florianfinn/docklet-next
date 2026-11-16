@@ -261,7 +261,7 @@ response before it (probed at admission, same request):
 
 | Change | Evidence for `verified` |
 | --- | --- |
-| New route | Before: the proxy's no-route response (Traefik's default 404, no Caddy site). After: any other first response. |
+| New route | Before: the proxy's no-route response. After: any other first response. For Traefik the no-route response is a bare 404: BusyBox stops at the 4xx status line, so no headers and no body are seen (B0), and a backend 404 looks the same and is never evidence. |
 | Deleted route | The reverse. |
 | Destination or middleware change | The first response's status, selected headers or body hash differs from before, and is not a gateway error (502, 503, 504). |
 | Caddy new or deleted route | Caddy has no distinctive no-route answer: an unmatched host gets an empty 200 (`Server: Caddy`, baseline B0) and a catch-all site answers with its own response. A create or delete therefore counts like an edit: the first response differs from before and is not a gateway error (a delete needs an answer before the change, a create one after it). |
@@ -309,6 +309,23 @@ file-driver logs are `logs-unavailable`, never "no error".
   stays editable and the service target is shown as being in that file by name.
 - Certificate resolvers are selected from the static inventory; creating them
   belongs to a later milestone.
+- The consumed set follows Traefik's directory loader: every `.yml`, `.yaml` and
+  `.toml` file, hidden files and directories included; one invalid file blocks
+  the directory. Traefik watches only the provider directory's top-level files,
+  so routes in subdirectory files are text-only (`watch-off`) and writes there
+  are refused. An empty or comment-only file is an empty configuration.
+- The static file is searched like Traefik's finder (`traefik.toml`, then
+  `.yaml`, then `.yml` in `/etc/traefik`); its location comes from flags only, so
+  an environment location without a found file makes the inventory incomplete.
+  Plain integer durations are seconds; `experimental.localPlugins` count as
+  plugins. Rules follow `rules.CheckRule`: empty matcher arguments are refused,
+  and each matcher is accepted in exact, lower, upper and title case.
+- Log rejection is scoped: an error record counts when it is an aggregate
+  file-provider error (`providerName` `file`) or names a router, service or
+  middleware of the target (old or new side) or one of its references as a whole
+  token. Other providers' records (ACME issuance, docker) and unrelated routers
+  never reject a change. The opaque-file health check counts aggregate
+  file-provider errors only.
 - Docker label routes are shown read-only and link to the stack editor when the
   container belongs to a Docklet stack; otherwise the detail names the container.
 

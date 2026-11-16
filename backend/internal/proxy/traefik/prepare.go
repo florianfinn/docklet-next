@@ -28,9 +28,12 @@ type probe struct {
 	Reason           dto.Reason
 }
 type engineState struct {
-	Inventory   dto.Inventory
-	Probes      []probe
-	Unresolved  bool
+	Inventory  dto.Inventory
+	Probes     []probe
+	Unresolved bool
+	// Scope names the target's routers, services and middlewares (old and new)
+	// and its references; only their log records reject the change.
+	Scope       []string
 	Marker      probe
 	ForceMarker bool
 }
@@ -44,6 +47,9 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 	in := proxy.Intent{Request: r, Mode: 0644, GraphHashes: map[string]string{}}
 	if !hostio.Relative(r.Target) || hostio.Secret(r.Target) || !consumed(r.Target) || strings.EqualFold(path.Ext(r.Target), ".toml") || !within(routeDirectory(r.Instance), path.Join(r.Instance.Source.MountTarget, r.Target)) {
 		return in, dto.Fail(dto.InvalidInput, 422)
+	}
+	if !watched(r.Instance, r.Target) {
+		return in, problem(dto.WatchOff, r.Target, 0, "Traefik does not watch files in subdirectories")
 	}
 	g, err := e.graph(ctx, r.Instance)
 	if err != nil {
@@ -198,13 +204,14 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 		return in, err
 	}
 	s.Unresolved = len(unresolved) > 0
+	s.Scope = logScope(in.Old, d, r.Target)
 	// Opaque input has no parseable definitions: the running provider must be healthy.
 	if len(g.result.OpaqueFiles) > 0 {
 		since := g.newest
 		if started, parseErr := time.Parse(time.RFC3339Nano, g.result.Inventory.Identity.StartedAt); parseErr == nil && started.After(since) {
 			since = started
 		}
-		if err = e.checkLogs(ctx, r.Instance, since); err != nil {
+		if err = e.checkLogs(ctx, r.Instance, since, nil); err != nil {
 			return in, err
 		}
 	}
@@ -427,4 +434,38 @@ func checkNewReferences(docs map[string]*document, opaque []dto.OpaqueFile, inv 
 		}
 	}
 	return nil
+}
+
+func logScope(old proxy.Bytes, next *document, target string) []string {
+	docs := []*document{next}
+	if old.Present {
+		if d, err := parseDocument(string(old.Content), target); err == nil {
+			docs = append(docs, d)
+		}
+	}
+	out := []string{}
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if !strings.Contains(name, "@") {
+			name += "@file"
+		}
+		if !contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	for _, d := range docs {
+		for _, section := range []string{"routers", "services", "middlewares"} {
+			for _, key := range keys(at(d.root, "http", section)) {
+				add(key)
+			}
+		}
+		for _, ref := range refs(map[string]*document{target: d}) {
+			if ref.section == "services" || ref.section == "middlewares" {
+				add(ref.name)
+			}
+		}
+	}
+	return out
 }

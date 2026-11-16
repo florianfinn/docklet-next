@@ -345,10 +345,15 @@ func TestP6P7ObservationDeadlineAndFirstResponse(t *testing.T) {
 	require.NoError(t, err)
 	a, err := hostio.ParseProbe(response(404, "backend not found"), nil)
 	require.NoError(t, err)
-	require.True(t, routingEvidence("create-route", b, a))
+	// BusyBox shows a backend 404 exactly like Traefik's no-route answer.
+	require.False(t, routingEvidence("create-route", b, a))
+	answered, err := hostio.ParseProbe(response(200, "fresh"), nil)
+	require.NoError(t, err)
+	require.True(t, routingEvidence("create-route", b, answered))
 	require.False(t, routingEvidence("create-route", hostio.Response{Status: 200}, a))
 	require.False(t, routingEvidence("delete-route", b, a))
-	require.True(t, routingEvidence("delete-route", a, b))
+	require.True(t, routingEvidence("delete-route", answered, b))
+	require.False(t, routingEvidence("delete-route", a, b), "a bare 404 before a delete is already no route")
 }
 func TestP29MarkerLoadAndFrameworkCleanup(t *testing.T) {
 	x := fixture(t)

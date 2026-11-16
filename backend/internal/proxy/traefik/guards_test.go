@@ -36,7 +36,7 @@ func TestInventoryStaticSelectorsAndFallbackFaults(t *testing.T) {
 		port      string
 	}{
 		{[]string{"--configFile=/etc/traefik/chosen.yml"}, nil, "", true, ":80"},
-		{nil, []string{"TRAEFIK_CONFIGFILE=/etc/traefik/chosen.yml"}, "", true, ":80"},
+		{nil, []string{"TRAEFIK_CONFIGFILE=/etc/traefik/chosen.yml"}, "", false, ""},
 		{[]string{"--configFile=/etc/traefik/chosen.yml"}, []string{"TRAEFIK_CONFIGFILE=/etc/traefik/other.yml"}, "", true, ":80"},
 		{[]string{"--providers.file.directory=/etc/traefik/dynamic", "--entrypoints.web.address=:80"}, nil, "/etc/traefik/missing.yml", false, ""},
 		{nil, nil, "relative.yml", false, ""},

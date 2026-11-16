@@ -8,8 +8,6 @@ package traefik
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"net"
 	"net/url"
 	"regexp"
@@ -87,15 +85,62 @@ func (e *engine) probe(ctx context.Context, i dto.Instance, p probe) (hostio.Res
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 
-func providerError(line string) bool {
+// providerError counts aggregate file-provider failures and records naming a
+// router, service or middleware in scope; other providers' records (ACME,
+// docker) and unrelated routers never reject a change.
+func providerError(line string, scope []string) bool {
 	lower := strings.ToLower(ansi.ReplaceAllString(line, ""))
 	// Provider parser errors and router-build failures appear at INFO and ERROR;
 	// JSON error records may have no message field at all.
 	failure := strings.Contains(lower, `"error":`) || strings.Contains(lower, " error=") || strings.Contains(lower, " err ") || strings.Contains(lower, "level=error") || strings.Contains(lower, `"level":"error"`) || strings.HasPrefix(lower, "err ")
-	config := strings.Contains(lower, "providername=file") || strings.Contains(lower, `"providername":"file"`) || strings.Contains(lower, "@file") || strings.Contains(lower, "file provider") || strings.Contains(lower, "configuration file")
-	return failure && config
+	if !failure {
+		return false
+	}
+	if name, ok := logProvider(lower); ok {
+		return name == "file"
+	}
+	if strings.Contains(lower, "file provider") || strings.Contains(lower, "configuration file") {
+		return true
+	}
+	for _, n := range scope {
+		if mentions(lower, strings.ToLower(n)) {
+			return true
+		}
+	}
+	return false
 }
-func (e *engine) checkLogs(ctx context.Context, i dto.Instance, since time.Time) error {
+func logProvider(lower string) (string, bool) {
+	for _, key := range []string{`"providername":"`, "providername="} {
+		if _, rest, ok := strings.Cut(lower, key); ok {
+			end := strings.IndexAny(rest, "\"\\ \t,}")
+			if end < 0 {
+				end = len(rest)
+			}
+			return strings.Trim(rest[:end], `"`), true
+		}
+	}
+	return "", false
+}
+
+// mentions matches a qualified name only as a whole token.
+func mentions(lower, name string) bool {
+	for from := 0; ; {
+		i := strings.Index(lower[from:], name)
+		if i < 0 {
+			return false
+		}
+		i += from
+		end := i + len(name)
+		if (i == 0 || !nameByte(lower[i-1])) && (end == len(lower) || !nameByte(lower[end])) {
+			return true
+		}
+		from = i + 1
+	}
+}
+func nameByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '-' || b == '_' || b == '.' || b == '@'
+}
+func (e *engine) checkLogs(ctx context.Context, i dto.Instance, since time.Time, scope []string) error {
 	if since.IsZero() {
 		return dto.Fail(dto.LogsUnavailable, 409)
 	}
@@ -111,16 +156,18 @@ func (e *engine) checkLogs(ctx context.Context, i dto.Instance, since time.Time)
 					text = rest
 				}
 			}
-			if providerError(text) {
+			if providerError(text, scope) {
 				return dto.Fail(dto.ProxyRejected, 422)
 			}
 		}
 		return nil
 	})
 }
+
+// noRoute is Traefik's no-route answer as BusyBox reports it: wget stops at the
+// first 4xx status line, so no headers and no body are available.
 func noRoute(r hostio.Response) bool {
-	h := sha256.Sum256([]byte("404 page not found\n"))
-	return r.Status == 404 && (r.BodyHash == hex.EncodeToString(h[:]) || (r.Headers["content-length"] == "19" && strings.HasPrefix(r.Headers["content-type"], "text/plain")))
+	return r.Status == 404 && !r.Followed && len(r.Headers) == 0 && r.BodyHash == ""
 }
 func routingEvidence(kind string, before, after hostio.Response) bool {
 	if after.Status == 0 || hostio.GatewayError(after.Status) {
@@ -173,7 +220,7 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 			}
 			return deadlineObservation(s, marked, lastReason, unanswered), nil
 		}
-		if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt); err != nil {
+		if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt, s.Scope); err != nil {
 			code := reason(err, dto.LogsUnavailable)
 			if code == dto.ProxyRejected {
 				return proxy.Observation{Restore: true, Reason: code}, nil
@@ -207,7 +254,8 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 				}
 				continue
 			}
-			if after.Status == 0 || noRoute(after) {
+			// Any 404 after the change counts as unanswered for an acknowledged reference.
+			if after.Status == 0 || after.Status == 404 {
 				unanswered = true
 			}
 			if !routingEvidence(in.Request.Change.Kind, p.Before, after) {
@@ -231,7 +279,7 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 			}
 		}
 		if evidence != "" {
-			if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt); err != nil {
+			if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt, s.Scope); err != nil {
 				if reason(err, "") == dto.ProxyRejected {
 					return proxy.Observation{Restore: true, Reason: dto.ProxyRejected}, nil
 				}
