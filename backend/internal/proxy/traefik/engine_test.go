@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestP1P2P3SiblingGraphAndStagedValidation(t *testing.T) {
 	r.Change.Rule = "Host(`next.example.com`)"
 	in := x.prepare(r)
 	require.NoError(t, x.d.Stage(t.Context(), in))
-	require.NoError(t, x.e.Validate(t.Context(), in))
+	require.NoError(t, x.validate(in))
 	for _, tt := range []struct {
 		name, content string
 		want          dto.Reason
@@ -40,7 +41,7 @@ func TestP1P2P3SiblingGraphAndStagedValidation(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			x.put("dynamic/"+tt.name, tt.content)
-			err := x.e.Validate(t.Context(), in)
+			err := x.validate(in)
 			requireCode(t, err, tt.want)
 			var p *dto.Problem
 			require.ErrorAs(t, err, &p)
@@ -50,7 +51,7 @@ func TestP1P2P3SiblingGraphAndStagedValidation(t *testing.T) {
 		})
 	}
 	x.put(in.TempPath, strings.Replace(string(in.New.Content), "Host(`next.example.com`)", "Unknown(`x`)", 1))
-	requireCode(t, x.e.Validate(t.Context(), in), dto.InvalidGraph)
+	requireCode(t, x.validate(in), dto.InvalidGraph)
 	x.put(in.TempPath, string(in.New.Content))
 	x.put("dynamic/added.yml", "http: {middlewares: {extra: {headers: {}}}}\n")
 	g, err := x.d.Graph(t.Context(), x.i)
@@ -201,7 +202,7 @@ func TestP25SharedServiceDependantsAndCrossFileGuard(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "text-only", route.Class)
 	require.Equal(t, dto.SharedAcrossFiles, route.Eligibility.Reason)
-	_, err = x.e.Prepare(t.Context(), r)
+	_, err = x.attempt(r)
 	requireCode(t, err, dto.UnsupportedFormat)
 }
 func TestCreateEditDeleteAndRouterRename(t *testing.T) {
@@ -214,7 +215,7 @@ func TestCreateEditDeleteAndRouterRename(t *testing.T) {
 	require.False(t, in.Old.Present)
 	require.Contains(t, string(in.New.Content), "    new-route:\n")
 	require.NoError(t, x.d.Stage(t.Context(), in))
-	require.NoError(t, x.e.Validate(t.Context(), in))
+	require.NoError(t, x.validate(in))
 	require.NoError(t, x.d.Publish(t.Context(), in))
 	require.Equal(t, string(in.New.Content), x.read(r.Target))
 	r = x.request("edit-route")
@@ -235,12 +236,12 @@ func TestP27ReferencesAcknowledgedAndPostChecked(t *testing.T) {
 	x.put("dynamic/extra.secret.yml", "opaque")
 	r := x.request("edit-route")
 	r.Change.Middlewares = []string{"missing@file"}
-	_, err := x.e.Prepare(t.Context(), r)
+	_, err := x.attempt(r)
 	requireCode(t, err, dto.AcknowledgementRequired)
 	r.Acknowledgements.UnresolvedReferences = []string{"missing@file"}
 	in := x.prepare(r)
 	require.NoError(t, x.d.Stage(t.Context(), in))
-	require.NoError(t, x.e.Validate(t.Context(), in))
+	require.NoError(t, x.validate(in))
 	require.NoError(t, x.d.Publish(t.Context(), in))
 	x.probeFunc = func([]string) hostio.ExecResult {
 		return hostio.ExecResult{ExitCode: 1, Stderr: []byte("wget: can't connect to remote host\n")}
@@ -255,14 +256,14 @@ func TestP27ReferencesAcknowledgedAndPostChecked(t *testing.T) {
 	x.put(r.Target, strings.Replace(tiny, "      service: app", "      middlewares: [private@file]\n      service: app", 1))
 	r = x.request("edit-route")
 	r.Change.Priority = new(10)
-	_, err = x.e.Prepare(t.Context(), r)
+	_, err = x.attempt(r)
 	require.NoError(t, err)
 }
 func TestP30RestoreOwnedThroughNormalProtocol(t *testing.T) {
 	x := fixture(t)
 	r := x.request("restore-owned")
 	x.put(r.Target, "http: [")
-	_, err := x.e.Prepare(t.Context(), r)
+	_, err := x.attempt(r)
 	requireCode(t, err, dto.InvalidInput)
 	key := "host\x00" + x.i.Source.Canonical
 	require.NoError(t, x.db.Exec("INSERT INTO proxy_verified_files(source,path,hash,content) VALUES(?,?,?,?)", key, r.Target, proxy.Snapshot([]byte(tiny), true).Hash, []byte(tiny)).Error)
@@ -270,7 +271,7 @@ func TestP30RestoreOwnedThroughNormalProtocol(t *testing.T) {
 	require.Equal(t, tiny, string(in.New.Content))
 	require.Equal(t, "http: [", string(in.Old.Content))
 	require.NoError(t, x.d.Stage(t.Context(), in))
-	require.NoError(t, x.e.Validate(t.Context(), in))
+	require.NoError(t, x.validate(in))
 	require.NoError(t, x.d.Publish(t.Context(), in))
 	require.Equal(t, tiny, x.read(r.Target))
 }
@@ -411,8 +412,8 @@ func TestAgentAutomaticallyRestoresRejectedRouteAndCleansMarker(t *testing.T) {
 				x.inspect.Config.Cmd = append(x.inspect.Config.Cmd, "--certificatesresolvers.primary.acme.email=operator@example.com")
 				r.Change.Resolver = "primary"
 				x.probeFunc = func(args []string) hostio.ExecResult {
-					if strings.Contains(strings.Join(args, " "), "docklet-check.invalid") {
-						x.logs = time.Now().Add(time.Second).Format(time.RFC3339Nano) + ` {"level":"error","error":"bad rule","routerName":"app@file"}` + "\n"
+					if _, exists := os.Stat(filepath.Join(x.root, "dynamic/docklet-check-"+r.ID+".yml")); strings.Contains(strings.Join(args, " "), "docklet-check.invalid") && exists == nil {
+						x.logs = "CURRENT " + ` {"level":"error","error":"bad rule","routerName":"app@file"}` + "\n"
 						return response(502, "closed")
 					}
 					return response(200, "old")
@@ -420,7 +421,7 @@ func TestAgentAutomaticallyRestoresRejectedRouteAndCleansMarker(t *testing.T) {
 			} else {
 				r.Change.Middlewares = []string{"missing@file"}
 				r.Acknowledgements.UnresolvedReferences = []string{"missing@file"}
-				x.logs = time.Now().Add(time.Second).Format(time.RFC3339Nano) + ` {"level":"error","error":"middleware missing","routerName":"app@file"}` + "\n"
+				x.logs = "CURRENT " + ` {"level":"error","error":"middleware missing","routerName":"app@file"}` + "\n"
 			}
 			op, err := a.Apply(t.Context(), r)
 			require.NoError(t, err)
@@ -439,17 +440,17 @@ func TestDelayedRoutingWaitsForActualEffect(t *testing.T) {
 	r := x.request("edit-route")
 	r.Change.Rule = "Host(`next.example.com`)"
 	in := x.prepare(r)
-	effect := false
+	var effect atomic.Bool
 	waited := false
 	x.e.wait = func(_ context.Context, d time.Duration) error {
-		require.False(t, effect, "first unchanged response cannot verify")
+		require.False(t, effect.Load(), "first unchanged response cannot verify")
 		waited = true
-		effect = true
+		effect.Store(true)
 		x.now = x.now.Add(d)
 		return nil
 	}
 	x.probeFunc = func([]string) hostio.ExecResult {
-		if effect {
+		if effect.Load() {
 			return response(200, "new")
 		}
 		return response(200, "old")
@@ -479,13 +480,13 @@ func TestPrepareInvalidRequestsRefuseWithoutEffects(t *testing.T) {
 	for _, change := range []dto.Change{{Kind: "unknown"}, {Kind: "create-route", Name: "bad/name", Rule: "Host(`a.example.com`)", Upstreams: []string{"http://192.0.2.1"}}, {Kind: "edit-route", RouteID: "missing"}, {Kind: "edit-route", RouteID: "app", Name: "bad/name"}, {Kind: "edit-route", RouteID: "app", Rule: "Unknown(`x`)"}, {Kind: "edit-route", RouteID: "app", Upstreams: []string{}}, {Kind: "edit-route", RouteID: "app", Resolver: "new-resolver"}, {Kind: "edit-route", RouteID: "app", Upstreams: []string{"file:///etc/example"}}} {
 		r := x.request("edit-route")
 		r.Change = change
-		require.NotPanics(t, func() { _, err := x.e.Prepare(t.Context(), r); require.Error(t, err) })
+		require.NotPanics(t, func() { _, err := x.attempt(r); require.Error(t, err) })
 		require.Equal(t, tiny, x.read(r.Target))
 	}
 	for _, target := range []string{"../routes.yml", "dynamic/auth.secret.yml", "dynamic/config.toml", "outside/routes.yml", "dynamic/data.txt"} {
 		r := x.request("edit-route")
 		r.Target = target
-		_, err := x.e.Prepare(t.Context(), r)
+		_, err := x.attempt(r)
 		require.Error(t, err)
 	}
 }

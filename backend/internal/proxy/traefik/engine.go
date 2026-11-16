@@ -32,6 +32,7 @@ type engine struct {
 	project    func(context.Context, string) (string, error)
 	now        func() time.Time
 	wait       func(context.Context, time.Duration) error
+	limit      func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 }
 
 // New constructs the file-provider engine. Register it before Module.Start.
@@ -52,7 +53,7 @@ func New(d *proxy.DockerRuntime) proxy.Engine {
 	return e
 }
 func newEngine(r runtime) *engine {
-	return &engine{run: r, now: time.Now, wait: func(ctx context.Context, d time.Duration) error {
+	return &engine{run: r, now: time.Now, limit: context.WithTimeout, wait: func(ctx context.Context, d time.Duration) error {
 		t := time.NewTimer(d)
 		defer t.Stop()
 		select {

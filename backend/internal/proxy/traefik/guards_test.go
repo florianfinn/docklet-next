@@ -7,7 +7,9 @@
 package traefik
 
 import (
+	"context"
 	"encoding/json/v2"
+	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
@@ -15,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -260,13 +263,13 @@ func TestCreateRefusesUnconsumedAndOutOfProviderFiles(t *testing.T) {
 	r.Change = dto.Change{Kind: "create-route", Name: "new-route", Rule: "Host(`new.example.com`)", Upstreams: []string{"http://192.0.2.2:8080"}}
 	for _, target := range []string{"dynamic/new.txt", "outside/new.yml"} {
 		r.Target = target
-		_, err := x.e.Prepare(t.Context(), r)
+		_, err := x.attempt(r)
 		requireCode(t, err, dto.InvalidInput)
 	}
 	r = x.request("edit-route")
 	r.Change.Service = "other"
 	r.Change.Upstreams = []string{"http://192.0.2.2:8080"}
-	_, err := x.e.Prepare(t.Context(), r)
+	_, err := x.attempt(r)
 	requireCode(t, err, dto.InvalidInput)
 }
 
@@ -279,17 +282,17 @@ func TestRuntimeReadFailuresArePreserved(t *testing.T) {
 	_, err := x.readResult()
 	require.ErrorContains(t, err, "container unavailable")
 	x.inspectFailures = 1
-	_, err = x.e.Prepare(t.Context(), r)
+	_, err = x.attempt(r)
 	require.ErrorContains(t, err, "container unavailable")
 	x.inspectFailures = 1
-	err = x.e.Validate(t.Context(), in)
+	err = x.validate(in)
 	require.ErrorContains(t, err, "container unavailable")
 	x.archiveStatus = map[string]int{"/etc/traefik/dynamic": 503}
 	_, err = x.readResult()
 	require.ErrorContains(t, err, "archive unavailable")
 	x.archiveStatus = nil
 	x.archiveStatus = map[string]int{"/etc/traefik/" + in.TempPath: 503}
-	err = x.e.Validate(t.Context(), in)
+	err = x.validate(in)
 	require.ErrorContains(t, err, "archive unavailable")
 	x.archiveStatus = nil
 	require.NoError(t, x.db.Exec("DROP TABLE proxy_verified_files").Error)
@@ -397,4 +400,162 @@ func TestOpaqueFilenameProviderProjectsOnlyRelativeName(t *testing.T) {
 	b, err := json.Marshal(r)
 	require.NoError(t, err)
 	require.NotContains(t, string(b), "do-not-project-this-payload")
+}
+
+func TestInventoryShortSelectorsDoNotInventDefinitions(t *testing.T) {
+	x := fixture(t)
+	base := append([]string{}, x.inspect.Config.Cmd...)
+	for _, extra := range []string{"--entrypoints", "--certificatesresolvers.ghost=false", "--providers", "--experimental", "--other.plugins.Ghost.modulename=example.com/other", "--experimental.other.Ghost.modulename=example.com/other"} {
+		x.inspect.Config.Cmd = append(append([]string{}, base...), extra)
+		v, err := x.inventory()
+		require.NoError(t, err)
+		require.True(t, v.Eligibility.Writable)
+		require.Empty(t, v.Resolvers)
+		require.Empty(t, v.Plugins)
+	}
+	x.i.RouteDirectory = "/outside"
+	x.inspect.Config.Cmd = []string{"--providers.file.directory=/outside", "--entrypoints.web.address=:80"}
+	v, err := x.inventory()
+	require.NoError(t, err)
+	require.False(t, v.Eligibility.Writable)
+}
+func TestOptionalSourceReasonHasTypedFallback(t *testing.T) {
+	x := fixture(t)
+	x.i.Source.ReadOnly = true
+	x.i.Source.Reason = ""
+	x.i.Source.Kind = dto.UnknownSourceKind
+	x.inspect.Mounts[0].Type = "tmpfs"
+	v, err := x.inventory()
+	require.NoError(t, err)
+	require.Equal(t, dto.UnknownSource, v.Eligibility.Reason)
+	x.i.Source.Canonical = filepath.Join(x.root, "dynamic", "routes.yml")
+	x.i.Source.MountTarget = "/etc/traefik/dynamic/routes.yml"
+	x.i.Source.Kind = dto.SingleFileSource
+	x.inspect.Mounts[0].Type = "bind"
+	x.inspect.Mounts[0].Source = x.i.Source.Canonical
+	x.inspect.Mounts[0].Destination = x.i.Source.MountTarget
+	v, err = x.inventory()
+	require.NoError(t, err)
+	require.Equal(t, dto.SingleFileMount, v.Eligibility.Reason)
+}
+
+func TestObservationBudgetCancelsHeldDockerIO(t *testing.T) {
+	x := fixture(t)
+	x.inspect.Config.Cmd = []string{"--providers.file.directory=/etc/traefik/dynamic", "--entrypoints.web.address=:443", "--entrypoints.web.http.tls=true"}
+	in := x.prepare(x.request("edit-route"))
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
+	budgetReady := make(chan context.CancelFunc, 1)
+	x.e.limit = func(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+		require.Equal(t, 14*time.Second, d)
+		limited, cancel := context.WithCancel(ctx)
+		budgetReady <- cancel
+		return limited, cancel
+	}
+	x.probeFunc = func([]string) hostio.ExecResult { close(entered); <-release; return response(200, "too late") }
+	result := make(chan struct {
+		obs proxy.Observation
+		err error
+	}, 1)
+	go func() {
+		obs, err := x.e.Observe(t.Context(), in, false)
+		result <- struct {
+			obs proxy.Observation
+			err error
+		}{obs, err}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "probe did not enter the Docker transport")
+	}
+	(<-budgetReady)()
+	select {
+	case got := <-result:
+		require.NoError(t, got.err)
+		require.Equal(t, dto.AppliedUnverified, got.obs.State)
+		require.NotEqual(t, dto.Routing, got.obs.Evidence)
+		require.Equal(t, dto.NotObservable, got.obs.Reason)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "expired observation still waits for Docker IO")
+	}
+}
+func TestLateEffectAndFinalProviderLogCannotVerify(t *testing.T) {
+	x := fixture(t)
+	in := x.prepare(x.request("edit-route"))
+	var effect atomic.Bool
+	x.e.wait = func(_ context.Context, _ time.Duration) error {
+		effect.Store(true)
+		x.now = x.now.Add(20 * time.Second)
+		return nil
+	}
+	x.probeFunc = func([]string) hostio.ExecResult {
+		if effect.Load() {
+			return response(200, "late")
+		}
+		return response(200, "old")
+	}
+	obs, err := x.e.Observe(t.Context(), in, false)
+	require.NoError(t, err)
+	require.NotEqual(t, dto.Verified, obs.State)
+	x = fixture(t)
+	in = x.prepare(x.request("edit-route"))
+	x.probeFunc = func([]string) hostio.ExecResult {
+		x.logs = in.PublishedAt.Add(time.Second).Format(time.RFC3339Nano) + ` ERR error="rejected" routerName=app@file` + "\n"
+		return response(200, "changed")
+	}
+	obs, err = x.e.Observe(t.Context(), in, false)
+	require.NoError(t, err)
+	require.True(t, obs.Restore)
+}
+
+func TestRouterWithOpaqueServiceKeepsEditableIdentity(t *testing.T) {
+	x := fixture(t)
+	x.put("dynamic/routes.yml", strings.Replace(tiny, "      service: app", "      service: hidden@file", 1))
+	x.put("dynamic/targets.secret.yml", "unread upstream")
+	read, err := x.readResult()
+	require.NoError(t, err)
+	require.Equal(t, "editable", read.Routes[0].Class)
+	require.Equal(t, "dynamic/targets.secret.yml", read.Routes[0].ServiceFile)
+	require.Empty(t, read.Routes[0].Upstreams)
+	r := x.request("edit-route")
+	r.Change.Priority = new(10)
+	in, err := x.attempt(r)
+	require.NoError(t, err)
+	require.Contains(t, string(in.New.Content), "service: hidden@file")
+	require.Contains(t, string(in.New.Content), "priority: 10")
+}
+
+func TestObservationClockAndParentCancellation(t *testing.T) {
+	x := fixture(t)
+	x.inspect.Config.Cmd = []string{"--providers.file.directory=/etc/traefik/dynamic", "--entrypoints.web.address=:443", "--entrypoints.web.http.tls=true"}
+	in := x.prepare(x.request("edit-route"))
+	x.e.limit = func(ctx context.Context, _ time.Duration) (context.Context, context.CancelFunc) {
+		limited, cancel := context.WithCancel(ctx)
+		cancel()
+		return limited, cancel
+	}
+	obs, err := x.e.Observe(t.Context(), in, false)
+	require.NoError(t, err)
+	require.Equal(t, dto.NotObservable, obs.Reason)
+	parent, cancelParent := context.WithCancel(t.Context())
+	cancelParent()
+	_, err = x.e.Observe(parent, in, false)
+	require.ErrorIs(t, err, context.Canceled)
+	x.e.limit = context.WithTimeout
+	clockErr := errors.New("injected clock failure")
+	x.e.wait = func(context.Context, time.Duration) error { x.now = x.now.Add(14 * time.Second); return clockErr }
+	_, err = x.e.Observe(t.Context(), in, false)
+	require.ErrorIs(t, err, clockErr)
+	var cancelBudget context.CancelFunc
+	x.e.limit = func(ctx context.Context, _ time.Duration) (context.Context, context.CancelFunc) {
+		limited, cancel := context.WithCancel(ctx)
+		cancelBudget = cancel
+		return limited, cancel
+	}
+	x.e.wait = func(ctx context.Context, _ time.Duration) error { cancelBudget(); return ctx.Err() }
+	obs, err = x.e.Observe(t.Context(), in, false)
+	require.NoError(t, err)
+	require.Equal(t, dto.NotObservable, obs.Reason)
 }

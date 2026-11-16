@@ -214,7 +214,7 @@ func TestSchemaWrongFieldTypes(t *testing.T) {
 		})
 	}
 	for _, u := range []string{"", "ftp://example.com", "http://", "http://user@example.com", "http://example.com/#fragment", "http://example.com/\n"} {
-		require.False(t, validURL(u), u)
+		require.NotPanics(t, func() { require.False(t, validURL(u), u) })
 	}
 }
 
@@ -261,9 +261,11 @@ func TestProbeSelectionAndProviderLogCorpus(t *testing.T) {
 	require.Equal(t, "docklet-probe.example.com", probes[0].Host)
 	for _, rule := range []string{"Unknown(`a`)", "HostRegexp(`.*`)", "HostRegexp(`^[a-z0-9-]+\\.example\\.com`)", "HostRegexp(`abc$`)"} {
 		probes = routeProbes(dto.Route{Rule: rule}, inv)
+		require.NotEmpty(t, probes)
 		require.Equal(t, dto.NotObservable, probes[0].Reason)
 	}
 	probes = routeProbes(dto.Route{Rule: "Host(`app.example.com`)"}, dto.Inventory{EntryPoints: []dto.EntryPoint{{Name: "bad", Address: "invalid"}}})
+	require.NotEmpty(t, probes)
 	require.Equal(t, dto.NotObservable, probes[0].Reason)
 	marker := markerProbe("a", inv)
 	require.Equal(t, "http://127.0.0.1:80/", marker.URL)
@@ -300,4 +302,122 @@ func TestListGrowthAndOptionalFieldAtSameOffset(t *testing.T) {
 	require.NoError(t, err)
 	expected := strings.Replace(source, "        - auth # Handler\n", "        - headers # Handler\n        - auth\n      priority: 10\n", 1)
 	require.Equal(t, expected, out)
+}
+
+func TestStaticFieldFoldingPreservesOnlyDictionaryNames(t *testing.T) {
+	for input, want := range map[string]string{"EXPERIMENTAL.PLUGINS.PluginCase.ModuleName": "experimental.plugins.PluginCase.modulename", "OTHER.PLUGINS.Name.Field": "other.plugins.name.field", "EXPERIMENTAL.OTHER.Name.Field": "experimental.other.name.field"} {
+		require.Equal(t, want, optionKey(input))
+	}
+}
+
+func TestRuleSyntaxVersions(t *testing.T) {
+	for _, syntax := range []string{"v2", "v3", "v4"} {
+		d, err := parseDocument(strings.Replace(tiny, "      service: app", "      ruleSyntax: "+syntax+"\n      service: app", 1), "")
+		require.NoError(t, err)
+		err = validateDocument(d, "")
+		if syntax == "v4" {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+}
+
+func TestPlainQuotesAndUnicodeInFlowCollectionsStayUntouched(t *testing.T) {
+	source := tiny + "  middlewares:\n    quote:\n      headers:\n        customRequestHeaders: {X-Example: Grüße, X-Quote: a\"b, X-Single: a'b}\n"
+	d, err := parseDocument(source, "")
+	require.NoError(t, err)
+	require.NoError(t, validateDocument(d, ""))
+	var edits []edit
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"priority": 10}, &edits))
+	out, err := d.apply(edits)
+	require.NoError(t, err)
+	require.Equal(t, strings.Replace(source, "      service: app\n", "      service: app\n      priority: 10\n", 1), out)
+}
+
+func TestNestedTLSAndStructuralCommentParity(t *testing.T) {
+	source := shared(t)
+	d, err := parseDocument(source, "")
+	require.NoError(t, err)
+	var edits []edit
+	patch := map[string]any{"tls": map[string]any{"certResolver": "dns-secondary", "domains": []any{map[string]any{"main": "example.net", "sans": []string{"*.example.net"}}}}}
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "wildcard"), patch, &edits))
+	out, err := d.apply(edits)
+	require.NoError(t, err)
+	want := strings.Replace(strings.Replace(strings.Replace(source, "certResolver: dns-primary", "certResolver: dns-secondary", 1), "main: example.com", "main: example.net", 1), "sans: ['*.example.com']", "sans: ['*.example.net']", 1)
+	require.Equal(t, want, out)
+	for _, patch := range []map[string]any{{"tls": map[string]any{}}, {"middlewares": nil, "tls": nil}} {
+		d, err := parseDocument(source, "")
+		require.NoError(t, err)
+		var edits []edit
+		key := "wildcard"
+		if len(patch) > 1 {
+			key = "app-one"
+		}
+		require.NoError(t, d.patch(at(d.root, "http", "routers", key), patch, &edits))
+		out, err := d.apply(edits)
+		require.NoError(t, err)
+		commentLines := func(text string) []string {
+			a := []string{}
+			for _, line := range strings.Split(text, "\n") {
+				if k := strings.IndexByte(line, '#'); k >= 0 {
+					a = append(a, line[k:])
+				}
+			}
+			return a
+		}
+		require.Equal(t, commentLines(source), commentLines(out))
+		require.NoError(t, validateDocument(mustDocument(t, out), ""))
+	}
+}
+func mustDocument(t *testing.T, s string) *document {
+	t.Helper()
+	d, err := parseDocument(s, "")
+	require.NoError(t, err)
+	return d
+}
+func TestFlowMapFieldSplicesAndCommentedSequenceResize(t *testing.T) {
+	source := `http: {routers: {app: {rule: 'Host("app.example.com")', service: app}}, services: {app: {loadBalancer: {servers: [{url: 'http://192.0.2.1:8080'}]}}}}` + "\n"
+	d := mustDocument(t, source)
+	var edits []edit
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"service": "changed", "middlewares": []string{"auth"}}, &edits))
+	out, err := d.apply(edits)
+	require.NoError(t, err)
+	require.Contains(t, out, `rule: 'Host("app.example.com")', service: changed`)
+	require.Contains(t, out, "middlewares: [auth]")
+	source = strings.Replace(tiny, "servers: [{url: 'http://192.0.2.1:8080'}]", "servers: [{url: 'http://192.0.2.1:8080'}, # First upstream\n                  {url: 'http://192.0.2.2:8080'}] # Service note", 1)
+	d = mustDocument(t, source)
+	seq := at(d.root, "http", "services", "app", "loadBalancer", "servers")
+	sp := d.spans[seq]
+	edits = nil
+	require.NoError(t, d.replace(seq, servers([]string{"http://192.0.2.3:8080"}), &edits))
+	out, err = d.apply(edits)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(out, source[:sp.start]))
+	require.True(t, strings.HasSuffix(out, source[sp.end:]))
+	require.Equal(t, 1, strings.Count(out, "# First upstream"))
+	require.Equal(t, 1, strings.Count(out, "# Service note"))
+	require.Less(t, strings.Index(out, "# First upstream"), strings.Index(out, "# Service note"))
+	require.NoError(t, validateDocument(mustDocument(t, out), ""))
+}
+func TestListGrowthAtEOFAndQuotedCommentTokens(t *testing.T) {
+	source := "http:\n  routers:\n    app:\n      rule: Host(`app.example.com`)\n      service: app\n      middlewares:\n        - auth"
+	d := mustDocument(t, source)
+	var edits []edit
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"middlewares": []string{"headers", "auth"}, "priority": 10}, &edits))
+	out, err := d.apply(edits)
+	require.NoError(t, err)
+	next := mustDocument(t, out)
+	require.Equal(t, []string{"headers", "auth"}, list(at(next.root, "http", "routers", "app", "middlewares")))
+	require.Contains(t, out, "priority: 10")
+	require.True(t, strings.HasPrefix(out, source[:strings.Index(source, "        - auth")]))
+	source = strings.Replace(tiny, "      entryPoints: [web]", "      middlewares:\n        - 'auth # data' # First handler\n        - \"auth\\\"data\" # Second handler", 1)
+	d = mustDocument(t, source)
+	edits = nil
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"middlewares": []string{"headers"}}, &edits))
+	out, err = d.apply(edits)
+	require.NoError(t, err)
+	require.NotContains(t, out, "# data")
+	require.Equal(t, 1, strings.Count(out, "# First handler"))
+	require.Equal(t, 1, strings.Count(out, "# Second handler"))
 }

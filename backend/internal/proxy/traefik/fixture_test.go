@@ -241,7 +241,11 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(p, "/logs"):
 		x.logSince = append(x.logSince, r.URL.Query().Get("since"))
 		w.WriteHeader(x.logStatus)
-		_, _ = frame(w, byte(stdcopy.Stdout), []byte(x.logs))
+		payload := x.logs
+		if strings.HasPrefix(payload, "CURRENT ") {
+			payload = time.Now().UTC().Format(time.RFC3339Nano) + strings.TrimPrefix(payload, "CURRENT")
+		}
+		_, _ = frame(w, byte(stdcopy.Stdout), []byte(payload))
 	default:
 		http.Error(w, `{"message":"not found"}`, 404)
 	}
@@ -280,4 +284,15 @@ func (x *seam) readResult() (v dto.ReadResult, err error) {
 	x.t.Helper()
 	require.NotPanics(x.t, func() { v, err = x.e.Read(x.t.Context(), x.i) }, "graph reads must refuse input without crashing")
 	return v, err
+}
+
+func (x *seam) attempt(r dto.ApplyRequest) (in proxy.Intent, err error) {
+	x.t.Helper()
+	require.NotPanics(x.t, func() { in, err = x.e.Prepare(x.t.Context(), r) }, "preparation must handle invalid input without crashing")
+	return in, err
+}
+func (x *seam) validate(in proxy.Intent) (err error) {
+	x.t.Helper()
+	require.NotPanics(x.t, func() { err = x.e.Validate(x.t.Context(), in) }, "validation must report bad graphs without crashing")
+	return err
 }

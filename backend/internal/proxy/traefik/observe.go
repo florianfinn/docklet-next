@@ -138,6 +138,21 @@ func routingEvidence(kind string, before, after hostio.Response) bool {
 func unverified(code dto.Reason) proxy.Observation {
 	return proxy.Observation{State: dto.AppliedUnverified, Reason: code}
 }
+func deadlineObservation(s engineState, marked bool, lastReason dto.Reason, unanswered bool) proxy.Observation {
+	if s.Unresolved && unanswered {
+		return proxy.Observation{Restore: true, Reason: dto.ProxyRejected}
+	}
+	if !marked && s.Marker.Reason == "" {
+		return proxy.Observation{NeedsMarker: true}
+	}
+	if marked && lastReason == dto.NoObservableDifference {
+		lastReason = dto.NotObservable
+	}
+	if s.Marker.Reason != "" && lastReason == dto.NoObservableDifference {
+		lastReason = s.Marker.Reason
+	}
+	return unverified(lastReason)
+}
 func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (proxy.Observation, error) {
 	s, err := state(in)
 	if err != nil {
@@ -145,10 +160,19 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 	}
 	budget := time.Duration(s.Inventory.ThrottleMillis)*2*time.Millisecond + 10*time.Second
 	deadline := e.now().Add(budget)
-	// A recovery call starts a fresh observation window; publication time still
-	// bounds log evidence from the original operation.
+	parent := ctx
+	ctx, cancel := e.limit(ctx, budget)
+	defer cancel()
+	// Recovery starts a fresh window. Publication still bounds log evidence.
 	lastReason := dto.NoObservableDifference
+	unanswered := false
 	for {
+		if ctx.Err() != nil {
+			if parent.Err() != nil {
+				return proxy.Observation{}, parent.Err()
+			}
+			return deadlineObservation(s, marked, lastReason, unanswered), nil
+		}
 		if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt); err != nil {
 			code := reason(err, dto.LogsUnavailable)
 			if code == dto.ProxyRejected {
@@ -157,8 +181,15 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 			return unverified(code), nil
 		}
 		all := len(s.Probes) > 0 && !s.ForceMarker
-		unanswered := false
+		unanswered = false
 		for _, p := range s.Probes {
+			if ctx.Err() != nil {
+				all = false
+				if s.Unresolved {
+					unanswered = true
+				}
+				break
+			}
 			if p.Reason != "" {
 				all = false
 				lastReason = p.Reason
@@ -183,8 +214,9 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 				all = false
 			}
 		}
-		if all && !marked {
-			return proxy.Observation{State: dto.Verified, Evidence: dto.Routing}, nil
+		evidence := dto.EvidenceKind("")
+		if all && !marked && ctx.Err() == nil && e.now().Before(deadline) {
+			evidence = dto.Routing
 		}
 		if marked && (!s.Unresolved || !unanswered) {
 			if s.Marker.Reason != "" {
@@ -193,34 +225,36 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 			answer, probeErr := e.probe(ctx, in.Request.Instance, s.Marker)
 			if probeErr != nil {
 				lastReason = reason(probeErr, dto.NotObservable)
-			} else if answer.Status != 0 && answer.Status != 404 && hostio.Differs(s.Marker.Before, answer) {
-				// The intentionally closed loopback upstream gives 502: this is load
-				// evidence only, never routing evidence for the edited route.
-				if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt); err != nil {
-					if reason(err, "") == dto.ProxyRejected {
-						return proxy.Observation{Restore: true, Reason: dto.ProxyRejected}, nil
-					}
-					return unverified(reason(err, dto.LogsUnavailable)), nil
-				}
-				return proxy.Observation{State: dto.Verified, Evidence: dto.Load}, nil
+			} else if answer.Status != 0 && answer.Status != 404 && hostio.Differs(s.Marker.Before, answer) && ctx.Err() == nil && e.now().Before(deadline) {
+				// A closed upstream can prove marker load, never successful route delivery.
+				evidence = dto.Load
 			}
 		}
-		if !e.now().Before(deadline) {
-			if s.Unresolved && unanswered {
-				return proxy.Observation{Restore: true, Reason: dto.ProxyRejected}, nil
+		if evidence != "" {
+			if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt); err != nil {
+				if reason(err, "") == dto.ProxyRejected {
+					return proxy.Observation{Restore: true, Reason: dto.ProxyRejected}, nil
+				}
+				return unverified(reason(err, dto.LogsUnavailable)), nil
 			}
-			if !marked && s.Marker.Reason == "" {
-				return proxy.Observation{NeedsMarker: true}, nil
+			if ctx.Err() != nil || !e.now().Before(deadline) {
+				return deadlineObservation(s, marked, lastReason, unanswered), nil
 			}
-			if marked && lastReason == dto.NoObservableDifference {
-				lastReason = dto.NotObservable
+			return proxy.Observation{State: dto.Verified, Evidence: evidence}, nil
+		}
+		if !e.now().Before(deadline) || ctx.Err() != nil {
+			if parent.Err() != nil {
+				return proxy.Observation{}, parent.Err()
 			}
-			if s.Marker.Reason != "" && lastReason == dto.NoObservableDifference {
-				lastReason = s.Marker.Reason
+			if lastReason == dto.ExecRunning {
+				lastReason = dto.NoObservableDifference
 			}
-			return unverified(lastReason), nil
+			return deadlineObservation(s, marked, lastReason, unanswered), nil
 		}
 		if err = e.wait(ctx, 250*time.Millisecond); err != nil {
+			if ctx.Err() != nil && parent.Err() == nil {
+				return deadlineObservation(s, marked, lastReason, unanswered), nil
+			}
 			return proxy.Observation{}, err
 		}
 	}

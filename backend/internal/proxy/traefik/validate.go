@@ -81,6 +81,10 @@ func validateDocument(d *document, p string) error {
 	routers := at(d.root, "http", "routers")
 	for _, key := range keys(routers) {
 		r := field(routers, key)
+		syntax := str(field(r, "ruleSyntax"))
+		if syntax != "" && syntax != "v2" && syntax != "v3" {
+			return problem(dto.UnsupportedFormat, p, r.Line, "unknown router rule syntax")
+		}
 		rule := field(r, "rule")
 		if rule == nil {
 			return problem(dto.InvalidGraph, p, r.Line, "router rule required")

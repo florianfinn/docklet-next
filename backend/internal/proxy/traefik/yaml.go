@@ -99,7 +99,11 @@ func (d *document) walk(n *yaml.Node, flow bool) error {
 	}
 	if n.Kind == yaml.ScalarNode || isFlow {
 		var err error
-		end, err = tokenEnd(d.text, start, flow, isFlow)
+		if isFlow {
+			end, err = flowEnd(d.text, start, end, n.Kind)
+		} else {
+			end, err = tokenEnd(d.text, start, flow)
+		}
 		if err != nil {
 			return err
 		}
@@ -115,12 +119,11 @@ func (d *document) walk(n *yaml.Node, flow bool) error {
 }
 
 // tokenEnd scans only the token identified by yaml/v4, never searches for a value.
-func tokenEnd(s string, start int, flow, collection bool) (int, error) {
+func tokenEnd(s string, start int, flow bool) (int, error) {
 	if start >= len(s) {
 		return start, nil
 	}
 	quote := byte(0)
-	depth := 0
 	for i := start; i < len(s); i++ {
 		c := s[i]
 		if quote != 0 {
@@ -133,27 +136,12 @@ func tokenEnd(s string, start int, flow, collection bool) (int, error) {
 					i++
 					continue
 				}
-				quote = 0
-				if !collection {
-					return i + 1, nil
-				}
+				return i + 1, nil
 			}
 			continue
 		}
-		if (i == start || collection) && (c == '"' || c == '\'') {
+		if i == start && (c == '"' || c == '\'') {
 			quote = c
-			continue
-		}
-		if collection {
-			if c == '{' || c == '[' {
-				depth++
-			}
-			if c == '}' || c == ']' {
-				depth--
-				if depth == 0 {
-					return i + 1, nil
-				}
-			}
 			continue
 		}
 		if (c == ':' && (i+1 == len(s) || strings.ContainsRune(" \t\n{}[]", rune(s[i+1])))) || c == '\n' || (c == '#' && (i == start || s[i-1] == ' ')) || (flow && strings.ContainsRune(",]}", rune(c))) {
@@ -163,10 +151,33 @@ func tokenEnd(s string, start int, flow, collection bool) (int, error) {
 			return 0, fmt.Errorf("multiline scalar edit unsupported")
 		}
 	}
-	if quote != 0 || depth != 0 {
+	if quote != 0 {
 		return 0, fmt.Errorf("unterminated source token")
 	}
 	return len(strings.TrimRight(s[start:], " \t\n")) + start, nil
+}
+
+// Child spans come from parsed YAML nodes. Starting after the last child avoids
+// treating quotes embedded in a plain scalar as flow-collection delimiters.
+func flowEnd(s string, start, end int, kind yaml.Kind) (int, error) {
+	close := byte('}')
+	if kind == yaml.SequenceNode {
+		close = ']'
+	}
+	for i := max(start+1, end); i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n', ',':
+			continue
+		case '#':
+			i = lineEnd(s, i) - 1
+		default:
+			if s[i] == close {
+				return i + 1, nil
+			}
+			return 0, fmt.Errorf("unexpected flow source token")
+		}
+	}
+	return 0, fmt.Errorf("unterminated flow source span")
 }
 func field(n *yaml.Node, key string) *yaml.Node {
 	if n == nil || n.Kind != yaml.MappingNode {
@@ -242,7 +253,7 @@ func (d *document) replace(n *yaml.Node, v any, edits *[]edit) error {
 	if reflect.DeepEqual(value(n), v) {
 		return nil
 	}
-	if m, ok := v.(map[string]any); ok && n.Kind == yaml.MappingNode && len(m) > 0 && len(n.Content) > 0 && n.Style&yaml.FlowStyle == 0 {
+	if m, ok := v.(map[string]any); ok && n.Kind == yaml.MappingNode && len(m) > 0 && len(n.Content) > 0 {
 		return d.patch(n, m, edits)
 	}
 	if a, ok := v.([]any); ok && n.Kind == yaml.SequenceNode && len(a) == len(n.Content) {
@@ -308,10 +319,13 @@ func (d *document) replace(n *yaml.Node, v any, edits *[]edit) error {
 		return err
 	}
 	sp := d.spans[n]
-	if n.Kind != yaml.ScalarNode && n.Style&yaml.FlowStyle == 0 {
-		// Structural replacement retains all comment lines at their original position.
-		sp.end = lineEnd(d.text, sp.end)
-		text += "\n" + comments(d.text[sp.start:sp.end], n.Column-1)
+	if n.Kind != yaml.ScalarNode {
+		if n.Style&yaml.FlowStyle == 0 {
+			sp.end = lineEnd(d.text, sp.end)
+			text += "\n" + comments(d.text[sp.start:sp.end], n.Column-1)
+		} else if retained := comments(d.text[sp.start:sp.end], n.Column-1); retained != "" {
+			text += "\n" + retained + strings.Repeat(" ", n.Column-1)
+		}
 	}
 	*edits = append(*edits, edit{sp, text})
 	return nil
