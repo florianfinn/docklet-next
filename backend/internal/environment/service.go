@@ -44,6 +44,7 @@ type EnvironmentService struct {
 	AssignmentUserChanged func(context.Context, string)
 	restarts              *restartController
 	runtimeRemoval        RuntimeRemoval
+	runtimeRecovery       func(context.Context, string) error
 	historyInvalidator    func(string)
 	snapshots             hoststate.Store
 	agentRuntime          agentRuntime

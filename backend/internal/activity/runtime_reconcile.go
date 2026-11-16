@@ -76,7 +76,7 @@ func (c *RuntimeRemoteCoordinator) Refresh(ctx context.Context, ref RuntimeRunRe
 	return c.refreshInternal(ctx, ref, false, true)
 }
 func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref RuntimeRunReference, force, joinDispatch bool) (activitytypes.RuntimeSnapshot, error) {
-	snapshot, task, err := c.prepareRefreshInternal(ctx, ref, force, joinDispatch)
+	snapshot, task, err := c.prepareRefreshInternal(ctx, ref, force, joinDispatch, false)
 	if err != nil || task == nil {
 		return snapshot, err
 	}
@@ -89,23 +89,24 @@ func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref Runt
 }
 
 func (c *RuntimeRemoteCoordinator) scheduleRefreshInternal(ctx context.Context, ref RuntimeRunReference) error {
-	_, _, err := c.prepareRefreshInternal(ctx, ref, false, false)
+	_, _, err := c.prepareRefreshInternal(ctx, ref, false, false, false)
 	return err
 }
 
-func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, ref RuntimeRunReference, force, joinDispatch bool) (activitytypes.RuntimeSnapshot, *runtimeRemoteTaskInternal, error) {
+func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, ref RuntimeRunReference, force, joinDispatch, heldOnly bool) (activitytypes.RuntimeSnapshot, *runtimeRemoteTaskInternal, error) {
 	// Serialize the durable dispatch state and task choice with Start. A pending
 	// admission must not query an executor that would fence its future Execute.
 	s := c.service
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
 	var snapshot activitytypes.RuntimeSnapshot
-	var pending bool
+	var pending, eligible bool
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, _ time.Time) error {
 		row, err := runtimeReferenceRowTxInternal(tx, ref)
 		if err != nil {
 			return err
 		}
+		eligible = row.SettledAt == nil && row.HubDisposition == nil && row.ExecutorState != nil && *row.ExecutorState == "unknown" && row.UnknownReason != nil && (*row.UnknownReason == "transport" || *row.UnknownReason == "process-continuity")
 		pending = *row.DispatchState == "pending" && row.SettledAt == nil
 		snapshot, err = runtimeSnapshotTxInternal(tx, row)
 		return err
@@ -114,6 +115,9 @@ func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, r
 		return activitytypes.RuntimeSnapshot{}, nil, err
 	}
 
+	if heldOnly && !eligible {
+		return snapshot, nil, nil
+	}
 	c.mu.Lock()
 	if c.paused {
 		c.mu.Unlock()
@@ -133,6 +137,13 @@ func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, r
 	}
 	task := c.queries[ref.RunID]
 	if task == nil {
+		if heldOnly {
+			if last, ok := c.lastRecovery[ref.RunID]; ok && c.schedule.Now().Sub(last) < 30*time.Second {
+				c.mu.Unlock()
+				return snapshot, nil, nil
+			}
+			c.lastRecovery[ref.RunID] = c.schedule.Now()
+		}
 		if !force && snapshot.OutcomeState == activitytypes.RuntimeOutcomeKnown && !isTerminalActivityStatusInternal(snapshot.Status) {
 			if last, ok := c.lastQuery[ref.RunID]; ok && c.schedule.Now().Sub(last) < 2*time.Second {
 				c.mu.Unlock()
@@ -152,6 +163,7 @@ func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, r
 				if err == nil && isTerminalActivityStatusInternal(snapshot.Status) {
 					delete(c.stamps, ref.RunID)
 					delete(c.lastQuery, ref.RunID)
+					delete(c.lastRecovery, ref.RunID)
 				}
 				// Any query that leaves a known active run (startup, transport
 				// recovery or an explicit refresh) hands it to one follower.

@@ -40,10 +40,11 @@ type RuntimeRemoteCoordinator struct {
 	queries     map[string]*runtimeRemoteTaskInternal
 	follows     map[string]*runtimeRemoteTaskInternal
 	// followEvery spaces reader-independent follow queries in real time.
-	followEvery time.Duration
-	stamps      map[string]runtimeDispatchStampInternal
-	lastQuery   map[string]time.Time
-	recovering  map[string]bool
+	followEvery  time.Duration
+	stamps       map[string]runtimeDispatchStampInternal
+	lastQuery    map[string]time.Time
+	lastRecovery map[string]time.Time
+	recovering   map[string]bool
 }
 
 func NewRuntimeRemoteCoordinator(service *RuntimeService, lifetime context.Context, transport RuntimeTransportFactory, schedule RuntimeReconcileSchedule) (*RuntimeRemoteCoordinator, error) {
@@ -64,7 +65,7 @@ func NewRuntimeRemoteCoordinator(service *RuntimeService, lifetime context.Conte
 	if service.remote != nil {
 		return nil, errRuntimeInvalidInternal
 	}
-	c := &RuntimeRemoteCoordinator{service: service, lifetime: lifetime, transport: transport, schedule: schedule, dispatch: make(map[string]*runtimeRemoteTaskInternal), queries: make(map[string]*runtimeRemoteTaskInternal), follows: make(map[string]*runtimeRemoteTaskInternal), followEvery: 2 * time.Second, stamps: make(map[string]runtimeDispatchStampInternal), lastQuery: make(map[string]time.Time), recovering: make(map[string]bool)}
+	c := &RuntimeRemoteCoordinator{service: service, lifetime: lifetime, transport: transport, schedule: schedule, dispatch: make(map[string]*runtimeRemoteTaskInternal), queries: make(map[string]*runtimeRemoteTaskInternal), follows: make(map[string]*runtimeRemoteTaskInternal), followEvery: 2 * time.Second, stamps: make(map[string]runtimeDispatchStampInternal), lastQuery: make(map[string]time.Time), lastRecovery: make(map[string]time.Time), recovering: make(map[string]bool)}
 	service.remote = c
 	return c, nil
 }
@@ -176,6 +177,7 @@ func (c *RuntimeRemoteCoordinator) dispatchInternal(ctx context.Context, ref Run
 		if err == nil && isTerminalActivityStatusInternal(snapshot.Status) {
 			delete(c.stamps, ref.RunID)
 			delete(c.lastQuery, ref.RunID)
+			delete(c.lastRecovery, ref.RunID)
 		}
 		// Register the follower before this owned task ends, so Close always
 		// either joins it or prevents it.
@@ -372,5 +374,6 @@ func (c *RuntimeRemoteCoordinator) forgetTerminalInternal(runID string) {
 	c.mu.Lock()
 	delete(c.stamps, runID)
 	delete(c.lastQuery, runID)
+	delete(c.lastRecovery, runID)
 	c.mu.Unlock()
 }

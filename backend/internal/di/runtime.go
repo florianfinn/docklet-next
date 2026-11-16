@@ -147,6 +147,13 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 		return runtimeResult{}, err
 	}
 	environments.SetRuntimeRemoval(runtime.RemoveEnvironment)
+	environments.SetRuntimeRecovery(func(ctx context.Context, id string) error {
+		_, identity, err := remoteIdentity(ctx, id)
+		if err != nil {
+			return err
+		}
+		return remote.RecoverHeldTarget(ctx, activity.RuntimeStoreBinding{StoreGeneration: runtime.LocalStore().StoreGeneration, EnvironmentID: id, ManagerID: identity.ManagerID, RegistrationID: identity.RegistrationID, ExecutorGeneration: identity.ExecutorGeneration})
+	})
 	var maintenanceCancel context.CancelFunc
 	var maintenanceDone chan error
 	lc.Append(fx.Hook{OnStart: func(start context.Context) error {

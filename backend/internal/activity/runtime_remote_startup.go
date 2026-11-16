@@ -76,3 +76,27 @@ func (c *RuntimeRemoteCoordinator) recoverInternal(ctx context.Context, only *Ru
 	}
 	return nil
 }
+
+// RecoverHeldTarget schedules only transport or continuity holds for this exact
+// executor identity. Evidence and administrator dispositions are never rewritten.
+func (c *RuntimeRemoteCoordinator) RecoverHeldTarget(ctx context.Context, store RuntimeStoreBinding) error {
+	s := c.service
+	s.activity.runningMu.Lock()
+	var rows []RuntimeReceipt
+	err := s.transactionInternal(ctx, func(tx *gorm.DB, _ time.Time) error {
+		return tx.Where("kind = 'receipt' AND environment_id <> '0' AND settled_at IS NULL AND hub_disposition IS NULL AND executor_state = 'unknown' AND unknown_reason IN ?", []string{"transport", "process-continuity"}).
+			Where("environment_id = ? AND registration_id = ? AND executor_generation = ? AND manager_id = ? AND store_generation = ?", store.EnvironmentID, store.RegistrationID, store.ExecutorGeneration, store.ManagerID, store.StoreGeneration).
+			Order("run_id").Find(&rows).Error
+	})
+	s.activity.runningMu.Unlock()
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		ref := RuntimeRunReference{Store: runtimeStoreFromRowInternal(&row), RunID: row.RunID}
+		if _, _, err := c.prepareRefreshInternal(ctx, ref, false, true, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}

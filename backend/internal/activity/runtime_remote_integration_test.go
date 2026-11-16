@@ -38,6 +38,7 @@ type remoteIntegration struct {
 	endpoint        string
 	handlerMu       sync.RWMutex
 	receiverHandler http.Handler
+	onConnect       func(context.Context)
 	agent           *runtimeServicesFixture
 	db              *database.DB
 	hub             *activity.RuntimeService
@@ -140,9 +141,15 @@ func newRemoteIntegration(t *testing.T, isEdge bool, customize ...func(*runtimeS
 				return "", errors.New("invalid synthetic credential")
 			}
 			return f.store.EnvironmentID, nil
-		}, func(_ context.Context, _ string, online bool) {
+		}, func(ctx context.Context, _ string, online bool) {
 			if online {
 				once.Do(func() { close(connected) })
+				f.handlerMu.RLock()
+				onConnect := f.onConnect
+				f.handlerMu.RUnlock()
+				if onConnect != nil {
+					onConnect(ctx)
+				}
 			}
 		})
 		server.SetSessionKeyResolver(func(context.Context, string, string) (string, error) { return "example-key", nil })

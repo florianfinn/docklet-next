@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,6 +49,11 @@ func TestEdgeConnectDeliversTargetsAfterCompatibilityAndRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.Create(&registry.ContainerRegistry{BaseModel: database.BaseModel{ID: "example-registry"}, URL: "registry.example.com", Username: "example", Token: encrypted, Enabled: true, RegistryType: registry.RegistryTypeGeneric}).Error)
 	svc := environment.NewEnvironmentService(db, nil, nil, nil, nil, nil)
+	var recovered atomic.Bool
+	svc.SetRuntimeRecovery(func(_ context.Context, id string) error {
+		recovered.Store(id == env.ID)
+		return nil
+	})
 	router := echo.New()
 	registry := edge.GetRegistry()
 	registerEdgeTunnelRoutes(ctx, fxtest.NewLifecycle(t), cfg, router.Group("/api"), svc, nil, nil, registry)
@@ -76,6 +82,7 @@ func TestEdgeConnectDeliversTargetsAfterCompatibilityAndRegistry(t *testing.T) {
 		case "/api/environments/0/system/health":
 		case "/api/container-registries/sync":
 		case "/api/environments/0/volumes/backups/targets":
+			require.True(t, recovered.Load(), "authenticated Edge connect must trigger runtime recovery before configuration sync")
 			require.Contains(t, paths, "/api/app-version")
 			require.Contains(t, paths, "/api/container-registries/sync")
 			require.Equal(t, http.MethodPut, request.Method)

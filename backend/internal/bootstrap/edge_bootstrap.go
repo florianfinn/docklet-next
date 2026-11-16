@@ -54,7 +54,7 @@ func registerEdgeTunnelRoutes(
 			go func() {
 				checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 				defer cancel()
-				if _, err := environmentService.CheckAgentCompatibility(checkCtx, envID); err == nil {
+				if err := environmentService.CheckReconnectedAgent(checkCtx, envID); err == nil {
 					_ = environmentService.SyncRegistriesToEnvironment(checkCtx, envID)
 					if err := environmentService.SyncBackupTargetsToEnvironment(checkCtx, envID); err != nil {
 						slog.WarnContext(checkCtx, "Failed to sync backup targets on Edge connect", "environmentId", envID, "code", "backup.target.sync-failed")

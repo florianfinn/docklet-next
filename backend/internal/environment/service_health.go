@@ -175,6 +175,8 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		return scheduler.Outcome{Status: scheduler.Succeeded}, nil
 	}
 
+	s.RecoverRuntime(ctx, envID)
+
 	// An agent that just came back may have restarted with different state; resend everything once
 	// instead of trusting the last delivered payload. The compatibility write announced the transition.
 	if !wasOnline {
