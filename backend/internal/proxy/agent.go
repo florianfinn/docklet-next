@@ -202,6 +202,9 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		return o, err
 	}
 	prepared, err := e.Prepare(ctx, q)
+	if Transient(err) {
+		return o, err // a failed read is no graph refusal; recovery rejects an unchanged target
+	}
 	if err != nil {
 		return a.finish(ctx, i, withDiagnostic(o, err), dto.Rejected, reason(err, dto.InvalidGraph), "")
 	}
@@ -431,6 +434,11 @@ func (a *Agent) finish(ctx context.Context, i Intent, o dto.Operation, s dto.Sta
 }
 func (a *Agent) effectFailure(ctx context.Context, i Intent, o dto.Operation, err error, published bool) (dto.Operation, error) {
 	if errors.Is(err, errCrash) {
+		return o, err
+	}
+	if Transient(err) {
+		// A failed read or write call proves neither a refusal nor a publication: the
+		// journal keeps its phase and recovery decides from the actual target bytes.
 		return o, err
 	}
 	o = withDiagnostic(o, err)

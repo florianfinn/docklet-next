@@ -35,7 +35,9 @@ target read: only a typed refusal or an observed difference (removed or stopped
 container, other `StartedAt`, other bytes) settles an operation. A failed read keeps
 the journal unfinished for a later query; an epoch that cannot be read around the
 observation gives `applied-unverified` (`not-observable`), never `verified` or
-`container-changed`, and a requested restore still runs.
+`container-changed`, and a requested restore still runs. A failed read or call while
+preparing, staging, validating or publishing is not a graph refusal either: the
+journal keeps its phase and the recovery table settles it from the actual target.
 
 | Need | Path |
 | --- | --- |
