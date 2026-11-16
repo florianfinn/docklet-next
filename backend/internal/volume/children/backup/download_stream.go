@@ -85,11 +85,11 @@ func (s *Service) BeginStreamingDownload(ctx context.Context, id string, actor *
 	d.release = func(err error) {
 		once.Do(func() {
 			cancel()
-			owner.Release(workCtx)
 			if err == nil {
 				err = workCtx.Err()
 			}
 			activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Backup downloaded", neutralBackupError(err, "volume.backup.repository-unavailable"))
+			owner.Release(workCtx)
 		})
 	}
 	d.cli, err = s.deps.Docker.GetClient(prepare)

@@ -75,8 +75,8 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 	reader, size, err := s.downloadRusticBackupInternal(prepare, ctx, entry)
 	if err != nil {
 		cancel()
-		owner.Release(ctx)
 		finish(err)
+		owner.Release(ctx)
 		if prepare.Err() == context.DeadlineExceeded {
 			return nil, 0, dto.NewProblem(504, "volume.backup.engine-timeout", err)
 		}
@@ -85,18 +85,18 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 	if edge && size > dto.MaxEdgeDownloadBytes {
 		_ = reader.Close()
 		cancel()
-		owner.Release(ctx)
 		finish(dto.NewProblem(413, "volume.backup.download-too-large", nil))
+		owner.Release(ctx)
 		return nil, 0, dto.NewProblem(413, "volume.backup.download-too-large", nil)
 	}
 	cleanup := sync.OnceFunc(func() {
 		closeErr := reader.Close()
 		cancel()
-		owner.Release(ctx)
 		if closeErr == nil {
 			closeErr = workCtx.Err()
 		}
 		finish(closeErr)
+		owner.Release(ctx)
 	})
 	context.AfterFunc(ctx, cleanup)
 	if actor == nil {
