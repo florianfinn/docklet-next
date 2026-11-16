@@ -73,7 +73,17 @@ func TestResumeInventoryAndPreparationErrorDiagnostics(t *testing.T) {
 		inv, err := inventoryChecked(t, x.e, x.i)
 		require.NoError(t, err)
 		require.False(t, inv.Eligibility.Writable)
-		require.Equal(t, dto.AdminUnavailable, inv.Eligibility.Reason)
+		if which == "admin" {
+			require.Equal(t, dto.AdminUnavailable, inv.Eligibility.Reason)
+		} else {
+			require.Equal(t, dto.InvalidGraph, inv.Eligibility.Reason)
+			require.Equal(t, "/etc/caddy/Caddyfile", inv.Eligibility.Path)
+			if which == "adapt-exit" {
+				require.Contains(t, inv.Eligibility.Detail, "adapt rejected")
+			} else {
+				require.Equal(t, "invalid adapted JSON", inv.Eligibility.Detail)
+			}
+		}
 		q := x.request("create-route", baseSite())
 		_, err = prepareChecked(t, x.e, q)
 		var p *dto.Problem

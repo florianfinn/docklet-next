@@ -9,6 +9,7 @@ package caddy
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"path"
 	"slices"
 	"sort"
@@ -82,7 +83,14 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 	if g.inventory.Eligibility.Writable && g.inventory.Resume && !g.inventory.AdminOff && g.inventory.PersistConfig {
 		diverged, err := e.diverged(ctx, i, g.inventory)
 		if err != nil {
-			g.inventory.Eligibility = refused(dto.AdminUnavailable, g.root)
+			eligibility := refused(reason(err, dto.AdminUnavailable), g.root)
+			var diagnostic *dto.Problem
+			if errors.As(err, &diagnostic) {
+				eligibility.Path = diagnostic.Path
+				eligibility.Line = diagnostic.Line
+				eligibility.Detail = diagnostic.Detail
+			}
+			g.inventory.Eligibility = eligibility
 			return g.inventory, nil
 		}
 		g.inventory.RunningDiverged = diverged
