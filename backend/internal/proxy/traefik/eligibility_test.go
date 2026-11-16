@@ -135,3 +135,15 @@ func TestStructuralReplacementRetainsCommentsAndRejectsNestedFlowRemoval(t *test
 	edits = nil
 	require.Error(t, d.patch(at(d.root, "http", "services", "app", "loadBalancer"), map[string]any{"servers": []any{map[string]any{"url": nil}}}, &edits))
 }
+
+func TestPlainScalarQuoteCharactersDoNotHideTheRealComment(t *testing.T) {
+	source := "http:\n  middlewares:\n    h:\n      headers:\n        customResponseHeaders:\n          Keep: value\n          Remove: a\"b\"'c' # Retained\n"
+	d, err := parseDocument(source, "")
+	require.NoError(t, err)
+	var edits []edit
+	require.NoError(t, d.patch(at(d.root, "http", "middlewares", "h", "headers", "customResponseHeaders"), map[string]any{"Remove": nil}, &edits))
+	out, err := d.apply(edits)
+	require.NoError(t, err)
+	require.Contains(t, out, "          # Retained\n")
+	require.NotContains(t, out, "a\"b\"'c'")
+}
