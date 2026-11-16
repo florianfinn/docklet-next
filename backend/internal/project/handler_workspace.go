@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/backend/pkg/workspace"
@@ -54,7 +55,7 @@ func projectWorkspaceRequestHTTPErrorInternal(err error) error {
 		return huma.Error409Conflict(err.Error())
 	}
 	if errors.Is(err, common.ErrProjectWorkspaceForbidden) {
-		return huma.Error403Forbidden(err.Error())
+		return projectWorkspacePolicyProblem(err)
 	}
 	if errors.Is(err, common.ErrProjectWorkspaceBadRequest) {
 		return huma.Error400BadRequest(err.Error())
@@ -86,7 +87,7 @@ func projectWorkspaceHTTPErrorInternal(err error) error {
 	case errors.Is(err, common.ErrProjectArchived):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, common.ErrProjectWorkspaceForbidden):
-		return huma.Error403Forbidden(err.Error())
+		return projectWorkspacePolicyProblem(err)
 	case errors.Is(err, common.ErrProjectWorkspaceNotFound), errors.Is(err, common.ErrProjectNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, common.ErrProjectWorkspaceBadRequest), errors.Is(err, common.ErrProjectEnvUnreadable):
@@ -156,4 +157,13 @@ func (h *ProjectHandler) UpdateProjectWorkspace(ctx context.Context, input *Upda
 	}
 	result.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
 	return &handlerutil.Out[workspacetypes.Workspace]{Body: base.ApiResponse[workspacetypes.Workspace]{Success: true, Data: *result}}, nil
+}
+
+// Policy refusals must not use agent credential rejection statuses.
+func projectWorkspacePolicyProblem(err error) *project.WorkspaceProblem {
+	p := &project.WorkspaceProblem{Status: http.StatusUnprocessableEntity, Title: "Workspace path refused", Detail: "This path cannot be accessed through the project workspace.", Code: "project.workspace-path-refused"}
+	if errors.Is(err, projects.ErrProjectWorkspaceProtectedPath) {
+		p.Code, p.Detail = "project.workspace-protected-path", "Project configuration must be edited through project settings."
+	}
+	return p
 }

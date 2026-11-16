@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2b45e157c0cc5e80dfd37622be523107703b88aaccbbfc04d2a88c91152abf7a
+// Revision: 8ee07e4a2c8f9fc042c014124d37a65c24c8593649d2ffffa4a4f4ef56dfa7b1
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11561,6 +11561,14 @@ export interface components {
         ProjectUpdateTagResponse: {
             activityId?: string;
             tags: components["schemas"]["ProjectTag"][] | null;
+        };
+        ProjectWorkspaceProblem: {
+            /** @enum {string} */
+            code: "project.workspace-protected-path" | "project.workspace-path-refused";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
         };
         ProxyAcknowledgements: {
             replaceRunningConfig: boolean;
@@ -26666,6 +26674,15 @@ export interface operations {
                     "application/json": components["schemas"]["RequestProblem"];
                 };
             };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -26715,6 +26732,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26883,6 +26909,15 @@ export interface operations {
                     "application/json": components["schemas"]["RequestProblem"];
                 };
             };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -26937,6 +26972,15 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -28072,6 +28116,15 @@ export interface operations {
                     "application/json": components["schemas"]["RequestProblem"];
                 };
             };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -28123,6 +28176,15 @@ export interface operations {
                     "application/json": components["schemas"]["RequestProblem"];
                 };
             };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -28169,6 +28231,15 @@ export interface operations {
                     "application/json": components["schemas"]["RequestProblem"];
                 };
             };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -28211,6 +28282,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Workspace policy refusal or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProjectWorkspaceProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */

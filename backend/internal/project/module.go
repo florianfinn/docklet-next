@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	"github.com/florianfinn/docklet-next/types/volume"
 )
 
@@ -286,6 +287,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermProjectsDeploy, h.BuildProjectImages)
+	registerProjectWorkspaceProblemResponses(api)
 }
 
 func registerProjectWorkspaceRoutesInternal(api huma.API, h *ProjectHandler) {
@@ -321,4 +323,22 @@ func registerProjectWorkspaceRoutesInternal(api huma.API, h *ProjectHandler) {
 	updateOperation := handlerutil.Operation("update-project-workspace", http.MethodPut, basePath, "Update project workspace", "", tag)
 	updateOperation.RequestBody = handlerutil.WorkspaceMultipartRequestBody("JSON encoded project workspace manifest")
 	handlerutil.RegisterSecured(api, updateOperation, authz.PermProjectsUpdate, h.UpdateProjectWorkspace)
+	registerProjectWorkspaceProblemResponses(api)
+}
+
+func registerProjectWorkspaceProblemResponses(api huma.API) {
+	problem := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[projectDTO.WorkspaceProblem](), true, "")
+	generic := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
+	for _, path := range []string{"/environments/{id}/projects", "/environments/{id}/projects/{projectId}", "/environments/{id}/projects/{projectId}/workspace", "/environments/{id}/projects/{projectId}/workspace/file", "/environments/{id}/projects/{projectId}/workspace/file/download"} {
+		item := api.OpenAPI().Paths[path]
+		if item == nil {
+			continue
+		}
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put} {
+			if op == nil {
+				continue
+			}
+			op.Responses["422"] = &huma.Response{Description: "Workspace policy refusal or validation failure", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{problem, generic}}}}}
+		}
+	}
 }
