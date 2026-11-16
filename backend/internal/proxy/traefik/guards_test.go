@@ -381,3 +381,19 @@ func TestFilenameProviderOnDirectorySourceReadsOnlyItsFile(t *testing.T) {
 	require.Equal(t, "dynamic/routes.yml", r.Files[0].Path)
 	require.Equal(t, dto.ReadOnlyMount, r.Eligibility.Reason)
 }
+
+func TestOpaqueFilenameProviderProjectsOnlyRelativeName(t *testing.T) {
+	x := fixture(t)
+	x.put("dynamic/auth.secret.yml", "do-not-project-this-payload")
+	x.inspect.Config.Cmd = []string{"--providers.file.filename=/etc/traefik/dynamic/auth.secret.yml", "--entrypoints.web.address=:80"}
+	r, err := x.readResult()
+	require.NoError(t, err)
+	require.Empty(t, r.Files)
+	require.Equal(t, []dto.OpaqueFile{{Path: "dynamic/auth.secret.yml"}}, r.OpaqueFiles)
+	for _, p := range x.archives {
+		require.False(t, hostio.Secret(p))
+	}
+	b, err := json.Marshal(r)
+	require.NoError(t, err)
+	require.NotContains(t, string(b), "do-not-project-this-payload")
+}

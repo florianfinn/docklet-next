@@ -59,6 +59,9 @@ func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 		prefix = ""
 	}
 	for _, o := range opaque {
+		if single {
+			o.Path = path.Base(o.Path)
+		}
 		o.Path = path.Join(prefix, o.Path)
 		g.result.OpaqueFiles = append(g.result.OpaqueFiles, o)
 	}
