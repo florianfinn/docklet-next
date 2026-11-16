@@ -251,7 +251,9 @@ func (s *RuntimeSender) metadata(ctx context.Context, path string, value, result
 		var problem imageDTO.OperationError
 		if status >= 400 && status <= 599 && activitytypes.DecodeRuntimeJSON(response, &problem) == nil && !problem.Success {
 			if imageDTO.ValidProblemCode(problem.Problem.Code) {
-				return imageDTO.Failure(problem.Problem.Code, status)
+				refusal := imageDTO.Failure(problem.Problem.Code, status)
+				refusal.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, problem.Problem.Blocker)
+				return refusal
 			}
 		}
 		return ErrRuntimeTransport
