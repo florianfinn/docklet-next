@@ -367,6 +367,7 @@ func TestSingleFileProviderRemainsReadableAndReadOnly(t *testing.T) {
 	require.Equal(t, dto.SingleFileMount, r.Eligibility.Reason)
 	require.Len(t, r.Files, 1)
 	require.Equal(t, tiny, r.Files[0].Content)
+	require.Equal(t, "routes.yml", r.Files[0].Path)
 	require.Len(t, r.Routes, 1)
 	require.Equal(t, "app", r.Routes[0].Name)
 	require.Equal(t, tiny, x.read("dynamic/routes.yml"))

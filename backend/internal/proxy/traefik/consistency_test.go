@@ -86,6 +86,7 @@ func TestClassifierRetainsEveryReferenceKindAndInfrastructureRule(t *testing.T) 
 	require.Empty(t, ref.File)
 	for _, tt := range []struct{ from, to string }{
 		{"service: app", "service: unavailable"},
+		{"loadBalancer:\n        servers: [{url: 'http://192.0.2.1:8080'}]", "loadBalancer: {}"},
 		{"servers: [{url: 'http://192.0.2.1:8080'}]", "servers: []"},
 		{"servers: [{url: 'http://192.0.2.1:8080'}]", "servers: {}"},
 		{"servers: [{url: 'http://192.0.2.1:8080'}]", "servers: [{url: 'ftp://example.com'}]"},
@@ -729,4 +730,16 @@ func TestBeforeProbeCapabilityIsPreservedAfterLaterRecovery(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, got.State)
 	require.Equal(t, dto.ProbeOptionUnavailable, got.Reason)
+}
+
+func TestReferenceProviderSuffixAndDuplicateNamespacesStayDistinct(t *testing.T) {
+	d, err := parseDocument(tiny+"    \"\": {loadBalancer: {servers: [{url: 'http://192.0.2.2:8080'}]}}\n", "")
+	require.NoError(t, err)
+	docs := map[string]*document{"routes.yml": d}
+	require.Equal(t, "unresolved", resolve(docs, nil, dto.Inventory{Providers: []string{"docker"}}, "services", "docker").Kind)
+	require.Equal(t, "unresolved", resolve(docs, nil, dto.Inventory{}, "services", "foreign@absent").Kind)
+	other, err := parseDocument(tiny, "")
+	require.NoError(t, err)
+	docs["other.yml"] = other
+	require.Equal(t, "unresolved", resolve(docs, []dto.OpaqueFile{{Path: "auth.secret.yml"}}, dto.Inventory{}, "services", "app").Kind)
 }
