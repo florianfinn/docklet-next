@@ -124,7 +124,10 @@ func command(c container.InspectResponse) (string, bool, error) {
 	if len(args) == 0 {
 		return "", false, problem(dto.IncompleteInventory, "", 0, "missing container command")
 	}
-	root := "/etc/caddy/Caddyfile"
+	// Caddy without --config reads ./Caddyfile from the working directory or runs empty,
+	// and without --adapter guesses from the file name; both are refused, never assumed.
+	root := ""
+	adapter := false
 	resume := false
 	run := false
 	for n := 0; n < len(args); n++ {
@@ -151,6 +154,8 @@ func command(c container.InspectResponse) (string, bool, error) {
 				root = value
 			} else if value != "caddyfile" {
 				return "", false, problem(dto.UnsupportedFormat, "", 0, "Caddyfile adapter required")
+			} else {
+				adapter = true
 			}
 		case "--resume":
 			if eq && value != "true" && value != "false" {
@@ -164,6 +169,9 @@ func command(c container.InspectResponse) (string, bool, error) {
 	}
 	if !run || !path.IsAbs(root) || path.Clean(root) != root || strings.ContainsAny(root, "\x00\r\n") {
 		return "", false, problem(dto.IncompleteInventory, "", 0, "absolute Caddyfile path required")
+	}
+	if !adapter && !strings.HasPrefix(path.Base(root), "Caddyfile") {
+		return "", false, problem(dto.UnsupportedFormat, root, 0, "Caddyfile adapter required")
 	}
 	return root, resume, nil
 }

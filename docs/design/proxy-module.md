@@ -264,6 +264,7 @@ response before it (probed at admission, same request):
 | New route | Before: the proxy's no-route response (Traefik's default 404, no Caddy site). After: any other first response. |
 | Deleted route | The reverse. |
 | Destination or middleware change | The first response's status, selected headers or body hash differs from before, and is not a gateway error (502, 503, 504). |
+| Caddy new or deleted route | Caddy has no distinctive no-route answer: an unmatched host gets an empty 200 (`Server: Caddy`, baseline B0) and a catch-all site answers with its own response. A create or delete therefore counts like an edit: the first response differs from before and is not a gateway error (a delete needs an answer before the change, a create one after it). |
 | Caddy site | Additionally the active configuration read from the admin endpoint inside the container contains the route's host, matcher and upstreams. For a site that cannot be probed (HTTPS through an IP URL fails in Caddy), this readback alone gives `verified` with evidence `configuration`. |
 
 The outcome records its evidence kind: `routing` (first response),
@@ -321,7 +322,16 @@ file-driver logs are `logs-unavailable`, never "no error".
   changes the root Caddyfile; its existing sites stay readable. A root Caddyfile
   mounted as a single file cannot be written, so setup shows the line instead.
 - One site block per route, using the grammar of the prototype; unknown
-  directives are refused rather than dropped.
+  directives are refused rather than dropped. A route file is written exactly as
+  submitted.
+- Inventory needs an explicit `--config` path; without `--adapter caddyfile` its
+  file name must start with `Caddyfile`. Otherwise Caddy's own fallback (working
+  directory, adapter guessed from the name) could differ from what the module
+  reads, so the instance is not inventoried.
+- Snippet imports (`import name` of a `(name)` block) are not resolved in this
+  version; such an instance is read-only (`relative-import`).
+- With `--resume` and admin off the running configuration cannot be read for the
+  comparison below, so the instance is read-only (`admin-unavailable`).
 - `caddy validate` is the validator; `adapt` alone accepts configurations that
   fail at provisioning. Missing DNS provider modules surface as the real
   validation error.

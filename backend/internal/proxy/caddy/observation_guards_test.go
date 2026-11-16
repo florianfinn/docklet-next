@@ -25,10 +25,29 @@ func TestRoutingDecisionTable(t *testing.T) {
 		before, after int
 		want          bool
 	}{
-		{"edit-route", 200, 200, false}, {"edit-route", 200, 0, false}, {"edit-route", 200, 401, true}, {"create-route", 0, 200, true}, {"create-route", 200, 201, false}, {"create-route", 404, 0, false}, {"create-route", 404, 404, false}, {"create-route", 404, 401, true}, {"delete-route", 0, 404, false}, {"delete-route", 404, 0, true}, {"delete-route", 200, 0, true}, {"delete-route", 200, 404, true}, {"delete-route", 200, 201, false},
+		{"edit-route", 200, 200, false}, {"edit-route", 200, 0, false}, {"edit-route", 200, 401, true}, {"create-route", 0, 200, true}, {"create-route", 200, 201, true}, {"create-route", 404, 0, false}, {"create-route", 404, 404, false}, {"create-route", 404, 401, true}, {"delete-route", 0, 404, false}, {"delete-route", 404, 0, true}, {"delete-route", 200, 0, true}, {"delete-route", 200, 404, true}, {"delete-route", 200, 201, true}, {"delete-route", 200, 200, false}, {"delete-route", 200, 502, false},
 	} {
 		require.Equal(t, tt.want, routing(hostio.Response{Status: tt.before}, hostio.Response{Status: tt.after}, tt.kind), "%+v", tt)
 	}
+}
+
+// Caddy 2.10.2 answers a host without a matching handler with an empty 200 (baseline B0,
+// sandbox measurement 2026-11-15); a catch-all site answers with its own response.
+const measuredUnmatched = "Connecting to 127.0.0.1 (127.0.0.1:80)\n  HTTP/1.1 200 OK\n  Server: Caddy\n  Date: Sun, 15 Nov 2026 00:37:54 GMT\n  Content-Length: 0\n  Connection: close\n  \nwriting to stdout\nwritten to stdout\n"
+
+func TestRoutingWithMeasuredUnmatchedAndCatchAll(t *testing.T) {
+	unmatched, err := hostio.ParseProbe(hostio.ExecResult{Stderr: []byte(measuredUnmatched)}, nil)
+	require.NoError(t, err)
+	site, err := hostio.ParseProbe(hostio.ExecResult{Stdout: []byte("Hostname: example-whoami-b"), Stderr: []byte("  HTTP/1.1 200 OK\n  Content-Type: text/plain; charset=utf-8\n  Content-Length: 25\n  \n")}, nil)
+	require.NoError(t, err)
+	catchAll, err := hostio.ParseProbe(hostio.ExecResult{Stdout: []byte("Hostname: example-whoami-a"), Stderr: []byte("  HTTP/1.1 200 OK\n  Content-Type: text/plain; charset=utf-8\n  Content-Length: 25\n  \n")}, nil)
+	require.NoError(t, err)
+	require.True(t, routing(unmatched, site, "create-route"), "a new site replaces the empty 200")
+	require.True(t, routing(catchAll, site, "create-route"), "a new site replaces the catch-all answer")
+	require.False(t, routing(catchAll, catchAll, "create-route"), "the same answer is no evidence")
+	require.True(t, routing(site, unmatched, "delete-route"))
+	require.True(t, routing(site, catchAll, "delete-route"))
+	require.False(t, routing(site, hostio.Response{Status: 502}, "delete-route"))
 }
 func observationIntent(x *dockerFixture, s Site, adminOff bool, kind string) proxy.Intent {
 	b, _ := json.Marshal(state{Root: "/etc/caddy/Caddyfile", Admin: "localhost:2019", AdminOff: adminOff, Before: hostio.Response{Status: 200, Headers: map[string]string{"server": "Caddy"}}, NewSite: &s})

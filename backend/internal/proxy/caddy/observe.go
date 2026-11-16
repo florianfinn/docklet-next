@@ -113,14 +113,14 @@ func routing(before, after hostio.Response, kind string) bool {
 	if hostio.GatewayError(after.Status) || !hostio.Differs(before, after) {
 		return false
 	}
-	switch kind {
-	case "create-route":
-		return (before.Status == 0 || before.Status == 404) && after.Status != 0
-	case "delete-route":
-		return before.Status != 0 && (after.Status == 0 || after.Status == 404)
-	default:
-		return after.Status != 0
+	// Caddy has no distinctive no-route answer: an unmatched host gets an empty 200
+	// (baseline B0) or a catch-all site's answer. A create, edit or delete therefore
+	// counts when the first response differs and is not a gateway error (AUTO-4). A
+	// delete needs an answer before the change, a create or edit one after it.
+	if kind == "delete-route" {
+		return before.Status != 0
 	}
+	return after.Status != 0
 }
 func unverified(r dto.Reason) proxy.Observation {
 	return proxy.Observation{State: dto.AppliedUnverified, Reason: r}

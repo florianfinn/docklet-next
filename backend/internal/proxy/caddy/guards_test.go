@@ -21,13 +21,15 @@ import (
 )
 
 func TestCommandInventory(t *testing.T) {
-	for _, args := range [][]string{{"caddy", "run"}, {"caddy", "run", "--config=/etc/caddy/Caddyfile", "--adapter=caddyfile", "--resume=true", "--watch", "--environ"}, {"caddy", "run", "--resume=false"}} {
+	for _, args := range [][]string{{"caddy", "run", "--config", "/etc/caddy/Caddyfile"}, {"caddy", "run", "--config=/etc/caddy/Caddyfile", "--adapter=caddyfile", "--resume=true", "--watch", "--environ"}, {"caddy", "run", "--config=/etc/caddy/Caddyfile", "--resume=false"}} {
 		root, resume, err := command(container.InspectResponse{Config: &container.Config{Cmd: args}})
 		require.NoError(t, err)
 		require.Equal(t, "/etc/caddy/Caddyfile", root)
 		require.Equal(t, strings.Contains(strings.Join(args, " "), "--resume=true"), resume)
 	}
-	bad := [][]string{{"caddy"}, {"caddy", "run", "--config"}, {"caddy", "run", "--adapter=json"}, {"caddy", "run", "--resume=maybe"}, {"caddy", "run", "--unknown"}, {"caddy", "run", "--config=relative"}, {"caddy", "run", "--config=/etc/../Caddyfile"}, {"caddy", "run", "--config=/etc/Caddyfile\n"}}
+	// Without --config Caddy reads ./Caddyfile from its working directory; without --adapter
+	// it guesses from the file name. Neither is assumed.
+	bad := [][]string{{"caddy"}, {"caddy", "run"}, {"caddy", "run", "--resume=false"}, {"caddy", "run", "--config=/etc/caddy/config.json"}, {"caddy", "run", "--config"}, {"caddy", "run", "--adapter=json"}, {"caddy", "run", "--resume=maybe"}, {"caddy", "run", "--unknown"}, {"caddy", "run", "--config=relative"}, {"caddy", "run", "--config=/etc/../Caddyfile"}, {"caddy", "run", "--config=/etc/Caddyfile\n"}}
 	for _, args := range bad {
 		_, _, err := command(container.InspectResponse{Config: &container.Config{Cmd: args}})
 		require.Error(t, err, "%v", args)

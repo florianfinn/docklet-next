@@ -70,7 +70,9 @@ func TestP15OwnedRouteCRUDPreservesEveryOtherByte(t *testing.T) {
 	x.put("routes/foreign.caddy", "# untouched sibling\nother.example.net {\n respond ok\n}\n")
 	s.Upstreams = []string{"http://192.0.2.81:8080"}
 	q = x.request("edit-route", s)
-	q.Change.Advanced = strings.Replace(q.Change.Advanced, "  route {", "\t route {", 1)
+	// Non-canonical text (leading blank line, tab indentation, trailing blank lines) is
+	// written exactly as submitted.
+	q.Change.Advanced = "\n" + strings.Replace(q.Change.Advanced, "  route {", "\t route {", 1) + "\n\n"
 	o, err = applyChecked(t, x.a, q)
 	require.NoError(t, err)
 	require.Equal(t, dto.Verified, o.State)
