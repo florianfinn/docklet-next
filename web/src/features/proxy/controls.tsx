@@ -91,7 +91,7 @@ export function ProxyDialog({
       }}
     >
       <DialogContent
-        className="[&_button]:max-w-full [&_button]:whitespace-normal max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-2xl"
+        className="[&_button]:max-w-full [&_button]:whitespace-normal max-h-[calc(100dvh-2rem)] min-w-0 grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl"
         onEscapeKeyDown={e => {
           if (busy) e.preventDefault();
         }}
