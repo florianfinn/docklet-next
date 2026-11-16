@@ -71,7 +71,7 @@ func TestStagingWriterInspectionFailureReturnsOriginalError(t *testing.T) {
 		}
 		return false
 	}
-	_, err = x.e.load(t.Context(), x.i)
+	_, err = loadChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	boundary := count + 1
 	count = 0

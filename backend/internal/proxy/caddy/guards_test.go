@@ -246,7 +246,7 @@ func TestInventoryRootImportAndMountGuards(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := fixture(t)
 			tt.mutate(x)
-			inv, err := x.e.Inventory(t.Context(), x.i)
+			inv, err := inventoryChecked(t, x.e, x.i)
 			if tt.bad {
 				require.True(t, err != nil || !inv.Eligibility.Writable, "must refuse bad inventory")
 			} else {
@@ -286,7 +286,7 @@ func TestImportCyclesDepthAndStagingIsolation(t *testing.T) {
 			i, err := prepareChecked(t, x.e, q)
 			require.NoError(t, err)
 			i.StagingPath = "routes/.docklet-staging-example"
-			require.NoError(t, x.e.Validate(t.Context(), i))
+			require.NoError(t, validateChecked(t, x.e, i))
 			require.NoError(t, x.d.Cleanup(t.Context(), i))
 			x.noTransient()
 		})

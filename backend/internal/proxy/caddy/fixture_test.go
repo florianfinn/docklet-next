@@ -67,17 +67,40 @@ type dockerFixture struct {
 	fault     func(http.ResponseWriter, *http.Request) bool
 }
 
+var fixtureSeedOnce sync.Once
+var fixtureSeedBytes []byte
+
+// Copy a closed, migrated test database rather than repeat unrelated settings
+// inserts in every Docker seam case. Each fixture still opens its own real DB.
+func seededDatabase(t *testing.T) string {
+	t.Helper()
+	fixtureSeedOnce.Do(func() {
+		database.SetGormLogger(logger.Default.LogMode(logger.Silent))
+		seed := filepath.Join(t.TempDir(), "seed.db")
+		db, err := database.Initialize(t.Context(), sqlitestore.URL(seed), database.MigrationOptions{})
+		require.NoError(t, err)
+		settingsService, err := settings.NewSettingsService(t.Context(), db)
+		require.NoError(t, err)
+		require.NoError(t, settingsService.EnsureDefaultSettings(t.Context()))
+		require.NoError(t, settingsService.Stop(context.Background()))
+		require.NoError(t, db.Close())
+		fixtureSeedBytes, err = os.ReadFile(seed)
+		require.NoError(t, err)
+	})
+	target := filepath.Join(t.TempDir(), "proxy.db")
+	require.NoError(t, os.WriteFile(target, fixtureSeedBytes, 0600))
+	return target
+}
+
 func fixture(t *testing.T) *dockerFixture {
 	t.Helper()
 	root := t.TempDir()
-	database.SetGormLogger(logger.Default.LogMode(logger.Silent))
-	db, err := database.Initialize(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "proxy.db")), database.MigrationOptions{})
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(seededDatabase(t)), database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	s, err := settings.NewSettingsService(t.Context(), db)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, s.Stop(context.Background())) })
-	require.NoError(t, s.EnsureDefaultSettings(t.Context()))
 	require.NoError(t, s.UpdateSetting(t.Context(), "projectsDirectory", root))
 	x := &dockerFixture{t: t, root: root, execs: map[string][]string{}, result: map[string]hostio.ExecResult{}, now: time.Date(2026, 11, 16, 1, 0, 0, 0, time.UTC)}
 	x.c = container.InspectResponse{ID: "example-caddy", Name: "/example-caddy", Config: &container.Config{Entrypoint: []string{"caddy"}, Cmd: []string{"run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"}}, HostConfig: &container.HostConfig{}, State: &container.State{Running: true, StartedAt: epoch}, Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: root, Destination: "/etc/caddy", RW: true}}}
@@ -88,7 +111,13 @@ func fixture(t *testing.T) *dockerFixture {
 	x.d = &proxy.DockerRuntime{Docker: dockerinternal.NewDockerClientService(t.Context(), nil, &config.Config{DockerHost: "tcp://" + strings.TrimPrefix(server.URL, "http://")}, nil), Settings: s, DB: db}
 	x.e = New(x.d).(*engine)
 	x.e.now = func() time.Time { x.mu.Lock(); defer x.mu.Unlock(); return x.now }
-	x.e.wait = func(ctx context.Context, d time.Duration) error { x.waits++; x.now = x.now.Add(d); return ctx.Err() }
+	x.e.wait = func(ctx context.Context, d time.Duration) error {
+		x.mu.Lock()
+		defer x.mu.Unlock()
+		x.waits++
+		x.now = x.now.Add(d)
+		return ctx.Err()
+	}
 	x.d.Engines = proxy.Engines{dto.Caddy: x.e}
 	x.a, err = proxy.NewAgent(db.DB, x.d, x.d.Engines)
 	require.NoError(t, err)

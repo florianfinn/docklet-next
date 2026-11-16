@@ -49,7 +49,7 @@ func TestP9P22SingleFileRootWithSelectedRouteDirectoryIsWritable(t *testing.T) {
 	x.serving()
 	x.c.Mounts = []container.MountPoint{{Type: mount.TypeBind, Source: filepath.Join(x.root, "Caddyfile"), Destination: "/etc/caddy/Caddyfile", RW: true}, {Type: mount.TypeBind, Source: filepath.Join(x.root, "routes"), Destination: "/etc/caddy/routes", RW: true}}
 	x.i.Source = dto.Source{Kind: dto.ProjectSource, Canonical: filepath.Join(x.root, "routes"), MountTarget: "/etc/caddy/routes"}
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.True(t, inv.Eligibility.Writable)
 	require.True(t, inv.ImportPresent)
@@ -63,7 +63,7 @@ func TestP9P22SingleFileRootWithSelectedRouteDirectoryIsWritable(t *testing.T) {
 	require.Equal(t, rootText, x.bytes("Caddyfile"))
 	x.noTransient()
 	x.put("Caddyfile", strings.TrimSuffix(rootText, "import /etc/caddy/routes/*.caddy\n"))
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Eligibility.Writable)
 	require.False(t, inv.ImportPresent)
@@ -106,13 +106,13 @@ func TestGlobalOptionShapesAndPersistenceWithoutResume(t *testing.T) {
 	x := fixture(t)
 	for _, options := range []string{"log {\n admin off\n persist_config off\n}\n", "admin off extra\npersist_config off extra\n"} {
 		x.put("Caddyfile", "{\n"+options+"}\nimport /etc/caddy/routes/*.caddy\n")
-		inv, err := x.e.Inventory(t.Context(), x.i)
+		inv, err := inventoryChecked(t, x.e, x.i)
 		require.NoError(t, err)
 		require.False(t, inv.AdminOff)
 		require.True(t, inv.PersistConfig)
 	}
 	x.put("Caddyfile", strings.Replace(rootText, "admin localhost:2019", "persist_config off", 1))
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Resume)
 	require.False(t, inv.PersistConfig)
@@ -143,12 +143,12 @@ func TestNestedRootMountGuardsAndSourceEligibility(t *testing.T) {
 	x.i.RootFile = "/etc/caddy/config/Caddyfile"
 	x.put("config/Caddyfile", "legacy.example.net {\n respond ok\n}\n")
 	x.c.Mounts = append(x.c.Mounts, container.MountPoint{Type: mount.TypeBind, Source: filepath.Join(x.root, "config"), Destination: "/etc/caddy/config", RW: true})
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.True(t, inv.Eligibility.Writable)
 	for _, change := range []func(){func() { x.c.Mounts[1].RW = false }, func() { x.c.Mounts[1].RW = true; x.c.Mounts[1].Source = filepath.Join(x.root, "unrelated") }} {
 		change()
-		inv, err = x.e.Inventory(t.Context(), x.i)
+		inv, err = inventoryChecked(t, x.e, x.i)
 		require.NoError(t, err)
 		require.False(t, inv.Eligibility.Writable)
 	}
@@ -240,5 +240,16 @@ func TestProbeUnavailableReasonsAndStoppedContainer(t *testing.T) {
 func renderChecked(t *testing.T, s Site) (text string, err error) {
 	t.Helper()
 	require.NotPanics(t, func() { text, err = s.Render() })
+	return
+}
+
+func inventoryChecked(t *testing.T, e *engine, i dto.Instance) (r dto.Inventory, err error) {
+	t.Helper()
+	require.NotPanics(t, func() { r, err = e.Inventory(t.Context(), i) })
+	return
+}
+func loadChecked(t *testing.T, e *engine, i dto.Instance) (g graph, err error) {
+	t.Helper()
+	require.NotPanics(t, func() { g, err = e.load(t.Context(), i) })
 	return
 }

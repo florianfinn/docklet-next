@@ -58,12 +58,12 @@ func TestGraphGlobalBudgets(t *testing.T) {
 func TestNestedMountMappingAndRootImportRefusals(t *testing.T) {
 	x := fixture(t)
 	x.c.Mounts = append(x.c.Mounts, container.MountPoint{Type: mount.TypeBind, Source: filepath.Join(x.root, "unrelated"), Destination: "/etc/caddy/routes", RW: true})
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Eligibility.Writable)
 	require.Equal(t, dto.SourceReadOnly, inv.Eligibility.Reason)
 	x.c.Mounts[1].Source = filepath.Join(x.root, "routes")
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.True(t, inv.Eligibility.Writable)
 	without := strings.TrimSuffix(rootText, "import /etc/caddy/routes/*.caddy\n")
@@ -90,11 +90,11 @@ func TestPrepareReadAndValidateErrors(t *testing.T) {
 	require.NoError(t, err)
 	for _, p := range []string{"/absolute/staging", "routes/ordinary"} {
 		i.StagingPath = p
-		require.ErrorContains(t, x.e.Validate(t.Context(), i), "invalid-input")
+		require.ErrorContains(t, validateChecked(t, x.e, i), "invalid-input")
 	}
 	i.StagingPath = "routes/.docklet-staging-example"
 	x.put("routes/extra.secret.caddy", "secret payload")
-	require.ErrorContains(t, x.e.Validate(t.Context(), i), "opaque-input")
+	require.ErrorContains(t, validateChecked(t, x.e, i), "opaque-input")
 	r, err := readChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.NotEmpty(t, r.OpaqueFiles)
@@ -104,7 +104,7 @@ func TestPrepareReadAndValidateErrors(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(x.root, "routes/extra.secret.caddy")))
 	x.i.RootFile = "/etc/caddy/other"
 	i.Request.Instance = x.i
-	require.Error(t, x.e.Validate(t.Context(), i))
+	require.Error(t, validateChecked(t, x.e, i))
 	x.i.RootFile = "/etc/caddy/Caddyfile"
 	x.put("routes/foreign.caddy", "foreign.example.net {\n respond ok\n}\n")
 	r, err = readChecked(t, x.e, x.i)
@@ -115,7 +115,7 @@ func TestPrepareReadAndValidateErrors(t *testing.T) {
 	require.ErrorContains(t, err, "container-changed")
 	_, err = prepareChecked(t, x.e, q)
 	require.ErrorContains(t, err, "container-changed")
-	require.Error(t, x.e.Validate(t.Context(), i))
+	require.Error(t, validateChecked(t, x.e, i))
 }
 func TestResumeRefusesBadAdminAndAdaptJSON(t *testing.T) {
 	for _, which := range []string{"adapt-fails", "adapt-json", "adapt-null", "admin-fails", "resume-admin-off"} {
@@ -181,14 +181,14 @@ func TestIntentStateDecoderAndNoCaddyMarker(t *testing.T) {
 func TestInventoryImportLocationAndDiagnostics(t *testing.T) {
 	x := fixture(t)
 	x.i.RootFile = ""
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.True(t, inv.Eligibility.Writable)
 	x.i.RootFile = "/etc/caddy/Caddyfile"
 	for _, dir := range []string{"", "routes\n"} {
 		i := x.i
 		i.RouteDirectory = dir
-		_, err := x.e.Read(t.Context(), i)
+		_, err := readChecked(t, x.e, i)
 		var p *dto.Problem
 		require.ErrorAs(t, err, &p)
 		require.Equal(t, dto.InvalidInput, p.Code)
@@ -200,7 +200,7 @@ func TestInventoryImportLocationAndDiagnostics(t *testing.T) {
 			x.put("other.caddy", "other.example.net {\n respond ok\n}\n")
 			x.put("Caddyfile", "import /etc/caddy/other.caddy\n")
 		}
-		inv, err = x.e.Inventory(t.Context(), x.i)
+		inv, err = inventoryChecked(t, x.e, x.i)
 		require.NoError(t, err)
 		require.False(t, inv.ImportPresent)
 		require.Equal(t, dto.ImportMissing, inv.Eligibility.Reason)
@@ -209,12 +209,12 @@ func TestInventoryImportLocationAndDiagnostics(t *testing.T) {
 		require.ErrorContains(t, err, "import-missing")
 	}
 	x.put("Caddyfile", rootText+"import /etc/caddy/{$FILE}\n")
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.Equal(t, dto.IncompleteInventory, inv.Eligibility.Reason)
 	x.put("extra/hidden.secret.caddy", "opaque payload")
 	x.put("Caddyfile", rootText+"import /etc/caddy/extra/*.caddy\n")
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Eligibility.Writable)
 	require.Equal(t, dto.OpaqueInput, inv.Eligibility.Reason)
@@ -264,11 +264,11 @@ func TestOrphanedFilesAndMissingRouteDirectoryStayReadOnly(t *testing.T) {
 	without := strings.TrimSuffix(rootText, "import /etc/caddy/routes/*.caddy\n")
 	x.put("Caddyfile", without)
 	require.NoError(t, os.Remove(filepath.Join(x.root, "routes")))
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Eligibility.Writable)
 	x.put("routes/extra.secret.caddy", "opaque payload")
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Eligibility.Writable)
 	require.Equal(t, dto.OpaqueInput, inv.Eligibility.Reason)
@@ -280,12 +280,12 @@ func TestOrphanedFilesAndMissingRouteDirectoryStayReadOnly(t *testing.T) {
 func TestGlobalOptionsIgnoreUnusedSnippetsAndSiteBlocks(t *testing.T) {
 	x := fixture(t)
 	x.put("Caddyfile", rootText+"(unused) {\n admin off\n persist_config off\n}\n")
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.AdminOff)
 	require.True(t, inv.PersistConfig)
 	x.put("Caddyfile", "{\n admin 127.0.0.1:2020\n persist_config on\n}\nimport /etc/caddy/routes/*.caddy\n")
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.AdminOff)
 	require.Equal(t, "127.0.0.1:2020", inv.AdminAddress)

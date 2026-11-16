@@ -163,12 +163,12 @@ func TestP9ResumeNormalizesJSONAndRequiresDivergenceAcknowledgement(t *testing.T
 		}
 		return hostio.ExecResult{}
 	}
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.True(t, inv.Resume)
 	require.False(t, inv.RunningDiverged)
 	running = "{\"apps\":{\"http\":{}}}"
-	inv, err = x.e.Inventory(t.Context(), x.i)
+	inv, err = inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.True(t, inv.RunningDiverged)
 	q := x.request("create-route", baseSite())
@@ -242,7 +242,7 @@ func TestP22P23EligibilityFromRealCommandMountsAndSecretArchive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := fixture(t)
 			tt.change(x)
-			inv, err := x.e.Inventory(t.Context(), x.i)
+			inv, err := inventoryChecked(t, x.e, x.i)
 			require.NoError(t, err)
 			require.False(t, inv.Eligibility.Writable)
 			require.Equal(t, tt.reason, inv.Eligibility.Reason)
@@ -259,7 +259,7 @@ func TestP28ImportInsertionAndReinsertionOnlyAppendsOneTopLevelLine(t *testing.T
 	without := strings.TrimSuffix(rootText, "import /etc/caddy/routes/*.caddy\n")
 	x.put("Caddyfile", without)
 	for n := 0; n < 2; n++ {
-		inv, err := x.e.Inventory(t.Context(), x.i)
+		inv, err := inventoryChecked(t, x.e, x.i)
 		require.NoError(t, err)
 		require.False(t, inv.ImportPresent)
 		require.True(t, inv.Eligibility.Writable)
@@ -275,7 +275,7 @@ func TestP28ImportInsertionAndReinsertionOnlyAppendsOneTopLevelLine(t *testing.T
 		x.put("Caddyfile", without)
 	}
 	x.c.Mounts = append(x.c.Mounts, container.MountPoint{Type: mount.TypeBind, Source: filepath.Join(x.root, "Caddyfile"), Destination: "/etc/caddy/Caddyfile", RW: true})
-	inv, err := x.e.Inventory(t.Context(), x.i)
+	inv, err := inventoryChecked(t, x.e, x.i)
 	require.NoError(t, err)
 	require.False(t, inv.Eligibility.Writable)
 	require.False(t, inv.ImportPresent)
@@ -394,7 +394,7 @@ func TestP23CrashAfterStagingRemovesCandidateGraph(t *testing.T) {
 	i.TempPath = "routes/.docklet-" + q.ID + ".tmp"
 	i.StagingPath = "routes/.docklet-staging-" + q.ID
 	require.NoError(t, x.d.Stage(t.Context(), i))
-	require.NoError(t, x.e.Validate(t.Context(), i))
+	require.NoError(t, validateChecked(t, x.e, i))
 	digest, err := proxy.Digest(q)
 	require.NoError(t, err)
 	intent, err := json.Marshal(i)

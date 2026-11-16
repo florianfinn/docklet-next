@@ -70,7 +70,7 @@ func TestResumeInventoryAndPreparationErrorDiagnostics(t *testing.T) {
 			}
 			return hostio.ExecResult{Stdout: []byte("bad")}
 		}
-		inv, err := x.e.Inventory(t.Context(), x.i)
+		inv, err := inventoryChecked(t, x.e, x.i)
 		require.NoError(t, err)
 		require.False(t, inv.Eligibility.Writable)
 		require.Equal(t, dto.AdminUnavailable, inv.Eligibility.Reason)
@@ -182,7 +182,7 @@ func TestInsertImportRechecksFreshRootMount(t *testing.T) {
 				}
 				return false
 			}
-			_, err := x.e.load(t.Context(), x.i)
+			_, err := loadChecked(t, x.e, x.i)
 			require.NoError(t, err)
 			boundary := count + 1
 			count = 0
