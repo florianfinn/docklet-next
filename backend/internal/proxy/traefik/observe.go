@@ -89,7 +89,8 @@ var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 // router, service or middleware in scope; other providers' records (ACME,
 // docker) and unrelated routers never reject a change.
 func providerError(line string, scope []string) bool {
-	lower := strings.ToLower(ansi.ReplaceAllString(line, ""))
+	plain := ansi.ReplaceAllString(line, "")
+	lower := strings.ToLower(plain)
 	// Provider parser errors and router-build failures appear at INFO and ERROR;
 	// JSON error records may have no message field at all.
 	failure := strings.Contains(lower, `"error":`) || strings.Contains(lower, " error=") || strings.Contains(lower, " err ") || strings.Contains(lower, "level=error") || strings.Contains(lower, `"level":"error"`) || strings.HasPrefix(lower, "err ")
@@ -102,8 +103,9 @@ func providerError(line string, scope []string) bool {
 	if strings.Contains(lower, "file provider") || strings.Contains(lower, "configuration file") {
 		return true
 	}
+	// Traefik names are case-sensitive: app@file and App@file are distinct.
 	for _, n := range scope {
-		if mentions(lower, strings.ToLower(n)) {
+		if mentions(plain, n) {
 			return true
 		}
 	}
@@ -122,23 +124,23 @@ func logProvider(lower string) (string, bool) {
 	return "", false
 }
 
-// mentions matches a qualified name only as a whole token.
-func mentions(lower, name string) bool {
+// mentions matches a qualified name only as a whole token, byte for byte.
+func mentions(text, name string) bool {
 	for from := 0; ; {
-		i := strings.Index(lower[from:], name)
+		i := strings.Index(text[from:], name)
 		if i < 0 {
 			return false
 		}
 		i += from
 		end := i + len(name)
-		if (i == 0 || !nameByte(lower[i-1])) && (end == len(lower) || !nameByte(lower[end])) {
+		if (i == 0 || !nameByte(text[i-1])) && (end == len(text) || !nameByte(text[end])) {
 			return true
 		}
 		from = i + 1
 	}
 }
 func nameByte(b byte) bool {
-	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '-' || b == '_' || b == '.' || b == '@'
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '-' || b == '_' || b == '.' || b == '@'
 }
 func (e *engine) checkLogs(ctx context.Context, i dto.Instance, since time.Time, scope []string) error {
 	if since.IsZero() {

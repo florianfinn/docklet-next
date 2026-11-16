@@ -156,6 +156,15 @@ func canonicalMatcher(name string) string {
 	}
 	return name
 }
+
+// canonicalRule spells a rule's leading matcher canonically for literal comparisons.
+func canonicalRule(rule string) string {
+	rule = strings.TrimSpace(rule)
+	if i := strings.IndexByte(rule, '('); i > 0 {
+		return canonicalMatcher(rule[:i]) + rule[i:]
+	}
+	return rule
+}
 func checkMatcher(name string, a []string) error {
 	n := 1
 	switch name {

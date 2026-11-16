@@ -191,3 +191,22 @@ func TestSubdirectoryFilesAreNotWritable(t *testing.T) {
 	_, err = x.attempt(r)
 	requireCode(t, err, dto.WatchOff)
 }
+
+func TestLogScopeComparesNamesByteForByte(t *testing.T) {
+	for _, tt := range []struct {
+		line  string
+		scope string
+		want  bool
+	}{
+		{`{"level":"error","routerName":"App@file","error":"bad"}`, "App@file", true},
+		{`ERR error="bad" routerName=App@file`, "App@file", true},
+		{`{"level":"error","serviceName":"Svc@file","error":"bad"}`, "Svc@file", true},
+		{`ERR error="bad" middlewareName=Mw@file`, "Mw@file", true},
+		{`{"level":"error","routerName":"App@file","error":"bad"}`, "app@file", false},
+		{`{"level":"error","serviceName":"svc@file","error":"bad"}`, "Svc@file", false},
+		{`ERR error="bad" middlewareName=MW@file`, "Mw@file", false},
+		{`ERR rejected routerName=MYapp@file`, "app@file", false},
+	} {
+		require.Equal(t, tt.want, providerError(tt.line, []string{tt.scope}), "%s / %s", tt.line, tt.scope)
+	}
+}

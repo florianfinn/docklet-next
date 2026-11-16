@@ -319,11 +319,12 @@ file-driver logs are `logs-unavailable`, never "no error".
   an environment location without a found file makes the inventory incomplete.
   Plain integer durations are seconds; `experimental.localPlugins` count as
   plugins. Rules follow `rules.CheckRule`: empty matcher arguments are refused,
-  and each matcher is accepted in exact, lower, upper and title case.
+  and each matcher is accepted in exact, lower, upper and title case; catch-all
+  recognition applies to every accepted spelling.
 - Log rejection is scoped: an error record counts when it is an aggregate
   file-provider error (`providerName` `file`) or names a router, service or
   middleware of the target (old or new side) or one of its references as a whole
-  token. Other providers' records (ACME issuance, docker) and unrelated routers
+  token, compared byte for byte (Traefik names are case-sensitive). Other providers' records (ACME issuance, docker) and unrelated routers
   never reject a change. The opaque-file health check counts aggregate
   file-provider errors only.
 - Docker label routes are shown read-only and link to the stack editor when the
