@@ -37,7 +37,8 @@ func TestCheckAndEpochRealDockerSeam(t *testing.T) {
 		{"no state", func(c *container.InspectResponse) { c.State = nil }, "", dto.ContainerChanged},
 		{"changed source", func(c *container.InspectResponse) { c.Mounts[0].Source = root + "-other" }, dto.SourceReadOnly, ""},
 		{"changed kind", func(c *container.InspectResponse) { c.Mounts[0].Type = mount.TypeVolume }, dto.SourceReadOnly, ""},
-		{"read-only", func(c *container.InspectResponse) { c.Mounts[0].RW = false }, dto.SourceReadOnly, ""},
+		// Proxy-side mount access is not writer authority (Q-SRC); the source stays the same.
+		{"proxy-side read-only mount", func(c *container.InspectResponse) { c.Mounts[0].RW = false }, "", ""},
 		{"other mount target", func(c *container.InspectResponse) { c.Mounts[0].Destination = "/etc/elsewhere" }, dto.SourceReadOnly, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

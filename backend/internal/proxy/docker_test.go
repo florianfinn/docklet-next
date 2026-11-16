@@ -42,7 +42,9 @@ func TestP17SourceSelectionAndReinspection(t *testing.T) {
 		{"named-volume", "/example/volumes/data", mount.TypeVolume, true, true, dto.NamedVolume, true},
 		{"refused-bind", "/etc/proxy", mount.TypeBind, true, true, dto.BindSource, false},
 		{"single-file", project, mount.TypeBind, false, true, dto.SingleFileSource, false},
-		{"readonly", project, mount.TypeBind, true, false, dto.ProjectSource, false},
+		// Proxy-side read-only mounts keep the module's writer (Q-SRC): project writer or helper.
+		{"proxy-side-readonly-project", project, mount.TypeBind, true, false, dto.ProjectSource, true},
+		{"proxy-side-readonly-volume", "/example/volumes/data", mount.TypeVolume, true, false, dto.NamedVolume, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mu := sync.Mutex{}

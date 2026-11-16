@@ -49,7 +49,10 @@ func (d *DockerRuntime) inspect(ctx context.Context, name string) (container.Ins
 	return r.Container, err
 }
 func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse, m container.MountPoint) (dto.Source, error) {
-	source := dto.Source{Canonical: path.Clean(m.Source), MountTarget: m.Destination, ReadOnly: !m.RW, Kind: dto.UnknownSourceKind}
+	// Writability follows the module's writer (agent project writer or volume/bind
+	// helper, Q-SRC), not the proxy container's own mount access: a proxy may mount
+	// its configuration read-only and still be configured through Docklet.
+	source := dto.Source{Canonical: path.Clean(m.Source), MountTarget: m.Destination, Kind: dto.UnknownSourceKind}
 	cli, err := d.Docker.GetClient(ctx)
 	if err != nil {
 		return source, err
@@ -82,9 +85,6 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 	default:
 		source.ReadOnly = true
 		source.Reason = dto.UnknownSource
-	}
-	if !m.RW {
-		source.Reason = dto.ReadOnlyMount
 	}
 	return source, nil
 }

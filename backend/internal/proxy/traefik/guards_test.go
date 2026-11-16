@@ -62,11 +62,11 @@ func TestInventoryStaticSelectorsAndFallbackFaults(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, v.Eligibility.Writable)
 	x.archiveStatus = nil
+	// A proxy-side read-only mount is not a read-only source: the agent writes the project directory itself (Q-SRC).
 	x.inspect.Mounts[0].RW = false
-	x.i.Source.ReadOnly = true
 	v, err = x.inventory()
 	require.NoError(t, err)
-	require.False(t, v.Eligibility.Writable)
+	require.True(t, v.Eligibility.Writable, "%+v", v.Eligibility)
 }
 func TestInventoryArgumentBoundariesAndIdentityProjection(t *testing.T) {
 	x := fixture(t)
@@ -377,14 +377,11 @@ func TestFilenameProviderOnDirectorySourceReadsOnlyItsFile(t *testing.T) {
 	x := fixture(t)
 	x.inspect.Config.Cmd = []string{"--providers.file.filename=/etc/traefik/dynamic/routes.yml", "--entrypoints.web.address=:80"}
 	x.put("dynamic/ignored.yml", "http: [")
-	x.i.Source.ReadOnly = true
-	x.i.Source.Reason = dto.ReadOnlyMount
-	x.inspect.Mounts[0].RW = false
 	r, err := x.readResult()
 	require.NoError(t, err)
 	require.Len(t, r.Files, 1)
 	require.Equal(t, "dynamic/routes.yml", r.Files[0].Path)
-	require.Equal(t, dto.ReadOnlyMount, r.Eligibility.Reason)
+	require.Equal(t, dto.SingleFileMount, r.Eligibility.Reason)
 }
 
 func TestOpaqueFilenameProviderProjectsOnlyRelativeName(t *testing.T) {

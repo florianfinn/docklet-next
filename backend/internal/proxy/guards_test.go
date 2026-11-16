@@ -202,7 +202,7 @@ func rebindCases(t *testing.T, kind, other mount.Type, source dto.SourceKind) {
 		{"same source", func(*container.InspectResponse) {}, true},
 		{"changed kind", func(c *container.InspectResponse) { c.Mounts[0].Type = other }, false},
 		{"changed source", func(c *container.InspectResponse) { c.Mounts[0].Source = root + "-other" }, false},
-		{"read-only", func(c *container.InspectResponse) { c.Mounts[0].RW = false }, false},
+		{"proxy-side read-only", func(c *container.InspectResponse) { c.Mounts[0].RW = false }, true},
 		{"other mount target", func(c *container.InspectResponse) { c.Mounts[0].Destination = "/etc/elsewhere" }, false},
 		{"gone", nil, false},
 	} {
