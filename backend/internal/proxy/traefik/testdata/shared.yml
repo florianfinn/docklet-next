@@ -1,0 +1,233 @@
+# Source: web/src/features/design-lab/proxy/traefik-import.test.ts
+# Revision: e4b866c08d58a2b47df3d320e92f0729b7f0db2e
+# Retrieved: 2026-11-16
+# License: Apache-2.0
+# Deviations: Ported template literal as a YAML fixture; kept the 130 maintenance comments.
+# Maintenance note 1
+# Maintenance note 2
+# Maintenance note 3
+# Maintenance note 4
+# Maintenance note 5
+# Maintenance note 6
+# Maintenance note 7
+# Maintenance note 8
+# Maintenance note 9
+# Maintenance note 10
+# Maintenance note 11
+# Maintenance note 12
+# Maintenance note 13
+# Maintenance note 14
+# Maintenance note 15
+# Maintenance note 16
+# Maintenance note 17
+# Maintenance note 18
+# Maintenance note 19
+# Maintenance note 20
+# Maintenance note 21
+# Maintenance note 22
+# Maintenance note 23
+# Maintenance note 24
+# Maintenance note 25
+# Maintenance note 26
+# Maintenance note 27
+# Maintenance note 28
+# Maintenance note 29
+# Maintenance note 30
+# Maintenance note 31
+# Maintenance note 32
+# Maintenance note 33
+# Maintenance note 34
+# Maintenance note 35
+# Maintenance note 36
+# Maintenance note 37
+# Maintenance note 38
+# Maintenance note 39
+# Maintenance note 40
+# Maintenance note 41
+# Maintenance note 42
+# Maintenance note 43
+# Maintenance note 44
+# Maintenance note 45
+# Maintenance note 46
+# Maintenance note 47
+# Maintenance note 48
+# Maintenance note 49
+# Maintenance note 50
+# Maintenance note 51
+# Maintenance note 52
+# Maintenance note 53
+# Maintenance note 54
+# Maintenance note 55
+# Maintenance note 56
+# Maintenance note 57
+# Maintenance note 58
+# Maintenance note 59
+# Maintenance note 60
+# Maintenance note 61
+# Maintenance note 62
+# Maintenance note 63
+# Maintenance note 64
+# Maintenance note 65
+# Maintenance note 66
+# Maintenance note 67
+# Maintenance note 68
+# Maintenance note 69
+# Maintenance note 70
+# Maintenance note 71
+# Maintenance note 72
+# Maintenance note 73
+# Maintenance note 74
+# Maintenance note 75
+# Maintenance note 76
+# Maintenance note 77
+# Maintenance note 78
+# Maintenance note 79
+# Maintenance note 80
+# Maintenance note 81
+# Maintenance note 82
+# Maintenance note 83
+# Maintenance note 84
+# Maintenance note 85
+# Maintenance note 86
+# Maintenance note 87
+# Maintenance note 88
+# Maintenance note 89
+# Maintenance note 90
+# Maintenance note 91
+# Maintenance note 92
+# Maintenance note 93
+# Maintenance note 94
+# Maintenance note 95
+# Maintenance note 96
+# Maintenance note 97
+# Maintenance note 98
+# Maintenance note 99
+# Maintenance note 100
+# Maintenance note 101
+# Maintenance note 102
+# Maintenance note 103
+# Maintenance note 104
+# Maintenance note 105
+# Maintenance note 106
+# Maintenance note 107
+# Maintenance note 108
+# Maintenance note 109
+# Maintenance note 110
+# Maintenance note 111
+# Maintenance note 112
+# Maintenance note 113
+# Maintenance note 114
+# Maintenance note 115
+# Maintenance note 116
+# Maintenance note 117
+# Maintenance note 118
+# Maintenance note 119
+# Maintenance note 120
+# Maintenance note 121
+# Maintenance note 122
+# Maintenance note 123
+# Maintenance note 124
+# Maintenance note 125
+# Maintenance note 126
+# Maintenance note 127
+# Maintenance note 128
+# Maintenance note 129
+# Maintenance note 130
+http:
+  # Application routing
+  routers:
+    redirect:
+      # HTTP catch-all
+      rule: PathPrefix(`/`)
+      entryPoints: [web]
+      middlewares: [https]
+      service: noop
+    wildcard: # Requests the shared certificate
+      rule: HostRegexp(`^[a-z0-9-]+\.example\.com$`)
+      entryPoints: [websecure]
+      service: wildcard
+      tls:
+        # Issuance is owned by Traefik
+        certResolver: dns-primary # Keep the resolver annotation
+        domains:
+          - main: example.com # Certificate scope
+            sans: ['*.example.com']
+    # Exact application route
+    app-one:
+      rule: 'Host("app.example.com")' # Keep quoting
+      entryPoints: [websecure] # Public listener
+      middlewares: [auth, other@file]
+      service: app-one
+      tls: {} # Uses the certificate store
+    app-two:
+      rule: Host(`two.example.com`)
+      service: shared
+      tls: {}
+    app-three:
+      rule: Host(`three.example.com`)
+      service: shared
+      tls: {}
+    files:
+      rule: Host(`files.example.net`) && PathPrefix(`/files`)
+      service: shared
+      tls: {}
+    priority:
+      rule: Host(`priority.example.com`)
+      service: priority
+      priority: 100 # Deliberately outside the form
+      tls: {}
+    path:
+      rule: Host(`priority.example.com`) && Path(`/exact`)
+      service: priority
+    internal:
+      rule: Host(`internal.example.net`)
+      entryPoints: [internal-https]
+      service: internal
+      tls: {}
+    internal-two:
+      rule: Host(`second.example.net`)
+      service: internal
+      tls: {}
+    plugin-route:
+      rule: Host(`plugin.example.net`)
+      service: plugin-route
+      middlewares: [security-plugin, private-auth@file, foreign@docker]
+      tls: {}
+  # Services are independent configuration entries
+  services:
+    noop:
+      loadBalancer:
+        servers: [{url: 'http://192.0.2.1:1'}]
+    wildcard:
+      loadBalancer:
+        servers: [{url: 'http://192.0.2.10:8080'}]
+    app-one: # Owned by one router
+      loadBalancer:
+        servers: [{url: 'http://192.0.2.11:8080'}]
+    shared: # Shared by three routers
+      loadBalancer:
+        servers: [{url: 'http://192.0.2.12:8080'}]
+    priority:
+      loadBalancer:
+        servers: [{url: 'https://[2001:db8::10]:8443'}]
+    internal:
+      loadBalancer:
+        servers: [{url: 'http://198.51.100.10:8080'}]
+    plugin-route:
+      loadBalancer:
+        servers: [{url: 'http://203.0.113.10:8080'}]
+  # Middleware annotations are preserved as well
+  middlewares:
+    https:
+      redirectScheme: {scheme: https, permanent: true}
+    headers:
+      headers: {frameDeny: true}
+    auth:
+      forwardAuth: {address: 'https://auth.example.net'}
+    security-plugin:
+      plugin: {example: {enabled: true}}
+    compression:
+      compress: {}
+    strip:
+      stripPrefix: {prefixes: [/api]}
+# File footer

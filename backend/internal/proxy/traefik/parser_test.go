@@ -1,0 +1,172 @@
+// Source: docklet-next/issues/473
+// Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
+// Retrieved: 2026-11-16
+// License: Apache-2.0
+// Deviations: Original Traefik v3 engine.
+
+package traefik
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	dto "github.com/florianfinn/docklet-next/types/proxy"
+	"github.com/stretchr/testify/require"
+)
+
+func TestP26V3RuleGrammar(t *testing.T) {
+	valid := []string{"Host(`app.example.com`)", "HostRegexp(`^[a-z0-9-]+\\.example\\.com$`)", "Path(`/exact`)", "PathPrefix(`/api`)", "PathRegexp(`^/v[0-9]+/`)", "Method(`GET`)", "Header(`X-Example`, `on`)", "HeaderRegexp(`X-Example`, `^on$`)", "Query(`enabled`)", "Query(`enabled`, `yes`)", "QueryRegexp(`enabled`, `yes|on`)", "ClientIP(`192.0.2.0/24`)", "ClientIP(`2001:db8::1`)", `!(Host("a.example.com") || Host("b.example.net")) && (PathPrefix("/api") || !Method("POST"))`}
+	for _, rule := range valid {
+		t.Run("valid/"+rule, func(t *testing.T) { _, err := parseRule(rule); require.NoError(t, err) })
+	}
+	invalid := []string{"", "Unknown(`value`)", "Headers(`X-Example`, `on`)", "Host(`a.example.com`, `b.example.com`)", "HostRegexp(`{subdomain:[a-z]+}.example.com`)", "PathRegexp(`[`)", "HeaderRegexp(`X`, `[`)", "ClientIP(`bad`)", "Method(`get`)", "Path(`relative`)", "Host('app.example.com')", "Host(`app.example.com`) &&", "(Host(`app.example.com`)", "Host(`app.example.com`))", "Host(`app.example.com`) + Path(`/`)", "Host(\"bad\\q\")", "Host(`a\nexample.com`)", "Header(`X`)", "QueryRegexp(`x`)", "Host(``)", "ClientIP(`999.0.0.1`)", "Host(`a.example.com`) trailing", "!"}
+	for _, rule := range invalid {
+		t.Run("invalid/"+rule, func(t *testing.T) {
+			_, err := parseRule(rule)
+			require.Error(t, err, "invalid matcher must not publish")
+		})
+	}
+}
+func shared(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("testdata/shared.yml")
+	require.NoError(t, err)
+	return string(b)
+}
+func TestP15GoldenBytesPerEditKind(t *testing.T) {
+	source := shared(t)
+	cases := []struct {
+		name, router string
+		patch        map[string]any
+		from, to     string
+	}{
+		{"rule", "app-one", map[string]any{"rule": `Host("new.example.com")`}, `Host("app.example.com")`, `Host("new.example.com")`},
+		{"listener", "app-one", map[string]any{"entryPoints": []string{"internal-https"}}, "entryPoints: [websecure] # Public", "entryPoints: [internal-https] # Public"},
+		{"middleware", "app-one", map[string]any{"middlewares": []string{"headers", "other@file"}}, "middlewares: [auth, other@file]", "middlewares: [headers, other@file]"},
+		{"service", "app-one", map[string]any{"service": "replacement"}, "service: app-one\n", "service: replacement\n"},
+		{"resolver", "wildcard", map[string]any{"tls": map[string]any{"certResolver": "dns-secondary"}}, "certResolver: dns-primary", "certResolver: dns-secondary"},
+		{"priority", "priority", map[string]any{"priority": 101}, "priority: 100 #", "priority: 101 #"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			d, err := parseDocument(source, "routes.yml")
+			require.NoError(t, err)
+			var edits []edit
+			require.NoError(t, d.patch(at(d.root, "http", "routers", tt.router), tt.patch, &edits))
+			out, err := d.apply(edits)
+			require.NoError(t, err)
+			require.Equal(t, strings.Replace(source, tt.from, tt.to, 1), out, "only the intended span changes")
+		})
+	}
+	t.Run("upstream", func(t *testing.T) {
+		d, err := parseDocument(source, "")
+		require.NoError(t, err)
+		var edits []edit
+		require.NoError(t, d.patch(at(d.root, "http", "services", "app-one", "loadBalancer"), map[string]any{"servers": servers([]string{"http://192.0.2.21:8080"})}, &edits))
+		out, err := d.apply(edits)
+		require.NoError(t, err)
+		require.Equal(t, strings.Replace(source, "http://192.0.2.11:8080", "http://192.0.2.21:8080", 1), out)
+	})
+	t.Run("noop", func(t *testing.T) {
+		d, err := parseDocument(source, "")
+		require.NoError(t, err)
+		for _, key := range keys(at(d.root, "http", "routers")) {
+			var edits []edit
+			n := at(d.root, "http", "routers", key)
+			require.NoError(t, d.patch(n, value(n).(map[string]any), &edits))
+			out, err := d.apply(edits)
+			require.NoError(t, err)
+			require.Equal(t, source, out)
+		}
+	})
+	t.Run("delete", func(t *testing.T) {
+		d, err := parseDocument(source, "")
+		require.NoError(t, err)
+		routers := at(d.root, "http", "routers")
+		for j := 0; j < len(routers.Content); j += 2 {
+			if routers.Content[j].Value == "app-two" {
+				ed, err := d.remove(routers, j)
+				require.NoError(t, err)
+				out, err := d.apply([]edit{ed})
+				require.NoError(t, err)
+				start := strings.Index(source, "    app-two:")
+				end := strings.Index(source, "    app-three:")
+				require.Equal(t, source[:start]+source[end:], out)
+			}
+		}
+	})
+}
+func TestSpanRefusalsAndStructuralEdits(t *testing.T) {
+	for _, s := range []string{"http: &defaults {}\ncopy: *defaults\n", "http: !!map {}\n", "http: {}\nhttp: {}\n", "http: [", "[]", "http: {}\n---\nhttp: {}", "? [a,b]\n: value"} {
+		_, err := parseDocument(s, "")
+		require.Error(t, err, s)
+	}
+	d, err := parseDocument(strings.ReplaceAll(tiny, "\n", "\r\n"), "")
+	require.Error(t, err)
+	d, err = parseDocument("http: {routers: {app: {rule: 'Host(`app.example.com`)', service: app}}}\n", "")
+	require.NoError(t, err)
+	_, err = d.remove(at(d.root, "http", "routers"), 0)
+	require.Error(t, err)
+	d, err = parseDocument(tiny, "")
+	require.NoError(t, err)
+	ed, err := d.remove(at(d.root, "http", "routers"), 0)
+	require.NoError(t, err)
+	next, err := d.apply([]edit{ed})
+	require.NoError(t, err)
+	parsed, err := parseDocument(next, "")
+	require.NoError(t, err)
+	require.Empty(t, keys(at(parsed.root, "http", "routers")))
+	require.NotNil(t, at(parsed.root, "http", "services", "app"))
+	d, err = parseDocument(tiny, "")
+	require.NoError(t, err)
+	var edits []edit
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"priority": 10, "middlewares": []string{"headers"}}, &edits))
+	next, err = d.apply(edits)
+	require.NoError(t, err)
+	require.Contains(t, next, "      priority: 10\n")
+	require.Contains(t, next, "      middlewares:\n        - headers\n")
+}
+func TestClassifierPrototypeParityAndAcceptedExtensions(t *testing.T) {
+	d, err := parseDocument(shared(t), "routes.yml")
+	require.NoError(t, err)
+	other, err := parseDocument("http:\n  middlewares:\n    other:\n      headers: {}\n", "")
+	require.NoError(t, err)
+	docs := map[string]*document{"routes.yml": d, "other.yml": other}
+	opaque := []dto.OpaqueFile{{Path: "auth.secret.yml"}}
+	routes := classify(docs, opaque, dto.Inventory{Providers: []string{"file", "docker"}})
+	require.Len(t, routes, 11)
+	for _, r := range routes {
+		if r.Name == "redirect" {
+			require.Equal(t, "infrastructure", r.Class)
+		} else {
+			require.Equal(t, "editable", r.Class, r.Name)
+		}
+	}
+	app, _ := findRoute(routes, "app-one", "routes.yml")
+	require.Equal(t, []dto.Reference{{Name: "auth", Kind: "local", File: "routes.yml"}, {Name: "other@file", Kind: "local", File: "other.yml"}}, app.References)
+	plugin, _ := findRoute(routes, "plugin-route", "routes.yml")
+	require.Equal(t, []dto.Reference{{Name: "security-plugin", Kind: "plugin", File: "routes.yml"}, {Name: "private-auth@file", Kind: "opaque", File: "auth.secret.yml"}, {Name: "foreign@docker", Kind: "external"}}, plugin.References)
+	appTwo, _ := findRoute(routes, "app-two", "routes.yml")
+	require.Len(t, appTwo.Dependants, 3)
+	for _, tt := range []struct {
+		from, to string
+		class    string
+	}{
+		{"service: app-one", "service: missing@docker", "text-only"},
+		{"service: app-one", "service: app-one\n      observability: {}", "text-only"},
+		{"tls: {} # Uses", "tls: {options: strict} # Uses", "text-only"},
+		{"servers: [{url: 'http://192.0.2.11:8080'}]", "servers: [{url: 'http://192.0.2.11:8080', weight: 2}]", "text-only"},
+		{`rule: 'Host("app.example.com")'`, `rule: Path(` + "`/exact`" + `)`, "editable"},
+		{`rule: 'Host("app.example.com")'`, `rule: Host(` + "`app.example.com`" + `) || Host(` + "`other.example.net`" + `)`, "editable"},
+		{`rule: 'Host("app.example.com")'`, `rule: HostRegexp(` + "`.*example.com`" + `)`, "editable"},
+		{`rule: 'Host("app.example.com")'`, `rule: Header(` + "`X-Example`" + `, ` + "`on`" + `)`, "editable"},
+	} {
+		t.Run(tt.to, func(t *testing.T) {
+			doc, err := parseDocument(strings.Replace(shared(t), tt.from, tt.to, 1), "")
+			require.NoError(t, err)
+			r, _ := findRoute(classify(map[string]*document{"routes.yml": doc}, opaque, dto.Inventory{}), "app-one", "routes.yml")
+			require.Equal(t, tt.class, r.Class)
+		})
+	}
+}
