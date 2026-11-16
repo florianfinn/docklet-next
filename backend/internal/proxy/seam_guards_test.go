@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -218,6 +219,8 @@ func TestRestartRecoveryEpochGuards(t *testing.T) {
 	for _, tt := range []struct{ name, before, after string }{
 		{"unparseable before", "example-invalid-timestamp", nextEpoch},
 		{"unparseable after", initialEpoch, "example-invalid-timestamp"},
+		// Year 0000 parses and sorts before the zero time a failed parse returns.
+		{"unparseable after an early before", "0000-01-01T00:00:00Z", "example-invalid-timestamp"},
 		{"not newer", initialEpoch, initialEpoch},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -441,4 +444,41 @@ func TestReleaseRefusesPendingJournal(t *testing.T) {
 	var j Journal
 	require.NoError(t, x.db.First(&j, "id = ?", x.request.ID).Error)
 	require.Equal(t, dto.Pending, j.State)
+}
+
+// Cleanup keeps a typed source refusal: after a transient directory-stat failure the
+// same container reads fine again, but Cleanup must not rebind and delete anything.
+// Adapted from the R5 review probe.
+func TestCleanupKeepsTypedSourceRefusal(t *testing.T) {
+	x := newFixture(t)
+	root := t.TempDir()
+	i := fileIntent(t, x, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, i.TempPath), i.New.Content, 0644))
+	var stats atomic.Int32
+	c := container.InspectResponse{ID: i.Request.Instance.Identity.ContainerID, Name: "/example-proxy", State: &container.State{Running: true, StartedAt: initialEpoch}, Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: root, Destination: "/etc/proxy", RW: true}}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/_ping"):
+			w.Header().Set("API-Version", "1.54")
+			_, _ = w.Write([]byte("OK"))
+		case strings.HasSuffix(r.URL.Path, "/json"):
+			_ = json.NewEncoder(w).Encode(c)
+		case strings.HasSuffix(r.URL.Path, "/archive"):
+			if stats.Add(1) == 1 {
+				w.WriteHeader(503)
+				return
+			}
+			b, _ := json.Marshal(container.PathStat{Name: "proxy", Mode: os.ModeDir | 0755})
+			w.Header().Set("X-Docker-Container-Path-Stat", base64.StdEncoding.EncodeToString(b))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	d := &DockerRuntime{Docker: dockerinternal.NewDockerClientService(t.Context(), nil, &config.Config{DockerHost: server.URL}, nil), Settings: x.settings, DB: x.db}
+	err := d.Cleanup(t.Context(), i)
+	requireCode(t, err, dto.SourceReadOnly)
+	b, err := os.ReadFile(filepath.Join(root, i.TempPath))
+	require.NoError(t, err)
+	require.Equal(t, "new", string(b))
 }
