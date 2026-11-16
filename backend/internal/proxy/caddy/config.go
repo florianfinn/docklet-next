@@ -170,7 +170,8 @@ func command(c container.InspectResponse) (string, bool, error) {
 	if !run || !path.IsAbs(root) || path.Clean(root) != root || strings.ContainsAny(root, "\x00\r\n") {
 		return "", false, problem(dto.IncompleteInventory, "", 0, "absolute Caddyfile path required")
 	}
-	if !adapter && !strings.HasPrefix(path.Base(root), "Caddyfile") {
+	// Like Caddy's own inference, a .json extension means JSON even after a Caddyfile prefix.
+	if !adapter && (!strings.HasPrefix(path.Base(root), "Caddyfile") || strings.EqualFold(path.Ext(root), ".json")) {
 		return "", false, problem(dto.UnsupportedFormat, root, 0, "Caddyfile adapter required")
 	}
 	return root, resume, nil
