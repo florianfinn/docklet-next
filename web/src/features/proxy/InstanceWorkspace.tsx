@@ -144,6 +144,27 @@ export function InstanceWorkspace({
     }, true);
   };
   const blocked = busy || uncertain || rows.some(r => ["pending", "recovery-required"].includes(r.state));
+  // Settings stay reachable without a readable snapshot, so a stale instance can still be removed.
+  const settings = (inventory?: Inventory) => (
+    <Settings
+      key={JSON.stringify([instance.name, instance.rootFile, instance.routeDirectory])}
+      instance={instance}
+      inventory={inventory}
+      busy={blocked}
+      save={input => {
+        void run(async () => {
+          const i = await api.update(instance.id, input);
+          if (active.current) updated(i);
+        });
+      }}
+      remove={() => {
+        void run(async () => {
+          await api.remove(instance.id);
+          if (active.current) removed();
+        });
+      }}
+    />
+  );
   const writable = !!snapshot && routeWritesAllowed(snapshot.read, snapshot.inventory) && !blocked;
   return (
     <div className="grid min-w-0 gap-5">
@@ -169,6 +190,7 @@ export function InstanceWorkspace({
       )}
       {error !== undefined && <ErrorView error={error} />}
       {!snapshot && error === undefined && <p role="status">{t("loading")}</p>}
+      {!snapshot && error !== undefined && settings(undefined)}
       {snapshot && (
         <>
           <EligibilityView value={snapshot.inventory.eligibility} />
@@ -254,24 +276,7 @@ export function InstanceWorkspace({
               )}
             </TabsContent>
             <TabsContent value="settings" className="min-w-0 pt-3">
-              <Settings
-                key={JSON.stringify([instance.name, instance.rootFile, instance.routeDirectory])}
-                instance={instance}
-                inventory={snapshot.inventory}
-                busy={blocked}
-                save={input => {
-                  void run(async () => {
-                    const i = await api.update(instance.id, input);
-                    if (active.current) updated(i);
-                  });
-                }}
-                remove={() => {
-                  void run(async () => {
-                    await api.remove(instance.id);
-                    if (active.current) removed();
-                  });
-                }}
-              />
+              {settings(snapshot.inventory)}
             </TabsContent>
           </Tabs>
         </>

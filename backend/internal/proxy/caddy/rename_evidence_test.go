@@ -139,3 +139,33 @@ func TestLaterProbeClearsAnEarlierProbeFailureReason(t *testing.T) {
 	require.GreaterOrEqual(t, probes, 2)
 	require.Equal(t, proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference}, o)
 }
+
+// Candidate delta 1: a probe or readback cut off by the end of the observation window is
+// not the operation's reason (Traefik already maps this to no-observable-difference).
+func TestCallCutOffByWindowEndKeepsTheLastReason(t *testing.T) {
+	for _, adminOff := range []bool{true, false} {
+		x := fixture(t)
+		s := baseSite()
+		i := observationIntent(x, s, adminOff, "edit-route")
+		x.e.activated.Store(i.Request.ID, x.now.Add(-4800*time.Millisecond))
+		x.execFn = func(args []string) hostio.ExecResult {
+			if strings.Contains(args[len(args)-1], "/config/") {
+				return httpResult(200, configFor(s))
+			}
+			return httpResult(200, "")
+		}
+		x.fault = func(_ http.ResponseWriter, r *http.Request) bool {
+			if !strings.HasSuffix(r.URL.Path, "/start") {
+				return false
+			}
+			cmd := x.execs[strings.Split(apiVersion.ReplaceAllString(r.URL.Path, ""), "/")[2]]
+			if adminOff || strings.Contains(cmd[len(cmd)-1], "/config/") {
+				time.Sleep(400 * time.Millisecond) // the probe (admin off) or readback outlives the window
+			}
+			return false
+		}
+		o, err := x.e.Observe(t.Context(), i, false)
+		require.NoError(t, err)
+		require.Equal(t, proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference}, o, "admin off: %v", adminOff)
+	}
+}

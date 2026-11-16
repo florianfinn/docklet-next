@@ -181,6 +181,9 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		probeReason := s.ProbeReason
 		if site != nil {
 			after, probeErr := e.probe(ctx, i.Request.Instance, *site)
+			if probeErr != nil && ctx.Err() != nil && parent.Err() == nil {
+				return unverified(lastReason), nil // the window ended during the probe
+			}
 			unobservable = probeErr == nil && after.Status == 0 || reason(probeErr, "") == dto.NotObservable
 			if probeErr != nil {
 				probeReason, probeFailed = reason(probeErr, dto.NotObservable), true
@@ -194,6 +197,9 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		configOK := s.AdminOff
 		if !s.AdminOff {
 			config, adminErr := e.admin(ctx, i.Request.Instance, s.Admin)
+			if adminErr != nil && ctx.Err() != nil && parent.Err() == nil {
+				return unverified(lastReason), nil // the window ended during the readback
+			}
 			if adminErr != nil {
 				lastReason = reason(adminErr, dto.AdminUnavailable)
 			} else {

@@ -337,3 +337,27 @@ it("uses no break-word wrapping in proxy views", () => {
   const offenders = Object.entries(sources).filter(([, text]) => String(text).includes("break-words"));
   expect(offenders.map(([path]) => path)).toEqual([]);
 });
+
+// Candidate delta 1 F5: a recreated container makes read and inventory fail with
+// container-changed; the registration must still be removable from its settings.
+it("keeps Remove instance reachable when the instance cannot be read", async () => {
+  const f = fixture();
+  f.api.read = async () => {
+    throw new ProxyError("container-changed", undefined, 409);
+  };
+  let removedCalls = 0;
+  render(
+    <Providers>
+      <InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => removedCalls++} />
+    </Providers>,
+  );
+  const user = userEvent.setup();
+  await screen.findByRole("alert");
+  expect(screen.queryByRole("button", { name: "Remove instance" }) !== null).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Remove instance" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.click(within(dialog).getByRole("checkbox", { name: "Confirm" }));
+  await user.click(within(dialog).getByRole("button", { name: "Remove instance" }));
+  await waitFor(() => expect(removedCalls).toBe(1));
+  expect(f.writes.some(w => w.method === "DELETE" && w.path.endsWith("/instances/" + instance.id))).toBe(true);
+});

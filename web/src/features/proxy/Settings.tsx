@@ -19,7 +19,8 @@ export function Settings({
   remove,
 }: {
   instance: Instance;
-  inventory: Inventory;
+  /** Absent when the instance cannot be read (e.g. its container was recreated): removal stays available. */
+  inventory?: Inventory;
   busy: boolean;
   save: (input: InstanceSettings) => void;
   remove: () => void;
@@ -31,8 +32,9 @@ export function Settings({
     [root, setRoot] = useState(instance.rootFile ?? "");
   const [removing, setRemoving] = useState(false),
     [confirmed, setConfirmed] = useState(false);
-  const facts =
-    instance.kind === "traefik"
+  const facts = !inventory
+    ? []
+    : instance.kind === "traefik"
       ? [
           [t("entryPoints"), inventory.entryPoints?.map(ep => `${ep.name} · ${ep.address}`).join(", ")],
           [t("resolvers"), inventory.resolvers?.join(", ")],
@@ -54,21 +56,23 @@ export function Settings({
     <section className="grid min-w-0 gap-6">
       <div className="grid gap-3 rounded-xl border p-4">
         <h2 className="font-semibold">{t("status")}</h2>
-        <EligibilityView value={inventory.eligibility} />
+        {inventory && <EligibilityView value={inventory.eligibility} />}
         <p className="break-all text-sm">
           {t("authority")} · {t(`authorities.${instance.authority}`)}
         </p>
         <p className="break-all text-sm">
           {contract(`sources.${instance.source.kind}`)} · {instance.source.mountTarget}
         </p>
-        <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-          {facts.map(([label, value]) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="whitespace-pre-wrap break-all text-sm">{value || "—"}</dd>
-            </div>
-          ))}
-        </dl>
+        {facts.length > 0 && (
+          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+            {facts.map(([label, value]) => (
+              <div key={label} className="min-w-0">
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="whitespace-pre-wrap break-all text-sm">{value || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
       <form
         className="grid min-w-0 gap-4 rounded-xl border p-4"
