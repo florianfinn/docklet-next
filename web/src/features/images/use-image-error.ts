@@ -15,6 +15,7 @@ import type { enImageErrors } from "./messages/errors-en";
 export function useImageError() {
   const all = useTranslations(), t = useTranslations("images.errors"), fallback = useCommandError();
   return useCallback((error: unknown) => {
+    if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.blocker) return fallback(error);
     const code = typeof error === "string" ? error : error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.code : undefined;
     const guardedKey = wireKey(IMAGE_ERROR_KEYS, code);
     if (guardedKey) return all(guardedKey);

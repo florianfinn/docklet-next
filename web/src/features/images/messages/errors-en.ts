@@ -8,6 +8,11 @@ import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+  "runtime_stack-blocker": "Runtime actions are blocked by stack “{name}”: {reason}. Fix that stack to continue.",
+  "runtime_archived-stack-blocker": "Runtime actions are blocked by archived stack “{name}”: {reason}. Fix that stack to continue.",
+  "runtime_blocker-selection": "its Compose selection is unsupported",
+  "runtime_blocker-identity": "its Compose identity cannot be read",
+
   "recovery_restored": "Previous version restored",
   "recovery_restore-failed": "Automatic restore failed",
   "recovery_unavailable": "Automatic restore unavailable",

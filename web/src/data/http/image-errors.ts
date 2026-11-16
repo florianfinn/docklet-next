@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original production image and registry UI implementation for issue #230.
 
+import { runtimeBlocker } from "../runtime-blocker";
 import { AdapterOutcomeError } from "@/data/capability";
 
 export const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -15,7 +16,7 @@ export function imageErrorCode(body: unknown): string | undefined {
 }
 export function imageResponseError(body: unknown, status?: number, write = true): AdapterOutcomeError {
   const code = imageErrorCode(body);
-  return new AdapterOutcomeError({ kind: "error", status, code: write && (status === 502 || status === 504) && code === "agent.unavailable" ? "image.outcome-unknown" : code ?? "http.error" });
+  return new AdapterOutcomeError({ kind: "error", status, code: write && (status === 502 || status === 504) && code === "agent.unavailable" ? "image.outcome-unknown" : code ?? "http.error", blocker: runtimeBlocker(code, record(record(body).error).blocker) });
 }
 export function imageUnknown(): AdapterOutcomeError {
   return new AdapterOutcomeError({ kind: "error", code: "image.outcome-unknown" });

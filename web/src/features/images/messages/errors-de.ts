@@ -8,6 +8,11 @@ import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+  "runtime_stack-blocker": "Stack „{name}“ blockiert Laufzeitaktionen: {reason}. Repariere diesen Stack, um fortzufahren.",
+  "runtime_archived-stack-blocker": "Der archivierte Stack „{name}“ blockiert Laufzeitaktionen: {reason}. Repariere diesen Stack, um fortzufahren.",
+  "runtime_blocker-selection": "seine Compose-Auswahl wird nicht unterstützt",
+  "runtime_blocker-identity": "seine Compose-Identität kann nicht gelesen werden",
+
   "recovery_restored": "Vorherige Version wiederhergestellt",
   "recovery_restore-failed": "Automatische Wiederherstellung fehlgeschlagen",
   "recovery_unavailable": "Automatische Wiederherstellung nicht verfügbar",

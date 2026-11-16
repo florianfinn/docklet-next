@@ -13,6 +13,7 @@ import (
 
 	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	kit "go.getarcane.app/kit/pkg"
 	"strconv"
@@ -37,9 +38,19 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 		// otherwise select it. Unreadable peers, including archived rows, can
 		// conceal duplicate ownership and therefore block every successful lookup.
 		name, err := s.runtimeComposeName(ctx, row)
-		if err != nil && row.ID != projectID && UnsupportedUpdateLayout(err) != nil {
-			// A peer's unsupported layout still blocks, but never reads as the target's refusal.
-			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: peer %s: %s", row.ID, err.Error())
+		if err != nil && row.ID != projectID {
+			reason := "compose.identity-unreadable"
+			if UnsupportedUpdateLayout(err) != nil {
+				reason = "compose.selection-unsupported"
+			}
+			problem := imageDTO.Failure("runtime.target-unavailable", 409)
+			blocker := &imageDTO.RuntimeIdentityBlocker{Name: cmp.Or(row.Name, row.ID), Reason: reason, Archived: row.IsArchived}
+			problem.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, blocker)
+			if problem.Problem.Blocker == nil {
+				blocker.Name = row.ID
+				problem.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, blocker)
+			}
+			return projecttypes.Reference{}, false, problem
 		}
 		if err != nil {
 			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: %w", err)

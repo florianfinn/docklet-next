@@ -27,6 +27,11 @@ export function useCommandError() {
  if (error instanceof SettingsProblemError) return settingsErrorMessage(error, all);
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
+      if (outcome.kind === "error" && outcome.code === "runtime.target-unavailable" && outcome.blocker) {
+        const blocker = outcome.blocker;
+        const reason = all(blocker.reason === "compose.selection-unsupported" ? "images.errors.runtime_blocker-selection" : "images.errors.runtime_blocker-identity");
+        return all(blocker.archived ? "images.errors.runtime_archived-stack-blocker" : "images.errors.runtime_stack-blocker", { name: blocker.name, reason });
+      }
       const key = operationReasonKey(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code);
       if (key && !["agent.unavailable", "agent.invalid-token", "agent.update-required"].includes(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code)) return operation(key);
       if (outcome.kind === "not-available") return capability(outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable");

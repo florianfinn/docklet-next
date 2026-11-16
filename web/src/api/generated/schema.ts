@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 8ee07e4a2c8f9fc042c014124d37a65c24c8593649d2ffffa4a4f4ef56dfa7b1
+// Revision: c87b44c8ae3645e14fc7a5d52bcf1b87d097930aca4a11ea04afcf50d7e939ca
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10491,8 +10491,9 @@ export interface components {
             success: boolean;
         };
         ImageProblem: {
+            blocker?: components["schemas"]["ImageRuntimeIdentityBlocker"];
             /** @enum {string} */
-            code: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "deploy.point-unavailable" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
+            code: "agent.unavailable" | "container.origin-locked" | "container.recreate-ambiguous" | "container.recreate-recovered" | "deploy.point-unavailable" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "runtime.target-unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "settings.invalid-time-zone" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.service-coupled" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.candidate-changed" | "update.target-changed" | "update.target-not-found" | "update.unstable" | "update.auto-restored" | "update.auto-restore-failed" | "update.auto-restore-unavailable" | "update.interrupted" | "update.candidate-failed" | "restore.files-changed" | "container.auto-remove";
             message: string;
         };
         ImageProtection: {
@@ -10551,6 +10552,12 @@ export interface components {
             activityId: string;
             /** @enum {string} */
             type: "activity";
+        };
+        ImageRuntimeIdentityBlocker: {
+            archived: boolean;
+            name: string;
+            /** @enum {string} */
+            reason: "compose.selection-unsupported" | "compose.identity-unreadable";
         };
         ImageSearchResult: {
             automated: boolean;
