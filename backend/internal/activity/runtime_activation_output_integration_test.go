@@ -35,6 +35,10 @@ func TestRuntimeActivationLegacyLossMarkerIsNDJSON(t *testing.T) {
 				require.Equal(t, 202, status, string(response))
 				run := activationRunID(t, response)
 				activationJoinRun(t, hub, executor, env, run)
+				releaseAppend := activity.DelayRuntimeOutputAppendForTest(t, hub.remote, run)
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				require.NoError(t, hub.remote.Close(ctx))
+				cancel()
 				before := runtimeEffectEvents(executor.services.http.snapshot())
 				const original = `{ "log": "retained progress", "example": true }`
 				line := activitytypes.OutputLine{Timestamp: time.Now().UTC(), Stream: "stdout", Text: original}
@@ -42,6 +46,7 @@ func TestRuntimeActivationLegacyLossMarkerIsNDJSON(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, hub.services.db.Model(&activity.RuntimeReceipt{}).Where("run_id = ?", run).UpdateColumn("output_next_seq", 3).Error)
 				require.NoError(t, hub.services.db.Model(&activity.Activity{}).Where("id = ?", run).UpdateColumns(map[string]any{"runtime_output": string(window), "output": activity.OutputLines{line}, "output_truncated": true}).Error)
+				releaseAppend()
 				status, response = activationCall(t, hub, path, key, "", body)
 				require.Equal(t, 200, status, string(response))
 				lines := strings.Split(strings.TrimSpace(string(response)), "\n")
@@ -55,7 +60,7 @@ func TestRuntimeActivationLegacyLossMarkerIsNDJSON(t *testing.T) {
 				require.Equal(t, "[runtime output truncated]", frames[1]["log"])
 				require.Equal(t, original, lines[2], "existing JSON output payload bytes stay unchanged")
 				require.Equal(t, true, frames[3]["done"])
-				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				ctx, cancel = context.WithTimeout(t.Context(), 5*time.Second)
 				require.NoError(t, hub.remote.WaitDispatch(ctx, run))
 				cancel()
 				require.Equal(t, before, runtimeEffectEvents(executor.services.http.snapshot()))
