@@ -4,7 +4,6 @@
 // License: Apache-2.0
 // Deviations: Registered legacy streams preserve output and encode visible loss as valid NDJSON.
 
-
 package activity
 
 import (
