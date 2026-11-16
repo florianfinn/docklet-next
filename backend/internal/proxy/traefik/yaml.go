@@ -290,6 +290,9 @@ func (d *document) replace(n *yaml.Node, v any, edits *[]edit) error {
 				indent := strings.Repeat(" ", n.Column-1)
 				text = indent + strings.ReplaceAll(text, "\n", "\n"+indent) + "\n"
 				pos := lineEnd(d.text, d.spans[n].end)
+				if pos > 0 && d.text[pos-1] != '\n' {
+					text = "\n" + text
+				}
 				*edits = append(*edits, edit{span{pos, pos}, text})
 			}
 			return nil
@@ -415,7 +418,9 @@ func (d *document) apply(edits []edit) (string, error) {
 	if strings.Contains(d.text, "\r") {
 		return "", fmt.Errorf("CRLF unsupported")
 	}
-	sort.SliceStable(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
+	sort.SliceStable(edits, func(i, j int) bool {
+		return edits[i].start > edits[j].start || edits[i].start == edits[j].start && insertionIndent(edits[i].text) < insertionIndent(edits[j].text)
+	})
 	text := d.text
 	boundary := len(text)
 	for _, e := range edits {
@@ -429,4 +434,9 @@ func (d *document) apply(edits []edit) (string, error) {
 		return "", err
 	}
 	return text, nil
+}
+
+func insertionIndent(s string) int {
+	s = strings.TrimLeft(s, "\n")
+	return len(s) - len(strings.TrimLeft(s, " "))
 }

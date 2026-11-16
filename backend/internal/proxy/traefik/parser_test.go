@@ -289,3 +289,15 @@ func TestNoRouteCannotVerifyChangedRouting(t *testing.T) {
 	require.False(t, routingEvidence("delete-route", backend, backend))
 	require.False(t, routingEvidence("edit-route", hostio.Response{Status: 200}, missing))
 }
+
+func TestListGrowthAndOptionalFieldAtSameOffset(t *testing.T) {
+	source := strings.Replace(tiny, "      entryPoints: [web]\n      service: app\n", "      service: app\n      middlewares:\n        - auth # Handler\n", 1)
+	d, err := parseDocument(source, "")
+	require.NoError(t, err)
+	var edits []edit
+	require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"middlewares": []string{"headers", "auth"}, "priority": 10}, &edits))
+	out, err := d.apply(edits)
+	require.NoError(t, err)
+	expected := strings.Replace(source, "        - auth # Handler\n", "        - headers # Handler\n        - auth\n      priority: 10\n", 1)
+	require.Equal(t, expected, out)
+}
