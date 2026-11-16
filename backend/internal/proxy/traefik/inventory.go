@@ -22,7 +22,9 @@ import (
 )
 
 func readonly(v *dto.Inventory, code dto.Reason, p string) {
-	v.Eligibility = dto.Eligibility{Reason: code, Path: p}
+	if v.Eligibility.Writable {
+		v.Eligibility = dto.Eligibility{Reason: code, Path: p}
+	}
 }
 func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, error) {
 	v := dto.Inventory{Identity: i.Identity, Generation: i.Generation, Watch: true, ThrottleMillis: 2000, EntryPoints: []dto.EntryPoint{}, Resolvers: []string{}, Providers: []string{}, Plugins: []string{}, Imports: []string{}, Eligibility: dto.Eligibility{Writable: true}}

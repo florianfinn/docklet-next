@@ -140,7 +140,7 @@ func TestInventorySourcesAndWatchGuard(t *testing.T) {
 		{"zero-port", "--entrypoints.web.address=:0", dto.IncompleteInventory},
 		{"high-port", "--entrypoints.web.address=:65536", dto.IncompleteInventory},
 		{"outside", "--providers.file.directory=/outside", dto.IncompleteInventory},
-		{"both", "--providers.file.filename=/etc/traefik/dynamic/routes.yml", dto.SingleFileMount},
+		{"both", "--providers.file.filename=/etc/traefik/dynamic/routes.yml", dto.IncompleteInventory},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			x := fixture(t)
@@ -160,6 +160,7 @@ func TestInventorySourcesAndWatchGuard(t *testing.T) {
 		inv, err := x.e.Inventory(t.Context(), x.i)
 		require.NoError(t, err)
 		require.False(t, inv.Eligibility.Writable)
+		require.Equal(t, dto.UnsupportedFormat, inv.Eligibility.Reason)
 	})
 }
 func TestP25SharedServiceDependantsAndCrossFileGuard(t *testing.T) {
