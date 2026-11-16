@@ -47,6 +47,9 @@ const tiny = "http:\n  routers:\n    app:\n      rule: Host(`app.example.com`)\n
 
 type seam struct {
 	inspectFailures int
+	containerStatus int
+	containers      []container.Summary
+	archiveModified map[string]time.Time
 	t               *testing.T
 	mu              sync.Mutex
 	root            string
@@ -141,6 +144,14 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("API-Version", "1.54")
 		_, _ = w.Write([]byte("OK"))
 	case p == "/containers/json":
+		if x.containerStatus != 0 {
+			http.Error(w, `{"message":"list unavailable"}`, x.containerStatus)
+			return
+		}
+		if x.containers != nil {
+			_ = json.NewEncoder(w).Encode(x.containers)
+			return
+		}
 		_ = json.NewEncoder(w).Encode([]container.Summary{{ID: "example-labelled", Names: []string{"/example-app"}, Labels: map[string]string{"traefik.http.routers.label.rule": "Host(`label.example.com`)", "traefik.http.routers.label.service": "label", "com.docker.compose.project": "example-stack"}}})
 	case p == "/containers/example-proxy/json" || p == "/containers/example-container/json":
 		if x.inspectFailures > 0 {
@@ -189,6 +200,10 @@ func (x *seam) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			h.Name = filepath.ToSlash(rel)
 			h.ModTime = epoch
+			rootRelative, _ := filepath.Rel(x.root, file)
+			if changed, ok := x.archiveModified[filepath.ToSlash(rootRelative)]; ok {
+				h.ModTime = changed
+			}
 			if hostio.Secret(h.Name) && !de.IsDir() {
 				h.Typeflag = tar.TypeReg
 				h.Size = 18
