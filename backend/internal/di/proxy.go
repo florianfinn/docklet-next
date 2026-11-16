@@ -9,6 +9,7 @@ package di
 import (
 	"github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/caddy"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/traefik"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"go.uber.org/fx"
 )
@@ -16,6 +17,7 @@ import (
 // registerEngines adds every engine before startup settlement can need one.
 func registerEngines(m *proxy.Module) {
 	m.RegisterEngine(dto.Caddy, caddy.New(m.Runtime))
+	m.RegisterEngine(dto.Traefik, traefik.New(m.Runtime))
 }
 
 func init() {

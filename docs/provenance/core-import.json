@@ -125,8 +125,8 @@
       "entrypoint": "./backend/cmd",
       "cgo": "0",
       "tags": [],
-      "packages": 1522,
-      "packageGraphSha256": "e69000691634a1a0def27be52dba19361de765a850446c048718525aaa90e49f"
+      "packages": 1523,
+      "packageGraphSha256": "a25457e66c022106ccb24c2de5679b704983222291f085ed77f68127e4778328"
     },
     {
       "target": "agent",
@@ -135,8 +135,8 @@
       "tags": [
         "-tags=exclude_frontend"
       ],
-      "packages": 1522,
-      "packageGraphSha256": "e69000691634a1a0def27be52dba19361de765a850446c048718525aaa90e49f"
+      "packages": 1523,
+      "packageGraphSha256": "a25457e66c022106ccb24c2de5679b704983222291f085ed77f68127e4778328"
     }
   ],
   "limitations": "Post-cut hub and agent source graphs; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json.",

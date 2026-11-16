@@ -17,6 +17,8 @@ import (
 func TestRegisterEnginesAddsEveryKind(t *testing.T) {
 	m := &proxy.Module{Agent: &proxy.Agent{Engines: proxy.Engines{}}, Runtime: &proxy.DockerRuntime{}}
 	registerEngines(m)
-	_, err := m.Agent.Engines.For(dto.Caddy)
-	require.NoError(t, err)
+	for _, kind := range []dto.Kind{dto.Caddy, dto.Traefik} {
+		_, err := m.Agent.Engines.For(kind)
+		require.NoError(t, err, kind)
+	}
 }
