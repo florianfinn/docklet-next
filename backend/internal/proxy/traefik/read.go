@@ -210,7 +210,9 @@ func resolve(docs map[string]*document, opaque []dto.OpaqueFile, inv dto.Invento
 	}
 	if len(defs) == 0 && len(opaque) > 0 && fileName(name) != "" {
 		r.Kind = "opaque"
-		r.File = opaque[0].Path
+		if len(opaque) == 1 {
+			r.File = opaque[0].Path
+		}
 	}
 	return r
 }

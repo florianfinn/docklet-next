@@ -33,6 +33,9 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 	if err != nil {
 		return v, err
 	}
+	if c.State != nil {
+		v.Identity.StartedAt = c.State.StartedAt
+	}
 	if c.Config == nil {
 		readonly(&v, dto.IncompleteInventory, "")
 		return v, nil
@@ -53,7 +56,7 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 				val = args[j]
 			}
 		}
-		k = strings.ToLower(k)
+		k = optionKey(k)
 		opts[k] = val
 		if k == "configfile" {
 			configFile = val
@@ -138,7 +141,7 @@ func (e *engine) Inventory(ctx context.Context, i dto.Instance) (dto.Inventory, 
 				ep.Address = val
 			}
 			if strings.HasPrefix(strings.Join(bits[2:], "."), "http.tls") {
-				ep.TLS = true
+				ep.TLS = val != "false"
 			}
 		case len(bits) >= 3 && bits[0] == "certificatesresolvers":
 			resolvers[bits[1]] = true
@@ -222,17 +225,17 @@ func hasStaticOptions(m map[string]string) bool {
 func flatten(n *yaml.Node, p string, out map[string]string) {
 	if n.Kind == yaml.MappingNode {
 		if len(n.Content) == 0 {
-			out[p] = "true"
+			out[optionKey(p)] = "true"
 		}
 		for j := 0; j < len(n.Content); j += 2 {
-			k := strings.ToLower(n.Content[j].Value)
+			k := n.Content[j].Value
 			if p != "" {
 				k = p + "." + k
 			}
 			flatten(n.Content[j+1], k, out)
 		}
 	} else if n.Kind == yaml.ScalarNode {
-		out[p] = n.Value
+		out[optionKey(p)] = n.Value
 	}
 }
 func sorted(m map[string]bool) []string {
@@ -258,4 +261,19 @@ func reason(err error, fallback dto.Reason) dto.Reason {
 		return p.Code
 	}
 	return fallback
+}
+
+// Dynamic dictionary names retain their identity; static field names are folded.
+func optionKey(s string) string {
+	parts := strings.Split(s, ".")
+	for j := range parts {
+		if j == 1 && (strings.EqualFold(parts[0], "entrypoints") || strings.EqualFold(parts[0], "certificatesresolvers")) {
+			continue
+		}
+		if j == 2 && strings.EqualFold(parts[0], "experimental") && strings.EqualFold(parts[1], "plugins") {
+			continue
+		}
+		parts[j] = strings.ToLower(parts[j])
+	}
+	return strings.Join(parts, ".")
 }

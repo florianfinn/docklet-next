@@ -496,3 +496,58 @@ func TestLabelRoutesLinkOnlyToManagedStack(t *testing.T) {
 	require.Equal(t, "example-id", route.ProjectID)
 	require.Equal(t, "example-app", route.ContainerName)
 }
+
+func TestInventoryIncompleteAndCaseSensitiveNames(t *testing.T) {
+	x := fixture(t)
+	x.inspect.Config.Cmd = []string{"--providers.file.directory", "/etc/traefik/dynamic", "--entrypoints.webSecure.address=:443", "--entrypoints.webSecure.http.tls=false", "--certificatesresolvers.DnsPrimary.acme.email=operator@example.com", "--providers.docker"}
+	x.inspect.Config.Entrypoint = []string{"traefik"}
+	v, err := x.e.Inventory(t.Context(), x.i)
+	require.NoError(t, err)
+	require.True(t, v.Eligibility.Writable)
+	require.Equal(t, "webSecure", v.EntryPoints[0].Name)
+	require.False(t, v.EntryPoints[0].TLS)
+	require.Equal(t, []string{"DnsPrimary"}, v.Resolvers)
+	x.inspect.Config = nil
+	v, err = x.e.Inventory(t.Context(), x.i)
+	require.NoError(t, err)
+	require.False(t, v.Eligibility.Writable)
+	x.i.Identity.ContainerID = "other"
+	_, err = x.e.Inventory(t.Context(), x.i)
+	require.Error(t, err)
+}
+func TestInvalidIntentAndMarkerGuards(t *testing.T) {
+	x := fixture(t)
+	in := proxy.Intent{Request: x.request("edit-route"), Engine: []byte("invalid")}
+	_, err := x.e.Observe(t.Context(), in, false)
+	require.Error(t, err)
+	require.Error(t, x.e.Mark(t.Context(), in))
+	in = x.prepare(x.request("edit-route"))
+	in.MarkerPath = ""
+	require.Error(t, x.e.Mark(t.Context(), in))
+	in.MarkerPath = "dynamic/wrong.yml"
+	require.Error(t, x.e.Mark(t.Context(), in))
+	in.MarkerPath = "dynamic/docklet-check-example-op.yml"
+	in.Request.ID = "bad/name"
+	require.Error(t, x.e.Mark(t.Context(), in))
+	require.Error(t, x.e.Restart(t.Context(), in))
+	require.NoError(t, x.e.Reload(t.Context(), in))
+}
+
+func TestRecoveryFreshDeadlineAndOpaqueHealthEpoch(t *testing.T) {
+	x := fixture(t)
+	r := x.request("edit-route")
+	r.Change.Priority = new(10)
+	in := x.prepare(r)
+	in.PublishedAt = x.now.Add(-time.Hour)
+	start := x.now
+	obs, err := x.e.Observe(t.Context(), in, false)
+	require.NoError(t, err)
+	require.True(t, obs.NeedsMarker)
+	require.GreaterOrEqual(t, x.now.Sub(start), 14*time.Second)
+	x.put("dynamic/extra.secret.yml", "opaque")
+	x.inspect.State.StartedAt = epoch.Add(time.Minute).Format(time.RFC3339Nano)
+	x.i.Identity.StartedAt = x.inspect.State.StartedAt
+	x.logs = epoch.Add(time.Second).Format(time.RFC3339Nano) + ` ERR configuration error="invalid yaml" providerName=file` + "\n"
+	_, err = x.e.Prepare(t.Context(), x.request("edit-route"))
+	require.NoError(t, err, "a provider error from the previous epoch cannot block opaque writes")
+}

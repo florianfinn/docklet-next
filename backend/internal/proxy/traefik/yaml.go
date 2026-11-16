@@ -261,6 +261,40 @@ func (d *document) replace(n *yaml.Node, v any, edits *[]edit) error {
 		}
 		return nil
 	}
+	if n.Kind == yaml.SequenceNode && n.Style&yaml.FlowStyle == 0 && len(n.Content) > 0 {
+		var items []any
+		switch a := v.(type) {
+		case []any:
+			items = a
+		case []string:
+			for _, x := range a {
+				items = append(items, x)
+			}
+		}
+		if items != nil && len(items) > 0 {
+			for j, c := range n.Content {
+				if j < len(items) {
+					if err := d.replace(c, items[j], edits); err != nil {
+						return err
+					}
+				} else {
+					sp := span{lineStart(d.text, d.spans[c].start), lineEnd(d.text, d.spans[c].end)}
+					*edits = append(*edits, edit{sp, comments(d.text[sp.start:sp.end], n.Column-1)})
+				}
+			}
+			if len(items) > len(n.Content) {
+				text, err := render(items[len(n.Content):], 0)
+				if err != nil {
+					return err
+				}
+				indent := strings.Repeat(" ", n.Column-1)
+				text = indent + strings.ReplaceAll(text, "\n", "\n"+indent) + "\n"
+				pos := lineEnd(d.text, d.spans[n].end)
+				*edits = append(*edits, edit{span{pos, pos}, text})
+			}
+			return nil
+		}
+	}
 	style := n.Style
 	switch v.(type) {
 	case map[string]any, []string, []any:

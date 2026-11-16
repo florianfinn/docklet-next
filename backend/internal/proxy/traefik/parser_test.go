@@ -216,3 +216,25 @@ func TestSchemaWrongFieldTypes(t *testing.T) {
 		require.False(t, validURL(u), u)
 	}
 }
+
+func TestBlockListResizePreservesCommentPositions(t *testing.T) {
+	source := strings.Replace(tiny, "entryPoints: [web]", "entryPoints:\n        - web # First listener\n        # Listener order\n        - websecure # Second listener", 1)
+	for _, tt := range []struct {
+		items []string
+		want  string
+	}{
+		{[]string{"internal", "websecure", "extra"}, strings.Replace(source, "- web # First", "- internal # First", 1)},
+		{[]string{"internal"}, strings.Replace(strings.Replace(source, "- web # First", "- internal # First", 1), "        - websecure # Second listener\n", "        # Second listener\n", 1)},
+	} {
+		d, err := parseDocument(source, "")
+		require.NoError(t, err)
+		var edits []edit
+		require.NoError(t, d.patch(at(d.root, "http", "routers", "app"), map[string]any{"entryPoints": tt.items}, &edits))
+		out, err := d.apply(edits)
+		require.NoError(t, err)
+		if len(tt.items) == 3 {
+			tt.want = strings.Replace(tt.want, "        - websecure # Second listener\n", "        - websecure # Second listener\n        - extra\n", 1)
+		}
+		require.Equal(t, tt.want, out)
+	}
+}

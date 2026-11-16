@@ -155,9 +155,8 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 	}
 	budget := time.Duration(s.Inventory.ThrottleMillis)*2*time.Millisecond + 10*time.Second
 	deadline := e.now().Add(budget)
-	if !marked && !in.PublishedAt.IsZero() {
-		deadline = in.PublishedAt.Add(budget)
-	}
+	// A recovery call starts a fresh observation window; publication time still
+	// bounds log evidence from the original operation.
 	lastReason := dto.NoObservableDifference
 	for {
 		if err = e.checkLogs(ctx, in.Request.Instance, in.PublishedAt); err != nil {

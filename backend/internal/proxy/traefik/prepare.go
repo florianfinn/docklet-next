@@ -13,6 +13,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
@@ -196,7 +197,11 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 	s.Unresolved = len(unresolved) > 0
 	// Opaque input has no parseable definitions: the running provider must be healthy.
 	if len(g.result.OpaqueFiles) > 0 {
-		if err = e.checkLogs(ctx, r.Instance, g.newest); err != nil {
+		since := g.newest
+		if started, parseErr := time.Parse(time.RFC3339Nano, g.result.Inventory.Identity.StartedAt); parseErr == nil && started.After(since) {
+			since = started
+		}
+		if err = e.checkLogs(ctx, r.Instance, since); err != nil {
 			return in, err
 		}
 	}
