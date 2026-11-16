@@ -29,7 +29,7 @@ export const deProxyContract = {
     "loading": "Proxy-Konfiguration wird geladen…",
     "empty": "Keine Routen gefunden.",
     "error": "Die Anfrage konnte nicht abgeschlossen werden. Aktualisiere den aktuellen Zustand.",
-    "uncertain": "Die Antwort ging verloren. Letzte Vorgänge werden geladen; aktualisiere sie vor einer weiteren Aktion.",
+    "uncertain": "Das Schreibergebnis ist nicht bestätigt. Letzte Vorgänge werden geladen; aktualisiere sie vor einer weiteren Aktion.",
     "invalidResponse": "Der Server hat eine nicht unterstützte Antwort gesendet.",
     "save": "Speichern",
     "cancel": "Abbrechen",

@@ -12,7 +12,8 @@ import type { CreateInstance, Instance, OperationRequest, Release, Settings } fr
 export class ProxyError extends Error {
   readonly code: string;
   readonly diagnostic?: { path?: string; line?: number; detail?: string };
-  constructor(code: string, diagnostic?: { path?: string; line?: number; detail?: string }) { super(code); this.code = code; this.diagnostic = diagnostic; }
+  readonly status?: number;
+  constructor(code: string, diagnostic?: { path?: string; line?: number; detail?: string }, status?: number) { super(code); this.code = code; this.diagnostic = diagnostic; this.status = status; }
 }
 const hub = "/api/modules/proxy";
 const part = encodeURIComponent;
@@ -27,7 +28,7 @@ export function createProxyApi(signal: AbortSignal | (() => AbortSignal), fetche
     ownedSignal.throwIfAborted();
     if (!response.ok) {
       const p = value as { code?: string; path?: string; line?: number; detail?: string };
-      throw new ProxyError(typeof p?.code === "string" ? p.code : "http.error", p);
+      throw new ProxyError(typeof p?.code === "string" ? p.code : "http.error", p, response.status);
     }
     return value;
   }

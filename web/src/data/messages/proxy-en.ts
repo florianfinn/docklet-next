@@ -29,7 +29,7 @@ export const enProxyContract = {
     "loading": "Loading proxy configuration…",
     "empty": "No routes found.",
     "error": "The request could not be completed. Refresh to read the current state.",
-    "uncertain": "The response was lost. Recent operations are being read; refresh them before starting another action.",
+    "uncertain": "Write outcome is not confirmed. Recent operations are being read; refresh them before starting another action.",
     "invalidResponse": "The server returned an unsupported response.",
     "save": "Save",
     "cancel": "Cancel",

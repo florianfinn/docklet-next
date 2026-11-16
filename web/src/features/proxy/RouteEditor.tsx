@@ -44,7 +44,13 @@ export function RouteEditor({ instance, inventory, read, route, busy, submit, cl
     let change: Change;
     if (caddy) change = { kind: route ? "edit-route" : "create-route", routeId: route?.id, advanced: mode === "advanced" || textChanged ? advanced : caddyText };
     else {
-      change = { kind: route ? "edit-route" : "create-route", routeId: route?.id, name, rule, priority: Number(priority), entryPoints, middlewares: names, ...(resolver !== "preserve" ? { resolver } : {}) };
+      change = { kind: route ? "edit-route" : "create-route", ...(route ? { routeId: route.id } : {}) };
+      if (!route || name !== route.name) change.name = name;
+      if (!route || rule !== route.rule) change.rule = rule;
+      if (!route || Number(priority) !== route.priority) change.priority = Number(priority);
+      if (!route || JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? [])) change.entryPoints = entryPoints;
+      if (!route || JSON.stringify(names) !== JSON.stringify((route.references ?? []).map(ref => ref.name))) change.middlewares = names;
+      if (resolver !== "preserve") change.resolver = resolver;
       if (!opaqueService && !shared && (!route || upstream !== route.upstreams?.[0])) change.upstreams = [upstream, ...(route?.upstreams?.slice(1) ?? [])];
     }
     submit(target, change, ack);

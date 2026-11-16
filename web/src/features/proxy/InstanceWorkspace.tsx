@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "use-intl";
-import type { ProxyApi } from "@/data/http/proxy-api";
+import { ProxyError, type ProxyApi } from "@/data/http/proxy-api";
 import { Button } from "@/shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { EligibilityView, ErrorView } from "./controls";
@@ -49,7 +49,7 @@ export function InstanceWorkspace({ instance, api, updated, removed }: { instanc
     if (lock.current || uncertain) return false;
     lock.current = true; setBusy(true); setError(undefined);
     try { await work(); if (!active.current) return false; await refresh(); return true; }
-    catch (e) { if (active.current) { if (isOperation) { setUncertain(true); setEditor(undefined); setAction(undefined); await refresh(); } setError(e); } return false; }
+    catch (e) { if (active.current) { if (isOperation) { setUncertain(!(e instanceof ProxyError) || e.status === undefined || e.status >= 500); setEditor(undefined); setAction(undefined); await refresh(); } setError(e); } return false; }
     finally { lock.current = false; if (active.current) setBusy(false); }
   };
   const write = (held: Snapshot, target: string, change: Change, ack: Acknowledgements) => {

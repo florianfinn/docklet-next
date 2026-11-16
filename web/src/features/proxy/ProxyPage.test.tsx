@@ -5,7 +5,8 @@
 // Deviations: Original production proxy Manager implementation.
 
 import { readFileSync } from "node:fs";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateCatalog } from "@/app/i18n/catalog-validation.test-support";
@@ -49,6 +50,24 @@ describe("production proxy Manager HTTP integration", () => {
     expect(f.writes.find(w => w.path.endsWith("/instances"))?.body).toEqual({ containerId: instance.identity.containerId, environmentId: instance.environmentId, kind: "traefik", mountTarget: "/etc/proxy", name: "example-proxy", routeDirectory: "/etc/proxy/routes" });
     expect(f.fetcher.mock.calls.some(([url]) => String(url).includes("/discover?environmentId=host-one"))).toBe(true);
   });
+  it("ignores the abandoned StrictMode setup request", async () => {
+    const f = fixture(), raw = f.fetcher.getMockImplementation()!;
+    let first = true, unblock!: () => void, finished!: () => void;
+    const held = new Promise<void>(resolve => { unblock = resolve; }), bodyFinished = new Promise<void>(resolve => { finished = resolve; });
+    f.fetcher.mockImplementation(async (input, init) => {
+      const response = await raw(input, init);
+      if (String(input).endsWith("/instances") && first) {
+        first = false; const json = response.json.bind(response);
+        response.json = async () => { await held; try { return await json(); } finally { finished(); } };
+      }
+      return response;
+    });
+    vi.stubGlobal("fetch", f.fetcher);
+    render(<StrictMode><Providers><ProxyPage /></Providers></StrictMode>);
+    await screen.findByRole("article", { name: "app" });
+    await act(async () => { unblock(); await bodyFinished; });
+    expect(screen.queryByRole("alert") === null).toBe(true);
+  });
   it("renders all route classes and links labels to the actual stack Compose editor", async () => {
     const f = fixture(); f.state.read.routes = [route, ...(["text-only", "infrastructure", "label-read-only"] as const).map((className, n) => ({ ...route, id: String(n), name: className, class: className, projectId: "project-one" }))];
     await workspace(f);
@@ -61,7 +80,7 @@ describe("production proxy Manager HTTP integration", () => {
     fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "next.example.com" } });
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(operationWrites(f).length).toBe(1));
-    expect(operationWrites(f)[0]?.body).toEqual({ target: "routes/app.yml", expected: { present: true, hash }, graphHashes: { "routes/app.yml": hash, "routes/extra.secret.yml": "opaque" }, change: { kind: "edit-route", routeId: route.id, name: "app", rule: route.rule, priority: 0, entryPoints: ["web"], middlewares: ["headers"], upstreams: ["http://next.example.com:8080"] }, acknowledgements: { replaceRunningConfig: false, restart: false, unresolvedReferences: [] } });
+    expect(operationWrites(f)[0]?.body).toEqual({ target: "routes/app.yml", expected: { present: true, hash }, graphHashes: { "routes/app.yml": hash, "routes/extra.secret.yml": "opaque" }, change: { kind: "edit-route", routeId: route.id, upstreams: ["http://next.example.com:8080"] }, acknowledgements: { replaceRunningConfig: false, restart: false, unresolvedReferences: [] } });
   });
   it.each(["unresolved", "diverged", "restart"])("gates %s acknowledgement before dispatch", async kind => {
     const f = fixture();
@@ -83,9 +102,10 @@ describe("production proxy Manager HTTP integration", () => {
     const f = fixture(); f.state.read.routes = [{ ...route, upstreams: [], serviceFile: "routes/extra.secret.yml" }];
     await workspace(f); const user = await openEdit();
     expect(screen.queryByLabelText("Backend host") === null).toBe(true);
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "renamed-app" } });
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(operationWrites(f).length).toBe(1));
-    expect(Object.hasOwn((operationWrites(f)[0]!.body as { change: object }).change, "upstreams")).toBe(false);
+    expect((operationWrites(f)[0]!.body as { change: object }).change).toEqual({ kind: "edit-route", routeId: route.id, name: "renamed-app" });
   });
   it("lists every shared-service dependant before sending edit-service", async () => {
     const f = fixture(); f.state.read.routes = [{ ...route, dependants: ["routes/app.yml#app", "routes/app.yml#two", "routes/app.yml#three"] }];
@@ -126,11 +146,21 @@ describe("production proxy Manager HTTP integration", () => {
     await userEvent.click(screen.getByRole("button", { name: "New route" }));
     fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "new-app" } }); fireEvent.change(screen.getByLabelText("Host / domain"), { target: { value: "new.example.com" } }); fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "backend.example.com" } });
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await screen.findByText(/The response was lost/);
+    await screen.findByText(/Write outcome is not confirmed/);
     expect(operationWrites(f).length).toBe(1);
     expect(screen.queryByRole("dialog") === null).toBe(true);
     expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true);
     expect(f.fetcher.mock.calls.filter(([u, init]) => String(u).endsWith("/operations") && !init?.body).length).toBeGreaterThan(1);
+  });
+  it("renders a definite HTTP refusal without claiming an unknown write outcome", async () => {
+    const f = fixture(), raw = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input, init) => String(input).endsWith("/operations") && init?.method === "POST" ? new Response(JSON.stringify({ code: "stale-hash", status: 422, path: route.file, line: 2, detail: "The file changed." }), { status: 422, headers: { "Content-Type": "application/problem+json" } }) : raw(input, init));
+    await workspace(f); const user = await openEdit();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("A configuration file changed.");
+    expect(screen.queryByText(/Write outcome is not confirmed/) === null).toBe(true);
+    expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(false);
+    expect(f.fetcher.mock.calls.filter(([url, init]) => String(url).endsWith("/operations") && init?.method === "POST").length).toBe(1);
   });
   it("follows pending receipts to their final state", async () => {
     const f = fixture(); f.state.operations = [operation({ state: "pending", phase: "reloading", evidence: undefined })];
