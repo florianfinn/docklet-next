@@ -30,6 +30,15 @@ describe("P19 proxy outcomes from real Direct and Edge forwarding", () => {
     expect(screen.getByRole("status").textContent).toBe(state === "applied-unverified" ? "Applied, not verified" : "Recovery required");
     expect(screen.getByRole("status").getAttribute("data-tone")).toBe(state === "applied-unverified" ? "warning" : "danger");
   });
+  it("keeps the engine diagnostic from both transports", () => {
+    const rows = fixtures.filter((f) => (f.body as { data: { diagnostic?: unknown } }).data.diagnostic !== undefined);
+    expect(rows.map((r) => r.transport).sort()).toEqual(["direct", "edge"]);
+    for (const row of rows) expect(decodeProxyOperation(row.body).diagnostic).toEqual({ path: "routes/app.caddy", line: 3, detail: "Error: adapting config: unrecognized directive: example_directive" });
+  });
+  it("rejects a malformed diagnostic", () => {
+    const original = fixtures[0]!.body as { success: true; data: object };
+    for (const diagnostic of ["text", { line: -1 }, { line: 1.5 }, { path: 7 }, { detail: "x".repeat(4097) }, { path: "x".repeat(1025) }]) expect(() => decodeProxyOperation({ ...original, data: { ...original.data, diagnostic } })).toThrow("proxy.invalid-response");
+  });
   it("rejects unknown states and reasons", () => {
     const original = fixtures[0]!.body as { success: true; data: object };
     for (const patch of [{ state: "future-state" }, { reason: "future-reason" }]) expect(() => decodeProxyOperation({ ...original, data: { ...original.data, ...patch } })).toThrow("proxy.invalid-response");

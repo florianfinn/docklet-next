@@ -235,6 +235,13 @@ environment and user. The staging directory is removed after validation and by
 startup settlement. Inserting the route `import` line validates a staged root
 Caddyfile with the line appended at top level.
 
+An operation receipt carries an optional `diagnostic` (path, line and the
+engine's bounded text, at most 4 KiB, without control characters other than
+newline and tab) when an engine refuses in Prepare or fails in staging,
+activation or observation; it is journalled with the receipt, survives Direct and
+Edge and is shown next to the reason. Engines never put opaque file content into
+it. An eligibility refusal names the eligibility reason, path and line.
+
 ## Verification
 
 The first request of every probe goes to the selected container: BusyBox `wget`

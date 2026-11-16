@@ -193,6 +193,15 @@ type Operation struct {
 	CreatedAt    time.Time    `json:"createdAt"`
 	FinishedAt   *time.Time   `json:"finishedAt,omitempty"`
 	ReleasedBy   string       `json:"releasedBy,omitempty"`
+	// Diagnostic names where an engine refused or failed (validator message, file and line).
+	Diagnostic *Diagnostic `json:"diagnostic,omitempty"`
+}
+
+// Diagnostic is bounded engine text; it never contains opaque file content.
+type Diagnostic struct {
+	Path   string `json:"path,omitempty" maxLength:"1024"`
+	Line   int    `json:"line,omitempty" minimum:"0"`
+	Detail string `json:"detail,omitempty" maxLength:"4096"`
 }
 type Query struct {
 	ID           string   `json:"id"`

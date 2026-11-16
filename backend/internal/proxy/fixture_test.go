@@ -138,6 +138,7 @@ type fakeEngine struct {
 	reloadErr                                         error
 	restartErr                                        error
 	validate                                          func() error
+	prepareErr                                        error
 	state                                             jsontext.Value
 	seen                                              []Intent
 }
@@ -149,6 +150,9 @@ func (e *fakeEngine) Read(context.Context, dto.Instance) (dto.ReadResult, error)
 	return dto.ReadResult{}, nil
 }
 func (e *fakeEngine) Prepare(ctx context.Context, q dto.ApplyRequest) (Intent, error) {
+	if e.prepareErr != nil {
+		return Intent{}, e.prepareErr
+	}
 	b, _ := e.runtime.Target(ctx, q.Instance, q.Target)
 	g, _ := e.runtime.Graph(ctx, q.Instance)
 	return Intent{Old: b, New: e.new, GraphHashes: g, Mode: 0644, Reload: q.Instance.Kind == dto.Caddy && !e.adminOff, Restart: e.adminOff, Owned: true, Engine: e.state}, nil

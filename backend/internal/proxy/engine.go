@@ -140,6 +140,7 @@ func Eligibility(i dto.Instance) error {
 	if !i.Eligibility.Writable || i.Source.ReadOnly || i.Source.Kind == dto.SingleFileSource || i.Source.Kind == dto.UnknownSourceKind {
 		p := dto.Fail(dto.SourceReadOnly, 409)
 		p.Detail = string(i.Eligibility.Reason)
+		p.Path, p.Line = i.Eligibility.Path, i.Eligibility.Line
 		return p
 	}
 	return nil

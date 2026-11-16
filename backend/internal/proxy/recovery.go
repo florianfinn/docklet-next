@@ -27,6 +27,7 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 		if errors.Is(err, errCrash) {
 			return o, err
 		}
+		o = withDiagnostic(o, err)
 		r := reason(err, dto.ProxyRejected)
 		if r == dto.ExecRunning {
 			return a.finish(ctx, i, o, dto.RecoveryRequired, r, "")
@@ -60,6 +61,7 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 		return o, err
 	}
 	if err != nil {
+		o = withDiagnostic(o, err)
 		r := reason(err, dto.NotObservable)
 		if r == dto.ExecRunning {
 			return a.finish(ctx, i, o, dto.RecoveryRequired, r, "")

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 523ce69522082215e16f7c039bcc69a48523ac469099496f57fe7907c1f19990
+// Revision: 9b7764f0b794e5ecdabe8973197067356fbf9b79c304ccd4857bd30f2aa943c6
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11617,6 +11617,12 @@ export interface components {
             rootFile?: string;
             routeDirectory: string;
         };
+        ProxyDiagnostic: {
+            detail?: string;
+            /** Format: int64 */
+            line?: number;
+            path?: string;
+        };
         ProxyDiscovery: {
             identity: components["schemas"]["ProxyIdentity"];
             image: string;
@@ -11716,6 +11722,7 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             current?: components["schemas"]["ProxyFileState"];
+            diagnostic?: components["schemas"]["ProxyDiagnostic"];
             digest: string;
             /** @enum {string} */
             evidence?: "routing" | "configuration" | "load";

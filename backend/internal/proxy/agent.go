@@ -13,9 +13,12 @@ import (
 	"github.com/florianfinn/docklet-next/types/features"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"gorm.io/gorm"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Agent serializes admission and receipts; durable source uniqueness also covers
@@ -202,7 +205,7 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 	}
 	prepared, err := e.Prepare(ctx, q)
 	if err != nil {
-		return a.finish(ctx, i, o, dto.Rejected, reason(err, dto.InvalidGraph), "")
+		return a.finish(ctx, i, withDiagnostic(o, err), dto.Rejected, reason(err, dto.InvalidGraph), "")
 	}
 	// The request, paths and baseline are protocol-owned, never engine-selected.
 	prepared.Request = q
@@ -260,6 +263,43 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 	return a.activateObserve(ctx, i, o, e, true)
 }
 func (a *Agent) inactive(id string) { a.mu.Lock(); delete(a.active, id); a.mu.Unlock() }
+
+// MaxDiagnostic bounds stored engine text; longer text is cut on a rune boundary.
+const MaxDiagnostic = 4096
+
+// diagnostic keeps the location and bounded text of a typed engine refusal.
+func diagnostic(err error) *dto.Diagnostic {
+	p, ok := errors.AsType[*dto.Problem](err)
+	if !ok || p.Path == "" && p.Line <= 0 && p.Detail == "" {
+		return nil
+	}
+	detail := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || !unicode.IsControl(r) {
+			return r
+		}
+		return -1
+	}, strings.ToValidUTF8(p.Detail, ""))
+	if len(detail) > MaxDiagnostic {
+		cut := MaxDiagnostic
+		for cut > 0 && !utf8.RuneStart(detail[cut]) {
+			cut--
+		}
+		detail = detail[:cut]
+	}
+	path := p.Path
+	if len(path) > 1024 {
+		path = ""
+	}
+	return &dto.Diagnostic{Path: path, Line: max(p.Line, 0), Detail: detail}
+}
+
+// withDiagnostic records err's diagnostic on o, keeping an earlier one when err has none.
+func withDiagnostic(o dto.Operation, err error) dto.Operation {
+	if d := diagnostic(err); d != nil {
+		o.Diagnostic = d
+	}
+	return o
+}
 func reason(err error, fallback dto.Reason) dto.Reason {
 	if p, ok := errors.AsType[*dto.Problem](err); ok {
 		return p.Code
@@ -347,6 +387,7 @@ func (a *Agent) finish(ctx context.Context, i Intent, o dto.Operation, s dto.Sta
 		if err := a.cleanup(ctx, i); err != nil {
 			s = dto.RecoveryRequired
 			r = reason(err, dto.RestoreFailed)
+			o = withDiagnostic(o, err)
 		}
 	}
 	o.State = s
@@ -391,6 +432,7 @@ func (a *Agent) effectFailure(ctx context.Context, i Intent, o dto.Operation, er
 	if errors.Is(err, errCrash) {
 		return o, err
 	}
+	o = withDiagnostic(o, err)
 	r := reason(err, dto.InvalidGraph)
 	if r == dto.ExecRunning {
 		return a.finish(ctx, i, o, dto.RecoveryRequired, r, "")

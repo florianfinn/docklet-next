@@ -237,7 +237,7 @@ func TestInventoryRootImportAndMountGuards(t *testing.T) {
 		{"resume-admin-off", func(x *dockerFixture) {
 			x.c.Config.Cmd = append(x.c.Config.Cmd, "--resume")
 			x.put("Caddyfile", strings.Replace(rootText, "admin localhost:2019", "admin off", 1))
-		}, false},
+		}, true}, // AUTO-3: read-only, the running configuration cannot be read
 		{"relative-route-import", func(x *dockerFixture) {
 			x.put("Caddyfile", strings.Replace(rootText, "/etc/caddy/routes/*.caddy", "routes/*.caddy", 1))
 		}, false},

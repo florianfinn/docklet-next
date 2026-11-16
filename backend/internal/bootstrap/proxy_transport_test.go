@@ -29,6 +29,7 @@ type proxyWireRuntime struct {
 	target p.Bytes
 	// inside/resume hold Validate so a test can drop the connection after admission.
 	inside, resume chan struct{}
+	validateErr    error
 }
 
 func (f *proxyWireRuntime) Rebind(_ context.Context, i dto.Instance) (dto.Instance, error) {
@@ -78,7 +79,7 @@ func (e *proxyWireEngine) Validate(context.Context, p.Intent) error {
 		close(e.f.inside)
 		<-e.f.resume
 	}
-	return nil
+	return e.f.validateErr
 }
 func (e *proxyWireEngine) Reload(context.Context, p.Intent) error  { return nil }
 func (e *proxyWireEngine) Restart(context.Context, p.Intent) error { return nil }
@@ -199,6 +200,29 @@ func TestM27P19OutcomeFixturesRealDirectEdge(t *testing.T) {
 			}
 		}
 	}
+	for _, mode := range []string{"direct", "edge"} {
+		x, _, tr, q := proxyWireFixture(t, mode)
+		o, err := tr.Apply(t.Context(), q)
+		require.NoError(t, err)
+		o.Generation, o.Registration, o.Digest = "example-generation", "example-registration", strings.Repeat("a", 64)
+		o.CreatedAt, o.FinishedAt = time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC), nil
+		o.State, o.Reason = dto.Rejected, dto.InvalidGraph
+		o.Diagnostic = &dto.Diagnostic{Path: "routes/app.caddy", Line: 3, Detail: "Error: adapting config: unrecognized directive: example_directive"}
+		x.agentIntercept = func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+			if strings.Contains(r.URL.Path, "/operations/") {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": o})
+				return
+			}
+			next.ServeHTTP(w, r)
+		}
+		got, err := tr.Query(t.Context(), dto.Query{ID: q.ID, Generation: q.Generation, Registration: q.Registration, Instance: q.Instance})
+		require.NoError(t, err)
+		require.Equal(t, o.Diagnostic, got.Diagnostic)
+		b, err := json.Marshal(map[string]any{"success": true, "data": got})
+		require.NoError(t, err)
+		entries = append(entries, entry{mode, got.State, got.Reason, b})
+	}
 	lines := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		b, err := json.Marshal(entry)
@@ -270,4 +294,26 @@ func TestM27ProxyAdmissionRaceUsesHubUnknownEnvelope(t *testing.T) {
 	require.Zero(t, n)
 	require.NoError(t, a.DB.Table("proxy_journal").Count(&n).Error)
 	require.Zero(t, n)
+}
+
+// The engine's diagnostic survives the real agent, the Direct proxy or Edge tunnel and
+// the hub record.
+func TestM27ProxyDiagnosticRealDirectEdge(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			x, a, tr, q := proxyWireFixture(t, mode)
+			refusal := dto.Fail(dto.InvalidGraph, 422)
+			refusal.Path, refusal.Line, refusal.Detail = "routes/app.caddy", 3, "Error: adapting config: unrecognized directive: example_directive"
+			a.Runtime.(*proxyWireRuntime).validateErr = refusal
+			h := &p.Hub{DB: x.f.db.DB, Modules: x.manager, Transport: tr}
+			o, err := h.Apply(t.Context(), q)
+			require.NoError(t, err)
+			want := &dto.Diagnostic{Path: refusal.Path, Line: refusal.Line, Detail: refusal.Detail}
+			require.Equal(t, dto.Rejected, o.State)
+			require.Equal(t, want, o.Diagnostic)
+			stored, err := h.Query(t.Context(), q.ID)
+			require.NoError(t, err)
+			require.Equal(t, want, stored.Diagnostic)
+		})
+	}
 }
