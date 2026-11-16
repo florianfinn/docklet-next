@@ -46,12 +46,12 @@ export function RouteList({
           aria-label={r.name}
           className="grid min-w-0 gap-3 border-b p-4 last:border-b-0 md:grid-cols-[1fr_2fr_1fr_auto]"
         >
-          <div className="min-w-0 break-words">
+          <div className="min-w-0 [overflow-wrap:anywhere]">
             <h3 className="font-medium">{r.name}</h3>
             <p className="text-xs text-muted-foreground">{ui(`classes.${r.class}`)}</p>
             <p className="mt-1 break-all font-mono text-xs">{r.file}</p>
           </div>
-          <div className="min-w-0 space-y-2 break-words">
+          <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
             <p className="font-mono text-xs">{r.rule}</p>
             <EligibilityView value={r.eligibility} />
             <ul className="text-xs" aria-label={ui("references")}>
@@ -72,7 +72,7 @@ export function RouteList({
             )}
             {r.containerName && <p className="text-xs">{r.containerName}</p>}
           </div>
-          <div className="min-w-0 break-words text-sm">
+          <div className="min-w-0 text-sm [overflow-wrap:anywhere]">
             <p>{r.service}</p>
             {r.upstreams?.map(u => (
               <p key={u} className="break-all font-mono text-xs">

@@ -112,12 +112,14 @@ export function ProxyDialog({
 export function Diagnostic({ value }: { value?: { path?: string; line?: number; detail?: string } }) {
   const t = useTranslations("proxyContract.ui");
   return value ? (
-    <div role="group" aria-label={t("diagnostic")} className="min-w-0 break-words text-sm">
+    // overflow-wrap:anywhere (not break-word) lowers min-content, so long Caddy JSON log
+    // tokens cannot widen the dialog column on narrow screens.
+    <div role="group" aria-label={t("diagnostic")} className="min-w-0 text-sm [overflow-wrap:anywhere]">
       <p>
         {value.path}
         {value.line ? `:${value.line}` : ""}
       </p>
-      <pre className="whitespace-pre-wrap break-words font-mono text-xs [overflow-wrap:anywhere]">{value.detail}</pre>
+      <pre className="whitespace-pre-wrap font-mono text-xs [overflow-wrap:anywhere]">{value.detail}</pre>
     </div>
   ) : null;
 }

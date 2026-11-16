@@ -9,6 +9,7 @@ package caddy
 import (
 	"fmt"
 	"net/url"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -29,6 +30,12 @@ type Site struct {
 	KeyFile           string   `json:"keyFile,omitempty"`
 	Upstreams         []string `json:"upstreams"`
 	Middlewares       []string `json:"middlewares"`
+}
+
+// renameOnly reports sites that differ at most in their name comment.
+func renameOnly(old, next Site) bool {
+	old.Name, next.Name = "", ""
+	return reflect.DeepEqual(old, next)
 }
 
 var routeName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$`)

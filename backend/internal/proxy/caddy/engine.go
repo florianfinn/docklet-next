@@ -68,6 +68,9 @@ type state struct {
 	ProbeReason dto.Reason      `json:"probeReason,omitempty"`
 	OldSite     *Site           `json:"oldSite,omitempty"`
 	NewSite     *Site           `json:"newSite,omitempty"`
+	// Rename marks an edit that changes only the route name: the running graph is
+	// unchanged, so the admin readback is the only evidence it can produce.
+	Rename bool `json:"rename,omitempty"`
 }
 
 func decode(i proxy.Intent) (state, error) {
@@ -251,6 +254,7 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 				return i, problem(dto.InvalidInput, r.Target, 0, err.Error())
 			}
 			s.NewSite = &candidate
+			s.Rename = s.OldSite != nil && renameOnly(*s.OldSite, candidate)
 			for p, other := range g.files {
 				if p != target {
 					if site, err := ParseSite(other.Content); err == nil && site.Name == candidate.Name {

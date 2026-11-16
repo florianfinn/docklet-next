@@ -11,6 +11,7 @@ import { decodeProxyData } from "@/data/http/proxy-read-decoder";
 import { InstanceWorkspace } from "./InstanceWorkspace";
 import ProxyPage from "./ProxyPage";
 import { ProxyError } from "@/data/http/proxy-api";
+import { Diagnostic } from "./controls";
 import { fixture, instance, operation, Providers, read, route } from "./proxy.test-support";
 import type { Instance } from "./types";
 
@@ -314,4 +315,25 @@ it("reviewer keeps the untouched shared upstream line bytes", async () => {
   await user.click(screen.getByRole("button", { name: "Confirm" }));
   await waitFor(() => expect(writes(f).length).toBe(1));
   expect(change(f).upstreams).toEqual([old, "http://next.example.com:80"]);
+});
+
+// Early smoke 4: overflow-wrap:break-word keeps a long token's min-content, so a Caddy
+// JSON log line widened the dialog column to 654 px at 390 px. Only "anywhere" may apply.
+it("wraps diagnostic text anywhere so long log tokens cannot widen the dialog", () => {
+  render(
+    <Providers>
+      <Diagnostic value={{ path: "/etc/caddy/Caddyfile", detail: '{"file":"/etc/caddy/routes/example.caddy"}' }} />
+    </Providers>,
+  );
+  const group = screen.getByRole("group", { name: "Diagnostic" });
+  const pre = group.querySelector("pre")!;
+  for (const el of [group, pre]) {
+    expect(el.classList.contains("[overflow-wrap:anywhere]")).toBe(true);
+    expect(el.classList.contains("break-words")).toBe(false);
+  }
+});
+it("uses no break-word wrapping in proxy views", () => {
+  const sources = import.meta.glob(["./*.tsx", "!./*.test.tsx"], { query: "?raw", import: "default", eager: true });
+  const offenders = Object.entries(sources).filter(([, text]) => String(text).includes("break-words"));
+  expect(offenders.map(([path]) => path)).toEqual([]);
 });

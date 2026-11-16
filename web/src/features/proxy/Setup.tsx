@@ -35,7 +35,7 @@ function Candidate({
   const selected = c.sources?.find(s => s.mountTarget === source);
   return (
     <article className="grid min-w-0 gap-4 rounded-xl border bg-card p-4">
-      <div className="min-w-0 break-words">
+      <div className="min-w-0 [overflow-wrap:anywhere]">
         <h3 className="font-semibold">{c.identity.containerName}</h3>
         <p className="text-sm">
           {c.image} {c.version}

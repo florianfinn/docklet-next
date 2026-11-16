@@ -207,15 +207,18 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 				}
 			}
 		}
-		currentRunning, currentEpoch, epochErr := e.runtime.Epoch(ctx, i.Request.Instance)
-		if epochErr != nil || !currentRunning || currentEpoch != epoch {
-			return unverified(dto.ContainerChanged), nil
-		}
 		if probeReason != "" {
 			lastReason = probeReason
 		}
 		if lastReason == "" {
 			lastReason = dto.NoObservableDifference
+		}
+		currentRunning, currentEpoch, epochErr := e.runtime.Epoch(ctx, i.Request.Instance)
+		if epochErr != nil && ctx.Err() != nil && parent.Err() == nil {
+			return unverified(lastReason), nil // the window ended, identity is unknown
+		}
+		if epochErr != nil || !currentRunning || currentEpoch != epoch {
+			return unverified(dto.ContainerChanged), nil
 		}
 		if !e.now().Before(deadline) {
 			return unverified(lastReason), nil
@@ -223,7 +226,7 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		if configOK && routed {
 			return proxy.Observation{State: dto.Verified, Evidence: dto.Routing}, nil
 		}
-		if !s.AdminOff && configOK && unobservable {
+		if !s.AdminOff && configOK && (unobservable || s.Rename) {
 			return proxy.Observation{State: dto.Verified, Evidence: dto.Configuration}, nil
 		}
 		if err = e.wait(ctx, 100*time.Millisecond); err != nil {
