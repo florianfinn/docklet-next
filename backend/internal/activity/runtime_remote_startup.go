@@ -84,19 +84,34 @@ func (c *RuntimeRemoteCoordinator) RecoverHeldTarget(ctx context.Context, store 
 	s.activity.runningMu.Lock()
 	var rows []RuntimeReceipt
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, _ time.Time) error {
-		return tx.Where("kind = 'receipt' AND environment_id <> '0' AND settled_at IS NULL AND hub_disposition IS NULL AND executor_state = 'unknown' AND unknown_reason IN ?", []string{"transport", "process-continuity"}).
-			Where("environment_id = ? AND registration_id = ? AND executor_generation = ? AND manager_id = ? AND store_generation = ?", store.EnvironmentID, store.RegistrationID, store.ExecutorGeneration, store.ManagerID, store.StoreGeneration).
+		return heldReceiptsInternal(tx, store.EnvironmentID).
+			Where("registration_id = ? AND executor_generation = ? AND manager_id = ? AND store_generation = ?", store.RegistrationID, store.ExecutorGeneration, store.ManagerID, store.StoreGeneration).
 			Order("run_id").Find(&rows).Error
 	})
 	s.activity.runningMu.Unlock()
 	if err != nil {
 		return err
 	}
+	// One run that cannot refresh now does not delay the other held runs of this host.
+	var errs []error
 	for _, row := range rows {
 		ref := RuntimeRunReference{Store: runtimeStoreFromRowInternal(&row), RunID: row.RunID}
 		if _, _, err := c.prepareRefreshInternal(ctx, ref, false, true, true); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
+}
+
+// HasHeldTarget reports whether the environment has any held run RecoverHeldTarget could select, so a
+// health tick contacts the agent for its identity only when there is something to recover.
+func (c *RuntimeRemoteCoordinator) HasHeldTarget(ctx context.Context, environmentID string) (bool, error) {
+	var count int64
+	err := heldReceiptsInternal(c.service.activity.db.WithContext(ctx), environmentID).Model(&RuntimeReceipt{}).Count(&count).Error
+	return count > 0, err
+}
+
+func heldReceiptsInternal(tx *gorm.DB, environmentID string) *gorm.DB {
+	return tx.Where("kind = 'receipt' AND environment_id <> '0' AND settled_at IS NULL AND hub_disposition IS NULL AND executor_state = 'unknown' AND unknown_reason IN ?", []string{"transport", "process-continuity"}).
+		Where("environment_id = ?", environmentID)
 }

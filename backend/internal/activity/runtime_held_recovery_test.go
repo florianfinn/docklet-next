@@ -37,6 +37,10 @@ func TestRuntimeRecoverHeldTargetFiltersEvidenceAndIdentity(t *testing.T) {
 				_, err := f.service.remoteUnknownInternal(t.Context(), f.ref, reason)
 				require.NoError(t, err)
 			}
+			held, err := f.control.HasHeldTarget(t.Context(), store.EnvironmentID)
+			require.NoError(t, err)
+			require.Equal(t, reason != "invalid-evidence" && reason != "evidence-expired" && reason != "storage" && reason != "administrator" && reason != "known", held,
+				"the precheck selects held runs of the environment independently of the executor identity")
 			before := f.receipt(t)
 			queries := p.queries.Load()
 			p.query = func(_ context.Context, id a.RuntimeRunIdentity) (a.RuntimeExecutionOutcome, error) {
@@ -54,6 +58,29 @@ func TestRuntimeRecoverHeldTargetFiltersEvidenceAndIdentity(t *testing.T) {
 			require.EqualValues(t, 1, p.executes.Load())
 		})
 	}
+}
+
+// A held run that cannot be prepared does not keep the other held runs of the host waiting.
+func TestRuntimeRecoverHeldTargetContinuesAfterRowError(t *testing.T) {
+	p := &remoteTransportProbe{}
+	f := remoteFixture(t, p, RuntimeReconcileSchedule{})
+	f.start(t)
+	_, err := f.service.remoteUnknownInternal(t.Context(), f.ref, "transport")
+	require.NoError(t, err)
+	broken := f.receipt(t)
+	broken.RunID = "00000000-0000-4000-8000-000000000000"
+	broken.GateScope = new("stack:example-other")
+	require.NoError(t, f.store.svc.db.Create(&broken).Error)
+	f.control.mu.Lock()
+	f.control.recovering[broken.RunID] = true
+	f.control.mu.Unlock()
+	p.query = func(_ context.Context, id a.RuntimeRunIdentity) (a.RuntimeExecutionOutcome, error) {
+		return remoteAnswer(id, f.store.now, a.StatusSuccess), nil
+	}
+	require.ErrorIs(t, f.control.RecoverHeldTarget(t.Context(), f.ref.Store), ErrRuntimeRecoveryInProgress)
+	require.NoError(t, WaitRuntimeRemoteIdleForTest(t.Context(), f.control, f.ref.RunID))
+	require.NotNil(t, f.receipt(t).SettledAt, "the healthy held run must still settle")
+	require.EqualValues(t, 1, p.executes.Load())
 }
 
 func TestRuntimeRecoverHeldTargetCoalescesAndDebounces(t *testing.T) {

@@ -148,6 +148,9 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	}
 	environments.SetRuntimeRemoval(runtime.RemoveEnvironment)
 	environments.SetRuntimeRecovery(func(ctx context.Context, id string) error {
+		if held, err := remote.HasHeldTarget(ctx, id); err != nil || !held {
+			return err
+		}
 		_, identity, err := remoteIdentity(ctx, id)
 		if err != nil {
 			return err
