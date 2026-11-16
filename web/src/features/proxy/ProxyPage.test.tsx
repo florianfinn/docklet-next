@@ -151,8 +151,8 @@ describe("production proxy Manager HTTP integration", () => {
     await workspace(f);
     const user = await openEdit();
     if (kind === "unresolved")
-      fireEvent.change(screen.getByLabelText("Middleware names (comma separated)"), {
-        target: { value: "headers, hidden-middleware" },
+      fireEvent.change(screen.getByLabelText("Middleware names (one per line)"), {
+        target: { value: "headers\nhidden-middleware" },
       });
     const save = screen.getByRole("button", { name: "Save" });
     expect(save.hasAttribute("disabled")).toBe(true);

@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { decodeProxyData } from "@/data/http/proxy-read-decoder";
 import { InstanceWorkspace } from "./InstanceWorkspace";
 import ProxyPage from "./ProxyPage";
+import { ProxyError } from "@/data/http/proxy-api";
 import { fixture, instance, operation, Providers, read, route } from "./proxy.test-support";
 import type { Instance } from "./types";
 
@@ -163,5 +164,68 @@ describe("proxy refusals and blocking states", () => {
     const body = { success: true, data: { ...read, routes: [{ ...route, class: "editable-ish" }] } };
     expect(() => decodeProxyData("read", body)).toThrow("proxy.invalid-response");
     expect(decodeProxyData("read", { success: true, data: read }).routes?.length).toBe(1);
+  });
+});
+
+describe("verify round trip sweep (v-s5-fix1)", () => {
+  it("keeps an untouched empty explicit port", async () => {
+    const f = fixture();
+    f.state.read.routes![0] = { ...route, upstreams: ["http://backend.example.com:/api?x=1"] };
+    show(f);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "renamed" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect("upstreams" in change(f)).toBe(false);
+  });
+  it("keeps a middleware name containing a comma on a rename", async () => {
+    const f = fixture();
+    f.state.read.routes![0] = { ...route, references: [{ name: "headers,strict", kind: "local", file: route.file }] };
+    f.state.read.middlewares = [{ name: "headers,strict", kind: "local", file: route.file }];
+    show(f);
+    const user = await edit();
+    fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "renamed" } });
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect("middlewares" in change(f)).toBe(false);
+  });
+  it("adds a selected definition whose name contains a comma as one reference", async () => {
+    const f = fixture();
+    f.state.read.middlewares = [{ name: "a,b", kind: "local", file: "routes/mw.yml" }];
+    show(f);
+    const user = await edit();
+    screen.getByRole("combobox", { name: "Existing middleware" }).focus();
+    await user.keyboard("{ArrowDown}");
+    await screen.findByRole("option", { name: "headers" });
+    await user.click(screen.getByRole("option", { name: "a,b" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes(f).length).toBe(1));
+    expect(change(f).middlewares).toEqual(["headers", "a,b"]);
+  });
+  it("does not say TLS off for implicit entry points with TLS", async () => {
+    const f = fixture();
+    f.state.inventory.entryPoints = [{ name: "websecure", address: ":443", tls: true }];
+    f.state.read.routes![0] = { ...route, entryPoints: [], tls: false };
+    show(f);
+    await edit();
+    expect(screen.queryByText("Current TLS: off.") === null).toBe(true);
+    expect(screen.queryByText("Current TLS: from the default entry points where they enable TLS.") !== null).toBe(true);
+  });
+  it.each([500, 503, undefined])("closes and locks on unknown status %s", async status => {
+    const f = fixture();
+    let calls = 0;
+    f.api.operate = async () => {
+      calls++;
+      throw new ProxyError("invalid-graph", undefined, status);
+    };
+    show(f);
+    const user = await edit();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls).toBe(1));
+    await act(async () => {});
+    expect(screen.queryByRole("dialog") === null).toBe(true);
+    expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true);
+    expect(calls).toBe(1);
   });
 });

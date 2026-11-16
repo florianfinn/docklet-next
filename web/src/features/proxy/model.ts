@@ -58,7 +58,7 @@ export function operationRequest(
 }
 export const splitNames = (value: string) =>
   value
-    .split(/[\n,]/)
+    .split("\n")
     .map(x => x.trim())
     .filter(Boolean);
 /** Split a backend URL as written: the port and any path stay byte for byte; Caddy may omit the scheme. */

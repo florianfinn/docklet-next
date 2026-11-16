@@ -53,15 +53,24 @@ export function RouteEditor({
     [priority, setPriority] = useState(String(route?.priority ?? 0));
   const [backend, setBackend] = useState(() => backendParts(route?.upstreams?.[0] ?? ""));
   const [entryPoints, setEntryPoints] = useState(route?.entryPoints ?? []);
-  const [middlewares, setMiddlewares] = useState((route?.references ?? []).map(r => r.name).join(", "));
+  // One name per line: Traefik names may contain commas.
+  const [middlewares, setMiddlewares] = useState((route?.references ?? []).map(r => r.name).join("\n"));
   const [resolver, setResolver] = useState("preserve"),
     [tls, setTls] = useState(true);
   const [ack, setAck] = useState(emptyAcknowledgements);
   const originalText = (read.files ?? []).find(f => f.path === route?.file)?.content ?? "";
   const [advanced, setAdvanced] = useState(originalText),
     [textChanged, setTextChanged] = useState(false);
-  const upstream = backendURL(backend);
-  const entryTLS = (inventory.entryPoints ?? []).some(ep => ep.tls && (route?.entryPoints ?? []).includes(ep.name));
+  // Untouched backend parts keep the server's string byte for byte (also forms like an empty explicit port).
+  const upstream =
+    route?.upstreams?.[0] !== undefined && JSON.stringify(backend) === JSON.stringify(backendParts(route.upstreams[0]))
+      ? route.upstreams[0]
+      : backendURL(backend);
+  // A router without entry points uses the default ones, which the inventory cannot name exactly.
+  const implicitEntryPoints = !!route && !(route.entryPoints ?? []).length;
+  const entryTLS = (inventory.entryPoints ?? []).some(
+    ep => ep.tls && (implicitEntryPoints || (route?.entryPoints ?? []).includes(ep.name)),
+  );
   const opaqueService = !!route && !route.upstreams?.length && !!route.serviceFile;
   const shared = !caddy && (route?.dependants?.length ?? 0) > 1;
   const known = [
@@ -212,19 +221,26 @@ export function RouteEditor({
                       <p className="text-xs text-muted-foreground">
                         {route.resolver
                           ? t("tlsResolver", { name: route.resolver })
-                          : t(route.tls ? "tlsOn" : entryTLS ? "tlsEntryPoint" : "tlsOff")}
+                          : t(route.tls ? "tlsOn" : !entryTLS ? "tlsOff" : implicitEntryPoints ? "tlsDefaultEntryPoints" : "tlsEntryPoint")}
                       </p>
                     )}
-                    <TextField
-                      id="route-middlewares"
-                      label={t("middlewares")}
-                      value={middlewares}
-                      onChange={v => {
-                        setMiddlewares(v);
-                        setAck(a => ({ ...a, unresolvedReferences: [] }));
-                      }}
-                      description={t("middlewareHint")}
-                    />
+                    <div className="grid min-w-0 gap-2">
+                      <Label htmlFor="route-middlewares">{t("middlewares")}</Label>
+                      <Textarea
+                        id="route-middlewares"
+                        className="min-h-20 font-mono text-xs"
+                        value={middlewares}
+                        aria-describedby="route-middlewares-desc"
+                        spellCheck={false}
+                        onChange={e => {
+                          setMiddlewares(e.target.value);
+                          setAck(a => ({ ...a, unresolvedReferences: [] }));
+                        }}
+                      />
+                      <p id="route-middlewares-desc" className="text-xs text-muted-foreground">
+                        {t("middlewareHint")}
+                      </p>
+                    </div>
                     {known.length > 0 && (
                       <Choice
                         id="known-middleware"
@@ -232,7 +248,7 @@ export function RouteEditor({
                         value=""
                         placeholder={t("selectMiddleware")}
                         onChange={v => {
-                          if (!names.includes(v)) setMiddlewares([...names, v].join(", "));
+                          if (!names.includes(v)) setMiddlewares([...names, v].join("\n"));
                         }}
                         options={known.map(n => ({ value: n, label: n }))}
                       />
