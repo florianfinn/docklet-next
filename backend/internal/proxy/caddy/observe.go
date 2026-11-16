@@ -1,0 +1,321 @@
+// Source: docklet-next/issues/474
+// Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
+// Retrieved: 2026-11-16
+// License: Apache-2.0
+// Deviations: Original first-response and Caddy admin verification.
+
+package caddy
+
+import (
+	"context"
+	"encoding/json/v2"
+	"net"
+	"net/url"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/proxy"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
+	dto "github.com/florianfinn/docklet-next/types/proxy"
+)
+
+func adminURL(address string) (string, error) {
+	if !strings.Contains(address, "://") {
+		address = "http://" + address
+	}
+	u, err := url.Parse(address)
+	if err != nil {
+		return "", dto.Fail(dto.AdminUnavailable, 409)
+	}
+	if u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" {
+		return "", dto.Fail(dto.AdminUnavailable, 409)
+	}
+	host := u.Hostname()
+	if host != "localhost" && host != "127.0.0.1" && host != "0.0.0.0" && host != "" && host != "::1" && host != "::" {
+		return "", dto.Fail(dto.AdminUnavailable, 409)
+	}
+	port := u.Port()
+	if port == "" {
+		port = "2019"
+	}
+	u.Host = net.JoinHostPort("127.0.0.1", port)
+	u.Path = "/config/"
+	return u.String(), nil
+}
+func (e *engine) admin(ctx context.Context, i dto.Instance, address string) (map[string]any, error) {
+	u, err := adminURL(address)
+	if err != nil {
+		return nil, err
+	}
+	res, err := e.runtime.Exec(ctx, i, "admin", "", "localhost", u)
+	if err != nil {
+		if reason(err, "") == dto.ExecRunning {
+			return nil, err
+		}
+		return nil, dto.Fail(dto.AdminUnavailable, 409)
+	}
+	response, err := hostio.ParseProbe(res, nil)
+	if err != nil || response.Status != 200 || response.Followed {
+		return nil, dto.Fail(dto.AdminUnavailable, 409)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(res.Stdout, &config); err != nil {
+		return nil, dto.Fail(dto.AdminUnavailable, 409)
+	}
+	if config == nil {
+		return nil, dto.Fail(dto.AdminUnavailable, 409)
+	}
+	return config, nil
+}
+func (e *engine) diverged(ctx context.Context, i dto.Instance, inv dto.Inventory) (bool, error) {
+	running, err := e.admin(ctx, i, inv.AdminAddress)
+	if err != nil {
+		return false, err
+	}
+	res, err := e.runtime.Exec(ctx, i, "adapt", inv.RootFile, "", "")
+	if err = commandError(res, err, inv.RootFile); err != nil {
+		return false, err
+	}
+	var adapted map[string]any
+	if err := json.Unmarshal(res.Stdout, &adapted); err != nil {
+		return false, problem(dto.InvalidGraph, inv.RootFile, 0, "invalid adapted JSON")
+	}
+	if adapted == nil {
+		return false, problem(dto.InvalidGraph, inv.RootFile, 0, "empty adapted JSON")
+	}
+	a, err := json.Marshal(running, json.Deterministic(true))
+	if err != nil {
+		return false, err
+	}
+	b, err := json.Marshal(adapted, json.Deterministic(true))
+	if err != nil {
+		return false, err
+	}
+	return string(a) != string(b), nil
+}
+func (e *engine) probe(ctx context.Context, i dto.Instance, s Site) (hostio.Response, error) {
+	if strings.HasPrefix(s.Domain, "*.") {
+		return hostio.Response{}, dto.Fail(dto.NotObservable, 409)
+	}
+	scheme := "https"
+	if s.TLS == "off" {
+		scheme = "http"
+	}
+	u := scheme + "://127.0.0.1" + s.Path
+	if s.Path == "" {
+		u += "/"
+	}
+	res, err := e.runtime.Exec(ctx, i, "probe", "", s.Domain, u)
+	return hostio.ParseProbe(res, err)
+}
+func routing(before, after hostio.Response, kind string) bool {
+	if hostio.GatewayError(after.Status) || !hostio.Differs(before, after) {
+		return false
+	}
+	switch kind {
+	case "create-route":
+		return (before.Status == 0 || before.Status == 404) && after.Status != 0 && after.Status != 404
+	case "delete-route":
+		return before.Status != 0 && before.Status != 404 && (after.Status == 0 || after.Status == 404)
+	default:
+		return after.Status != 0
+	}
+}
+func unverified(r dto.Reason) proxy.Observation {
+	return proxy.Observation{State: dto.AppliedUnverified, Reason: r}
+}
+func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Observation, error) {
+	s, err := decode(i)
+	if err != nil {
+		return proxy.Observation{}, err
+	}
+	start := e.now()
+	if at, ok := e.activated.Load(i.Request.ID); ok {
+		start = at.(time.Time)
+	}
+	deadline := start.Add(5 * time.Second)
+	remaining := deadline.Sub(e.now())
+	if remaining <= 0 {
+		return unverified(dto.NoObservableDifference), nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, remaining)
+	defer cancel()
+	// Runtime.Epoch and Logs fence real Docker identity. For an acknowledged
+	// restart, capture the new epoch rather than trusting the registration epoch.
+	running, epoch, err := e.runtime.Epoch(ctx, i.Request.Instance)
+	if err != nil || !running {
+		return unverified(dto.ContainerChanged), nil
+	}
+	if !i.Restart && epoch != i.Request.Instance.Identity.StartedAt {
+		return unverified(dto.ContainerChanged), nil
+	}
+	site := s.NewSite
+	if site == nil {
+		site = s.OldSite
+	}
+	lastReason := dto.NoObservableDifference
+	for {
+		if !e.now().Before(deadline) {
+			return unverified(lastReason), nil
+		}
+		// A backend request error is not a Caddy configuration rejection.
+		// Validate/reload decide rejection; logs still fence availability/epoch.
+		err = e.runtime.Logs(ctx, i.Request.Instance, i.PublishedAt, func(string) error { return nil })
+		if err != nil {
+			return unverified(reason(err, dto.LogsUnavailable)), nil
+		}
+		routed := false
+		unobservable := site == nil
+		probeReason := s.ProbeReason
+		if site != nil {
+			after, probeErr := e.probe(ctx, i.Request.Instance, *site)
+			unobservable = probeErr == nil && after.Status == 0 || reason(probeErr, "") == dto.NotObservable
+			if probeErr != nil {
+				probeReason = reason(probeErr, dto.NotObservable)
+			} else {
+				routed = routing(s.Before, after, i.Request.Change.Kind)
+			}
+		}
+		configOK := s.AdminOff
+		if !s.AdminOff {
+			config, adminErr := e.admin(ctx, i.Request.Instance, s.Admin)
+			if adminErr != nil {
+				lastReason = reason(adminErr, dto.AdminUnavailable)
+			} else {
+				if s.NewSite != nil {
+					configOK = containsSite(config, *s.NewSite, true)
+				} else if s.OldSite != nil {
+					configOK = !containsSite(config, *s.OldSite, false)
+				} else { // An import insertion proves the complete adapted graph, including an empty set.
+					inv := dto.Inventory{RootFile: s.Root, AdminAddress: s.Admin}
+					differs, err := e.diverged(ctx, i.Request.Instance, inv)
+					configOK = err == nil && !differs
+				}
+				if configOK && !routed {
+					lastReason = probeReason
+				}
+			}
+		}
+		currentRunning, currentEpoch, epochErr := e.runtime.Epoch(ctx, i.Request.Instance)
+		if epochErr != nil || !currentRunning || currentEpoch != epoch {
+			return unverified(dto.ContainerChanged), nil
+		}
+		if configOK && routed {
+			return proxy.Observation{State: dto.Verified, Evidence: dto.Routing}, nil
+		}
+		if !s.AdminOff && configOK && unobservable {
+			return proxy.Observation{State: dto.Verified, Evidence: dto.Configuration}, nil
+		}
+		if probeReason != "" {
+			lastReason = probeReason
+		}
+		if lastReason == "" {
+			lastReason = dto.NoObservableDifference
+		}
+		if !e.now().Before(deadline) {
+			return unverified(lastReason), nil
+		}
+		if err = e.wait(ctx, 100*time.Millisecond); err != nil {
+			return proxy.Observation{}, err
+		}
+	}
+}
+
+func object(v any) map[string]any { m, _ := v.(map[string]any); return m }
+func array(v any) []any           { a, _ := v.([]any); return a }
+func stringsIn(v any, want string) bool {
+	for _, s := range array(v) {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
+// containsSite follows each route branch: a host, path and reverse proxy must
+// belong to the same effective branch, not unrelated JSON subtrees.
+func containsSite(config map[string]any, s Site, targets bool) bool {
+	var walk func([]any, bool, bool) bool
+	walk = func(routes []any, host, pathOK bool) bool {
+		for _, raw := range routes {
+			r := object(raw)
+			matches := array(r["match"])
+			if len(matches) == 0 {
+				matches = []any{map[string]any{}}
+			}
+			for _, m := range matches {
+				match := object(m)
+				h, p := host, pathOK
+				if hosts, ok := match["host"]; ok {
+					h = stringsIn(hosts, s.Domain)
+				}
+				if paths, ok := match["path"]; ok {
+					p = s.Path != "" && stringsIn(paths, s.Path+"*")
+				}
+				restricted := false
+				for key := range match {
+					if key != "host" && key != "path" {
+						restricted = true
+					}
+				}
+				if restricted {
+					continue
+				}
+				for _, rawHandler := range array(r["handle"]) {
+					handler := object(rawHandler)
+					if handler["handler"] == "reverse_proxy" && h && p {
+						if !targets || upstreamsEqual(handler, s.Upstreams) {
+							return true
+						}
+					}
+					if walk(array(handler["routes"]), h, p) {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+	servers := object(object(object(config["apps"])["http"])["servers"])
+	for _, server := range servers {
+		if walk(array(object(server)["routes"]), false, s.Path == "") {
+			return true
+		}
+	}
+	return false
+}
+func upstreamsEqual(handler map[string]any, want []string) bool {
+	got := []string{}
+	for _, v := range array(handler["upstreams"]) {
+		dial, _ := object(v)["dial"].(string)
+		got = append(got, dial)
+	}
+	expected := []string{}
+	tls := false
+	for _, v := range want {
+		u, err := url.Parse(v)
+		if err != nil {
+			return false
+		}
+		host := u.Host
+		if u.Port() == "" {
+			port := "80"
+			if u.Scheme == "https" {
+				port = "443"
+			}
+			host = net.JoinHostPort(u.Hostname(), port)
+		}
+		expected = append(expected, host)
+		if u.Scheme == "https" {
+			tls = true
+		}
+	}
+	if len(got) != len(expected) {
+		return false
+	}
+	slices.Sort(got)
+	slices.Sort(expected)
+	_, hasTLS := object(handler["transport"])["tls"]
+	return slices.Equal(got, expected) && tls == hasTLS
+}
