@@ -559,3 +559,19 @@ func TestObservationClockAndParentCancellation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dto.NotObservable, obs.Reason)
 }
+
+func TestMissingBaselineCannotBecomeMarkerLoadEvidence(t *testing.T) {
+	x := fixture(t)
+	x.probeFunc = func([]string) hostio.ExecResult {
+		return hostio.ExecResult{ExitCode: 1, Stderr: []byte("connection refused")}
+	}
+	r := x.request("edit-route")
+	r.Change.Priority = new(10)
+	in := x.prepare(r)
+	x.probeFunc = func([]string) hostio.ExecResult { return response(502, "old catch-all") }
+	obs, err := x.e.Observe(t.Context(), in, false)
+	require.NoError(t, err)
+	require.Equal(t, dto.AppliedUnverified, obs.State)
+	require.Equal(t, dto.NotObservable, obs.Reason)
+	require.False(t, obs.NeedsMarker)
+}

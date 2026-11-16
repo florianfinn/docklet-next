@@ -268,6 +268,9 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 	s.Marker = markerProbe(r.ID, s.Inventory)
 	if s.Marker.Reason == "" {
 		s.Marker.Before, err = e.probe(ctx, r.Instance, s.Marker)
+		if err == nil && s.Marker.Before.Status == 0 {
+			s.Marker.Reason = dto.NotObservable
+		}
 		if err != nil {
 			s.Marker.Reason = reason(err, dto.NotObservable)
 		}
