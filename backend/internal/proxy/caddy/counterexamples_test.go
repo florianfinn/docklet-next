@@ -392,3 +392,17 @@ func TestReadbackUnrestrictedSiteDoesNotAcquireAPathMatcher(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(raw), &config))
 	require.False(t, containsSite(config, s, true))
 }
+
+func TestCaddyRefusesTraefikAndUnknownOperationKindsBeforeExec(t *testing.T) {
+	x := fixture(t)
+	q := x.request("create-route", baseSite())
+	for _, kind := range []string{"edit-service", "restore-owned", "unknown"} {
+		q.Change.Kind = kind
+		_, err := prepareChecked(t, x.e, q)
+		var p *dto.Problem
+		require.ErrorAs(t, err, &p)
+		require.Equal(t, dto.InvalidInput, p.Code)
+		require.Equal(t, "unsupported change", p.Detail)
+	}
+	require.Empty(t, x.commands)
+}
