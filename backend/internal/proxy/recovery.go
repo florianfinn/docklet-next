@@ -109,7 +109,7 @@ func (a *Agent) restore(ctx context.Context, i Intent, o dto.Operation, e Engine
 		return o, err
 	}
 	if err != nil {
-		return a.finish(ctx, i, o, dto.RecoveryRequired, reason(err, dto.RestoreFailed), "")
+		return a.finish(ctx, i, withDiagnostic(o, err), dto.RecoveryRequired, reason(err, dto.RestoreFailed), "")
 	}
 	return a.finish(ctx, i, o, dto.Restored, r, "")
 }
@@ -163,7 +163,7 @@ func (a *Agent) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
 func (a *Agent) recover(ctx context.Context, i Intent, o dto.Operation) (dto.Operation, error) {
 	// Remove transient files before every branch, including third states.
 	if err := a.cleanup(ctx, i); err != nil {
-		return a.finish(ctx, i, o, dto.RecoveryRequired, reason(err, dto.RestoreFailed), "")
+		return a.finish(ctx, i, withDiagnostic(o, err), dto.RecoveryRequired, reason(err, dto.RestoreFailed), "")
 	}
 	b, err := a.Runtime.Target(ctx, i.Request.Instance, i.Request.Target)
 	if err != nil {

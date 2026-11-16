@@ -139,8 +139,16 @@ func paths(i *Intent) {
 func Eligibility(i dto.Instance) error {
 	if !i.Eligibility.Writable || i.Source.ReadOnly || i.Source.Kind == dto.SingleFileSource || i.Source.Kind == dto.UnknownSourceKind {
 		p := dto.Fail(dto.SourceReadOnly, 409)
+		// The detail names the eligibility reason and, when inventory kept it, the
+		// engine's own bounded text (for example a failed validation).
 		p.Detail = string(i.Eligibility.Reason)
+		if i.Eligibility.Detail != "" {
+			p.Detail += ": " + i.Eligibility.Detail
+		}
 		p.Path, p.Line = i.Eligibility.Path, i.Eligibility.Line
+		if d := diagnostic(p); d != nil {
+			p.Path, p.Line, p.Detail = d.Path, d.Line, d.Detail
+		}
 		return p
 	}
 	return nil

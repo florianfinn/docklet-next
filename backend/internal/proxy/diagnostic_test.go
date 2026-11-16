@@ -7,6 +7,7 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -81,4 +82,85 @@ func TestEligibilityRefusalKeepsLocation(t *testing.T) {
 	require.Equal(t, string(dto.ImportMissing), p.Detail)
 	require.Equal(t, "Caddyfile", p.Path)
 	require.Equal(t, 7, p.Line)
+}
+
+type restoreFailEngine struct {
+	*fakeEngine
+	calls int
+}
+
+func (e *restoreFailEngine) Reload(context.Context, Intent) error {
+	e.calls++
+	if e.calls == 1 {
+		return errors.New("example initial reload failure")
+	}
+	return refusal("restore reload refused")
+}
+
+type firstCleanupFailEngine struct {
+	*fakeEngine
+	calls int
+}
+
+func (e *firstCleanupFailEngine) Cleanup(context.Context, Intent) error {
+	e.calls++
+	if e.calls == 1 {
+		return refusal("recovery cleanup refused")
+	}
+	return nil
+}
+
+// A restore failure and a first recovery cleanup failure keep their diagnostic, also
+// when a later cleanup succeeds. Adapted from the main-thread verify probes.
+func TestDiagnosticFromRestoreAndRecoveryCleanup(t *testing.T) {
+	t.Run("restore", func(t *testing.T) {
+		x := newFixture(t)
+		x.request.Instance.Kind = dto.Caddy
+		x.a.Engines[dto.Caddy] = &restoreFailEngine{fakeEngine: x.e}
+		o, err := x.a.Apply(t.Context(), x.request)
+		require.NoError(t, err)
+		require.Equal(t, dto.RecoveryRequired, o.State)
+		require.NotNil(t, o.Diagnostic)
+		require.Equal(t, "restore reload refused", o.Diagnostic.Detail)
+	})
+	t.Run("recovery cleanup", func(t *testing.T) {
+		x := newFixture(t)
+		x.a.Engines[dto.Traefik] = &firstCleanupFailEngine{fakeEngine: x.e}
+		i := Intent{Request: x.request, Old: x.f.files[x.request.Target], New: x.e.new}
+		paths(&i)
+		o := dto.Operation{ID: x.request.ID, InstanceID: x.request.Instance.ID, Generation: x.request.Generation, Registration: x.request.Registration, State: dto.Pending, Phase: dto.Staging}
+		x.persist(t, i, o)
+		got, err := x.a.recover(t.Context(), i, o)
+		require.NoError(t, err)
+		require.Equal(t, dto.RecoveryRequired, got.State)
+		require.NotNil(t, got.Diagnostic)
+		require.Equal(t, "recovery cleanup refused", got.Diagnostic.Detail)
+	})
+}
+
+// Release and Query keep an earlier diagnostic on the final receipt.
+func TestReleaseKeepsDiagnostic(t *testing.T) {
+	x := newFixture(t)
+	i := Intent{Request: x.request, Old: x.f.files[x.request.Target], New: x.e.new}
+	paths(&i)
+	d := &dto.Diagnostic{Path: "routes/app.caddy", Line: 3, Detail: "example initial refusal"}
+	x.persist(t, i, dto.Operation{ID: x.request.ID, InstanceID: x.request.Instance.ID, Generation: x.request.Generation, Registration: x.request.Registration, State: dto.RecoveryRequired, Phase: dto.Restoring, Diagnostic: d})
+	got, err := x.a.Release(t.Context(), dto.ReleaseRequest{Query: x.query(), Actor: "example-admin", Confirmed: i.Old.FileState})
+	require.NoError(t, err)
+	require.Equal(t, dto.Released, got.State)
+	require.Equal(t, d, got.Diagnostic)
+	queried, err := x.a.Query(t.Context(), x.query())
+	require.NoError(t, err)
+	require.Equal(t, d, queried.Diagnostic)
+}
+
+// An eligibility refusal carries the inventory's own text, bounded like a diagnostic.
+func TestEligibilityRefusalKeepsInventoryText(t *testing.T) {
+	i := dto.Instance{Source: dto.Source{Kind: dto.ProjectSource}, Eligibility: dto.Eligibility{Reason: dto.InvalidGraph, Path: "Caddyfile", Line: 3, Detail: "unrecognized directive: example_directive"}}
+	var p *dto.Problem
+	require.ErrorAs(t, Eligibility(i), &p)
+	require.Equal(t, "invalid-graph: unrecognized directive: example_directive", p.Detail)
+	i.Eligibility.Detail = strings.Repeat("x", 2*MaxDiagnostic)
+	require.ErrorAs(t, Eligibility(i), &p)
+	require.LessOrEqual(t, len(p.Detail), MaxDiagnostic)
 }
