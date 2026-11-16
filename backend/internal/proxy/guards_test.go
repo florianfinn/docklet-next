@@ -221,6 +221,9 @@ func rebindCases(t *testing.T, kind, other mount.Type, source dto.SourceKind) {
 			d := dockerSeam(t, x, inspected)
 			i := x.request.Instance
 			i.Source = dto.Source{Kind: source, Canonical: root, MountTarget: "/etc/proxy"}
+			if source == dto.NamedVolume { // registered as classified: helper-only, read-only
+				i.Source.ReadOnly, i.Source.Reason = true, dto.UnsupportedMetadata
+			}
 			got, err := d.Rebind(t.Context(), i)
 			if !tt.ok {
 				var p *dto.Problem

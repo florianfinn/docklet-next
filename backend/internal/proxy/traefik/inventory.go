@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"go.yaml.in/yaml/v4"
 )
@@ -24,6 +25,9 @@ import (
 type staticInventory struct {
 	dto.Inventory
 	single bool
+	// readErr keeps a failed static-file read: shown as incomplete inventory, but a
+	// write must return it rather than settle on that presentation.
+	readErr error
 }
 
 func readonly(v *staticInventory, code dto.Reason, p string) {
@@ -112,6 +116,9 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 		if copyErr != nil {
 			if errdefs.IsNotFound(copyErr) && configFile == "" {
 				continue
+			}
+			if !errdefs.IsNotFound(copyErr) && proxy.Transient(copyErr) {
+				v.readErr = copyErr
 			}
 			readonly(&v, dto.IncompleteInventory, p)
 			break

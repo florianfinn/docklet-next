@@ -19,15 +19,17 @@ import (
 )
 
 type graph struct {
-	result dto.ReadResult
-	docs   map[string]*document
-	newest time.Time
+	result  dto.ReadResult
+	docs    map[string]*document
+	newest  time.Time
+	readErr error // a failed static read; writes return it (see staticInventory)
 }
 
 func (e *engine) graph(ctx context.Context, i dto.Instance) (graph, error) {
 	g := graph{docs: map[string]*document{}}
 	inv, err := e.inventory(ctx, i)
 	g.result = dto.ReadResult{Inventory: inv.Inventory, Eligibility: inv.Eligibility, Files: []dto.File{}, OpaqueFiles: []dto.OpaqueFile{}, Routes: []dto.Route{}}
+	g.readErr = inv.readErr
 	if err != nil {
 		return g, err
 	}

@@ -76,6 +76,7 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 	switch m.Type {
 	case mount.TypeVolume:
 		source.Kind = dto.NamedVolume
+		helperOnly(&source)
 	case mount.TypeBind:
 		if _, err = acfs.LogicalPath(d.projects(), m.Source); err == nil {
 			source.Kind = dto.ProjectSource
@@ -88,6 +89,8 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 			if err != nil {
 				source.ReadOnly = true
 				source.Reason = dto.RefusedBind
+			} else {
+				helperOnly(&source)
 			}
 		}
 	default:
@@ -95,6 +98,14 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 		source.Reason = dto.UnknownSource
 	}
 	return source, nil
+}
+
+// helperOnly marks a source that only the tools helper could write. The pinned helper
+// cannot prove the absence of extended attributes, ACLs or hard links, so such sources
+// stay read-only with that reason (Q-HELPER-META); the project writer covers the planned case.
+func helperOnly(s *dto.Source) {
+	s.ReadOnly = true
+	s.Reason = dto.UnsupportedMetadata
 }
 func (d *DockerRuntime) Check(ctx context.Context, i dto.Instance) error {
 	c, err := d.inspect(ctx, i.Identity.ContainerName)

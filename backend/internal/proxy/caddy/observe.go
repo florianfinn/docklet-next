@@ -56,7 +56,8 @@ func (e *engine) admin(ctx context.Context, i dto.Instance, address string) (map
 	}
 	res, err := e.runtime.Exec(ctx, i, "admin", "", authority, u)
 	if err != nil {
-		if reason(err, "") == dto.ExecRunning {
+		// An uncertain exec or a failed Docker call (no command ran) is no admin answer.
+		if reason(err, "") == dto.ExecRunning || proxy.Transient(err) {
 			return nil, err
 		}
 		return nil, dto.Fail(dto.AdminUnavailable, 409)

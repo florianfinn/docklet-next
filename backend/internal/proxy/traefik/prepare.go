@@ -55,6 +55,9 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 	if err != nil {
 		return in, err
 	}
+	if g.readErr != nil {
+		return in, g.readErr // a failed static read is no eligibility refusal for a write
+	}
 	var current *dto.File
 	for j, f := range g.result.Files {
 		in.GraphHashes[f.Path] = f.Hash

@@ -160,6 +160,9 @@ func (e *engine) Validate(ctx context.Context, in proxy.Intent) error {
 		return err
 	}
 	docs[in.Request.Target] = d
+	if g.readErr != nil {
+		return g.readErr
+	}
 	if !g.result.Inventory.Eligibility.Writable {
 		return eligibilityError(g.result.Inventory.Eligibility)
 	}

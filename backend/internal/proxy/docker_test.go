@@ -39,12 +39,13 @@ func TestP17SourceSelectionAndReinspection(t *testing.T) {
 		writable     bool
 	}{
 		{"project", project, mount.TypeBind, true, true, dto.ProjectSource, true},
-		{"named-volume", "/example/volumes/data", mount.TypeVolume, true, true, dto.NamedVolume, true},
+		// Helper-only sources stay read-only in M27 (Q-HELPER-META): metadata cannot be proven.
+		{"named-volume", "/example/volumes/data", mount.TypeVolume, true, true, dto.NamedVolume, false},
 		{"refused-bind", "/etc/proxy", mount.TypeBind, true, true, dto.BindSource, false},
 		{"single-file", project, mount.TypeBind, false, true, dto.SingleFileSource, false},
 		// Proxy-side read-only mounts keep the module's writer (Q-SRC): project writer or helper.
 		{"proxy-side-readonly-project", project, mount.TypeBind, true, false, dto.ProjectSource, true},
-		{"proxy-side-readonly-volume", "/example/volumes/data", mount.TypeVolume, true, false, dto.NamedVolume, true},
+		{"proxy-side-readonly-volume", "/example/volumes/data", mount.TypeVolume, true, false, dto.NamedVolume, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mu := sync.Mutex{}
@@ -80,6 +81,9 @@ func TestP17SourceSelectionAndReinspection(t *testing.T) {
 			source, err := d.Source(t.Context(), c, c.Mounts[0])
 			require.NoError(t, err)
 			require.Equal(t, tt.want, source.Kind)
+			if tt.want == dto.NamedVolume {
+				require.Equal(t, dto.UnsupportedMetadata, source.Reason)
+			}
 			i := x.request.Instance
 			i.Identity.ContainerID = c.ID
 			i.Source = source

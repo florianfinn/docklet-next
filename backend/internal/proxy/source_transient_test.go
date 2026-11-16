@@ -39,7 +39,7 @@ func TestSourceTransientErrorsAreNotClassifications(t *testing.T) {
 		{"stat missing", "/example/binds/proxy", http.StatusNotFound, http.StatusOK, false, dto.UnknownSourceKind, true},
 		{"info failure", "/example/binds/proxy", http.StatusOK, http.StatusInternalServerError, true, "", false},
 		{"bind rule refusal", "/etc/proxy", http.StatusOK, http.StatusOK, false, dto.BindSource, true},
-		{"bind allowed", "/example/binds/proxy", http.StatusOK, http.StatusOK, false, dto.BindSource, false},
+		{"bind allowed (helper-only, read-only)", "/example/binds/proxy", http.StatusOK, http.StatusOK, false, dto.BindSource, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			x := newFixture(t)
