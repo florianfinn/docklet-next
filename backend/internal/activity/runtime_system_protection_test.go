@@ -2,7 +2,7 @@
 // Revision: e83119924556ce53fea232ceac7a270bd595304b
 // Retrieved: 2026-11-13
 // License: Apache-2.0
-// Deviations: Original system-labelled descriptor, admission, metadata and executor parity.
+// Deviations: Original system-labelled descriptor, admission, metadata and executor parity. Hub hidden like the agent: policy targets are not found.
 
 package activity_test
 
@@ -147,9 +147,8 @@ func TestSystemWorkloadDirectExecutorAndPolicy(t *testing.T) {
 			require.NoError(t, f.db.First(&admin, "username=?", "arcane").Error)
 			_, err = service.SaveImagePolicy(t.Context(), "0", "app", u.UpdatePolicyInput{Mode: "scheduled", Window: &u.UpdateWindow{Kind: "daily", Time: "04:00"}}, admin.ID, "", "container")
 			require.Error(t, err)
-			if role == "hub" {
-				require.Equal(t, "container.origin-locked", imageDTO.Neutral(err, "unexpected", 500).Problem.Code, "system workload must be ineligible for policy updates")
-			}
+			// Hub and agent containers are hidden alike, so a policy cannot even find them as a target.
+			require.Equal(t, "update.target-not-found", imageDTO.Neutral(err, "unexpected", 500).Problem.Code, "system workload must be ineligible for policy updates")
 		})
 	}
 }
