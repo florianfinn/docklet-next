@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release compatibility and supported-layout reference.
+Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472).
 -->
 
 # Compatibility
@@ -31,17 +31,23 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `18` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `19` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. A contract-18 agent must also have
-the expected schema fingerprint. Health/version reads and the agent update
+`update-required` and `agent.update-required`. Contracts 18 and 19 must also have
+their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
+
+A contract-18 agent stays usable for all host functions except optional
+modules. Modules need contract 19; on an older host, or an Edge agent that does
+not advertise the module commands, the module shows as unavailable for that host
+(`agent.update-required`) and receives no module call. Use **Update agent** to
+bring the host to the hub's version.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without

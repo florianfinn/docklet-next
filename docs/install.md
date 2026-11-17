@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release installation instructions verified against the package and runtime producers.
+Deviations: Original release installation instructions verified against the package and runtime producers; published-release wording for 1.0.0.
 -->
 
 # Install Docklet Next
@@ -13,8 +13,8 @@ then add agents through the hub. Check [compatibility](compatibility.md) first.
 Release images target **linux/amd64**:
 `ghcr.io/florianfinn/docklet-next-hub` and
 `ghcr.io/florianfinn/docklet-next-agent`.
-Until a release is published, and for local builds without a product registry,
-use the [source-build guide](../deploy/hub/README.md).
+For local builds without a product registry, use the
+[source-build guide](../deploy/hub/README.md).
 
 ## Prepare the host and public address
 

@@ -1,6 +1,17 @@
 # Security policy
 
-Docklet Next is in early development and has no supported product release yet.
+## Supported versions
+
+| Version | Supported |
+| --- | --- |
+| 1.0.x | Yes |
+| Earlier builds, release candidates and development images | No |
+
+Fixes ship in a new patch release; upgrade to the latest 1.0.x release before
+reporting. Custom and source-built images are supported only as far as the
+reported defect reproduces with an official release image.
+
+## Reporting a vulnerability
 
 Report suspected vulnerabilities privately through GitHub Security Advisories:
 open the repository Security tab, choose Advisories, then Report a vulnerability.
