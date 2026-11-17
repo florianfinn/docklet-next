@@ -25,7 +25,7 @@ func TestBindRefusesDockletContainersByTheirOwnLabels(t *testing.T) {
 		owner  container.Summary
 	}{{"/opt/docklet-agent/data", agent}, {"/opt/docklet-agent", agent}, {"/srv/docklet-hub/data/backups", hub}} {
 		var p *dto.Problem
-		require.ErrorAs(t, Rules(tc.source, "", []container.Summary{tc.owner}, nil, true), &p, tc.source)
+		require.ErrorAs(t, Rules(tc.source, "", []container.Summary{tc.owner}, nil, true, Strict), &p, tc.source)
 		require.Equal(t, "docklet", p.Reason, tc.source)
 	}
 	require.False(t, Helper(agent))

@@ -33,11 +33,21 @@ earlier docklet-hub, Arcane or pre-release data is supported.
 
 The [release package](docs/install.md) is the supported installation: its
 Compose file pins both images by version and digest and forwards every sign-in
-setting. For a first look, this minimal `compose.yaml` runs the hub with local
-sign-in:
+setting. For a first look, this example keeps everything of Docklet in one
+directory and manages the stacks next to it:
+
+```text
+/srv/docker/            projects directory: one subdirectory per stack
+/srv/docker/docklet/    Docklet itself: compose.yaml, .env, data/, backups/
+```
+
+Any local directory works; replace `/srv/docker` everywhere below if you use another
+one.
+
+Create `/srv/docker/docklet/compose.yaml`:
 
 ```yaml
-name: docklet-next
+name: docklet
 services:
   hub:
     image: ghcr.io/florianfinn/docklet-next-hub:1.0.0
@@ -46,43 +56,65 @@ services:
     ports:
       - "127.0.0.1:3552:3552"
     environment:
-      TZ: ${TZ:-UTC}
-      APP_URL: ${APP_URL:?Set APP_URL to the public origin}
-      AUTH_MODE: local
+      APP_URL: ${APP_URL:?Set APP_URL in .env}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      PUID: ${PUID:?Set PUID in .env}
+      PGID: ${PGID:?Set PGID in .env}
+      TZ: ${TZ:-UTC}
+      AUTH_MODE: local
+      PROJECTS_DIRECTORY: /srv/docker
+      # Fixed container paths; leave them as they are.
       DATABASE_URL: file:/app/data/docklet.db
       DOCKLET_BACKUP_DIR: /var/lib/docklet/backups
-      PROJECTS_DIRECTORY: /app/data/projects
       DOCKER_CONFIG: /app/data/.docker
     volumes:
-      - hub-data:/app/data
-      - hub-backups:/var/lib/docklet/backups
+      - ./data:/app/data
+      - ./backups:/var/lib/docklet/backups
+      - /srv/docker:/srv/docker
       - /var/run/docker.sock:/var/run/docker.sock
-volumes:
-  hub-data: {}
-  hub-backups: {}
 ```
 
-Put the private values in a `.env` file beside it and start the hub:
+Create `/srv/docker/docklet/.env` beside it:
+
+```dotenv
+APP_URL=https://docklet.example.com
+PUID=1000
+PGID=1000
+TZ=Europe/Berlin
+```
+
+Then add a new encryption key and start the hub:
 
 ```sh
-printf 'APP_URL=https://docklet.example.com\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+cd /srv/docker/docklet
+echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
 chmod 600 .env
 docker compose up -d
 docker compose logs hub
 ```
 
-Keep `ENCRYPTION_KEY` with your protected backups; the hub cannot read its
-stored secrets without it. Serve the hub at the root of the domain in `APP_URL`
-through a TLS reverse proxy that forwards WebSockets to `127.0.0.1:3552` (see the
-[reverse-proxy guide](docs/deployment/reverse-proxy.md)). Sign in as `arcane`
-with the initial password from the startup log, change it when prompted and
-complete setup. Then use **Hosts** › **Add host**; the hub generates the
-agent installation package.
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `APP_URL` | yes | Public origin of the hub, the root of a dedicated domain or subdomain. Links, sign-in and agent connections use it. |
+| `ENCRYPTION_KEY` | yes | Encrypts stored credentials (registry logins, backup targets and their keys) and secures sign-in sessions. Keep a copy with your backups: without the original key a restored hub cannot read those credentials, and changing it later makes them unreadable. |
+| `PUID`, `PGID` | yes | User and group the hub runs as. Use the owner of the projects directory (`stat -c '%u %g' /srv/docker`), so Docklet can create and edit stacks there. The hub hands `data/` and `backups/` to this user at startup. |
+| `TZ` | no | IANA time zone for schedules and dates, default `UTC`. |
+| `AUTH_MODE` | no | Sign-in mode: `local` (passwords, default), `proxy` (a trusted reverse proxy authenticates) or `none`. See the [installation guide](docs/install.md#select-a-sign-in-mode). |
+| `PROJECTS_DIRECTORY` | no | Where stacks live inside the container. Mount it at the same path as on the host, as above, so relative paths in your stacks resolve correctly. |
+| `DATABASE_URL`, `DOCKLET_BACKUP_DIR`, `DOCKER_CONFIG` | fixed | Database file, hub backup archives and registry login data inside the mounted `data/` and `backups/` directories. |
 
-The hub database must stay on local storage, not on a network share. Before
-production use, switch to the release package for digest pins, proxy sign-in and
-the documented upgrade path.
+All other settings, such as proxy sign-in, trusted proxies or image overrides, are
+described in [`.env.example`](.env.example). Docklet keeps its own settings in the
+database under `data/`; there is no separate configuration directory. Keep `data/`
+on a local disk, not on a network share.
+
+Serve the hub through a TLS reverse proxy that forwards WebSockets to
+`127.0.0.1:3552` (see the [reverse-proxy guide](docs/deployment/reverse-proxy.md)).
+Sign in as `arcane` with the initial password from `docker compose logs hub`,
+change it when prompted and complete setup. Docklet hides its own `docklet`
+project from the stack list. Then use **Hosts** › **Add host**; the hub generates
+the agent installation package. Before production use, switch to the release
+package for digest pins, proxy sign-in and the documented upgrade path.
 
 ## Install
 

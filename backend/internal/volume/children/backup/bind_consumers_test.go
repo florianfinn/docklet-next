@@ -27,7 +27,10 @@ func TestBindConsumersOverlapAndSelfRefusal(t *testing.T) {
 	rows := []container.Summary{row("equal", "/srv/app", nil), row("parent", "/srv", nil), row("child", "/srv/app/data", nil), row("sibling", "/srv/app2", nil), row("helper", "/srv/app", volumehelper.Labels())}
 	started := []string{}
 	svc := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.True(t, strings.HasSuffix(r.URL.Path, "/containers/json"))
+		if !strings.HasSuffix(r.URL.Path, "/containers/json") {
+			http.NotFound(w, r) // own-container lookup: not running in a container keeps self mounts strict
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(rows))
 	}), &started)
@@ -58,4 +61,30 @@ func TestProtectedBindBackupsRemainDownloadable(t *testing.T) {
 			require.NotEqual(t, "/etc/config", m.Source, "by-ID recovery never mounts the protected source")
 		}
 	}
+}
+
+func TestBindConsumersExemptOwnProjectsMount(t *testing.T) {
+	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
+	own := container.Summary{ID: "own-agent", Names: []string{"/agent"}, State: container.StateRunning,
+		Labels: map[string]string{"io.docklet.system": "agent"},
+		Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker", Destination: "/srv/docker"}, {Type: mount.TypeBind, Source: "/srv/docker/docklet-agent/data", Destination: "/app/data"}}}
+	app := container.Summary{ID: "app", Names: []string{"/app"}, State: container.StateRunning,
+		Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker/app/data", Destination: "/data"}}}
+	started := []string{}
+	svc := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/containers/json") {
+			require.NoError(t, json.NewEncoder(w).Encode([]container.Summary{own, app}))
+			return
+		}
+		_, _ = w.Write([]byte(`{"Id":"own-agent","Config":{"Labels":{"io.docklet.system":"agent"}}}`))
+	}), &started)
+	// B4: a stack bind below the own projects mount is restorable; its workload consumer is stopped.
+	consumers, err := svc.listConsumers(t.Context(), volume.BindKey("/srv/docker/app/data"), true)
+	require.NoError(t, err)
+	require.Len(t, consumers, 1)
+	require.Equal(t, "app", consumers[0].ID)
+	// The own data mount still refuses a restore into it.
+	_, err = svc.listConsumers(t.Context(), volume.BindKey("/srv/docker/docklet-agent/data"), true)
+	require.EqualError(t, err, "volume.restore.self-mounted")
 }

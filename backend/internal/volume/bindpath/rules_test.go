@@ -27,7 +27,7 @@ func binding(id, source string, labels map[string]string) container.Summary {
 }
 func TestBindSystemAndDockerOverlap(t *testing.T) {
 	for _, tc := range []struct{ source, root, reason string }{{"/etcetera", "", ""}, {"/etc/x", "", "system"}, {"/var/lib", "", "docker"}, {"/srv", "/srv/engine", "docker"}, {"/srv/engine/x", "/srv/engine", "docker"}, {"/srv2", "/srv/engine", ""}} {
-		err := Rules(tc.source, tc.root, nil, nil, true)
+		err := Rules(tc.source, tc.root, nil, nil, true, Strict)
 		if tc.reason == "" {
 			require.NoError(t, err, tc.source)
 		} else {
@@ -46,15 +46,15 @@ func TestBindDockletTargetsAndObservedAdmission(t *testing.T) {
 	helper := binding("helper", "/srv/app", volumehelper.Labels())
 	workload := binding("app", "/srv/app", nil)
 	for _, source := range []string{"/srv", "/srv/docklet", "/srv/docklet/data"} {
-		require.Error(t, Rules(source, "", []container.Summary{self}, nil, true))
+		require.Error(t, Rules(source, "", []container.Summary{self}, nil, true, Strict))
 	}
 	for _, source := range []string{"/srv", "/srv/target", "/srv/target/archive"} {
-		require.Error(t, Rules(source, "", nil, []string{"/srv/target"}, true))
+		require.Error(t, Rules(source, "", nil, []string{"/srv/target"}, true, Strict))
 	}
-	require.EqualError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, false), "volume.bind.not-mounted")
-	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper, workload}, nil, false))
-	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, true))
-	require.NoError(t, Rules("/srv/app", "", nil, nil, true), "retained rows keep the key usable")
+	require.EqualError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, false, Strict), "volume.bind.not-mounted")
+	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper, workload}, nil, false, Strict))
+	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, true, Strict))
+	require.NoError(t, Rules("/srv/app", "", nil, nil, true, Strict), "retained rows keep the key usable")
 	require.True(t, Uses(workload, "/srv", true))
 	require.False(t, Uses(workload, "/srv", false))
 }

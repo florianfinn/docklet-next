@@ -56,16 +56,16 @@ func TestStoredTargetsProtectRetiredPaths(t *testing.T) {
 					require.NoError(t, err)
 					for _, source := range []string{"/srv/archive", "/srv/archive/repository", "/srv/archive/repository/data"} {
 						for _, stored := range []bool{false, true} {
-							err := Rules(source, "", nil, paths, stored)
+							err := Rules(source, "", nil, paths, stored, Strict)
 							var problem *dto.Problem
 							require.ErrorAs(t, err, &problem, "stored target paths stay protected after retirement")
 							require.Equal(t, "volume.bind.path-denied", problem.Code)
 							require.Equal(t, "docklet", problem.Reason)
 						}
 					}
-					require.NoError(t, Rules("/srv/foreign", "", nil, paths, true))
-					require.NoError(t, Rules("/srv/shared", "", nil, paths, true))
-					require.NoError(t, Rules("/srv/archive/repository-other", "", nil, paths, true))
+					require.NoError(t, Rules("/srv/foreign", "", nil, paths, true, Strict))
+					require.NoError(t, Rules("/srv/shared", "", nil, paths, true, Strict))
+					require.NoError(t, Rules("/srv/archive/repository-other", "", nil, paths, true, Strict))
 				})
 			}
 		}

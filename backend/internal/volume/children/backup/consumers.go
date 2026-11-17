@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original exact-container recovery ownership for volume operations; M16 bind mounts and backup completion.
+// Deviations: Original exact-container recovery ownership for volume operations; M16 bind mounts and backup completion; own projects-mount exemption.
 
 package backup
 
@@ -40,11 +40,15 @@ func (s *Service) listConsumers(ctx context.Context, name string, refuseSelf boo
 	}
 	stopped := []volume.StoppedContainer{}
 	seen := map[string]bool{}
+	own := bindpath.OwnProjects(ctx, cli, s.deps.DB)
 	for _, candidate := range result.Items {
 		if seen[candidate.ID] || source != "" && bindpath.Helper(candidate) {
 			continue
 		}
 		uses := source != "" && bindpath.Uses(candidate, source, true)
+		if uses && bindpath.Self(candidate) {
+			uses = bindpath.Protects(candidate, source, own)
+		}
 		for _, m := range candidate.Mounts {
 			if source == "" && m.Name == name {
 				uses = true

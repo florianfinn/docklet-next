@@ -3,7 +3,7 @@ Source: docklet-next/issues/327
 Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 Retrieved: 2026-11-01
 License: Apache-2.0
-Deviations: Original bind-mount path rules, file access and backup rationale.
+Deviations: Original bind-mount path rules, file access and backup rationale; own projects-mount exemption and install-directory protection.
 -->
 
 # Bind mounts: path rules, files and backups
@@ -52,10 +52,19 @@ below or above, compared segment-wise (`/etcetera` does not overlap `/etc`).
 | Rule | Refuses | Code |
 | --- | --- | --- |
 | R1 system | `/` and any path overlapping `/proc`, `/sys`, `/dev`, `/etc`, `/run`, `/var/run`, `/boot`, `/var/lib/docker`, `/var/lib/containerd` or the daemon's `DockerRootDir`; ancestors are refused too, so `/var/lib` or `/srv` above a Docker root under `/srv/engine` is denied | `422 volume.bind.path-denied` (`reason: system` or `docker`) |
-| R2 Docklet | a path overlapping a bind source of a Docklet hub or agent container (self labels) or the host path of a stored local or mount backup target of that host, including retired targets | `422 volume.bind.path-denied` (`reason: docklet`) |
+| R2 Docklet | a path overlapping a bind source or the Compose working directory of a Docklet hub or agent container (self labels), or the host path of a stored local or mount backup target of that host, including retired targets. The executing container's own projects-directory mount protects only its root and ancestors: stack data below it stays eligible | `422 volume.bind.path-denied` (`reason: docklet`) |
 | R3 observed | a key without stored policy, backup or restore rows that no workload container on the host (any state) currently bind-mounts with exactly that source | `404 volume.bind.not-mounted` |
 | R4 type | a source that is missing, or neither a directory nor a regular file (socket, device, FIFO), found by the source witness (§2.1) | `404 volume.bind.source-missing`, `422 volume.bind.unsupported-type` |
 
+- **Own projects mount**: the bind mount of the executing hub or agent container whose
+  destination equals its effective projects directory (`PROJECTS_DIRECTORY`, else the
+  setting, else `/app/data/projects`). The agent installer and the README layout mount it
+  at the same host path. The container is found by its own inspect (labelled
+  `io.docklet.system`); any lookup failure keeps every Docklet mount fully protected, and
+  the lookup runs only when a Docklet mount overlaps the requested path. Restore applies
+  the same exemption before refusing with `409 volume.restore.self-mounted`. The Compose
+  working directory protects the install directory (`.env` with the encryption key or the
+  agent token) when it lies inside the projects root.
 - **Workload container**: any container that is not a Docklet hub or agent container and
   not a Docklet operation helper. Operation helpers are the workspace helper, backup
   engine, restore writer, source witness and target probe containers; they carry the

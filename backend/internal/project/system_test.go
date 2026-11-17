@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original fake Docker project-list regression test.
+// Deviations: Original fake Docker project-list regression test; hub role.
 
 package project
 
@@ -18,6 +18,15 @@ import (
 )
 
 func TestListProjectsHidesAgentFakeDocker(t *testing.T) {
+	testListProjectsHidesSystemRole(t, "agent")
+}
+
+// B6: the hub's own Compose project, e.g. inside its own projects directory, is not a stack.
+func TestListProjectsHidesHubFakeDocker(t *testing.T) {
+	testListProjectsHidesSystemRole(t, "hub")
+}
+
+func testListProjectsHidesSystemRole(t *testing.T, role string) {
 	db := setupProjectTestDB(t)
 	settings, err := newSettingsServiceForTest(t, t.Context(), db)
 	require.NoError(t, err)
@@ -29,7 +38,7 @@ func TestListProjectsHidesAgentFakeDocker(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&records).Error)
 	server := newProjectRuntimeDockerServer(t, []container.Summary{
-		{ID: "agent", Labels: map[string]string{"com.docker.compose.project": "system", "com.docker.compose.service": "agent", "io.docklet.system": "agent"}, State: container.StateRunning},
+		{ID: "agent", Labels: map[string]string{"com.docker.compose.project": "system", "com.docker.compose.service": role, "io.docklet.system": role}, State: container.StateRunning},
 		{ID: "user", Labels: map[string]string{"com.docker.compose.project": "docklet-agent", "com.docker.compose.service": "web"}, State: container.StateRunning},
 	})
 	service := NewProjectService(db, settings, nil, nil, &docker.DockerClientService{Client: newTestDockerClient(t, server)}, nil, nil, config.Load(), nil, nil)
