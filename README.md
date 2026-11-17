@@ -10,8 +10,9 @@ earlier docklet-hub, Arcane or pre-release data is supported.
 ## Features
 
 - **Stacks and containers:** create, edit, import and deploy Compose stacks; start,
-  stop, restart and redeploy stacks and containers as durable action runs; live
-  logs and an interactive container shell.
+  stop and restart stacks and containers and redeploy stacks as durable action
+  runs; edit and recreate standalone containers; live logs and an interactive
+  container shell.
 - **Hosts:** the local hub host plus Direct agents (the hub connects) and Edge
   agents (the agent tunnels out), with onboarding packages, host maintenance
   (edit, check, reconnect, restart, remove) and in-app hub and agent updates.
