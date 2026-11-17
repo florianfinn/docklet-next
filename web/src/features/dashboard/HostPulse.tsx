@@ -10,6 +10,8 @@ import { Meter } from "@/shared/components/meter";
 import { ToneBadge, ToneDot } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
 
+import { smoothHistory } from "./smooth-history";
+
 /** Host resource samples remain visible with their observation notice on disconnect. */
 export function HostPulse({ host, stacks, containers, className }: { host: Host; stacks: number; containers: number; className?: string }) {
   const t = useTranslations("dashboard.summary");
@@ -40,7 +42,7 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
           {tc(host.status)}
         </span>
       </header>
-      {/* Grows when the card stretches to the host area's height; the trend takes the extra space. */}
+      {/* Grows when the card stretches to the host area's height; the smoothed CPU bars take the extra space. Meters show the raw sample. */}
       <div className="flex min-h-9 flex-1 items-end justify-between gap-3">
         <div className="shrink-0 text-[11px] leading-tight text-muted-foreground">
           <div>{host.os}</div>
@@ -48,7 +50,7 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
             {t("hostStacks", { count: stacks })} · {t("hostContainers", { count: containers })}
           </div>
         </div>
-        {m && <Sparkline data={m.cpuHistory} type="area" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}
+        {m && <Sparkline data={smoothHistory(m.cpuHistory)} type="bar" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}
       </div>
       {pending ? (
         <p className="flex items-center gap-1.5 text-xs text-info">
