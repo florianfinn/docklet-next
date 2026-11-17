@@ -2,7 +2,7 @@
 // Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion.
+// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; realistic state destination.
 
 package bindpath
 
@@ -27,7 +27,7 @@ func binding(id, source string, labels map[string]string) container.Summary {
 }
 func TestBindSystemAndDockerOverlap(t *testing.T) {
 	for _, tc := range []struct{ source, root, reason string }{{"/etcetera", "", ""}, {"/etc/x", "", "system"}, {"/var/lib", "", "docker"}, {"/srv", "/srv/engine", "docker"}, {"/srv/engine/x", "/srv/engine", "docker"}, {"/srv2", "/srv/engine", ""}} {
-		err := Rules(tc.source, tc.root, nil, nil, true, Strict)
+		err := Rules(tc.source, tc.root, nil, nil, true)
 		if tc.reason == "" {
 			require.NoError(t, err, tc.source)
 		} else {
@@ -43,18 +43,19 @@ func TestBindSystemAndDockerOverlap(t *testing.T) {
 }
 func TestBindDockletTargetsAndObservedAdmission(t *testing.T) {
 	self := binding("hub", "/srv/docklet", map[string]string{"com.getarcaneapp.arcane": "true"})
+	self.Mounts[0].Destination = "/app/data" // state mount: its whole subtree is protected
 	helper := binding("helper", "/srv/app", volumehelper.Labels())
 	workload := binding("app", "/srv/app", nil)
 	for _, source := range []string{"/srv", "/srv/docklet", "/srv/docklet/data"} {
-		require.Error(t, Rules(source, "", []container.Summary{self}, nil, true, Strict))
+		require.Error(t, Rules(source, "", []container.Summary{self}, nil, true))
 	}
 	for _, source := range []string{"/srv", "/srv/target", "/srv/target/archive"} {
-		require.Error(t, Rules(source, "", nil, []string{"/srv/target"}, true, Strict))
+		require.Error(t, Rules(source, "", nil, []string{"/srv/target"}, true))
 	}
-	require.EqualError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, false, Strict), "volume.bind.not-mounted")
-	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper, workload}, nil, false, Strict))
-	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, true, Strict))
-	require.NoError(t, Rules("/srv/app", "", nil, nil, true, Strict), "retained rows keep the key usable")
+	require.EqualError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, false), "volume.bind.not-mounted")
+	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper, workload}, nil, false))
+	require.NoError(t, Rules("/srv/app", "", []container.Summary{helper}, nil, true))
+	require.NoError(t, Rules("/srv/app", "", nil, nil, true), "retained rows keep the key usable")
 	require.True(t, Uses(workload, "/srv", true))
 	require.False(t, Uses(workload, "/srv", false))
 }

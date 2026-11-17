@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; hidden agent inventory; authoritative network write validation; separate scheduled-prune removal.
+// Deviations: Local module namespace; hidden agent and hub inventory; authoritative network write validation; separate scheduled-prune removal.
 
 package network
 
@@ -76,7 +76,7 @@ func (s *NetworkService) GetNetworkTopology(ctx context.Context) (*networktypes.
 	containerInfoByID := buildTopologyContainerInfoInternal(containers)
 	systemIDs := map[string]bool{}
 	for _, c := range containers {
-		if c.Labels[inventory.SystemLabel] == "agent" {
+		if inventory.IsSystem(c.Labels) {
 			systemIDs[c.ID] = true
 		}
 	}

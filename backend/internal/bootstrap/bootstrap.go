@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown; registers resolved state paths for bind rules.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown.
 
 package bootstrap
 
@@ -230,7 +230,6 @@ type initializeStartupStateParams struct {
 	AppCtx     context.Context
 	Config     *config.Config
 	HTTPClient *http.Client
-	DB         *database.DB
 
 	Volume        *volume.VolumeService
 	Settings      *settings.SettingsService
@@ -284,7 +283,6 @@ func initializeStartupState(p initializeStartupStateParams) error {
 	if err := p.Settings.NormalizeProjectsDirectory(appCtx, cfg.ProjectsDirectory); err != nil {
 		slog.WarnContext(appCtx, "Failed to normalize projects directory", "error", err)
 	}
-	configureBindRuntime(cfg, p.DB, p.Settings)
 
 	if err := p.Environment.EnsureLocalEnvironment(appCtx, cfg.AppUrl); err != nil {
 		slog.WarnContext(appCtx, "Failed to ensure local environment", "error", err)

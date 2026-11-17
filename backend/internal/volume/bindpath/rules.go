@@ -2,7 +2,7 @@
 // Revision: b9b59ae92f1b09eb828940860971002eab9267b6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; own projects-mount exemption.
+// Deviations: Original M16 bind identity and admission rules; M16 bind mounts and backup completion; Docklet mounts protect state, install directory and mount roots.
 
 package bindpath
 
@@ -47,7 +47,7 @@ func Uses(c container.Summary, source string, overlap bool) bool {
 	return false
 }
 
-func Rules(source, dockerRoot string, rows []container.Summary, targets []string, stored bool, own OwnLookup) error {
+func Rules(source, dockerRoot string, rows []container.Summary, targets []string, stored bool) error {
 	deny := func(reason string) error {
 		e := dto.NewProblem(422, "volume.bind.path-denied", nil)
 		e.Reason = reason
@@ -64,7 +64,7 @@ func Rules(source, dockerRoot string, rows []container.Summary, targets []string
 		}
 	}
 	for _, c := range rows {
-		if Self(c) && Protects(c, source, own) {
+		if Self(c) && Protects(c, source) {
 			return deny("docklet")
 		}
 	}
@@ -113,7 +113,7 @@ func Check(ctx context.Context, cli *client.Client, db *database.DB, key string)
 			return "", err
 		}
 	}
-	if err = Rules(source, info.Info.DockerRootDir, rows.Items, targets, stored, OwnProjects(ctx, cli)); err != nil {
+	if err = Rules(source, info.Info.DockerRootDir, rows.Items, targets, stored); err != nil {
 		return "", err
 	}
 	return source, nil

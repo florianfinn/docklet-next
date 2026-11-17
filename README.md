@@ -112,7 +112,7 @@ Serve the hub through a TLS reverse proxy that forwards WebSockets to
 `127.0.0.1:3552` (see the [reverse-proxy guide](docs/deployment/reverse-proxy.md)).
 Sign in as `arcane` with the initial password from `docker compose logs hub`,
 change it when prompted and complete setup. Docklet hides its own `docklet`
-project from the stack list. Then use **Hosts** › **Add host**; the hub generates
+project and its own containers. Then use **Hosts** › **Add host**; the hub generates
 the agent installation package. Before production use, switch to the release
 package for digest pins, proxy sign-in and the documented upgrade path.
 

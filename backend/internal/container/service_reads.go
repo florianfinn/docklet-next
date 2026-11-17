@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent inventory; M14 container and host operation contracts. M25 system workload protection.
+// Deviations: Local module namespace; split lifecycle, editing, inventory and stream concerns; exclude Docklet agent and hub inventory; M14 container and host operation contracts. M25 system workload protection.
 
 package container
 
 import (
 	"cmp"
 	"context"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"log/slog"
 	"strings"
 
@@ -234,7 +235,7 @@ func FilterExcludedContainers(containers []container.Summary, includeInternal, i
 
 	filtered := make([]container.Summary, 0, len(containers))
 	for _, dc := range containers {
-		if dc.Labels["io.docklet.system"] == "agent" {
+		if inventory.IsSystem(dc.Labels) {
 			continue
 		}
 		internal, _ := kit.ParseBool(dc.Labels[libarcane.InternalResourceLabel])

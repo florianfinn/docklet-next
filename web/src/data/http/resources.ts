@@ -2,8 +2,9 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. Hub images and networks hidden like the agent.
 
+import { systemRole } from "@/domain/system";
 import { READ_TAG_HEADER, SKIPPED_HEADER, type ReadTag } from "./host-read-policy";
 import { mergeInventoryObservations } from "./inventory-observations";
 import { inventoryRecovery } from "../inventory-recovery";
@@ -53,7 +54,7 @@ export function createObservedHostImageReader(baseUrl: string, fetcher: typeof f
     const inventory = combine([projects.observation, containers.observation, images.observation]);
     onState(hostId, inventory);
     if (version === generation()) loaded.add(hostId);
-    return { inventory, images: images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, hostId, containers.rows, projects.rows, inventory)) };
+    return { inventory, images: images.rows.filter((i) => systemRole(i.labels) === undefined).map((i) => mapImage(i, hostId, containers.rows, projects.rows, inventory)) };
   };
 }
 
@@ -101,7 +102,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     listImages: (onPartial, signal) => aggregate("listImages", async (h, owned) => { const { images, inventory } = await hostImages(h.id, owned); return { rows: images, inventory }; }, onPartial, signal),
     listNetworkSummaries: (signal) => aggregate("getTopology", async (h, owned) => {
       const networks = await list("list-networks", h.id, "networks", undefined, owned);
-      return { rows: networks.rows.filter((n) => n.labels?.["io.docklet.system"] !== "agent").map((n) => ({ id: n.id, hostId: h.id })), inventory: networks.observation };
+      return { rows: networks.rows.filter((n) => systemRole(n.labels) === undefined).map((n) => ({ id: n.id, hostId: h.id })), inventory: networks.observation };
     }, undefined, signal),
     async getTopology(onPartial, retained) {
       await requireCapability("getTopology");

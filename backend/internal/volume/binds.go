@@ -79,7 +79,6 @@ func (s *VolumeService) bindsFromContainers(ctx context.Context, cli *client.Cli
 	if err != nil {
 		return nil, err
 	}
-	own := bindpath.OwnProjects(ctx, cli)
 	bySource := map[string]*volumetypes.Bind{}
 	for _, c := range rows {
 		if bindpath.Self(c) || bindpath.Helper(c) {
@@ -96,7 +95,7 @@ func (s *VolumeService) bindsFromContainers(ctx context.Context, cli *client.Cli
 				if err := volumetypes.ValidateName(key); err != nil {
 					row.Eligible = false
 					row.Reason = "volume.bind.invalid-key"
-				} else if err := bindpath.Rules(m.Source, info.Info.DockerRootDir, rows, targets, true, own); err != nil {
+				} else if err := bindpath.Rules(m.Source, info.Info.DockerRootDir, rows, targets, true); err != nil {
 					var p *dto.Problem
 					if errors.As(err, &p) {
 						row.Eligible = false

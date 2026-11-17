@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original fake-Docker read-path integration tests.
+// Deviations: Original fake-Docker read-path integration tests; hub hidden like the agent.
 
 package docker_test
 
@@ -28,9 +28,16 @@ import (
 )
 
 func TestReadInventoryFakeDocker(t *testing.T) {
+	for _, role := range []string{"agent", "hub"} {
+		t.Run(role, func(t *testing.T) { readInventoryHidesSystemRole(t, role) })
+	}
+}
+
+// Docklet's own agent and hub, and resources only they use, are hidden alike.
+func readInventoryHidesSystemRole(t *testing.T, role string) {
 	containers := []map[string]any{
 		{"Id": "app", "Names": []string{"/app"}, "Image": "example:1.0.0", "ImageID": "sha256:user", "State": "running", "Mounts": []map[string]any{{"Type": "volume", "Name": "user-data", "Destination": "/data"}}, "NetworkSettings": map[string]any{"Networks": map[string]any{"user-net": map[string]any{"NetworkID": "user-net"}}}, "Ports": []map[string]any{{"PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}}},
-		{"Id": "agent", "Names": []string{"/agent"}, "Image": "example-agent:1.0.0", "ImageID": "sha256:agent", "State": "running", "Labels": map[string]string{"io.docklet.system": "agent"}, "Mounts": []map[string]any{{"Type": "volume", "Name": "agent-data"}}, "NetworkSettings": map[string]any{"Networks": map[string]any{"agent-net": map[string]any{"NetworkID": "agent-net"}}}, "Ports": []map[string]any{{"PrivatePort": 3552, "PublicPort": 3552, "Type": "tcp"}}},
+		{"Id": "agent", "Names": []string{"/agent"}, "Image": "example-agent:1.0.0", "ImageID": "sha256:agent", "State": "running", "Labels": map[string]string{"io.docklet.system": role}, "Mounts": []map[string]any{{"Type": "volume", "Name": "agent-data"}}, "NetworkSettings": map[string]any{"Networks": map[string]any{"agent-net": map[string]any{"NetworkID": "agent-net"}}}, "Ports": []map[string]any{{"PrivatePort": 3552, "PublicPort": 3552, "Type": "tcp"}}},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

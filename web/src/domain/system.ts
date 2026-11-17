@@ -1,17 +1,18 @@
-// Docklet's own components (the agent) are workloads on the host but not user
-// stacks or containers. They are recognised only by an explicit label that the
+// Docklet's own components (hub and agent) are workloads on the host but not user
+// stacks or containers. They are recognised only by an explicit label that the image or
 // installer writes, never by name, so a user stack called "docklet-agent" stays visible.
 
 import type { ContainerState, ImageVersion, LogLevel, PortMapping } from "./model";
 
 export const SYSTEM_LABEL = "io.docklet.system";
-export type SystemRole = "agent";
+export type SystemRole = "agent" | "hub";
 
 /** Labels the installer puts on the agent's compose project and container. */
 export const AGENT_LABELS: Readonly<Record<string, string>> = { [SYSTEM_LABEL]: "agent" };
 
-export function systemRole(labels: Readonly<Record<string, string>> | undefined): SystemRole | undefined {
-  return labels?.[SYSTEM_LABEL] === "agent" ? "agent" : undefined;
+export function systemRole(labels: Readonly<Record<string, unknown>> | undefined): SystemRole | undefined {
+  const role = labels?.[SYSTEM_LABEL];
+  return role === "agent" || role === "hub" ? role : undefined;
 }
 
 export function isSystemWorkload(item: { dockerLabels?: Readonly<Record<string, string>> }): boolean {

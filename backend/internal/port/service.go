@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; exclude agent port mappings.
+// Deviations: Local module namespace; exclude agent and hub port mappings.
 
 package port
 
 import (
 	"context"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"strconv"
 	"strings"
 
@@ -37,7 +38,7 @@ func (s *PortService) ListPortsPaginated(ctx context.Context, params pagination.
 
 	items := make([]porttypes.PortMapping, 0)
 	for _, rawContainer := range containers {
-		if rawContainer.Labels["io.docklet.system"] == "agent" {
+		if inventory.IsSystem(rawContainer.Labels) {
 			continue
 		}
 		summary := container.NewSummary(rawContainer)

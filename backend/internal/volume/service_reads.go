@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent and hub volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename; M16 bind mounts and backup completion.
 
 package volume
 
@@ -213,7 +213,7 @@ func (s *VolumeService) CountUsageFromSnapshot(dockerVolumes []volume.Volume, co
 }
 
 func (s *VolumeService) isInternalVolumeInternal(v volumetypes.Volume) bool {
-	if v.Labels[inventory.SystemLabel] == "agent" {
+	if inventory.IsSystem(v.Labels) {
 		return true
 	}
 	if strings.EqualFold(strings.TrimSpace(v.Name), strings.TrimSpace(s.backupVolumeName)) {

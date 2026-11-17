@@ -9,7 +9,6 @@ package backup
 import (
 	"context"
 	"encoding/json"
-	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
@@ -28,10 +27,7 @@ func TestBindConsumersOverlapAndSelfRefusal(t *testing.T) {
 	rows := []container.Summary{row("equal", "/srv/app", nil), row("parent", "/srv", nil), row("child", "/srv/app/data", nil), row("sibling", "/srv/app2", nil), row("helper", "/srv/app", volumehelper.Labels())}
 	started := []string{}
 	svc := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/containers/json") {
-			http.NotFound(w, r) // own-container lookup: not running in a container keeps self mounts strict
-			return
-		}
+		require.True(t, strings.HasSuffix(r.URL.Path, "/containers/json"))
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(rows))
 	}), &started)
@@ -64,32 +60,25 @@ func TestProtectedBindBackupsRemainDownloadable(t *testing.T) {
 	}
 }
 
-func TestBindConsumersExemptOwnProjectsMount(t *testing.T) {
-	const ownID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	bindpath.Configure(bindpath.Runtime{Projects: func(context.Context) string { return "/srv/docker" }, State: []string{"/var/run/docker.sock"}})
-	t.Cleanup(func() { bindpath.Configure(bindpath.Runtime{}) })
-	previous := bindpath.CurrentContainerID
-	bindpath.CurrentContainerID = func() (string, error) { return ownID, nil }
-	t.Cleanup(func() { bindpath.CurrentContainerID = previous })
-	mounts := []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker", Destination: "/srv/docker"}, {Type: mount.TypeBind, Source: "/srv/docker/docklet-agent/data", Destination: "/app/data"}}
-	own := container.Summary{ID: ownID, Names: []string{"/agent"}, State: container.StateRunning, Labels: map[string]string{"io.docklet.system": "agent"}, Mounts: mounts}
+func TestBindConsumersAllowStackDataBelowADockletProjectsMount(t *testing.T) {
+	agent := container.Summary{ID: "agent", Names: []string{"/agent"}, State: container.StateRunning,
+		Labels: map[string]string{"io.docklet.system": "agent", "com.docker.compose.project.working_dir": "/srv/docker/docklet-agent"},
+		Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker", Destination: "/srv/docker"}, {Type: mount.TypeBind, Source: "/srv/docker/docklet-agent/data", Destination: "/app/data"}}}
 	app := container.Summary{ID: "app", Names: []string{"/app"}, State: container.StateRunning,
 		Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker/app/data", Destination: "/data"}}}
 	started := []string{}
 	svc := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if strings.HasSuffix(r.URL.Path, "/containers/json") {
-			require.NoError(t, json.NewEncoder(w).Encode([]container.Summary{own, app}))
-			return
-		}
-		require.NoError(t, json.NewEncoder(w).Encode(container.InspectResponse{ID: ownID, Config: &container.Config{Labels: own.Labels}, Mounts: []container.MountPoint{mounts[0], mounts[1]}}))
+		require.NoError(t, json.NewEncoder(w).Encode([]container.Summary{agent, app}))
 	}), &started)
-	// B4: a stack bind below the own projects mount is restorable; its workload consumer is stopped.
+	// A stack bind below the agent's projects mount is restorable; its workload consumer is stopped.
 	consumers, err := svc.listConsumers(t.Context(), volume.BindKey("/srv/docker/app/data"), true)
 	require.NoError(t, err)
 	require.Len(t, consumers, 1)
 	require.Equal(t, "app", consumers[0].ID)
-	// The own data mount still refuses a restore into it.
-	_, err = svc.listConsumers(t.Context(), volume.BindKey("/srv/docker/docklet-agent/data"), true)
-	require.EqualError(t, err, "volume.restore.self-mounted")
+	// The agent's state mount and install directory still refuse a restore into them.
+	for _, source := range []string{"/srv/docker/docklet-agent/data", "/srv/docker/docklet-agent/data/docklet.db"} {
+		_, err = svc.listConsumers(t.Context(), volume.BindKey(source), true)
+		require.EqualError(t, err, "volume.restore.self-mounted", source)
+	}
 }
