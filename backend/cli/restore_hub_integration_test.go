@@ -21,6 +21,7 @@ import (
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestRestoreHubCommandIntoEmptyDatabase(t *testing.T) {
@@ -34,6 +35,7 @@ func TestRestoreHubCommandIntoEmptyDatabase(t *testing.T) {
 	dir := t.TempDir()
 	service := backupservice.NewService(backupservice.Dependencies{DB: source, Activity: activity.NewActivityService(source, nil), Config: &config.Config{DatabaseURL: sourceURL, BackupDir: dir}, Store: backupservice.Store{
 		CreateRun: func(context.Context, *backuptypes.SystemBackupRun) error { return nil }, SaveRun: func(context.Context, *backuptypes.SystemBackupRun) error { return nil },
+		CommitRunTx: func(*gorm.DB, *backuptypes.SystemBackupRun, []string) error { return nil },
 	}})
 	run, err := service.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerManual, backuptypes.CreateSystemBackupRequest{})
 	require.NoError(t, err)
