@@ -2,8 +2,9 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Existing per-host stats streams with retained observations. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
+// Deviations: Existing per-host stats streams with retained observations. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. Hub treated as a system workload like the agent.
 
+import { systemRole } from "@/domain/system";
 import type { Host, HostMetrics, InventoryObservation, MetricsSnapshot } from "@/domain/model";
 import { inventoryId, mapContainer } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
@@ -126,7 +127,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
           for (const row of result.rows) {
             mapContainer(row, h.id, [], result.observation);
             const sample = row.resourceSample;
-            if (!sample || row.labels?.["io.docklet.system"] === "agent") continue;
+            if (!sample || systemRole(row.labels) !== undefined) continue;
             if (![sample.cpuPercent, sample.memoryUsageBytes].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) throw new Error("metrics.invalid-sample");
             samples[inventoryId(h.id, row.id)] = { cpu: sample.cpuPercent, memMb: sample.memoryUsageBytes / 1024 ** 2 };
           }

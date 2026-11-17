@@ -2,14 +2,14 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original inventory DTO projections. M26 #462: raw bind sources independent of mount display syntax.
+// Deviations: Original inventory DTO projections. M26 #462: raw bind sources independent of mount display syntax. Hub treated as a system workload like the agent.
 
 import type { InventoryContainer } from "../nav-inventory";
 import { sameImageReference, imageReferenceValue } from "@/domain/docker-reference";
 import { checkResult } from "./update-decoders";
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, ContainerState, Health, ImageVersion, InventoryObservation, Service, Stack } from "@/domain/model";
-import { SYSTEM_LABEL } from "@/domain/system";
+import { SYSTEM_LABEL, systemRole } from "@/domain/system";
 import { mapUpdateInfo } from "./update-mapping";
 import { composeProjectOwner } from "./project-ownership";
 
@@ -108,6 +108,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
       update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
   const url = stackAddress(row.urls);
+  const role = members.map((item) => systemRole(item.dockerLabels)).find((value) => value !== undefined);
   return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
-    ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };
+    ...(role ? { dockerLabels: { [SYSTEM_LABEL]: role } } : {}) };
 }

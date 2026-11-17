@@ -2,8 +2,9 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original Docker resource view-model mappings.
+// Deviations: Original Docker resource view-model mappings. Hub treated as a system workload like the agent.
 
+import { systemRole } from "@/domain/system";
 import { mapImageObservation } from "./image-mapping";
 import type { components } from "@/api/generated/schema";
 import type { DockerImage } from "@/domain/images";
@@ -22,7 +23,7 @@ export function mapImage(row: Schema["ImageSummary"], hostId: string, containers
   const repository = reference ? reference.slice(0, colon > reference.lastIndexOf("/") ? colon : undefined) : row.repo === "<none>" ? "" : row.repo;
   const consumers = containers.filter((c) => c.imageId === row.id).map((raw) => {
     const c = mapContainer(raw, hostId, projects, inventory);
-    return { containerId: c.id, name: c.name, hostId, stackId: c.stackId, stackName: c.stackName, serviceName: c.serviceName, state: c.state, ...(raw.labels?.["io.docklet.system"] === "agent" ? { system: true } : {}) };
+    return { containerId: c.id, name: c.name, hostId, stackId: c.stackId, stackName: c.stackName, serviceName: c.serviceName, state: c.state, ...(systemRole(raw.labels) !== undefined ? { system: true } : {}) };
   });
   // Hidden system consumers still protect shared images from appearing unused.
   for (const usage of row.usedBy ?? []) {
@@ -41,7 +42,7 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
   const usage = new Map<string, VolumeConsumer[]>();
   const binds = new Map<string, Volume>();
   for (const raw of containers) {
-    if (raw.labels?.["io.docklet.system"] === "agent") continue;
+    if (systemRole(raw.labels) !== undefined) continue;
     const c = mapContainer(raw, hostId, projects, inventory);
     for (const m of raw.mounts ?? []) {
       if (m.type !== "volume" && m.type !== "bind") continue;
@@ -54,7 +55,7 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
       if (m.type === "bind") binds.set(key, { id: inventoryId(hostId, bindKey(name)), name, hostId, kind: "bind", source: name, sizeBytes: 0, sizeUnavailable: true, createdAt: "", consumers, labels: {}, inventory });
     }
   }
-  return [...rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r): Volume => {
+  return [...rows.filter((r) => systemRole(r.labels) === undefined).map((r): Volume => {
     if (!r?.name || !r.driver) throw new Error("inventory.invalid-volume");
     const size = r.usageData?.Size ?? (r.size > 0 ? r.size : undefined);
     return { id: inventoryId(hostId, r.name), hostId, name: r.name, kind: "volume", driver: r.driver, source: r.mountpoint, composeName: r.labels?.["com.docker.compose.volume"], ...owner(r.labels, hostId, projects), sizeBytes: typeof size === "number" && size >= 0 ? size : 0, sizeUnavailable: size == null || size < 0, createdAt: r.createdAt || "", labels: r.labels ?? {}, consumers: usage.get(`volume:${r.name}`) ?? [], inventory };
@@ -70,14 +71,14 @@ function fixedAddress(config: unknown, key: "IPv4Address" | "IPv6Address"): stri
 
 export function mapTopology(rows: (Schema["NetworkInspect"] | Schema["NetworkSummary"])[], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation, summaries: Pick<Schema["NetworkSummary"], "id" | "isDefault">[] = [], unavailable = new Map<string, InventoryObservation>()): Topology {
   const defaults = new Map(summaries.map((n) => [n.id, n.isDefault]));
-  const networks: TopologyNetwork[] = rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r) => {
+  const networks: TopologyNetwork[] = rows.filter((r) => systemRole(r.labels) === undefined).map((r) => {
     if (!r?.id || !r.name || typeof r.driver !== "string" || !r.driver) throw new Error("inventory.invalid-network");
     const { internal } = "internal" in r ? r : { internal: false };
     const ip4 = r.ipam.config?.find((c) => c.subnet && !c.subnet.includes(":"));
     const ip6 = r.ipam.config?.find((c) => c.subnet?.includes(":"));
     return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver, internal, labels: r.labels ?? {}, options: r.options ?? {}, auxAddresses: Object.entries(ip4?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), auxAddresses6: Object.entries(ip6?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), builtIn: defaults.get(r.id) === true, ipv4: "enableIPv4" in r ? r.enableIPv4 : undefined, ipv6: "enableIPv6" in r ? r.enableIPv6 : undefined, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, ...owner(r.labels, hostId, projects), inventory: unavailable.get(r.id) ?? inventory, ...(unavailable.has(r.id) ? { detailUnavailable: true } : {}) };
   });
-  const users = containers.filter((c) => c.labels?.["io.docklet.system"] !== "agent");
+  const users = containers.filter((c) => systemRole(c.labels) === undefined);
   const attachments: Topology["attachments"] = [];
   const dependencies: Topology["dependencies"] = [];
   for (const c of users) {

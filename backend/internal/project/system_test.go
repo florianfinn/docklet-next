@@ -2,16 +2,21 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original fake Docker project-list regression test; hub role.
+// Deviations: Original fake Docker project-list regression test; hub role; pending updates skip Docklet projects.
 
 package project
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/image"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/moby/moby/api/types/container"
 	"github.com/stretchr/testify/require"
@@ -47,4 +52,48 @@ func testListProjectsHidesSystemRole(t *testing.T, role string) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "user", rows[0].ID)
 	require.EqualValues(t, 1, page.TotalItems)
+}
+
+// Docklet's own projects never appear as pending-update rows or in the pending-update count.
+func TestPendingUpdatesSkipDockletProjectsFakeDocker(t *testing.T) {
+	for _, role := range []string{"hub", "agent", "workload"} {
+		for _, tracked := range []bool{false, true} {
+			name := role + "/untracked"
+			if tracked {
+				name = role + "/tracked"
+			}
+			t.Run(name, func(t *testing.T) {
+				db := setupProjectTestDB(t)
+				settings, err := newSettingsServiceForTest(t, t.Context(), db)
+				require.NoError(t, err)
+				dir := t.TempDir()
+				require.NoError(t, settings.SetStringSetting(t.Context(), "projectsDirectory", dir))
+				if tracked {
+					require.NoError(t, os.MkdirAll(filepath.Join(dir, "docklet"), 0o755))
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "docklet", "compose.yaml"), []byte("name: docklet\nservices:\n  hub:\n    image: example:1.0.0\n"), 0o600))
+					require.NoError(t, db.Create(&Project{ID: "docklet", Name: "docklet", Path: filepath.Join(dir, "docklet"), Status: ProjectStatusRunning, ImageRefsJSON: `["example:1.0.0"]`}).Error)
+				}
+				require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{
+					ID: "sha256:hub", Repository: "docker.io/library/example", Tag: "1.0.0", Platform: new("native-v1:classic:linux/amd64"),
+					CurrentDigest: new("sha256:" + strings.Repeat("a", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)),
+					HasUpdate: true, UpdateType: imageupdate.UpdateTypeDigest, CurrentVersion: "1.0.0", CheckTime: time.Now().UTC(),
+				}).Error)
+				rows := []container.Summary{{ID: "hub", Names: []string{"/docklet-hub"}, Image: "example:1.0.0", ImageID: "sha256:hub", State: container.StateRunning,
+					Labels: map[string]string{"io.docklet.system": role, "com.docker.compose.project": "docklet", "com.docker.compose.service": "hub"}}}
+				images := image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)
+				service := NewProjectService(db, settings, nil, images, &docker.DockerClientService{Client: newTestDockerClient(t, newProjectRuntimeDockerServer(t, rows))}, nil, nil, config.Load(), nil, nil)
+				pending, _, err := service.ListProjects(t.Context(), pagination.QueryParams{Limit: 100, Filters: map[string]string{"updates": "has_update"}})
+				require.NoError(t, err)
+				count, err := service.CountProjectsWithPendingUpdates(t.Context(), rows)
+				require.NoError(t, err)
+				if role == "workload" {
+					require.Len(t, pending, 1, "an ordinary stack with an update stays listed")
+					require.Equal(t, 1, count)
+					return
+				}
+				require.Empty(t, pending)
+				require.Zero(t, count)
+			})
+		}
+	}
 }
