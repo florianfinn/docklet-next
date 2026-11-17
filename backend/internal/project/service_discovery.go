@@ -183,17 +183,8 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		return nil, pagination.Response{}, ownerErr
 	}
 	query := s.db.WithContext(ctx).Model(&Project{})
-	systemNames := listing.SystemProjectNames(snapshot.Containers)
-	if len(systemNames) > 0 {
-		var systemIDs []string
-		for _, identity := range identities {
-			if slices.Contains(systemNames, listing.ObservedComposeName(identity)) {
-				systemIDs = append(systemIDs, identity.ID)
-			}
-		}
-		if len(systemIDs) > 0 {
-			query = query.Where("id NOT IN ?", systemIDs)
-		}
+	if systemIDs := systemProjectIDs(snapshot.Containers, identities); len(systemIDs) > 0 {
+		query = query.Where("id NOT IN ?", systemIDs)
 	}
 	if archivedFilter := strings.TrimSpace(params.Filters["archived"]); !strings.EqualFold(archivedFilter, "all") {
 		archived, _ := kit.ParseBool(archivedFilter)
@@ -790,13 +781,27 @@ func (s *ProjectService) reconcileComposeTagsForProject(ctx context.Context, pro
 	return s.reconcileComposeProjectTags(ctx, projectModel.ID, meta.ProjectTags)
 }
 
-// withoutSystemContainers drops Docklet's own hub and agent, so they never form update rows or counts.
+// withoutSystemContainers drops every container of Docklet's own hub and agent Compose projects,
+// including unlabelled sibling services, so they never form update rows or counts.
 func withoutSystemContainers(containers []container.Summary) []container.Summary {
+	names := listing.SystemProjectNames(containers)
 	out := make([]container.Summary, 0, len(containers))
 	for _, c := range containers {
-		if !inventory.IsSystem(c.Labels) {
+		if !inventory.IsSystem(c.Labels) && !slices.Contains(names, docker.ComposeProjectLabel(c.Labels)) {
 			out = append(out, c)
 		}
 	}
 	return out
+}
+
+// systemProjectIDs lists stored projects that are Docklet's own hub or agent stacks.
+func systemProjectIDs(containers []container.Summary, identities []projecttypes.Record) []string {
+	systemNames := listing.SystemProjectNames(containers)
+	var ids []string
+	for _, identity := range identities {
+		if slices.Contains(systemNames, listing.ObservedComposeName(identity)) {
+			ids = append(ids, identity.ID)
+		}
+	}
+	return ids
 }

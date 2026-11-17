@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; Shared complete tools image reference for migration.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; Shared complete tools image reference for migration. Status counts skip Docklet's own projects.
 
 package project
 
@@ -585,8 +585,19 @@ func (s *ProjectService) StreamProjectLogs(ctx context.Context, projectID string
 }
 
 func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttypes.StatusCounts, error) {
+	query := s.db.WithContext(ctx).Model(&Project{})
+	// Docklet's own hub and agent stacks are hidden from the stack list and its counts alike.
+	if snapshot := s.listing.Snapshot(ctx); snapshot.Err == nil {
+		_, identities, err := s.projectComposeOwners(ctx)
+		if err != nil {
+			return projecttypes.StatusCounts{}, err
+		}
+		if systemIDs := systemProjectIDs(snapshot.Containers, identities); len(systemIDs) > 0 {
+			query = query.Where("id NOT IN ?", systemIDs)
+		}
+	}
 	var projectsList []Project
-	if listProjectsErr := s.db.WithContext(ctx).Find(&projectsList).Error; listProjectsErr != nil {
+	if listProjectsErr := query.Find(&projectsList).Error; listProjectsErr != nil {
 		return projecttypes.StatusCounts{}, fmt.Errorf("failed to list projects: %w", listProjectsErr)
 	}
 	return s.listing.StatusCounts(ctx, projectRecords(projectsList)), nil

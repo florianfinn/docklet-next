@@ -79,7 +79,10 @@ func TestPendingUpdatesSkipDockletProjectsFakeDocker(t *testing.T) {
 					HasUpdate: true, UpdateType: imageupdate.UpdateTypeDigest, CurrentVersion: "1.0.0", CheckTime: time.Now().UTC(),
 				}).Error)
 				rows := []container.Summary{{ID: "hub", Names: []string{"/docklet-hub"}, Image: "example:1.0.0", ImageID: "sha256:hub", State: container.StateRunning,
-					Labels: map[string]string{"io.docklet.system": role, "com.docker.compose.project": "docklet", "com.docker.compose.service": "hub"}}}
+					Labels: map[string]string{"io.docklet.system": role, "com.docker.compose.project": "docklet", "com.docker.compose.service": "hub"}},
+					// An unlabelled sibling service with its own update belongs to the same hidden project.
+					{ID: "sidecar", Names: []string{"/docklet-sidecar"}, Image: "example:1.0.0", ImageID: "sha256:hub", State: container.StateRunning,
+						Labels: map[string]string{"com.docker.compose.project": "docklet", "com.docker.compose.service": "sidecar"}}}
 				images := image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)
 				service := NewProjectService(db, settings, nil, images, &docker.DockerClientService{Client: newTestDockerClient(t, newProjectRuntimeDockerServer(t, rows))}, nil, nil, config.Load(), nil, nil)
 				pending, _, err := service.ListProjects(t.Context(), pagination.QueryParams{Limit: 100, Filters: map[string]string{"updates": "has_update"}})
@@ -95,5 +98,35 @@ func TestPendingUpdatesSkipDockletProjectsFakeDocker(t *testing.T) {
 				require.Zero(t, count)
 			})
 		}
+	}
+}
+
+// Status counts skip Docklet's own stacks like the stack list does.
+func TestProjectStatusCountsSkipDockletProjectsFakeDocker(t *testing.T) {
+	for _, role := range []string{"hub", "agent", "workload"} {
+		t.Run(role, func(t *testing.T) {
+			db := setupProjectTestDB(t)
+			settings, err := newSettingsServiceForTest(t, t.Context(), db)
+			require.NoError(t, err)
+			directory := t.TempDir()
+			require.NoError(t, settings.SetStringSetting(t.Context(), "projectsDirectory", directory))
+			require.NoError(t, db.Create(&[]Project{
+				{ID: "docklet", Name: "docklet", Path: filepath.Join(directory, "docklet"), Status: ProjectStatusRunning},
+				{ID: "user", Name: "user", Path: filepath.Join(directory, "user"), Status: ProjectStatusRunning},
+			}).Error)
+			server := newProjectRuntimeDockerServer(t, []container.Summary{
+				{ID: "docklet", Labels: map[string]string{"com.docker.compose.project": "docklet", "com.docker.compose.service": "hub", "io.docklet.system": role}, State: container.StateRunning},
+				{ID: "user", Labels: map[string]string{"com.docker.compose.project": "user", "com.docker.compose.service": "web"}, State: container.StateRunning},
+			})
+			service := NewProjectService(db, settings, nil, nil, &docker.DockerClientService{Client: newTestDockerClient(t, server)}, nil, nil, config.Load(), nil, nil)
+			counts, err := service.GetProjectStatusCounts(t.Context())
+			require.NoError(t, err)
+			want := 1
+			if role == "workload" {
+				want = 2
+			}
+			require.Equal(t, want, counts.TotalProjects)
+			require.Equal(t, want, counts.RunningProjects)
+		})
 	}
 }
