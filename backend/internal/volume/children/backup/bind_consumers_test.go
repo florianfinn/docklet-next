@@ -9,6 +9,7 @@ package backup
 import (
 	"context"
 	"encoding/json"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/bindpath"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
@@ -64,10 +65,13 @@ func TestProtectedBindBackupsRemainDownloadable(t *testing.T) {
 }
 
 func TestBindConsumersExemptOwnProjectsMount(t *testing.T) {
+	const ownID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
-	own := container.Summary{ID: "own-agent", Names: []string{"/agent"}, State: container.StateRunning,
-		Labels: map[string]string{"io.docklet.system": "agent"},
-		Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker", Destination: "/srv/docker"}, {Type: mount.TypeBind, Source: "/srv/docker/docklet-agent/data", Destination: "/app/data"}}}
+	previous := bindpath.CurrentContainerID
+	bindpath.CurrentContainerID = func() (string, error) { return ownID, nil }
+	t.Cleanup(func() { bindpath.CurrentContainerID = previous })
+	mounts := []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker", Destination: "/srv/docker"}, {Type: mount.TypeBind, Source: "/srv/docker/docklet-agent/data", Destination: "/app/data"}}
+	own := container.Summary{ID: ownID, Names: []string{"/agent"}, State: container.StateRunning, Labels: map[string]string{"io.docklet.system": "agent"}, Mounts: mounts}
 	app := container.Summary{ID: "app", Names: []string{"/app"}, State: container.StateRunning,
 		Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: "/srv/docker/app/data", Destination: "/data"}}}
 	started := []string{}
@@ -77,7 +81,7 @@ func TestBindConsumersExemptOwnProjectsMount(t *testing.T) {
 			require.NoError(t, json.NewEncoder(w).Encode([]container.Summary{own, app}))
 			return
 		}
-		_, _ = w.Write([]byte(`{"Id":"own-agent","Config":{"Labels":{"io.docklet.system":"agent"}}}`))
+		require.NoError(t, json.NewEncoder(w).Encode(container.InspectResponse{ID: ownID, Config: &container.Config{Labels: own.Labels}, Mounts: []container.MountPoint{mounts[0], mounts[1]}}))
 	}), &started)
 	// B4: a stack bind below the own projects mount is restorable; its workload consumer is stopped.
 	consumers, err := svc.listConsumers(t.Context(), volume.BindKey("/srv/docker/app/data"), true)

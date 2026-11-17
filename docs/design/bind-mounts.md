@@ -57,14 +57,19 @@ below or above, compared segment-wise (`/etcetera` does not overlap `/etc`).
 | R4 type | a source that is missing, or neither a directory nor a regular file (socket, device, FIFO), found by the source witness (§2.1) | `404 volume.bind.source-missing`, `422 volume.bind.unsupported-type` |
 
 - **Own projects mount**: the bind mount of the executing hub or agent container whose
-  destination equals its effective projects directory (`PROJECTS_DIRECTORY`, else the
-  setting, else `/app/data/projects`). The agent installer and the README layout mount it
-  at the same host path. The container is found by its own inspect (labelled
-  `io.docklet.system`); any lookup failure keeps every Docklet mount fully protected, and
-  the lookup runs only when a Docklet mount overlaps the requested path. Restore applies
-  the same exemption before refusing with `409 volume.restore.self-mounted`. The Compose
-  working directory protects the install directory (`.env` with the encryption key or the
-  agent token) when it lies inside the projects root.
+  destination equals its effective projects directory (`PROJECTS_DIRECTORY` with file
+  variants and trimmed quotes, else the setting, else `/app/data/projects`). The agent
+  installer and the README layout mount it at the same host path. The exemption needs
+  proof and otherwise stays strict: the container is inspected by this process's own
+  container ID (no label or name fallback) and must carry `io.docklet.system`; no other
+  container may share its network namespace; the projects directory must not overlap
+  Docklet's state (`/app/data`, the database directory, the hub backup directory, the
+  Docker config directory, the socket) or another mount of that container. The default
+  `/app/data/projects` therefore never qualifies. The lookup runs only when a Docklet
+  mount overlaps the requested path. Restore applies the same exemption before refusing
+  with `409 volume.restore.self-mounted`. The Compose working directory protects the
+  install directory (`.env` with the encryption key or the agent token) when it lies
+  inside the projects root.
 - **Workload container**: any container that is not a Docklet hub or agent container and
   not a Docklet operation helper. Operation helpers are the workspace helper, backup
   engine, restore writer, source witness and target probe containers; they carry the

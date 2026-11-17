@@ -7,12 +7,17 @@
 package bindpath
 
 import (
+	"cmp"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/florianfinn/docklet-next/types/backup"
+	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -97,25 +102,112 @@ func TestOwnLookupRunsOnlyForOverlappingDockletMounts(t *testing.T) {
 	require.Zero(t, calls)
 }
 
-func TestOwnProjectsIdentifiesTheExecutingDockletContainer(t *testing.T) {
+const ownID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+type fakeDaemon struct {
+	inspect string // JSON body; empty answers HTTP 500
+	list    string
+}
+
+func (f fakeDaemon) client(t *testing.T) *client.Client {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/info"):
+			_, _ = w.Write([]byte(`{"DockerRootDir":"/var/lib/docker"}`))
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			_, _ = w.Write([]byte(cmp.Or(f.list, `[]`)))
+		case f.inspect == "":
+			http.Error(w, "daemon error", http.StatusInternalServerError)
+		default:
+			_, _ = w.Write([]byte(f.inspect))
+		}
+	}))
+	t.Cleanup(server.Close)
+	cli, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.41"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cli.Close() })
+	return cli
+}
+
+func inspectJSON(id, role, mounts string) string {
+	return `{"Id":"` + id + `","Name":"/docklet-agent","Config":{"Labels":{"io.docklet.system":"` + role + `"}},"Mounts":[` + mounts + `]}`
+}
+
+const standardMounts = `{"Type":"bind","Source":"/srv/docker","Destination":"/srv/docker"},` +
+	`{"Type":"bind","Source":"/srv/docker/docklet-agent/data","Destination":"/app/data"},` +
+	`{"Type":"bind","Source":"/var/run/docker.sock","Destination":"/var/run/docker.sock"}`
+
+func selfID(id string, err error) func() (string, error) {
+	return func() (string, error) { return id, err }
+}
+
+func TestOwnProjectsIdentifiesOnlyTheExecutingDockletContainer(t *testing.T) {
 	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
-	for role, want := range map[string]Own{
-		"agent":    {ContainerID: "own-id", Projects: "/srv/docker"},
-		"hub":      {ContainerID: "own-id", Projects: "/srv/docker"},
-		"workload": {},
+	want := Own{ContainerID: ownID, Projects: "/srv/docker"}
+	for name, tc := range map[string]struct {
+		daemon fakeDaemon
+		id     func() (string, error)
+		want   Own
+	}{
+		"own agent":                {fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts)}, selfID(ownID, nil), want},
+		"own hub, short id":        {fakeDaemon{inspect: inspectJSON(ownID, "hub", standardMounts)}, selfID(ownID[:12], nil), want},
+		"identity unavailable":     {fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts)}, selfID("", errors.New("no id")), Own{}},
+		"identity is a name":       {fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts)}, selfID("docklet-agent", nil), Own{}},
+		"inspect fails":            {fakeDaemon{}, selfID(ownID, nil), Own{}},
+		"inspect returns another":  {fakeDaemon{inspect: inspectJSON(strings.Repeat("f", 64), "agent", standardMounts)}, selfID(ownID, nil), Own{}},
+		"not a Docklet container":  {fakeDaemon{inspect: inspectJSON(ownID, "workload", standardMounts)}, selfID(ownID, nil), Own{}},
+		"shared network namespace": {fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts), list: `[{"Id":"sidecar","HostConfig":{"NetworkMode":"container:` + ownID[:12] + `"}}]`}, selfID(ownID, nil), Own{}},
+		"no projects bind mount":   {fakeDaemon{inspect: inspectJSON(ownID, "agent", `{"Type":"volume","Source":"/var/lib/docker/volumes/p/_data","Destination":"/srv/docker"}`)}, selfID(ownID, nil), Own{}},
+		"own mount nested inside":  {fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts+`,{"Type":"bind","Source":"/srv/secret","Destination":"/srv/docker/secret"}`)}, selfID(ownID, nil), Own{}},
 	} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			if strings.HasSuffix(r.URL.Path, "/containers/json") {
-				_, _ = w.Write([]byte(`[]`))
-				return
-			}
-			_, _ = w.Write([]byte(`{"Id":"own-id","Config":{"Labels":{"io.docklet.system":"` + role + `"}}}`))
-		}))
-		cli, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.41"))
-		require.NoError(t, err)
-		require.Equal(t, want, OwnProjects(t.Context(), cli, nil)(), role)
-		require.NoError(t, cli.Close())
-		server.Close()
+		require.Equal(t, tc.want, ownProjects(t.Context(), tc.daemon.client(t), nil, tc.id), name)
 	}
+}
+
+func TestOwnProjectsNeverExemptsDockletState(t *testing.T) {
+	id := selfID(ownID, nil)
+	for projectsDir, extra := range map[string]string{
+		"/app/data":                "",
+		"/app":                     "",
+		"/var/lib/docklet/backups": "",
+		"/srv/state/registry":      "/srv/state/registry",
+		"/srv/state":               "/srv/state/registry",
+	} {
+		t.Setenv("PROJECTS_DIRECTORY", projectsDir)
+		t.Setenv("DOCKER_CONFIG", extra)
+		mounts := `{"Type":"bind","Source":"/srv/private-state","Destination":"` + projectsDir + `"}`
+		require.Equal(t, Own{}, ownProjects(t.Context(), fakeDaemon{inspect: inspectJSON(ownID, "hub", mounts)}.client(t), nil, id), projectsDir)
+	}
+	t.Setenv("DOCKER_CONFIG", "")
+	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
+	t.Setenv("DATABASE_URL", "file:/srv/docker/docklet/docklet.db?_pragma=busy_timeout(5000)")
+	require.Equal(t, Own{}, ownProjects(t.Context(), fakeDaemon{inspect: inspectJSON(ownID, "hub", standardMounts)}.client(t), nil, id), "database inside the projects mount")
+}
+
+func TestOwnProjectsReadsTheEffectiveSetting(t *testing.T) {
+	id := selfID(ownID, nil)
+	daemon := fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts)}
+	t.Setenv("PROJECTS_DIRECTORY", "'/srv/docker'")
+	require.Equal(t, Own{ContainerID: ownID, Projects: "/srv/docker"}, ownProjects(t.Context(), daemon.client(t), nil, id), "quotes trimmed like the settings loader")
+	file := filepath.Join(t.TempDir(), "projects")
+	require.NoError(t, os.WriteFile(file, []byte("/srv/docker\n"), 0o600))
+	t.Setenv("PROJECTS_DIRECTORY", "")
+	t.Setenv("PROJECTS_DIRECTORY_FILE", file)
+	require.Equal(t, Own{ContainerID: ownID, Projects: "/srv/docker"}, ownProjects(t.Context(), daemon.client(t), nil, id), "file variant")
+	t.Setenv("PROJECTS_DIRECTORY_FILE", "")
+	require.Equal(t, Own{}, ownProjects(t.Context(), daemon.client(t), nil, id), "default /app/data/projects is inside the data root")
+}
+
+func TestCheckStaysStrictWhenProjectsDirectoryIsTheDataMount(t *testing.T) {
+	// F-R1-2 end to end: the data mount configured as projects directory never exempts its contents.
+	t.Setenv("PROJECTS_DIRECTORY", "/app/data")
+	previous := CurrentContainerID
+	CurrentContainerID = selfID(ownID, nil)
+	t.Cleanup(func() { CurrentContainerID = previous })
+	list := `[{"Id":"` + ownID + `","Labels":{"io.docklet.system":"hub"},"Mounts":[{"Type":"bind","Source":"/srv/private-state","Destination":"/app/data"}]},` +
+		`{"Id":"app","Labels":{},"Mounts":[{"Type":"bind","Source":"/srv/private-state/credentials","Destination":"/data"}]}]`
+	cli := fakeDaemon{inspect: inspectJSON(ownID, "hub", `{"Type":"bind","Source":"/srv/private-state","Destination":"/app/data"}`), list: list}.client(t)
+	_, err := Check(t.Context(), cli, nil, volume.BindKey("/srv/private-state/credentials"))
+	require.Equal(t, "docklet", reason(t, err))
 }
