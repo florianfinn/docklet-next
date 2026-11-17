@@ -66,7 +66,8 @@ func TestProtectedBindBackupsRemainDownloadable(t *testing.T) {
 
 func TestBindConsumersExemptOwnProjectsMount(t *testing.T) {
 	const ownID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
+	bindpath.Configure(bindpath.Runtime{Projects: func(context.Context) string { return "/srv/docker" }, State: []string{"/var/run/docker.sock"}})
+	t.Cleanup(func() { bindpath.Configure(bindpath.Runtime{}) })
 	previous := bindpath.CurrentContainerID
 	bindpath.CurrentContainerID = func() (string, error) { return ownID, nil }
 	t.Cleanup(func() { bindpath.CurrentContainerID = previous })

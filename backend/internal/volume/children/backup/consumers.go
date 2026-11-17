@@ -40,7 +40,7 @@ func (s *Service) listConsumers(ctx context.Context, name string, refuseSelf boo
 	}
 	stopped := []volume.StoppedContainer{}
 	seen := map[string]bool{}
-	own := bindpath.OwnProjects(ctx, cli, s.deps.DB)
+	own := bindpath.OwnProjects(ctx, cli)
 	for _, candidate := range result.Items {
 		if seen[candidate.ID] || source != "" && bindpath.Helper(candidate) {
 			continue

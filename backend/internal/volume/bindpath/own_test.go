@@ -8,11 +8,10 @@ package bindpath
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -142,8 +141,12 @@ func selfID(id string, err error) func() (string, error) {
 	return func() (string, error) { return id, err }
 }
 
+func runtimeFor(projectsDir string, state ...string) *Runtime {
+	return &Runtime{Projects: func(context.Context) string { return projectsDir }, State: append([]string{"/var/run/docker.sock"}, state...)}
+}
+
 func TestOwnProjectsIdentifiesOnlyTheExecutingDockletContainer(t *testing.T) {
-	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
+	rt := runtimeFor("/srv/docker")
 	want := Own{ContainerID: ownID, Projects: "/srv/docker"}
 	for name, tc := range map[string]struct {
 		daemon fakeDaemon
@@ -161,47 +164,39 @@ func TestOwnProjectsIdentifiesOnlyTheExecutingDockletContainer(t *testing.T) {
 		"no projects bind mount":   {fakeDaemon{inspect: inspectJSON(ownID, "agent", `{"Type":"volume","Source":"/var/lib/docker/volumes/p/_data","Destination":"/srv/docker"}`)}, selfID(ownID, nil), Own{}},
 		"own mount nested inside":  {fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts+`,{"Type":"bind","Source":"/srv/secret","Destination":"/srv/docker/secret"}`)}, selfID(ownID, nil), Own{}},
 	} {
-		require.Equal(t, tc.want, ownProjects(t.Context(), tc.daemon.client(t), nil, tc.id), name)
+		require.Equal(t, tc.want, ownProjects(t.Context(), tc.daemon.client(t), rt, tc.id), name)
 	}
 }
 
 func TestOwnProjectsNeverExemptsDockletState(t *testing.T) {
 	id := selfID(ownID, nil)
-	for projectsDir, extra := range map[string]string{
-		"/app/data":                "",
-		"/app":                     "",
-		"/var/lib/docklet/backups": "",
-		"/srv/state/registry":      "/srv/state/registry",
-		"/srv/state":               "/srv/state/registry",
+	for projectsDir, state := range map[string][]string{
+		"/app/data":                {"/srv/db"},
+		"/app":                     {"/srv/db"},
+		"/var/lib/docklet/backups": {"/var/lib/docklet/backups"},
+		"/srv/state":               {"/srv/state/registry"},
+		"/srv/state/registry":      {"/srv/state/registry"},
+		"/srv/projects":            {"/srv/projects/state"},   // database directory decoded by the database layer
+		"/app/projects":            {"/app/projects/backups"}, // relative backup directory resolved at startup
 	} {
-		t.Setenv("PROJECTS_DIRECTORY", projectsDir)
-		t.Setenv("DOCKER_CONFIG", extra)
 		mounts := `{"Type":"bind","Source":"/srv/private-state","Destination":"` + projectsDir + `"}`
-		require.Equal(t, Own{}, ownProjects(t.Context(), fakeDaemon{inspect: inspectJSON(ownID, "hub", mounts)}.client(t), nil, id), projectsDir)
+		require.Equal(t, Own{}, ownProjects(t.Context(), fakeDaemon{inspect: inspectJSON(ownID, "hub", mounts)}.client(t), runtimeFor(projectsDir, state...), id), projectsDir)
 	}
-	t.Setenv("DOCKER_CONFIG", "")
-	t.Setenv("PROJECTS_DIRECTORY", "/srv/docker")
-	t.Setenv("DATABASE_URL", "file:/srv/docker/docklet/docklet.db?_pragma=busy_timeout(5000)")
-	require.Equal(t, Own{}, ownProjects(t.Context(), fakeDaemon{inspect: inspectJSON(ownID, "hub", standardMounts)}.client(t), nil, id), "database inside the projects mount")
 }
 
-func TestOwnProjectsReadsTheEffectiveSetting(t *testing.T) {
+func TestOwnProjectsNeedsTheRegisteredRuntime(t *testing.T) {
 	id := selfID(ownID, nil)
 	daemon := fakeDaemon{inspect: inspectJSON(ownID, "agent", standardMounts)}
-	t.Setenv("PROJECTS_DIRECTORY", "'/srv/docker'")
-	require.Equal(t, Own{ContainerID: ownID, Projects: "/srv/docker"}, ownProjects(t.Context(), daemon.client(t), nil, id), "quotes trimmed like the settings loader")
-	file := filepath.Join(t.TempDir(), "projects")
-	require.NoError(t, os.WriteFile(file, []byte("/srv/docker\n"), 0o600))
-	t.Setenv("PROJECTS_DIRECTORY", "")
-	t.Setenv("PROJECTS_DIRECTORY_FILE", file)
-	require.Equal(t, Own{ContainerID: ownID, Projects: "/srv/docker"}, ownProjects(t.Context(), daemon.client(t), nil, id), "file variant")
-	t.Setenv("PROJECTS_DIRECTORY_FILE", "")
-	require.Equal(t, Own{}, ownProjects(t.Context(), daemon.client(t), nil, id), "default /app/data/projects is inside the data root")
+	require.Equal(t, Own{}, ownProjects(t.Context(), daemon.client(t), nil, id), "not configured at startup")
+	require.Equal(t, Own{}, ownProjects(t.Context(), daemon.client(t), runtimeFor("/srv/docker", "relative/state"), id), "relative state path")
+	require.Equal(t, Own{}, ownProjects(t.Context(), daemon.client(t), runtimeFor(""), id), "default /app/data/projects is inside the data root")
+	require.Equal(t, Own{ContainerID: ownID, Projects: "/srv/docker"}, ownProjects(t.Context(), daemon.client(t), runtimeFor("/srv/docker:/host/docker"), id), "container side of a mapping")
 }
 
 func TestCheckStaysStrictWhenProjectsDirectoryIsTheDataMount(t *testing.T) {
 	// F-R1-2 end to end: the data mount configured as projects directory never exempts its contents.
-	t.Setenv("PROJECTS_DIRECTORY", "/app/data")
+	Configure(*runtimeFor("/app/data"))
+	t.Cleanup(func() { runtime.Store(nil) })
 	previous := CurrentContainerID
 	CurrentContainerID = selfID(ownID, nil)
 	t.Cleanup(func() { CurrentContainerID = previous })

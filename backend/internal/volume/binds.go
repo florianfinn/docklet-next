@@ -79,7 +79,7 @@ func (s *VolumeService) bindsFromContainers(ctx context.Context, cli *client.Cli
 	if err != nil {
 		return nil, err
 	}
-	own := bindpath.OwnProjects(ctx, cli, s.db)
+	own := bindpath.OwnProjects(ctx, cli)
 	bySource := map[string]*volumetypes.Bind{}
 	for _, c := range rows {
 		if bindpath.Self(c) || bindpath.Helper(c) {

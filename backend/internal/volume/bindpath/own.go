@@ -7,21 +7,17 @@
 package bindpath
 
 import (
-	"cmp"
 	"context"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 
-	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
-	kit "go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/cgroup"
 )
 
@@ -40,9 +36,21 @@ type OwnLookup func() Own
 // Strict never exempts a mount.
 func Strict() Own { return Own{} }
 
+// Runtime carries values resolved by their owners at hub or agent startup. Without it, or with
+// a relative or empty state path, no mount is exempt.
+type Runtime struct {
+	Projects func(context.Context) string // effective projects setting, as the project service reads it
+	State    []string                     // Docklet's own state: data root, database dir, backups, Docker config, socket
+}
+
+var runtime atomic.Pointer[Runtime]
+
+// Configure registers the runtime once startup has resolved its configuration.
+func Configure(r Runtime) { runtime.Store(&r) }
+
 // OwnProjects returns a lazy lookup of the executing container.
-func OwnProjects(ctx context.Context, cli *client.Client, db *database.DB) OwnLookup {
-	return sync.OnceValue(func() Own { return ownProjects(ctx, cli, db, CurrentContainerID) })
+func OwnProjects(ctx context.Context, cli *client.Client) OwnLookup {
+	return sync.OnceValue(func() Own { return ownProjects(ctx, cli, runtime.Load(), CurrentContainerID) })
 }
 
 // CurrentContainerID reads this process's container ID; tests replace it.
@@ -53,9 +61,14 @@ var hexID = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
 // Any doubt yields the zero value, which keeps every Docklet mount fully protected: the identity
 // is this process's own container ID (no label or name fallback), no other container shares its
 // network namespace, and the projects mount touches neither Docklet's state nor another own mount.
-func ownProjects(ctx context.Context, cli *client.Client, db *database.DB, id func() (string, error)) Own {
-	if cli == nil || id == nil {
+func ownProjects(ctx context.Context, cli *client.Client, rt *Runtime, id func() (string, error)) Own {
+	if cli == nil || rt == nil || rt.Projects == nil || id == nil {
 		return Own{}
+	}
+	for _, state := range rt.State {
+		if !path.IsAbs(state) {
+			return Own{}
+		}
 	}
 	self, err := id()
 	if self = strings.TrimSpace(self); err != nil || !hexID.MatchString(self) {
@@ -79,13 +92,12 @@ func ownProjects(ctx context.Context, cli *client.Client, db *database.DB, id fu
 			return Own{}
 		}
 	}
-	configured, ok := projectsSetting(ctx, db)
-	if !ok {
+	projectsDir := path.Clean(projects.ResolveConfiguredContainerDirectory(rt.Projects(ctx), "/app/data/projects"))
+	if !path.IsAbs(projectsDir) {
 		return Own{}
 	}
-	projectsDir := path.Clean(projects.ResolveConfiguredContainerDirectory(configured, "/app/data/projects"))
-	for _, operational := range operationalPaths() {
-		if Overlap(projectsDir, operational) {
+	for _, state := range append([]string{dataDirectory}, rt.State...) {
+		if Overlap(projectsDir, state) {
 			return Own{}
 		}
 	}
@@ -102,49 +114,6 @@ func ownProjects(ctx context.Context, cli *client.Client, db *database.DB, id fu
 		return Own{}
 	}
 	return Own{ContainerID: c.ID, Projects: projectsDir}
-}
-
-// projectsSetting mirrors the settings service: a non-empty environment override (file
-// variants, quotes trimmed) wins over the stored setting.
-func projectsSetting(ctx context.Context, db *database.DB) (string, bool) {
-	if value := envValue("PROJECTS_DIRECTORY"); value != "" {
-		return value, true
-	}
-	if db == nil {
-		return "", true
-	}
-	var setting struct{ Value string }
-	if db.WithContext(ctx).Table("settings").Where("key = ?", "projectsDirectory").Limit(1).Find(&setting).Error != nil {
-		return "", false
-	}
-	return setting.Value, true
-}
-
-func envValue(name string) string {
-	value, _, _ := utils.LookupEnvOrFile(name)
-	return strings.TrimSpace(kit.TrimQuotes(strings.TrimSpace(value)))
-}
-
-// operationalPaths are Docklet's own state: data root, database directory, hub backups,
-// registry login data and the Docker socket.
-func operationalPaths() []string {
-	paths := []string{dataDirectory, "/var/run/docker.sock", cmp.Or(envValue("DOCKLET_BACKUP_DIR"), "/var/lib/docklet/backups")}
-	if dir := envValue("DOCKER_CONFIG"); dir != "" {
-		paths = append(paths, dir)
-	}
-	database := strings.TrimPrefix(strings.SplitN(cmp.Or(envValue("DATABASE_URL"), "file:data/docklet.db"), "?", 2)[0], "file:")
-	if !strings.Contains(database, "://") {
-		if abs, err := filepath.Abs(database); err == nil {
-			paths = append(paths, path.Dir(abs))
-		}
-	}
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if strings.HasPrefix(p, "/") {
-			out = append(out, path.Clean(p))
-		}
-	}
-	return out
 }
 
 // Protects reports whether a Docklet container c guards source: any of its bind mounts or its

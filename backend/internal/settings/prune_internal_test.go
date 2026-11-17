@@ -94,7 +94,6 @@ var reviewedSettingFilesInternal = map[string]string{
 	"internal/schema/models.go":                           "registers the SettingVariable model",
 	"internal/session/sign_in.go":                         "writes authLastMode (Settings field)",
 	"internal/volume/bindpath/rules.go":                   "reads hubHostId",
-	"internal/volume/bindpath/own.go":                     "reads projectsDirectory",
 	"internal/volume/children/backup/metadata_routes.go":  "reads volumeBackupRepositoryCheck",
 	"internal/volume/children/backup/repository.go":       "reads hubHostId",
 	"internal/volume/children/backup/repository_check.go": "reads hubHostId, backupTargetSetVersion; writes volumeBackupRepositoryCheck",

@@ -113,7 +113,7 @@ func Check(ctx context.Context, cli *client.Client, db *database.DB, key string)
 			return "", err
 		}
 	}
-	if err = Rules(source, info.Info.DockerRootDir, rows.Items, targets, stored, OwnProjects(ctx, cli, db)); err != nil {
+	if err = Rules(source, info.Info.DockerRootDir, rows.Items, targets, stored, OwnProjects(ctx, cli)); err != nil {
 		return "", err
 	}
 	return source, nil
