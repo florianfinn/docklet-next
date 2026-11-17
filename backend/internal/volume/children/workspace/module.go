@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Helper incompatibility response schema.
+// Deviations: Local module namespace; Helper incompatibility and path policy refusal response schemas.
 
 package workspace
 
@@ -59,6 +59,10 @@ func RegisterRoutes(api huma.API, h *Handler) {
 		operation.Responses["503"] = &huma.Response{Description: "Helper incompatible or temporarily unavailable; no file access occurred", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{
 			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperIncompatibleError](), true, ""),
 			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperUnavailableError](), true, ""),
+		}}}}}
+		operation.Responses["422"] = &huma.Response{Description: "Workspace path policy refusal or validation failure", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{
+			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.WorkspaceProblem](), true, ""),
+			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, ""),
 		}}}}}
 	}
 

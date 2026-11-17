@@ -43,9 +43,13 @@ the existing run columns (`copy_target_id`, `copy_state`, `copy_error_code`).
 - **Maintenance**: the copy worker registers with the maintenance drain. A later hub
   backup or restore barrier cancels and drains it; the run becomes `failed`
   `runtime.interrupted` and the partial file is removed best effort.
-- **Retention**: when local retention removes a scheduled archive whose copy
-  succeeded, the hub removes that copy from the same target first (best effort; a
-  failure is logged and does not stop local retention). Deleting an archive by hand
+- **Retention**: a successful scheduled backup deletes its expired rows in the
+  transaction that completes it. Afterwards the hub removes each expired archive and,
+  when its copy succeeded, that copy from the same target (best effort; a failure is
+  logged and does not stop local retention). Restart reclamation covers local archive
+  files only: startup storage reconciliation removes a local archive without a row,
+  but a target copy whose removal a crash prevented after that commit stays on the
+  target, and later retention cannot select it (#508). Deleting an archive by hand
   removes only the local file; the confirmation says so. Files the hub did not record
   (other hubs, partial files) are never touched.
 - **Target references**: retiring a target that a hub policy names is refused under the

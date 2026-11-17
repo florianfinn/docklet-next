@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Typed helper incompatibility responses; M12 persisted volume lifecycle and legacy restore cut; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; Typed helper incompatibility responses; typed path policy refusal (#507); M12 persisted volume lifecycle and legacy restore cut; M16 bind mounts and backup completion.
 
 package workspace
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"mime/multipart"
+	"net/http"
 	"path"
 	"strings"
 
@@ -76,7 +77,8 @@ func volumeWorkspaceHTTPErrorInternal(err error) error {
 	case errors.Is(err, common.ErrVolumeWorkspaceConflict):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, common.ErrVolumeWorkspaceForbidden):
-		return huma.Error403Forbidden(err.Error())
+		// Policy refusals must not use agent credential rejection statuses.
+		return &volume.WorkspaceProblem{Status: http.StatusUnprocessableEntity, Title: "Workspace path refused", Detail: "This path cannot be accessed through the volume workspace.", Code: "volume.workspace-path-refused"}
 	case errors.Is(err, common.ErrVolumeWorkspaceNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, common.ErrVolumeWorkspaceBadRequest):

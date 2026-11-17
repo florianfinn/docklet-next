@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: c87b44c8ae3645e14fc7a5d52bcf1b87d097930aca4a11ea04afcf50d7e939ca
+// Revision: 0aa62dbb82b74ad7f5fc3d20591eb5662f5f0af95009b564408ca355556d7b73
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -13870,6 +13870,14 @@ export interface components {
             /** Format: int64 */
             size: number;
             usageData?: components["schemas"]["DockerVolumeUsageData"];
+        };
+        VolumeWorkspaceProblem: {
+            /** @enum {string} */
+            code: "volume.workspace-path-refused";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
         };
         VulnerabilityAcceptedScan: {
             activityId: string;
@@ -34609,7 +34617,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
+                    "application/problem+json": (components["schemas"]["VolumeWorkspaceProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -34733,7 +34741,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
+                    "application/problem+json": (components["schemas"]["VolumeWorkspaceProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -34852,7 +34860,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
+                    "application/problem+json": (components["schemas"]["VolumeWorkspaceProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Volume backup operation refused */
@@ -34969,7 +34977,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["BackupProblem"];
+                    "application/problem+json": (components["schemas"]["VolumeWorkspaceProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["BackupProblem"];
                 };
             };
             /** @description Volume backup operation refused */

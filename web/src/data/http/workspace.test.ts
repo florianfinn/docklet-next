@@ -81,7 +81,7 @@ describe("workspace response mapping", () => {
       });
     }
   }
-  for (const [status, code, expected] of [[403, "", "forbidden"], [404, "", "not-found"], [413, "", "too-large"], [422, "volume.helper-incompatible", "helper-incompatible"], [503, "volume.helper-incompatible", "helper-incompatible"], [503, "volume.helper-unavailable", "helper-unavailable"], [422, "project.workspace-protected-path", "forbidden"], [422, "project.workspace-path-refused", "forbidden"], [422, "", "invalid"]] as const) {
+  for (const [status, code, expected] of [[403, "", "forbidden"], [404, "", "not-found"], [413, "", "too-large"], [422, "volume.helper-incompatible", "helper-incompatible"], [503, "volume.helper-incompatible", "helper-incompatible"], [503, "volume.helper-unavailable", "helper-unavailable"], [422, "project.workspace-protected-path", "forbidden"], [422, "project.workspace-path-refused", "forbidden"], [422, "volume.workspace-path-refused", "forbidden"], [422, "", "invalid"]] as const) {
     it(`maps ${status} ${code}`, async () => {
       const { transport, response } = workspaceFixture();
       Object.assign(response, { status, code });

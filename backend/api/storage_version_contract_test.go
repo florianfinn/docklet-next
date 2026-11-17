@@ -2,7 +2,7 @@
 // Revision: 60d2471b62b12e1af64c54060a50102a2e39d1c1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Original v5 fixture parity with registered producers for issue #179.
+// Deviations: Original v5 fixture parity with registered producers for issue #179; typed path refusal response (#507).
 package api
 
 import (
@@ -67,6 +67,9 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 			require.Len(t, schemas, 2)
 			require.Equal(t, reflect.TypeFor[volume.HelperIncompatibleError](), api.OpenAPI().Components.Schemas.TypeFromRef(schemas[0].Ref))
 			require.Equal(t, reflect.TypeFor[volume.HelperUnavailableError](), api.OpenAPI().Components.Schemas.TypeFromRef(schemas[1].Ref))
+			refusal, err := json.Marshal(op.Responses["422"])
+			require.NoError(t, err)
+			require.Contains(t, string(refusal), `"$ref":"#/components/schemas/VolumeWorkspaceProblem"`, "path refusals use a typed non-credential status")
 		}
 	}
 }
