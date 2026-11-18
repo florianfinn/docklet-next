@@ -29,6 +29,7 @@ function dotenv() {
 }
 
 const destination = (mount) => mount.split(":")[1];
+const literal = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 test("README quick start pins the official hub image at the release train version", () => {
   const example = quickStart();
@@ -47,11 +48,13 @@ test("README quick start keeps the template's container paths and runtime settin
   assert.equal(hub.environment.TZ, source.environment.TZ);
   // The example relies on the image defaults; they must equal the template's explicit container paths.
   const dockerfile = readFileSync("deploy/hub/Dockerfile", "utf8");
-  assert.match(dockerfile, new RegExp(`^ENV DATABASE_URL=${source.environment.DATABASE_URL} `, "m"));
+  assert.match(dockerfile, new RegExp(`^ENV DATABASE_URL=${literal(source.environment.DATABASE_URL)} `, "m"));
   assert.match(readFileSync("backend/internal/config/config.go", "utf8"),
-    new RegExp(`env:"DOCKLET_BACKUP_DIR" default:"${source.environment.DOCKLET_BACKUP_DIR}"`));
+    new RegExp(`env:"DOCKLET_BACKUP_DIR" default:"${literal(source.environment.DOCKLET_BACKUP_DIR)}"`));
   assert.match(readFileSync("backend/pkg/libarcane/startup/runtime_identity.go", "utf8"),
-    new RegExp(`defaultDockerConfigDir\\s*=\\s*"${source.environment.DOCKER_CONFIG}"`));
+    new RegExp(`defaultDockerConfigDir\\s*=\\s*"${literal(source.environment.DOCKER_CONFIG)}"`));
+  // A root runtime gets no DOCKER_CONFIG default, so the README must name the explicit setting.
+  assert.ok(readme.includes(`with \`PUID=0\` and \`PGID=0\`, add \`DOCKER_CONFIG: ${source.environment.DOCKER_CONFIG}\` under \`environment\``));
   assert.deepEqual(hub.ports, ["127.0.0.1:3552:3552"], "loopback only, template default port");
   // Same container paths as the template; host sides are the documented project-directory layout.
   const projects = `${hub.environment.PROJECTS_DIRECTORY}:${hub.environment.PROJECTS_DIRECTORY}`;

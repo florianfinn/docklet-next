@@ -106,7 +106,7 @@ docker compose logs hub
 | `TZ` | no | IANA time zone for schedules and dates, default `UTC`. |
 | `AUTH_MODE` | no | Sign-in mode: `local` (passwords, default), `proxy` (a trusted reverse proxy authenticates) or `none`. See the [installation guide](docs/install.md#select-a-sign-in-mode). |
 | `PROJECTS_DIRECTORY` | no | Where stacks live inside the container. Mount it at the same path as on the host, as above, so relative paths in your stacks resolve correctly. |
-| `DATABASE_URL`, `DOCKLET_BACKUP_DIR`, `DOCKER_CONFIG` | no | Database file, hub backup archives and registry login data. The image already points them into the mounted `/app/data` and `/var/lib/docklet/backups`; the volume mounts are enough. Set them only to move these files. |
+| `DATABASE_URL`, `DOCKLET_BACKUP_DIR`, `DOCKER_CONFIG` | no | Database file, hub backup archives and registry login data. The image already points them into the mounted `/app/data` and `/var/lib/docklet/backups`; the volume mounts are enough. Set them only to move these files. Exception: with `PUID=0` and `PGID=0`, add `DOCKER_CONFIG: /app/data/.docker` under `environment`. |
 
 All other settings, such as proxy sign-in, trusted proxies or image overrides, are
 described in [`.env.example`](.env.example). Docklet keeps its own settings in the
