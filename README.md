@@ -50,8 +50,9 @@ Create `/srv/docker/docklet/compose.yaml`:
 name: docklet
 services:
   hub:
-    # Current release; GitHub Releases lists newer versions. There is no "latest" tag.
-    image: ghcr.io/florianfinn/docklet-next-hub:1.0.0
+    # In-place update: "Update Docklet" (Hub settings › Updates) writes the new
+    # version to HUB_IMAGE in .env. Until then this release is used; no "latest" tag.
+    image: ${HUB_IMAGE:-ghcr.io/florianfinn/docklet-next-hub:1.0.0}
     restart: unless-stopped
     stop_grace_period: 30s
     labels:
@@ -101,6 +102,7 @@ docker compose logs hub
 | `APP_URL` | yes | Public origin of the hub, the root of a dedicated domain or subdomain. Links, sign-in and agent connections use it. |
 | `ENCRYPTION_KEY` | yes | Encrypts stored credentials (registry logins, backup targets and their keys) and secures sign-in sessions. Keep a copy with your backups: without the original key a restored hub cannot read those credentials, and changing it later makes them unreadable. |
 | `PUID`, `PGID` | yes | User and group the hub runs as. Use the owner of the projects directory (`stat -c '%u %g' /srv/docker`), so Docklet can create and edit stacks there. The hub hands `data/` and `backups/` to this user at startup. |
+| `HUB_IMAGE` | no | Set by the in-app update; leave it out of `.env` at first. |
 | `TZ` | no | IANA time zone for schedules and dates, default `UTC`. |
 | `AUTH_MODE` | no | Sign-in mode: `local` (passwords, default), `proxy` (a trusted reverse proxy authenticates) or `none`. See the [installation guide](docs/install.md#select-a-sign-in-mode). |
 | `PROJECTS_DIRECTORY` | no | Where stacks live inside the container. Mount it at the same path as on the host, as above, so relative paths in your stacks resolve correctly. |

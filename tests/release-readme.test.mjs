@@ -33,7 +33,9 @@ const destination = (mount) => mount.split(":")[1];
 test("README quick start pins the official hub image at the release train version", () => {
   const example = quickStart();
   assert.deepEqual(Object.keys(example.services), ["hub"]);
-  assert.equal(example.services.hub.image, `ghcr.io/florianfinn/docklet-next-hub:${next}`);
+  // The in-app update rewrites HUB_IMAGE in .env; a literal reference would refuse it.
+  assert.equal(example.services.hub.image, `\${HUB_IMAGE:-ghcr.io/florianfinn/docklet-next-hub:${next}}`);
+  assert.match(readme, /^\| `HUB_IMAGE` \|/m);
 });
 
 test("README quick start keeps the template's container paths and runtime settings", () => {
