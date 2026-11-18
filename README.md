@@ -41,8 +41,8 @@ directory and manages the stacks next to it:
 /srv/docker/docklet/    Docklet itself: compose.yaml, .env, data/, backups/
 ```
 
-Any local directory works. Lines marked `# change` contain `/srv/docker` or a
-sample value; adjust them to your setup.
+Any local directory works: change the lines marked `# change` and the values in
+`.env`.
 
 Create `/srv/docker/docklet/compose.yaml`:
 
@@ -50,19 +50,14 @@ Create `/srv/docker/docklet/compose.yaml`:
 name: docklet
 services:
   hub:
-    # In-place update: "Update Docklet" (Hub settings › Updates) writes the new
-    # version to HUB_IMAGE in .env. Until then this release is used; no "latest" tag.
+    # "Update Docklet" in the UI sets HUB_IMAGE in .env (in-place update).
     image: ${HUB_IMAGE:-ghcr.io/florianfinn/docklet-next-hub:1.0.0}
     restart: unless-stopped
     stop_grace_period: 30s
     labels:
-      # Self-protection: marks this directory as Docklet's own, so it never appears
-      # as a stack in the UI and cannot be changed or removed there by accident.
-      io.docklet.system: hub
+      io.docklet.system: hub # self-protection: Docklet hides its own stack
     ports:
-      # 127.0.0.1 keeps the hub reachable only through a reverse proxy on this host.
-      # Use "3552:3552" instead to open the port to the network.
-      - "127.0.0.1:3552:3552"
+      - "127.0.0.1:3552:3552" # local reverse proxy; "3552:3552" for direct access
     environment:
       APP_URL: ${APP_URL:?Set APP_URL in .env}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
@@ -70,27 +65,27 @@ services:
       PGID: ${PGID:?Set PGID in .env}
       TZ: ${TZ:-UTC}
       AUTH_MODE: local
-      PROJECTS_DIRECTORY: /srv/docker # change: your projects directory
+      PROJECTS_DIRECTORY: /srv/docker # change
     volumes:
-      - ./data:/app/data # database, registry logins
-      - ./backups:/var/lib/docklet/backups # hub backup archives
-      - /srv/docker:/srv/docker # change: projects directory, same path on both sides
+      - ./data:/app/data
+      - ./backups:/var/lib/docklet/backups
+      - /srv/docker:/srv/docker # change
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
 Create `/srv/docker/docklet/.env` beside it:
 
 ```dotenv
-APP_URL=https://docklet.example.com # change: your hub address
-PUID=1000 # change: owner of the projects directory
-PGID=1000 # change: group of the projects directory
-TZ=Europe/Berlin # change: your time zone
+APP_URL=https://docklet.example.com
+PUID=1000
+PGID=1000
+TZ=Europe/Berlin
 ```
 
 Then add a new encryption key and start the hub:
 
 ```sh
-cd /srv/docker/docklet # change: your Docklet directory
+cd /srv/docker/docklet
 echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
 chmod 600 .env
 docker compose up -d
