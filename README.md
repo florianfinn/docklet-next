@@ -41,8 +41,8 @@ directory and manages the stacks next to it:
 /srv/docker/docklet/    Docklet itself: compose.yaml, .env, data/, backups/
 ```
 
-Any local directory works; replace `/srv/docker` everywhere below if you use another
-one.
+Any local directory works. Lines marked `# change` contain `/srv/docker` or a
+sample value; adjust them to your setup.
 
 Create `/srv/docker/docklet/compose.yaml`:
 
@@ -50,12 +50,17 @@ Create `/srv/docker/docklet/compose.yaml`:
 name: docklet
 services:
   hub:
+    # Current release; GitHub Releases lists newer versions. There is no "latest" tag.
     image: ghcr.io/florianfinn/docklet-next-hub:1.0.0
     restart: unless-stopped
     stop_grace_period: 30s
     labels:
+      # Self-protection: marks this directory as Docklet's own, so it never appears
+      # as a stack in the UI and cannot be changed or removed there by accident.
       io.docklet.system: hub
     ports:
+      # 127.0.0.1 keeps the hub reachable only through a reverse proxy on this host.
+      # Use "3552:3552" instead to open the port to the network.
       - "127.0.0.1:3552:3552"
     environment:
       APP_URL: ${APP_URL:?Set APP_URL in .env}
@@ -64,31 +69,27 @@ services:
       PGID: ${PGID:?Set PGID in .env}
       TZ: ${TZ:-UTC}
       AUTH_MODE: local
-      PROJECTS_DIRECTORY: /srv/docker
-      # Fixed container paths; leave them as they are.
-      DATABASE_URL: file:/app/data/docklet.db
-      DOCKLET_BACKUP_DIR: /var/lib/docklet/backups
-      DOCKER_CONFIG: /app/data/.docker
+      PROJECTS_DIRECTORY: /srv/docker # change: your projects directory
     volumes:
-      - ./data:/app/data
-      - ./backups:/var/lib/docklet/backups
-      - /srv/docker:/srv/docker
+      - ./data:/app/data # database, registry logins
+      - ./backups:/var/lib/docklet/backups # hub backup archives
+      - /srv/docker:/srv/docker # change: projects directory, same path on both sides
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
 Create `/srv/docker/docklet/.env` beside it:
 
 ```dotenv
-APP_URL=https://docklet.example.com
-PUID=1000
-PGID=1000
-TZ=Europe/Berlin
+APP_URL=https://docklet.example.com # change: your hub address
+PUID=1000 # change: owner of the projects directory
+PGID=1000 # change: group of the projects directory
+TZ=Europe/Berlin # change: your time zone
 ```
 
 Then add a new encryption key and start the hub:
 
 ```sh
-cd /srv/docker/docklet
+cd /srv/docker/docklet # change: your Docklet directory
 echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
 chmod 600 .env
 docker compose up -d
@@ -103,7 +104,7 @@ docker compose logs hub
 | `TZ` | no | IANA time zone for schedules and dates, default `UTC`. |
 | `AUTH_MODE` | no | Sign-in mode: `local` (passwords, default), `proxy` (a trusted reverse proxy authenticates) or `none`. See the [installation guide](docs/install.md#select-a-sign-in-mode). |
 | `PROJECTS_DIRECTORY` | no | Where stacks live inside the container. Mount it at the same path as on the host, as above, so relative paths in your stacks resolve correctly. |
-| `DATABASE_URL`, `DOCKLET_BACKUP_DIR`, `DOCKER_CONFIG` | fixed | Database file, hub backup archives and registry login data inside the mounted `data/` and `backups/` directories. |
+| `DATABASE_URL`, `DOCKLET_BACKUP_DIR`, `DOCKER_CONFIG` | no | Database file, hub backup archives and registry login data. The image already points them into the mounted `/app/data` and `/var/lib/docklet/backups`; the volume mounts are enough. Set them only to move these files. |
 
 All other settings, such as proxy sign-in, trusted proxies or image overrides, are
 described in [`.env.example`](.env.example). Docklet keeps its own settings in the
@@ -112,11 +113,12 @@ on a local disk, not on a network share.
 
 Serve the hub through a TLS reverse proxy that forwards WebSockets to
 `127.0.0.1:3552` (see the [reverse-proxy guide](docs/deployment/reverse-proxy.md)).
+Without a proxy on this host, publish `3552:3552` and set `APP_URL` to the address
+you open in the browser.
 Sign in as `arcane` with the initial password from `docker compose logs hub`,
-change it when prompted and complete setup. The `io.docklet.system: hub` label
-marks this directory as Docklet's own, so it never appears as a stack, and Docklet
-hides its own containers. Then use **Hosts** › **Add host**; the hub generates
-the agent installation package. Before production use, switch to the release
+change it when prompted and complete setup. Docklet hides its own directory and
+containers, as described at the label above. Then use **Hosts** › **Add host**;
+the hub generates the agent installation package. Before production use, switch to the release
 package for digest pins, proxy sign-in and the documented upgrade path.
 
 ## Install

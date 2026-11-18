@@ -23,7 +23,9 @@ function quickStart() {
 function dotenv() {
   const blocks = [...readme.matchAll(/```dotenv\n([\s\S]*?)```/g)].map((m) => m[1]);
   assert.equal(blocks.length, 1, "README has exactly one dotenv example");
-  return Object.fromEntries(blocks[0].trim().split("\n").map((line) => line.split(/=(.*)/s).slice(0, 2)));
+  // Compose drops an unquoted value's inline comment that follows whitespace.
+  return Object.fromEntries(blocks[0].trim().split("\n")
+    .map((line) => line.replace(/\s+#.*$/, "").split(/=(.*)/s).slice(0, 2)));
 }
 
 const destination = (mount) => mount.split(":")[1];
@@ -40,9 +42,14 @@ test("README quick start keeps the template's container paths and runtime settin
   for (const key of ["restart", "stop_grace_period"]) assert.equal(hub[key], source[key], key);
   assert.deepEqual(hub.labels, { "io.docklet.system": "hub" }, "the install-directory label keeps Docklet out of the stack list");
   assert.deepEqual(hub.labels, source.labels);
-  for (const key of ["DATABASE_URL", "DOCKLET_BACKUP_DIR", "DOCKER_CONFIG", "TZ"]) {
-    assert.equal(hub.environment[key], source.environment[key], key);
-  }
+  assert.equal(hub.environment.TZ, source.environment.TZ);
+  // The example relies on the image defaults; they must equal the template's explicit container paths.
+  const dockerfile = readFileSync("deploy/hub/Dockerfile", "utf8");
+  assert.match(dockerfile, new RegExp(`^ENV DATABASE_URL=${source.environment.DATABASE_URL} `, "m"));
+  assert.match(readFileSync("backend/internal/config/config.go", "utf8"),
+    new RegExp(`env:"DOCKLET_BACKUP_DIR" default:"${source.environment.DOCKLET_BACKUP_DIR}"`));
+  assert.match(readFileSync("backend/pkg/libarcane/startup/runtime_identity.go", "utf8"),
+    new RegExp(`defaultDockerConfigDir\\s*=\\s*"${source.environment.DOCKER_CONFIG}"`));
   assert.deepEqual(hub.ports, ["127.0.0.1:3552:3552"], "loopback only, template default port");
   // Same container paths as the template; host sides are the documented project-directory layout.
   const projects = `${hub.environment.PROJECTS_DIRECTORY}:${hub.environment.PROJECTS_DIRECTORY}`;
@@ -61,8 +68,8 @@ test("README quick start mounts the projects directory at the same path", () => 
 test("README quick start requires the deployment inputs and documents every variable", () => {
   const { environment } = quickStart().services.hub;
   // Intentional differences from the package: no image overrides or proxy sign-in inputs.
-  assert.deepEqual(Object.keys(environment).sort(), ["APP_URL", "AUTH_MODE", "DATABASE_URL", "DOCKER_CONFIG",
-    "DOCKLET_BACKUP_DIR", "ENCRYPTION_KEY", "PGID", "PROJECTS_DIRECTORY", "PUID", "TZ"]);
+  assert.deepEqual(Object.keys(environment).sort(), ["APP_URL", "AUTH_MODE", "ENCRYPTION_KEY", "PGID",
+    "PROJECTS_DIRECTORY", "PUID", "TZ"]);
   for (const key of ["APP_URL", "ENCRYPTION_KEY", "PUID", "PGID"]) {
     assert.match(environment[key], new RegExp(`^\\$\\{${key}:\\?`), `${key} is required`);
   }
