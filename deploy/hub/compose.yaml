@@ -2,7 +2,7 @@
 # Revision: b3607be5144101152c8eb7738d389e8c73986fba
 # Retrieved: 2026-10-16
 # License: Apache-2.0
-# Deviations: Original single-hub template with local persistent SQLite storage.
+# Deviations: Original single-hub template with local persistent SQLite storage; install-directory label.
 name: docklet-next
 services:
   hub:
@@ -12,6 +12,9 @@ services:
       dockerfile: deploy/hub/Dockerfile
     restart: unless-stopped
     stop_grace_period: 30s
+    # Marks Docklet's own install directory, so a projects scan never lists it as a stack.
+    labels:
+      io.docklet.system: hub
     ports:
       - "127.0.0.1:${HUB_PORT:-3552}:3552"
     environment:

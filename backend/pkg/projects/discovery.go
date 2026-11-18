@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed GitOps; skip labelled agent installation directories.
+// Deviations: Local module namespace; removed GitOps; skip labelled agent and hub installation directories.
 
 package projects
 
@@ -152,7 +152,7 @@ func walkProjectDirectoriesInternal(ctx context.Context,
 	// to contain its own compose file.
 	switch composePath, detectComposeFileErr := DetectComposeFile(ctx, root, path); {
 	case detectComposeFileErr == nil, errors.Is(detectComposeFileErr, common.ErrProjectEnvUnreadable) && composePath != "":
-		if isAgentInstallComposeInternal(composePath) {
+		if isDockletInstallComposeInternal(composePath) {
 			return nil
 		}
 		if detectComposeFileErr != nil {
@@ -360,8 +360,9 @@ func entriesNeedDirectorySyncInternal(entries []string, allowed map[string]struc
 	return false
 }
 
-// Inspect labels without interpolating the private agent .env or requiring Docker.
-func isAgentInstallComposeInternal(path string) bool {
+// Docklet's own hub or agent install directory is not a stack: every service carries
+// io.docklet.system=agent or =hub. Labels are inspected without interpolating its private .env.
+func isDockletInstallComposeInternal(path string) bool {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return false
@@ -380,13 +381,13 @@ func isAgentInstallComposeInternal(path string) bool {
 		switch labels.Kind {
 		case yaml.MappingNode:
 			for i := 0; i+1 < len(labels.Content); i += 2 {
-				if labels.Content[i].Value == "io.docklet.system" && labels.Content[i+1].Value == "agent" {
+				if labels.Content[i].Value == "io.docklet.system" && dockletRoleInternal(labels.Content[i+1].Value) {
 					labelled = true
 				}
 			}
 		case yaml.SequenceNode:
 			for _, label := range labels.Content {
-				if label.Value == "io.docklet.system=agent" {
+				if role, ok := strings.CutPrefix(label.Value, "io.docklet.system="); ok && dockletRoleInternal(role) {
 					labelled = true
 				}
 			}
@@ -397,3 +398,5 @@ func isAgentInstallComposeInternal(path string) bool {
 	}
 	return true
 }
+
+func dockletRoleInternal(role string) bool { return role == "agent" || role == "hub" }

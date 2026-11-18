@@ -58,7 +58,9 @@ below or above, compared segment-wise (`/etcetera` does not overlap `/etc`).
 
 - **Docklet mounts**: the agent installer and the README layout put Docklet's own
   directory inside the projects directory and mount that directory at the same path.
-  Docklet hides its own containers and Compose project, protects its install directory
+  Their Compose files label every service `io.docklet.system` (`agent` or `hub`), so the
+  projects scan skips that directory and never stores it as a stack. Docklet hides its own
+  containers and Compose project, protects its install directory
   and state mounts completely, and treats any other mount only as a boundary: its root and
   ancestors are refused, its contents are ordinary stack data. Restore applies the same
   rule before refusing with `409 volume.restore.self-mounted`. Keep Docklet's own secret

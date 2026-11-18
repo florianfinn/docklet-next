@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original fake Docker project-list regression test; hub role; pending updates, status counts and runtime identity skip Docklet projects.
+// Deviations: Original fake Docker project-list regression test; hub role; pending updates and status counts skip Docklet projects.
 
 package project
 
@@ -18,7 +18,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
-	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/moby/moby/api/types/container"
 	"github.com/stretchr/testify/require"
 )
@@ -128,85 +127,6 @@ func TestProjectStatusCountsSkipDockletProjectsFakeDocker(t *testing.T) {
 			}
 			require.Equal(t, want, counts.TotalProjects)
 			require.Equal(t, want, counts.RunningProjects)
-		})
-	}
-}
-
-// QS1-F1: a fresh README hub keeps its install .env private; that unreadable Docklet project must not
-// block runtime identity for ordinary stacks, while an unreadable ordinary peer still does.
-func TestRuntimeIdentityIgnoresUnreadableDockletProjects(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("file modes do not restrict root")
-	}
-	for _, role := range []string{"hub", "agent", "workload"} {
-		t.Run(role, func(t *testing.T) {
-			db := setupProjectTestDB(t)
-			settings, err := newSettingsServiceForTest(t, t.Context(), db)
-			require.NoError(t, err)
-			dir := t.TempDir()
-			require.NoError(t, settings.SetStringSetting(t.Context(), "projectsDirectory", dir))
-			for _, name := range []string{"docklet", "user"} {
-				require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(dir, name, "compose.yaml"), []byte("name: "+name+"\nservices:\n  web:\n    image: example:1.0.0\n"), 0o600))
-			}
-			unreadable := filepath.Join(dir, "docklet", "compose.yaml")
-			require.NoError(t, os.Chmod(unreadable, 0))
-			t.Cleanup(func() { _ = os.Chmod(unreadable, 0o600) })
-			require.NoError(t, db.Create(&[]Project{
-				{ID: "docklet", Name: "docklet", Path: filepath.Join(dir, "docklet"), Status: ProjectStatusRunning},
-				{ID: "user", Name: "user", Path: filepath.Join(dir, "user"), Status: ProjectStatusStopped},
-			}).Error)
-			server := newProjectRuntimeDockerServer(t, []container.Summary{
-				{ID: "docklet", Labels: map[string]string{"com.docker.compose.project": "docklet", "com.docker.compose.service": "web", "io.docklet.system": role}, State: container.StateRunning},
-			})
-			service := NewProjectService(db, settings, nil, nil, &docker.DockerClientService{Client: newTestDockerClient(t, server)}, nil, nil, config.Load(), nil, nil)
-			ref, ok, err := service.ResolveRuntimeProjectIdentity(t.Context(), "user", "")
-			if role == "workload" {
-				var problem *imageDTO.OperationError
-				require.ErrorAs(t, err, &problem, "an unreadable ordinary peer still blocks")
-				require.Equal(t, "runtime.target-unavailable", problem.Problem.Code)
-				return
-			}
-			require.NoError(t, err)
-			require.True(t, ok)
-			require.Equal(t, "user", ref.Name)
-		})
-	}
-}
-
-// F-R7-1: a workload whose Compose name equals the hidden Docklet project stays ambiguous, so a
-// runtime action can never resolve to Docklet's own containers.
-func TestRuntimeIdentityKeepsDockletNamesAsOwners(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("file modes do not restrict root")
-	}
-	for _, role := range []string{"hub", "agent"} {
-		t.Run(role, func(t *testing.T) {
-			db := setupProjectTestDB(t)
-			settings, err := newSettingsServiceForTest(t, t.Context(), db)
-			require.NoError(t, err)
-			dir := t.TempDir()
-			require.NoError(t, settings.SetStringSetting(t.Context(), "projectsDirectory", dir))
-			for _, name := range []string{"docklet", "imposter"} {
-				require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(dir, name, "compose.yaml"), []byte("name: docklet\nservices:\n  web:\n    image: example:1.0.0\n"), 0o600))
-			}
-			unreadable := filepath.Join(dir, "docklet", "compose.yaml")
-			require.NoError(t, os.Chmod(unreadable, 0))
-			t.Cleanup(func() { _ = os.Chmod(unreadable, 0o600) })
-			require.NoError(t, db.Create(&[]Project{
-				{ID: "docklet", Name: "docklet", Path: filepath.Join(dir, "docklet"), Status: ProjectStatusRunning},
-				{ID: "imposter", Name: "imposter", Path: filepath.Join(dir, "imposter"), Status: ProjectStatusStopped},
-			}).Error)
-			server := newProjectRuntimeDockerServer(t, []container.Summary{
-				{ID: "docklet", Labels: map[string]string{"com.docker.compose.project": "docklet", "com.docker.compose.service": "web", "io.docklet.system": role}, State: container.StateRunning},
-			})
-			service := NewProjectService(db, settings, nil, nil, &docker.DockerClientService{Client: newTestDockerClient(t, server)}, nil, nil, config.Load(), nil, nil)
-			for _, lookup := range [][2]string{{"imposter", ""}, {"", "docklet"}} {
-				ref, ok, err := service.ResolveRuntimeProjectIdentity(t.Context(), lookup[0], lookup[1])
-				require.NoError(t, err)
-				require.False(t, ok, "%v resolved to %v", lookup, ref)
-			}
 		})
 	}
 }

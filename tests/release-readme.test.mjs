@@ -38,6 +38,8 @@ test("README quick start keeps the template's container paths and runtime settin
   const hub = quickStart().services.hub;
   const source = template.services.hub;
   for (const key of ["restart", "stop_grace_period"]) assert.equal(hub[key], source[key], key);
+  assert.deepEqual(hub.labels, { "io.docklet.system": "hub" }, "the install-directory label keeps Docklet out of the stack list");
+  assert.deepEqual(hub.labels, source.labels);
   for (const key of ["DATABASE_URL", "DOCKLET_BACKUP_DIR", "DOCKER_CONFIG", "TZ"]) {
     assert.equal(hub.environment[key], source.environment[key], key);
   }

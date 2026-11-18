@@ -53,6 +53,8 @@ services:
     image: ghcr.io/florianfinn/docklet-next-hub:1.0.0
     restart: unless-stopped
     stop_grace_period: 30s
+    labels:
+      io.docklet.system: hub
     ports:
       - "127.0.0.1:3552:3552"
     environment:
@@ -111,8 +113,9 @@ on a local disk, not on a network share.
 Serve the hub through a TLS reverse proxy that forwards WebSockets to
 `127.0.0.1:3552` (see the [reverse-proxy guide](docs/deployment/reverse-proxy.md)).
 Sign in as `arcane` with the initial password from `docker compose logs hub`,
-change it when prompted and complete setup. Docklet hides its own `docklet`
-project and its own containers. Then use **Hosts** › **Add host**; the hub generates
+change it when prompted and complete setup. The `io.docklet.system: hub` label
+marks this directory as Docklet's own, so it never appears as a stack, and Docklet
+hides its own containers. Then use **Hosts** › **Add host**; the hub generates
 the agent installation package. Before production use, switch to the release
 package for digest pins, proxy sign-in and the documented upgrade path.
 

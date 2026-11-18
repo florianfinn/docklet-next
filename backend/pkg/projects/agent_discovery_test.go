@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original agent installation discovery tests.
+// Deviations: Original agent installation discovery tests; hub installation directory.
 
 package projects
 
@@ -14,7 +14,7 @@ import (
 )
 
 func TestDiscoverySkipsAgentInstallDirectory(t *testing.T) {
-	for _, labels := range []string{`{io.docklet.system: agent}`, `["io.docklet.system=agent"]`} {
+	for _, labels := range []string{`{io.docklet.system: agent}`, `["io.docklet.system=agent"]`, `{io.docklet.system: hub}`, `["io.docklet.system=hub"]`} {
 		t.Run(labels, func(t *testing.T) {
 			root := t.TempDir()
 			agent := filepath.Join(root, "docklet-agent")
@@ -34,6 +34,7 @@ func TestDiscoveryKeepsMixedOrUnlabelledStack(t *testing.T) {
 		"services: {app: {image: example:0.0.0}}",
 		"services: {agent: {labels: {io.docklet.system: agent}}, app: {image: example:0.0.0}}",
 		"services: {app: {labels: {io.docklet.system: other}}}",
+		"services: {hub: {labels: {io.docklet.system: hub}}, app: {image: example:0.0.0}}",
 	} {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "compose.yaml"), []byte(content), 0o644))
