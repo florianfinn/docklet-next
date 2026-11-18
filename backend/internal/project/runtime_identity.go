@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/florianfinn/docklet-next/backend/internal/project/children/listing"
 	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
@@ -33,6 +34,9 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 	}
 	// Docklet's own hub and agent stacks are ignored like in the stack list: their install
 	// directory (with a private .env) need not be readable and never blocks a workload.
+	// Docklet's own hub and agent stacks are not read from disk (their install directory keeps a
+	// private .env), but their observed Compose name still counts as an owner, so a workload with
+	// the same name stays ambiguous and never resolves to Docklet's own project.
 	var system []string
 	if snapshot := s.listing.Snapshot(ctx); snapshot.Err == nil {
 		system = systemProjectIDs(snapshot.Containers, projectRecords(rows))
@@ -42,6 +46,9 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 	for i := range rows {
 		row := &rows[i]
 		if row.ID != projectID && slices.Contains(system, row.ID) {
+			if name := listing.ObservedComposeName(projectRecord(*row)); name != "" {
+				owners[name]++
+			}
 			continue
 		}
 		// A requested ID must be checked, even when the name lookup would not
