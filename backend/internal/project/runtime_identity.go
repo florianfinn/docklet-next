@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Fresh, read-only project identity for runtime control.
+// Deviations: Fresh, read-only project identity for runtime control; Docklet's own projects ignored as peers.
 
 package project
 
@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"slices"
 
 	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
@@ -30,10 +31,19 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 	if err := s.db.WithContext(ctx).Find(&rows).Error; err != nil {
 		return projecttypes.Reference{}, false, fmt.Errorf("list runtime project identities: %w", err)
 	}
+	// Docklet's own hub and agent stacks are ignored like in the stack list: their install
+	// directory (with a private .env) need not be readable and never blocks a workload.
+	var system []string
+	if snapshot := s.listing.Snapshot(ctx); snapshot.Err == nil {
+		system = systemProjectIDs(snapshot.Containers, projectRecords(rows))
+	}
 	var match projecttypes.Reference
 	owners := make(map[string]int, len(rows))
 	for i := range rows {
 		row := &rows[i]
+		if row.ID != projectID && slices.Contains(system, row.ID) {
+			continue
+		}
 		// A requested ID must be checked, even when the name lookup would not
 		// otherwise select it. Unreadable peers, including archived rows, can
 		// conceal duplicate ownership and therefore block every successful lookup.
