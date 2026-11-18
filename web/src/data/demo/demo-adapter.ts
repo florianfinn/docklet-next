@@ -155,7 +155,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     ...createDemoRegistries(() => db.changed("registries")),
     ...createDemoUsers(db),
     getAuthMode: async () => db.settings.auth.mode,
-    getAuthConfiguration: async () => ({ mode: db.settings.auth.mode, ...(db.settings.auth.mode === "proxy" ? { logoutUrl: db.settings.auth.proxy.logoutUrl } : {}) }),
+    getAuthConfiguration: async () => ({ mode: db.settings.auth.mode, setupPending: false, forced: false, ...(db.settings.auth.mode === "proxy" ? { logoutUrl: db.settings.auth.proxy.logoutUrl } : {}) }),
     getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     login: async (username) => ({ id: "demo-admin", username, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     logout: async () => undefined,

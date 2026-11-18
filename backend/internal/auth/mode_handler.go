@@ -2,7 +2,7 @@
 // Revision: 92e896e926aaaf0189c72dcec6e3b15a52ddbd5d
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original read-only mode endpoint; M15 simple-user rights and identity contracts.
+// Deviations: Original read-only mode endpoint; M15 simple-user rights and identity contracts; M29 setup state and stored policy.
 
 package auth
 
@@ -20,9 +20,15 @@ type SignInModeOutput struct {
 }
 
 func (h *AuthHandler) GetSignInMode(ctx context.Context, _ *struct{}) (*SignInModeOutput, error) {
-	cfg := auth.SignInConfiguration{Mode: h.authService.SignInMode()}
+	p := h.authService.CurrentPolicy()
+	cfg := auth.SignInConfiguration{Mode: p.Mode, SetupPending: p.Pending, Forced: p.Forced}
 	if cfg.Mode == auth.SignInModeProxy && h.authService.config.AuthProxyLogoutURL != "" {
 		cfg.LogoutURL = &h.authService.config.AuthProxyLogoutURL
+	}
+	// The public endpoint shows proxy settings only during setup; administrators read them via the
+	// authenticated Sign-in section (this operation is public, so no user is resolved here).
+	if p.Pending {
+		cfg.ProxyHeader, cfg.TrustedProxies = &p.Header, &p.Trusted
 	}
 	return &SignInModeOutput{
 		CSRFToken: middleware.CSRFTokenFromContext(ctx),

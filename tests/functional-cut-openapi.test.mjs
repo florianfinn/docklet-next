@@ -5,6 +5,10 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  // M29 first-run claim and stored sign-in policy (#518).
+  ["POST /setup/identity", "claim-setup-identity"],
+  ["GET /auth/sign-in", "get-sign-in"],
+  ["PUT /auth/sign-in", "update-sign-in"],
   // M27 proxy contract foundation (#473/#474).
   ["POST /environments/{id}/modules/proxy/apply", "apply-proxy-operation"],
   ["GET /environments/{id}/modules/proxy/discover", "discover-proxy-containers"],

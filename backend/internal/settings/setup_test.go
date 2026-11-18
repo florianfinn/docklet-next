@@ -23,21 +23,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestSetupCompletionRequiresChangedInitialPassword(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	require.NoError(t, db.Exec("CREATE TABLE users (id TEXT PRIMARY KEY, requires_password_change BOOLEAN NOT NULL)").Error)
-	require.NoError(t, db.Exec("INSERT INTO users (id, requires_password_change) VALUES (?, ?)", "admin", true).Error)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	handler := &SettingsHandler{settingsService: svc}
-	actor := context.WithValue(ctx, middleware.ContextKeyUserID, "admin")
-	input := settingstypes.Update{SetupCompleted: new("true")}
-	require.ErrorContains(t, handler.validateSettingsUpdateInput(actor, input), "Change the initial administrator password")
-	require.NoError(t, db.Exec("UPDATE users SET requires_password_change = ? WHERE id = ?", false, "admin").Error)
-	require.NoError(t, handler.validateSettingsUpdateInput(actor, input))
-}
-
 func TestSetupSettingsPersistAcrossServiceRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hub.db")
 	open := func() *database.DB {
@@ -92,7 +77,7 @@ func TestSetupDefaultHostDirectoriesDoNotTouchHubProjects(t *testing.T) {
 	require.Equal(t, "true", stored.SetupCompleted.Value)
 }
 
-func TestSetupCompletionSignInModeGate(t *testing.T) {
+func TestSetupCompletionHasNoInitialPasswordGate(t *testing.T) {
 	for _, mode := range []string{"local", "none", "proxy"} {
 		t.Run(mode, func(t *testing.T) {
 			db := setupSettingsTestDB(t)
@@ -104,16 +89,8 @@ func TestSetupCompletionSignInModeGate(t *testing.T) {
 			input := &UpdateSettingsInput{EnvironmentID: "0", Body: settingstypes.Update{SetupCompleted: new("true")}}
 			actor := context.WithValue(t.Context(), middleware.ContextKeyUserID, "admin")
 			_, err = handler.UpdateSettings(actor, input)
-			if mode == "local" {
-				require.ErrorContains(t, err, "Change the initial administrator password")
-				_, err = handler.UpdateSettings(t.Context(), input)
-				require.ErrorContains(t, err, "Sign-in required")
-				require.NoError(t, db.Exec("UPDATE users SET requires_password_change = ?", false).Error)
-				_, err = handler.UpdateSettings(actor, input)
-				require.NoError(t, err)
-			} else {
-				require.NoError(t, err)
-			}
+			// The first administrator is created in setup; completion no longer waits for a password change.
+			require.NoError(t, err)
 		})
 	}
 }

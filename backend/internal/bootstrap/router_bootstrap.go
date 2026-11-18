@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; one environment route identity guard before every path consumer (#264); optional-module foundation (#472).
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation; M14 container and host operation contracts; M14 shell registry lifetime wiring; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; one environment route identity guard before every path consumer (#264); optional-module foundation (#472); M29 runtime sign-in policy and first-run claim.
 
 package bootstrap
 
@@ -128,7 +128,7 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 	}
 	return func(ctx context.Context, c *echo.Context) (*authz.PermissionSet, *usertypes.Actor, bool) {
 		req := c.Request()
-		if deps.Auth.Service().SignInMode() != "local" {
+		if !deps.Auth.Service().CurrentPolicy().LocalActive() {
 			if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
 				if envID, err := deps.ApiKey.Service().GetEnvironmentByApiKey(ctx, apiKey); err == nil && envID != nil {
 					return authz.EnvironmentPermissionSet(*envID), nil, true
@@ -177,7 +177,7 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 }
 
 func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.AuthService, req *http.Request) (*usertypes.Actor, bool) {
-	if authService.SignInMode() != "local" {
+	if !authService.CurrentPolicy().LocalActive() {
 		requestUser, err := authService.ModeRequestUser(ctx, req)
 		if err == nil && requestUser != nil {
 			*req = *req.WithContext(authService.ViewerContext(ctx, "", requestUser.ID))
@@ -281,7 +281,8 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	e.Use(middleware.NewCORSMiddleware(cfg).Add())
 	e.Use(middleware.NewCSRFMiddleware(cfg).
 		WithTransportValidator(csrfTransportValidatorInternal(deps)).
-		WithLocalCredentialValidator(authMiddleware.ValidateLocalHeaderCredential).Add())
+		WithLocalCredentialValidator(authMiddleware.ValidateLocalHeaderCredential).
+		WithLocalSignInActive(func() bool { return deps.Auth.Service().CurrentPolicy().LocalActive() }).Add())
 
 	apiGroup := e.Group("/api")
 
@@ -289,6 +290,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		[]string{
 			"/api/auth/login",
 			"/api/auth/refresh",
+			"/api/setup/identity",
 		}, 5, 5,
 	))
 	// Only POST agent ingestion needs this brute-force ceiling outside session auth.
@@ -356,7 +358,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
 		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
-		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
+		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), ProxyIdentityHeaderFunc: func() string { return deps.Auth.Service().CurrentPolicy().Header }, AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
 		}, PolicyCleanup: deps.Updater.Service().StackDestroyed, OriginOverlay: deps.Container.Service().OverlayInventory, InventoryPending: deps.Environment.Service().InventoryPending},
 	)

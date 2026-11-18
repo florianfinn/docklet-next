@@ -58,7 +58,7 @@ type Config struct {
 	JWTRefreshExpiry       time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
 	EncryptionKey          string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
 	AdminStaticAPIKey      string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
-	AuthMode               string         `env:"AUTH_MODE" default:"local" options:"file"`
+	AuthMode               string         `env:"AUTH_MODE" default:"" options:"file"`
 	AuthProxyAdminUsers    *string        `env:"AUTH_PROXY_ADMIN_USERS" options:"file"`
 	AuthProxyLogoutURL     string         `env:"AUTH_PROXY_LOGOUT_URL" default:"" options:"file"`
 	AuthProxyHeader        string         `env:"AUTH_PROXY_HEADER" default:"Remote-User" options:"file"`

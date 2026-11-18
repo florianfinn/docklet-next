@@ -2,7 +2,7 @@
 // Revision: e32adfed592cb71a2c8a85c8a5e539e7522ae8bc
 // Retrieved: 2026-11-17
 // License: Apache-2.0
-// Deviations: Original drift guard for the README quick-start Compose example; project-directory layout.
+// Deviations: Original drift guard for the README quick-start Compose example; project-directory layout; M29 sign-in chosen in setup.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -72,13 +72,12 @@ test("README quick start mounts the projects directory at the same path", () => 
 
 test("README quick start requires the deployment inputs and documents every variable", () => {
   const { environment } = quickStart().services.hub;
-  // Intentional differences from the package: no image overrides or proxy sign-in inputs.
-  assert.deepEqual(Object.keys(environment).sort(), ["APP_URL", "AUTH_MODE", "ENCRYPTION_KEY", "PGID",
+  // Intentional differences from the package: no image overrides or sign-in inputs; setup chooses the sign-in.
+  assert.deepEqual(Object.keys(environment).sort(), ["APP_URL", "ENCRYPTION_KEY", "PGID",
     "PROJECTS_DIRECTORY", "PUID", "TZ"]);
   for (const key of ["APP_URL", "ENCRYPTION_KEY", "PUID", "PGID"]) {
     assert.match(environment[key], new RegExp(`^\\$\\{${key}:\\?`), `${key} is required`);
   }
-  assert.equal(environment.AUTH_MODE, "local");
   for (const key of Object.keys(environment)) {
     assert.match(readme, new RegExp(`^\\| [^|]*\`${key}\``, "m"), `${key} has a table row`);
   }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; M15 simple-user rights and identity contracts; M29 runtime sign-in mode.
 
 package user
 
@@ -103,7 +103,7 @@ func (h *UserHandler) CreateUser(ctx context.Context, input *CreateUserInput) (*
 	}
 	input.Body.Email = normalizedEmail
 
-	proxy := h.cfg != nil && h.cfg.SignInMode() == "proxy"
+	proxy := h.signInModeInternal() == "proxy"
 	if !proxy && strings.Contains(input.Body.Username, "@") {
 		return nil, huma.Error400BadRequest("Local usernames cannot contain @")
 	}
@@ -205,7 +205,7 @@ func (h *UserHandler) UpdateUser(ctx context.Context, input *UpdateUserInput) (*
 		if normalizeUsernameErr != nil {
 			return nil, huma.Error400BadRequest(normalizeUsernameErr.Error())
 		}
-		if (h.cfg == nil || h.cfg.SignInMode() != "proxy") && strings.Contains(normalizedUsername, "@") {
+		if h.signInModeInternal() != "proxy" && strings.Contains(normalizedUsername, "@") {
 			return nil, huma.Error400BadRequest("Local usernames cannot contain @")
 		}
 		userModel.Username = normalizedUsername

@@ -68,10 +68,11 @@ Edit the copied `.env`. Required deployment values are:
 
 - `ENCRYPTION_KEY`: the private encryption key. Compose refuses an empty value.
 - `APP_URL`: the public origin, such as `https://docklet.example.com`.
-- `AUTH_MODE`: choose the sign-in policy below; the default is `local`.
 
 Optional package inputs are:
 
+- `AUTH_MODE`: leave it empty to choose the sign-in in setup; set it only to force
+  a mode (see [sign-in mode](#sign-in-mode)).
 - `HUB_PORT`: loopback host port, default `3552`.
 - `TZ`: IANA time zone for schedules and display, default `UTC`.
 - `PUID` and `PGID`: numeric application identity, both default `65532` in the
@@ -80,7 +81,8 @@ Optional package inputs are:
 - `HUB_IMAGE` and `DOCKLET_AGENT_IMAGE`: image overrides. Leave them unset or blank
   to use the package defaults. Docklet's release defaults use
   `name:X.Y.Z@sha256:…`; use the actual digest from the package, not this notation.
-- `AUTH_PROXY_HEADER`, `AUTH_TRUSTED_PROXIES`, `AUTH_RESET_ADMIN_PASSWORD` and their
+- `AUTH_PROXY_HEADER` and `AUTH_TRUSTED_PROXIES` (only with a forced `AUTH_MODE=proxy`),
+  `AUTH_RESET_ADMIN_PASSWORD` and their
   `_FILE` / `__FILE` variants, when needed for sign-in or recovery.
 
 The repository [`.env.example`](../.env.example) documents the full runtime
@@ -96,27 +98,37 @@ operator registries. This also applies to the optional `TOOLS_IMAGE` setting
 default remains pinned. Custom hub or agent images may disable in-app updates;
 the hub still checks the agent contract.
 
-### Select a sign-in mode
+### Sign-in mode
 
-`AUTH_MODE` is already in the hub Compose environment. Choose exactly one value
-and recreate the service after changes:
+First-run setup asks how people sign in and stores the choice; **Settings** ›
+**Sign-in** changes it later without a restart:
 
-- `local`: local passwords and sessions. On a fresh installation, sign in as
-  `arcane` using the initial password printed in the hub startup log. Change it
-  when prompted, then complete setup.
-- `proxy`: the proxy authenticates every request and strips and replaces
-  `AUTH_PROXY_HEADER` (default `Remote-User`). Set `AUTH_TRUSTED_PROXIES` to exact
-  direct TCP peer IP addresses or CIDRs as seen by the hub. Missing or malformed
-  values and all-address `/0` networks prevent startup. Forwarded client headers
-  never grant sign-in trust. By default accepted proxy identities act as the
-  shared administrator. Optional `AUTH_PROXY_ADMIN_USERS` limits that mapping;
-  other identities need a matching enabled username, and a name matching an
-  administrator account acts as that administrator. Pass this optional setting
-  explicitly in the Compose environment. `AUTH_PROXY_LOGOUT_URL` optionally sets
-  an absolute HTTP(S) proxy sign-out URL and also needs explicit forwarding.
-- `none`: everyone who can reach the hub has full administrator access. Mode
-  changes revoke sessions but retain users, API keys and agent tokens. Review
-  users and rotate unwanted credentials after using this mode.
+- `local`: local accounts with passwords and sessions. Setup creates the first
+  administrator with a username and password.
+- `proxy`: the reverse proxy authenticates every request and strips and replaces
+  the identity header (default `Remote-User`). Enter the header and the trusted
+  proxy addresses: exact direct TCP peer IP addresses or CIDRs as seen by the
+  hub. All-address `/0` networks are refused. Forwarded client headers never grant
+  sign-in trust. Docklet only accepts the choice when the current request already
+  arrives through that proxy with an identity, so a wrong value cannot lock you
+  out. By default accepted proxy identities act as the administrator. Optional
+  `AUTH_PROXY_ADMIN_USERS` limits that mapping; other identities need a matching
+  enabled username, and a name matching an administrator account acts as that
+  administrator. Pass this optional setting explicitly in the Compose environment.
+  `AUTH_PROXY_LOGOUT_URL` optionally sets an absolute HTTP(S) proxy sign-out URL
+  and also needs explicit forwarding.
+- `none`: everyone who can reach the hub has full administrator access. Setup still
+  creates a named administrator account.
+
+Every mode change revokes all sessions; users, API keys and agent tokens remain.
+Review users and rotate unwanted credentials after using `none`. Switching to
+`local` asks for a password when your account has none.
+
+To fix the mode from the deployment instead, set `AUTH_MODE` (`local`, `proxy` or
+`none`; for `proxy` also `AUTH_PROXY_HEADER` and `AUTH_TRUSTED_PROXIES`) and
+recreate the service. Setup and Settings then show the mode locked. Removing
+`AUTH_MODE` later resumes the sign-in stored in the database. Invalid forced
+values prevent startup.
 
 `TRUSTED_PROXIES` controls forwarded metadata separately from
 `AUTH_TRUSTED_PROXIES`. Optional proxy administrator and logout settings support
@@ -136,8 +148,11 @@ docker compose -f compose.yaml --env-file .env logs hub
 ```
 
 Wait for the service to become healthy (`/api/health`), then open the configured
-public address. Complete the first-login password change in local mode and the
-hub setup flow. Proxy mode uses the proxy identity; none mode opens directly.
+public address. Setup opens without a sign-in screen. It asks for the one-time
+setup code that the hub prints at startup (`Setup code: XXXX-XXXX-XXXX` in the
+logs), then for the sign-in mode and the first administrator. The code changes at
+every restart until setup has created the administrator; after that it is no
+longer accepted. The remaining steps configure addresses, projects and modules.
 The `hub-data` volume holds the database pair under `/app/data`; `hub-backups`
 holds hub archives under `/var/lib/docklet/backups`. Keep both across container
 replacement. Never delete live SQLite WAL/SHM files or copy just a live main

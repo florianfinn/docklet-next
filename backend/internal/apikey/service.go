@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; M15 simple-user rights and identity contracts; M29 static admin key owned by the global administrator.
 
 package apikey
 
@@ -27,7 +27,6 @@ import (
 	"go.getarcane.app/kit/normalization"
 	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
@@ -43,7 +42,6 @@ const (
 	apiKeyLastUsedWriteWindow = 5 * time.Minute
 
 	managedByAdminBootstrap = "admin_account_default_api_key"
-	defaultAdminUsername    = "arcane"
 	defaultAdminAPIKeyName  = "Static Admin API Key"
 
 	// ErrApiKeyPermissionEscalation is returned when a caller attempts to grant an
@@ -563,29 +561,14 @@ func (s *ApiKeyService) CreateDefaultAdminAPIKey(ctx context.Context, userID, ra
 	}, new(managedByAdminBootstrap), nil, ApiKeyKindScoped)
 }
 
+// getDefaultAdminUser resolves the global administrator (the first-run account); the username is mutable
+// and never used as provenance. Without an administrator (fresh hub before setup) reconciliation is skipped.
 func (s *ApiKeyService) getDefaultAdminUser(ctx context.Context) (*user.User, error) {
-	adminUser, err := s.userService.GetUserByUsername(ctx, defaultAdminUsername)
-	if err != nil {
-		if errors.Is(err, common.ErrUserNotFound) {
-			slog.WarnContext(ctx, "Default admin user not found, skipping default admin API key reconciliation", "username", defaultAdminUsername)
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to load default admin user: %w", err)
+	adminUser, err := s.userService.GlobalAdministrator(ctx)
+	if err != nil || adminUser == nil {
+		slog.InfoContext(ctx, "No global administrator yet, skipping default admin API key reconciliation")
+		return nil, nil
 	}
-
-	// The username is mutable and not proof of provenance — never mint the
-	// managed full-permission key onto an account that isn't a global admin.
-	if s.roleService != nil {
-		perms, resolvePermissionsErr := s.roleService.ResolvePermissions(ctx, adminUser.ID)
-		if resolvePermissionsErr != nil {
-			return nil, fmt.Errorf("failed to resolve default admin permissions: %w", resolvePermissionsErr)
-		}
-		if !perms.IsGlobalAdmin() {
-			slog.WarnContext(ctx, "User is not a global admin, skipping default admin API key reconciliation", "username", defaultAdminUsername)
-			return nil, nil
-		}
-	}
-
 	return adminUser, nil
 }
 

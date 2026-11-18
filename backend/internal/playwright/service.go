@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M29 keys owned by the global administrator.
 
 //go:build playwright
 
@@ -39,10 +39,10 @@ func NewPlaywrightService(
 func (ps *PlaywrightService) CreateTestApiKeys(ctx context.Context, count int) ([]*apikeytypes.ApiKeyCreatedDto, error) {
 	slog.InfoContext(ctx, "Playwright: Creating test API keys", "count", count)
 
-	// Get the arcane user to associate the API keys with
-	localUser, err := ps.userService.GetUserByUsername(ctx, "arcane")
+	// Associate the API keys with the global administrator created by setup.
+	localUser, err := ps.userService.GlobalAdministrator(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get arcane user: %w", err)
+		return nil, fmt.Errorf("failed to get administrator: %w", err)
 	}
 
 	// Grant every recognized permission globally so the test key behaves like

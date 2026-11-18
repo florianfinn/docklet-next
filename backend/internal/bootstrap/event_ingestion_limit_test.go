@@ -8,6 +8,7 @@ package bootstrap
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -51,7 +52,7 @@ func newEventIngestionLimitRouter(t *testing.T) (*echo.Echo, *http.Cookie) {
 	roles := role.NewRoleService(db)
 	require.NoError(t, roles.EnsureBuiltInRoles(t.Context()))
 	users := user.NewUserService(db, roles, session.RevokeAllUserSessionsExceptInDB)
-	require.NoError(t, users.CreateDefaultAdmin(t.Context()))
+	testfixtures.ClaimedAdministrator(t, db.DB, users, "admin", "")
 	admin, err := users.GlobalAdministrator(t.Context())
 	require.NoError(t, err)
 	settingsService, err := settings.NewSettingsService(t.Context(), db)

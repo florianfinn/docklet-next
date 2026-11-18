@@ -65,7 +65,7 @@ func TestStaticAdministratorKeyKeepsRuntimeAuthority(t *testing.T) {
 	for _, change := range []string{"demote", "disable"} {
 		t.Run(change, func(t *testing.T) {
 			svc, db, users := setupAPIKeyService(t)
-			owner := createTestAPIKeyUser(t, t.Context(), users, "owner", defaultAdminUsername)
+			owner := createTestAPIKeyUser(t, t.Context(), users, "owner", "admin")
 			operator := createTestAPIKeyUser(t, t.Context(), users, "operator")
 			raw := "arc_staticruntimeprovidedkey1234567890"
 			require.NoError(t, svc.ReconcileDefaultAdminAPIKey(t.Context(), raw))

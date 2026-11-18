@@ -38,7 +38,7 @@ func (s *AuthService) ViewerContextForPermissions(ctx context.Context, sessionID
 	if s == nil {
 		return ctx
 	}
-	if s.SignInMode() == "local" && s.sessionService != nil && sessionID != "" {
+	if s.CurrentPolicy().LocalActive() && s.sessionService != nil && sessionID != "" {
 		ctx = s.sessionService.ViewerContext(ctx, sessionID, userID)
 	}
 	if s.userService == nil || userID == "" || ps == nil {

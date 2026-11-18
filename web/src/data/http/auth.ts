@@ -95,13 +95,20 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     }
   }
 
-  let modeRead: Promise<{ mode: AuthMode; logoutUrl?: string }> | undefined;
+  let modeRead: Promise<components["schemas"]["AuthSignInConfiguration"]> | undefined;
   // Concurrent start-up readers (mode query, session discovery) share one public mode read.
   function getAuthConfiguration() {
     modeRead ??= (async () => {
       const payload = await request("/auth/mode") as components["schemas"]["AuthSignInConfiguration"];
       if (payload.mode !== "local" && payload.mode !== "proxy" && payload.mode !== "none") throw new Error("auth.invalid-mode");
-      return { mode: payload.mode as AuthMode, ...(payload.mode === "proxy" && payload.logoutUrl ? { logoutUrl: payload.logoutUrl } : {}) };
+      return {
+        mode: payload.mode as AuthMode,
+        setupPending: payload.setupPending === true,
+        forced: payload.forced === true,
+        ...(payload.mode === "proxy" && payload.logoutUrl ? { logoutUrl: payload.logoutUrl } : {}),
+        ...(typeof payload.proxyHeader === "string" ? { proxyHeader: payload.proxyHeader } : {}),
+        ...(typeof payload.trustedProxies === "string" ? { trustedProxies: payload.trustedProxies } : {}),
+      };
     })().finally(() => { modeRead = undefined; });
     return modeRead;
   }

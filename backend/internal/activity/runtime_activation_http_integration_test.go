@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -86,7 +87,7 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 	roles := role.NewRoleService(f.db)
 	require.NoError(t, roles.EnsureBuiltInRoles(t.Context()))
 	users := user.NewUserService(f.db, roles, session.RevokeAllUserSessionsExceptInDB)
-	require.NoError(t, users.CreateDefaultAdmin(t.Context()))
+	testfixtures.ClaimedAdministrator(t, f.db.DB, users, "admin", "")
 	keys := apikey.NewApiKeyService(f.db, users, roles)
 	authentication := auth.NewAuthService(users, f.settings, nil, session.NewSessionService(f.db), cfg)
 	if !agent {

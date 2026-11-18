@@ -144,7 +144,7 @@ func TestSystemWorkloadDirectExecutorAndPolicy(t *testing.T) {
 			service.ConfigureImagePolicies(hub.env, nil, f.containers)
 			require.NoError(t, hub.services.db.Exec("INSERT OR IGNORE INTO environments(id,name,api_url,enabled) VALUES(?,?,?,1)", "0", "Example", "https://agent.example.com").Error)
 			var admin user.User
-			require.NoError(t, f.db.First(&admin, "username=?", "arcane").Error)
+			require.NoError(t, f.db.First(&admin, "username=?", "admin").Error)
 			_, err = service.SaveImagePolicy(t.Context(), "0", "app", u.UpdatePolicyInput{Mode: "scheduled", Window: &u.UpdateWindow{Kind: "daily", Time: "04:00"}}, admin.ID, "", "container")
 			require.Error(t, err)
 			// Hub and agent containers are hidden alike, so a policy cannot even find them as a target.

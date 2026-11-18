@@ -64,7 +64,6 @@ services:
       PUID: ${PUID:?Set PUID in .env}
       PGID: ${PGID:?Set PGID in .env}
       TZ: ${TZ:-UTC}
-      AUTH_MODE: local
       PROJECTS_DIRECTORY: /srv/docker # change
     volumes:
       - ./data:/app/data
@@ -99,7 +98,6 @@ docker compose logs hub
 | `PUID`, `PGID` | yes | User and group the hub runs as. Use the owner of the projects directory (`stat -c '%u %g' /srv/docker`), so Docklet can create and edit stacks there. The hub hands `data/` and `backups/` to this user at startup. |
 | `HUB_IMAGE` | no | Set by the in-app update; leave it out of `.env` at first. |
 | `TZ` | no | IANA time zone for schedules and dates, default `UTC`. |
-| `AUTH_MODE` | no | Sign-in mode: `local` (passwords, default), `proxy` (a trusted reverse proxy authenticates) or `none`. See the [installation guide](docs/install.md#select-a-sign-in-mode). |
 | `PROJECTS_DIRECTORY` | no | Where stacks live inside the container. Mount it at the same path as on the host, as above, so relative paths in your stacks resolve correctly. |
 | `DATABASE_URL`, `DOCKLET_BACKUP_DIR`, `DOCKER_CONFIG` | no | Database file, hub backup archives and registry login data. The image already points them into the mounted `/app/data` and `/var/lib/docklet/backups`; the volume mounts are enough. Set them only to move these files. Exception: with `PUID=0` and `PGID=0`, add `DOCKER_CONFIG: /app/data/.docker` under `environment`. |
 
@@ -112,8 +110,9 @@ Serve the hub through a TLS reverse proxy that forwards WebSockets to
 `127.0.0.1:3552` (see the [reverse-proxy guide](docs/deployment/reverse-proxy.md)).
 Without a proxy on this host, publish `3552:3552` and set `APP_URL` to the address
 you open in the browser.
-Sign in as `arcane` with the initial password from `docker compose logs hub`,
-change it when prompted and complete setup. Docklet hides its own directory and
+Open the hub and complete setup: enter the setup code from `docker compose logs hub`,
+choose how to sign in (local accounts, a trusted reverse proxy, or no sign-in) and
+create your administrator account. Docklet hides its own directory and
 containers, as described at the label above. Then use **Hosts** › **Add host**;
 the hub generates the agent installation package. Before production use, switch to the release
 package for digest pins, proxy sign-in and the documented upgrade path.

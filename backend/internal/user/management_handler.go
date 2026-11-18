@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization; M29 runtime sign-in mode.
 
 package user
 
@@ -56,7 +56,7 @@ func registerUserManagement(api huma.API, h *UserHandler) {
 		return managementResult(h.userService.SetDisabled(ctx, in.UserID, false))
 	})
 	huma.Register(api, op("reset-user-password", "POST", "/reset-password"), func(ctx context.Context, in *ResetPasswordInput) (*handlerutil.Out[base.MessageResponse], error) {
-		if h.cfg != nil && h.cfg.SignInMode() != "local" {
+		if h.signInModeInternal() != "local" {
 			return nil, huma.Error403Forbidden("Local password management is disabled")
 		}
 		if err := validation.ValidatePasswordPolicy(in.Body.Password, h.passwordPolicyInternal(ctx)); err != nil {

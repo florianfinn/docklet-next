@@ -173,6 +173,18 @@ satisfying the configured policy, then recreate the hub with the same Compose
 inputs. Startup resets the global administrator's password and revokes its
 sessions. Remove the value after successful recovery and recreate again; a value
 left set is applied on each startup. The setting also supports secret files.
+Alternatively, set `AUTH_MODE=none` for one start, change the sign-in in
+**Settings** › **Sign-in**, then remove the variable again.
+
+## Upgrade from 1.0.0
+
+1.0.0 created a built-in `arcane` administrator. After the upgrade the hub opens
+first-run setup again: enter the setup code from the hub log, choose the sign-in
+mode and set the administrator's new username and password. Setup takes over the
+existing administrator account, so hosts, stacks, settings, API keys and activity
+stay; the `arcane` login and all earlier sessions stop working. If your Compose
+environment sets `AUTH_MODE`, setup shows that mode locked; remove the variable to
+choose the mode in setup or Settings.
 
 ## Configure the release feed
 

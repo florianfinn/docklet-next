@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded.; M15 resource authorization and isolated transport helpers; optional-module foundation (#472).
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded.; M15 resource authorization and isolated transport helpers; optional-module foundation (#472); M29 runtime proxy identity header.
 
 package middleware
 
@@ -66,7 +66,7 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 
 	skip := edge.GetSkipHeaders()
 	edge.CopyRequestHeaders(srcReq.Header, req.Header, skip)
-	remenv.StripHubCredentials(req.Header, m.proxyIdentityHeader)
+	remenv.StripHubCredentials(req.Header, m.identityHeaderInternal())
 	edge.SetAgentToken(req, accessToken)
 	edge.SetForwardedHeaders(req, c.RealIP(), srcReq.Host)
 

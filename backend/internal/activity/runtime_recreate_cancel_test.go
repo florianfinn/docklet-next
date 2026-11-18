@@ -99,7 +99,7 @@ func TestRecreateReleaseRefusedWhileJournalUnresolved(t *testing.T) {
 		store := f.store
 		store.ExecutorGeneration = uuid.NewString()
 		var original struct{ ID string }
-		require.NoError(t, f.db.Table("users").Where("username = ?", "arcane").Select("id").Scan(&original).Error)
+		require.NoError(t, f.db.Table("users").Where("username = ?", "admin").Select("id").Scan(&original).Error)
 		command := activity.RuntimeCommand{Store: store, Key: uuid.NewString(), Actor: usertypes.Actor{ID: original.ID, Username: "Historical operator"}, Operation: activity.RuntimeStartContainer, Target: activity.RuntimeTarget{Kind: "container", ID: runtimeContainerID}}
 		admitted, err := previous.Admit(t.Context(), command)
 		require.NoError(t, err)

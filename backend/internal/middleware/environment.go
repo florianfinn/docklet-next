@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; single-host upgrade routes are hub-owned before dispatch; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; optional-module foundation (#472).
+// Deviations: Local module namespace; single-host upgrade routes are hub-owned before dispatch; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding; M12 backup target set receiver is hub-only and never proxied; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; bounded typed agent refusal classification.; hub-owned one-shot restart wiring; M14 shell acceptance before remote upgrade; caller request restored after fenced forwarding; ordinary inventory reads time-bounded; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; optional-module foundation (#472); M29 runtime proxy identity header.
 
 package middleware
 
@@ -96,6 +96,7 @@ type EnvironmentMiddleware struct {
 	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin                func(*http.Request) bool
 	proxyIdentityHeader        string
+	proxyIdentityHeaderFunc    func() string
 	policyCleanup              func(context.Context, string, string) error
 	originOverlay              func(context.Context, string, []byte) ([]byte, error)
 	snapshots                  *hoststate.Store
@@ -134,6 +135,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	}
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
+		m.proxyIdentityHeaderFunc = options[0].ProxyIdentityHeaderFunc
 		m.agentAccess = options[0].AgentAccess
 		m.moduleEnabled = options[0].ModuleEnabled
 		m.shellSessions = options[0].ShellSessions
@@ -696,7 +698,7 @@ func (m *EnvironmentMiddleware) proxyRecoveredEdgeTunnelInternal(c *echo.Context
 }
 
 func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, accessToken *string) {
-	remenv.StripHubCredentials(c.Request().Header, m.proxyIdentityHeader)
+	remenv.StripHubCredentials(c.Request().Header, m.identityHeaderInternal())
 	if accessToken != nil && *accessToken != "" {
 		c.Request().Header.Set(edge.HeaderAgentToken, *accessToken)
 		c.Request().Header.Set(edge.HeaderAPIKey, *accessToken)
@@ -907,4 +909,12 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	}
 	m.cleanupStack(c, resp.StatusCode)
 	return m.writeProxyResponse(c, resp)
+}
+
+// identityHeaderInternal is the proxy identity header that forwarding strips before reaching an agent.
+func (m *EnvironmentMiddleware) identityHeaderInternal() string {
+	if m.proxyIdentityHeaderFunc != nil {
+		return m.proxyIdentityHeaderFunc()
+	}
+	return m.proxyIdentityHeader
 }

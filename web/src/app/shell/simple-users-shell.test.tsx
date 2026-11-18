@@ -51,7 +51,7 @@ it.each(["none", "local", "proxy"] as const)("W5 offers sign-out only in local/p
 it.each([{ mode: "local", url: "", calls: 1 }, { mode: "proxy", url: "", calls: 0 }, { mode: "proxy", url: "https://proxy.example.com/logout", calls: 1 }] as const)("W5 executes $mode logout with URL '$url'", async ({ mode, url, calls }) => {
   const demo = createDemoAdapter();
   const logout = vi.fn(async () => {});
-  const adapter = { ...demo, kind: "http" as const, getAuthMode: async () => mode as AuthMode, getAuthConfiguration: async () => ({ mode, ...(url ? { logoutUrl: url } : {}) }), logout };
+  const adapter = { ...demo, kind: "http" as const, getAuthMode: async () => mode as AuthMode, getAuthConfiguration: async () => ({ mode, setupPending: false, forced: false, ...(url ? { logoutUrl: url } : {}) }), logout };
   const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
   renderWithApp(<LogoutDialog open onOpenChange={() => {}} />, adapter);
   const confirm = await screen.findByRole("button", { name: "Got it" });

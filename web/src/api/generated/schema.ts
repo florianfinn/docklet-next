@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 0aa62dbb82b74ad7f5fc3d20591eb5662f5f0af95009b564408ca355556d7b73
+// Revision: 28b61ac79c60258e6f6135359f008f0376de614fac30f791075b93832cebed15
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -372,7 +372,7 @@ export interface paths {
         };
         /**
          * Get active sign-in mode
-         * @description Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
+         * @description Read the active sign-in mode and whether first-run setup is pending. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
          */
         get: operations["get-sign-in-mode"];
         put?: never;
@@ -437,6 +437,30 @@ export interface paths {
          * @description Revoke every session for the current user except the one making this request
          */
         post: operations["logout-all-other-sessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sign-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the sign-in policy
+         * @description Read the active sign-in mode with its proxy settings and whether AUTH_MODE fixes it.
+         */
+        get: operations["get-sign-in"];
+        /**
+         * Change the sign-in mode
+         * @description Store a new sign-in mode and proxy settings without a restart. Refused while AUTH_MODE fixes the mode, and when the caller would not stay signed in. Revokes every session; in local mode the caller receives a new one.
+         */
+        put: operations["update-sign-in"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5179,6 +5203,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create the first administrator
+         * @description While first-run setup is pending, store the sign-in mode and create the first administrator. Requires the setup code from the hub log, hub Origin and the CSRF pair; no credential exemption applies. Local mode signs the browser in.
+         */
+        post: operations["claim-setup-identity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stack-import": {
         parameters: {
             query?: never;
@@ -6030,13 +6074,65 @@ export interface components {
             /** @description Refresh token used to obtain a new access token */
             refreshToken: string;
         };
+        AuthSetupIdentityRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/AuthSetupIdentityRequest.json
+             */
+            readonly $schema?: string;
+            /** @description One-time setup code from the hub log */
+            code: string;
+            /** @description Display name of the first administrator */
+            displayName?: string;
+            /**
+             * @description Sign-in mode to store
+             * @enum {string}
+             */
+            mode: "none" | "local" | "proxy";
+            /** @description Password; required in local mode */
+            password?: string;
+            /** @description Proxy identity header (proxy mode; default Remote-User) */
+            proxyHeader?: string;
+            /** @description Comma-separated trusted proxy IP addresses or CIDRs (proxy mode) */
+            trustedProxies?: string;
+            /** @description Username of the first administrator */
+            username: string;
+        };
         AuthSignInConfiguration: {
+            /** @description True when AUTH_MODE fixes the mode; setup and settings cannot change it */
+            readonly forced: boolean;
             readonly logoutUrl?: string;
             /**
-             * @description Active startup sign-in mode; changes require operator configuration and restart
+             * @description Active sign-in mode; while setup is pending the forced mode or local as the default choice
              * @enum {string}
              */
             readonly mode: "none" | "local" | "proxy";
+            /** @description Proxy identity header; returned by GET /auth/sign-in and while setup is pending */
+            readonly proxyHeader?: string;
+            /** @description True until first-run setup has created the first administrator */
+            readonly setupPending: boolean;
+            /** @description Trusted proxy addresses; returned by GET /auth/sign-in and while setup is pending */
+            readonly trustedProxies?: string;
+        };
+        AuthSignInUpdateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/AuthSignInUpdateRequest.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Sign-in mode to store
+             * @enum {string}
+             */
+            mode: "none" | "local" | "proxy";
+            /** @description Sets the caller's password; required when switching to local without one */
+            password?: string;
+            /** @description Proxy identity header (proxy mode; default Remote-User) */
+            proxyHeader?: string;
+            /** @description Comma-separated trusted proxy IP addresses or CIDRs (proxy mode) */
+            trustedProxies?: string;
         };
         AuthTokenRefreshResponse: {
             /**
@@ -15572,6 +15668,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sign-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseAuthSignInConfiguration"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-sign-in": {
+        parameters: {
+            query?: never;
+            header?: {
+                "User-Agent"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSignInUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseAuthAuthenticationResponse"];
                 };
             };
             /** @description Error */
@@ -38613,6 +38774,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WidgetProblem"];
+                };
+            };
+        };
+    };
+    "claim-setup-identity": {
+        parameters: {
+            query?: never;
+            header?: {
+                "User-Agent"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSetupIdentityRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseAuthAuthenticationResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
         };

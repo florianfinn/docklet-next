@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts; preserve authenticated sessions across application releases.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys; M15 simple-user rights and identity contracts; preserve authenticated sessions across application releases; M29 stored sign-in policy and first-run claim.
 
 package auth
 
@@ -66,13 +66,13 @@ type AuthService struct {
 	config            *config.Config
 	recoveryOnce      sync.Once
 	recoveryErr       error
-	// tokenCache is a per-process in-memory cache for verified tokens. A hit
-	// skips signature verification and the user/session lookups; revocation in
-	// this process purges entries, revocation by another process is visible
-	// once the TTL lapses.
+	// tokenCache is a per-process in-memory cache for verified tokens. A hit skips signature verification and the
+	// user/session lookups; revocation in this process purges entries, revocation by another process is visible once
+	// the TTL lapses.
 	tokenCache  *hot.HotCache[string, verifiedTokenEntry]
 	cacheGen    atomic.Uint64
 	cacheFillMu sync.Mutex
+	signInState
 }
 
 func NewAuthService(
@@ -122,7 +122,7 @@ func (s *AuthService) GetSessionTimeout(ctx context.Context) (int, error) {
 
 // CompleteLogin creates a local session after primary-factor verification.
 func (s *AuthService) CompleteLogin(ctx context.Context, localUser *user.User, meta auth.SessionMeta, source string) (*TokenPair, error) {
-	if s.SignInMode() != auth.SignInModeLocal {
+	if !s.CurrentPolicy().LocalActive() {
 		return nil, ErrLocalAuthDisabled
 	}
 	if localUser == nil || localUser.DisabledAt != nil {
@@ -220,7 +220,7 @@ func (s *AuthService) browserSigningKeyInternal(ctx context.Context) ([]byte, er
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string, meta auth.SessionMeta) (*TokenPair, error) {
-	if s.SignInMode() != auth.SignInModeLocal {
+	if !s.CurrentPolicy().LocalActive() {
 		return nil, common.ErrInvalidToken
 	}
 	signingKey, err := s.signingKeyInternal(ctx)
@@ -269,7 +269,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string, met
 }
 
 func (s *AuthService) VerifyToken(ctx context.Context, accessToken string) (*user.User, string, error) {
-	if s.SignInMode() != auth.SignInModeLocal {
+	if !s.CurrentPolicy().LocalActive() {
 		return nil, "", common.ErrInvalidToken
 	}
 	tokenHash := kit.SHA256Hex(accessToken)
@@ -288,7 +288,7 @@ func (s *AuthService) VerifyToken(ctx context.Context, accessToken string) (*use
 }
 
 func (s *AuthService) VerifyBrowserToken(ctx context.Context, browserToken string) (*user.User, string, error) {
-	if s.SignInMode() != auth.SignInModeLocal {
+	if !s.CurrentPolicy().LocalActive() {
 		return nil, "", common.ErrInvalidToken
 	}
 	tokenHash := "browser:" + kit.SHA256Hex(browserToken)

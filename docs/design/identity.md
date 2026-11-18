@@ -1,10 +1,13 @@
-# Identity and startup sign-in policy
+# Identity and sign-in policy
 
-Decision #68 implements the sign-in boundary of #58. One mode is selected by
-`AUTH_MODE` at process start: `local` (the default), `proxy`, or `none`. Unknown or
-combined values prevent hub startup. Agent and Edge listeners keep their own
-transport authentication and do not use the hub sign-in policy. Hub mode changes
-require operator configuration and a restart; the API exposes no mode mutation.
+Decision #68 implements the sign-in boundary of #58; M29 (#518) revises how the mode
+is selected ([first-run setup](first-run-setup.md)). The hub has one effective mode:
+`local`, `proxy` or `none`. First-run setup stores it and **Settings** › **Sign-in**
+changes it at runtime (`PUT /api/auth/sign-in`). A non-empty `AUTH_MODE` forces the
+mode, and for `proxy` the header and trusted networks, from the environment; the
+stored value is then ignored and the UI shows it locked. Unknown forced values
+prevent hub startup. Agent and Edge listeners keep their own transport
+authentication and do not use the hub sign-in policy.
 
 `local` authenticates the existing local administrator using a password, database
 sessions, access tokens and browser cookies. The proxy identity header has no
@@ -14,11 +17,11 @@ rights are decided in [simple users](simple-users.md) (M15).
 Clients read the active policy from `GET /api/auth/mode`, not the legacy
 `authLocalEnabled` setting, whose stored value does not describe none/proxy mode.
 
-The web Sign-in section displays this startup policy read-only. In `local` mode,
+The web Sign-in section shows and changes this policy. In `local` mode,
 `/login` uses the cookie session and CSRF contract; in `proxy` mode, a rejected
 request explains that sign-in happens through the proxy; `none` skips the login
-screen. Local first-run setup requires changing the marked initial administrator
-password before completion. The administrator's profile language is stored in
+screen. There is no built-in administrator: setup creates the first one in every
+mode. The administrator's profile language is stored in
 the core and applied when the UI loads.
 
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
@@ -33,11 +36,12 @@ permissions, so renaming its username does not change the mapping.
 
 ## Proxy trust boundary
 
-`AUTH_PROXY_HEADER` defaults to `Remote-User`. `AUTH_TRUSTED_PROXIES` is a required,
-comma-separated list of literal IPv4/IPv6 addresses or CIDRs in proxy mode. There
-is no identity-trust default, including when the listener binds to loopback.
-Invalid list members, all-address `/0` networks and invalid HTTP header names
-prevent startup.
+The identity header defaults to `Remote-User`. The trusted proxy list is a required,
+comma-separated list of literal IPv4/IPv6 addresses or CIDRs in proxy mode (stored,
+or `AUTH_TRUSTED_PROXIES` when forced). There is no identity-trust default,
+including when the listener binds to loopback. Invalid list members, all-address
+`/0` networks and invalid HTTP header names are refused when stored and prevent
+startup when forced.
 
 The hub parses the direct socket peer from `Request.RemoteAddr`. Framework client
 IP extraction, `Forwarded` and `X-Forwarded-For` never establish identity. A peer
@@ -69,7 +73,9 @@ existing contracts, including health probes and the pairing handler that validat
 its own environment bootstrap key; mode selection does not add a user sign-in
 requirement to those operations.
 
-Before serving requests, startup compares its mode with internal `authLastMode`.
+Before serving requests, startup compares its effective mode with internal `authLastMode`.
+Every stored policy change revokes all sessions in the same transaction, then
+publishes the new policy; a request reads one policy snapshot.
 A different or unrecorded mode atomically revokes existing sessions and records
 the mode in the existing settings table. A failed write rolls the transaction back
 and prevents readiness. Access/browser verification checks the mode before any
@@ -136,11 +142,12 @@ the in-memory value once per start and logs the reset without the value. Failure
 prevents startup. Operators remove the environment value after use; leaving it in
 the environment applies it again after the next restart.
 
-Recovery is also possible by selecting none mode and restarting. There is no
-password-reset CLI. All four startup variables support the existing `_FILE` and
+While first-run setup is pending the reset is ignored. Recovery is also possible
+by forcing `AUTH_MODE=none` and restarting. There is no password-reset CLI.
+All four startup variables support the existing `_FILE` and
 `__FILE` loader variants; deployment and secret-file details belong to the
 [hub package](../../deploy/hub/README.md). The active mode and token bootstrap are
 read-only contracts used by the production login, setup and profile screens.
 
-After switching to local mode, the initial password remains valid until changed;
-the UI forces the password change even when setup was already completed.
+Switching to local mode in Settings requires a password for the caller's own
+account; an administrator created in `none` or `proxy` mode sets it in that step.

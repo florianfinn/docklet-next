@@ -38,7 +38,7 @@ See [installation](../install.md) for package and sign-in settings.
   other pages keep loading.
 - **Forwarded headers.** Send `X-Forwarded-For` and `X-Forwarded-Proto`. List the proxy's CIDR in
   `TRUSTED_PROXIES` so the hub records the client address; this setting does not grant sign-in trust
-  (see [sign-in modes](../install.md#select-a-sign-in-mode) for `AUTH_MODE=proxy`).
+  (see the [sign-in mode](../install.md#sign-in-mode) for proxy sign-in).
 - **Long downloads.** On the hub and on Direct hosts a volume or bind snapshot download starts at once
   and sends a few bytes every 10 seconds while the snapshot is prepared, so a read timeout of 60 seconds
   or more is enough. On Edge hosts the download is prepared completely before the first byte (up to

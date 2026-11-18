@@ -22,6 +22,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
@@ -52,6 +53,7 @@ func modeTestFixture(t *testing.T) (*AuthService, *TokenPair, *database.DB) {
 	require.NoError(t, roles.SetUserAssignments(t.Context(), admin.ID, []role.UserRoleAssignment{{RoleID: authz.BuiltInRoleAdmin}}))
 	settings, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
 	require.NoError(t, err)
+	testfixtures.MarkSetupClaimed(t, db.DB)
 	svc := NewAuthService(users, settings, nil, session.NewSessionService(db), &config.Config{
 		AuthMode: "local", AuthTrustedProxies: "192.0.2.10,2001:db8::/32", JWTRefreshExpiry: time.Hour,
 		AppUrl: "https://hub.example.com", Environment: "production",

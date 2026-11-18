@@ -27,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/widget"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -59,6 +60,7 @@ func TestSW9RealSessionAndSW13DurableActivity(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, preferences.Stop(context.WithoutCancel(ctx))) })
 	cfg := &config.Config{AuthMode: "local", AppUrl: "https://hub.example.com", Environment: "production", JWTRefreshExpiry: time.Hour}
 	identity := auth.NewAuthService(users, preferences, nil, session.NewSessionService(db), cfg)
+	testfixtures.MarkSetupClaimed(t, db.DB)
 	require.NoError(t, identity.InitializeSignIn(ctx))
 	adminToken, err := identity.CompleteLogin(ctx, admin, authdto.SessionMeta{}, session.UserSessionSourceLocal)
 	require.NoError(t, err)

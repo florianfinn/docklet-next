@@ -2,7 +2,7 @@
 // Revision: 92e896e926aaaf0189c72dcec6e3b15a52ddbd5d
 // Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original request policy shared by API, streams and environment proxy; M15 simple-user rights and identity contracts.
+// Deviations: Original request policy shared by API, streams and environment proxy; M15 simple-user rights and identity contracts; M29 stored policy snapshot and setup-pending gate.
 
 package auth
 
@@ -28,32 +28,26 @@ import (
 )
 
 func (s *AuthService) SignInMode() authtypes.SignInMode {
-	if s == nil || (s.config != nil && (s.config.AgentMode || s.config.EdgeAgent)) {
-		return authtypes.SignInModeLocal
-	}
-	return s.config.SignInMode()
+	return s.CurrentPolicy().Mode
 }
 
 // ModeRequestUser authenticates the direct peer; forwarded addresses never establish identity.
 // Local mode leaves credential verification to the existing session/API-key paths.
 func (s *AuthService) ModeRequestUser(ctx context.Context, req *http.Request) (*user.User, error) {
+	return s.modeRequestUserInternal(ctx, req, s.CurrentPolicy())
+}
+
+func (s *AuthService) modeRequestUserInternal(ctx context.Context, req *http.Request, p *Policy) (*user.User, error) {
+	if p.Pending {
+		return nil, ErrSetupPending
+	}
 	var identity string
-	switch s.SignInMode() {
+	switch p.Mode {
 	case authtypes.SignInModeNone:
 	case authtypes.SignInModeProxy:
-		if !s.trustedIdentityPeer(req.RemoteAddr) {
-			return nil, common.ErrInvalidToken
-		}
-		values := req.Header.Values(s.config.ProxyIdentityHeader())
-		if len(values) != 1 {
-			return nil, common.ErrInvalidToken
-		}
-		if !utf8.ValidString(values[0]) || strings.IndexFunc(values[0], func(ch rune) bool { return !unicode.IsPrint(ch) }) != -1 {
-			return nil, common.ErrInvalidToken
-		}
-		identity = strings.TrimSpace(values[0])
-		if identity == "" || len(identity) > 255 {
-			return nil, common.ErrInvalidToken
+		var err error
+		if identity, err = proxyIdentityInternal(req, p); err != nil {
+			return nil, err
 		}
 	default:
 		return nil, common.ErrInvalidToken
@@ -86,17 +80,32 @@ func (s *AuthService) ModeRequestUser(ctx context.Context, req *http.Request) (*
 	return admin, nil
 }
 
-func (s *AuthService) trustedIdentityPeer(remoteAddr string) bool {
+// proxyIdentityInternal returns the single identity header value of a trusted direct peer.
+func proxyIdentityInternal(req *http.Request, p *Policy) (string, error) {
+	if !trustedIdentityPeerInternal(req.RemoteAddr, p.Networks) {
+		return "", common.ErrInvalidToken
+	}
+	values := req.Header.Values(p.Header)
+	if len(values) != 1 {
+		return "", common.ErrInvalidToken
+	}
+	if !utf8.ValidString(values[0]) || strings.IndexFunc(values[0], func(ch rune) bool { return !unicode.IsPrint(ch) }) != -1 {
+		return "", common.ErrInvalidToken
+	}
+	identity := strings.TrimSpace(values[0])
+	if identity == "" || len(identity) > 255 {
+		return "", common.ErrInvalidToken
+	}
+	return identity, nil
+}
+
+func trustedIdentityPeerInternal(remoteAddr string, networks []netip.Prefix) bool {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		host = remoteAddr
 	}
 	peer, err := netip.ParseAddr(host)
 	if err != nil || peer.Zone() != "" {
-		return false
-	}
-	networks, err := s.config.AuthProxyNetworks()
-	if err != nil {
 		return false
 	}
 	for _, network := range networks {
@@ -107,15 +116,29 @@ func (s *AuthService) trustedIdentityPeer(remoteAddr string) bool {
 	return false
 }
 
+func isLocalCredentialPathInternal(path string) bool {
+	return strings.HasSuffix(path, "/auth/login") || strings.HasSuffix(path, "/auth/refresh") || strings.HasSuffix(path, "/auth/password")
+}
+
 func handleModeAuthInternal(api huma.API, ctx huma.Context, service *AuthService, resolver EnvironmentAccessTokenResolver, next func(huma.Context)) bool {
-	if service.SignInMode() == authtypes.SignInModeLocal {
+	p := service.CurrentPolicy()
+	if p.LocalActive() {
 		return false
 	}
-	if strings.HasSuffix(ctx.URL().Path, "/auth/login") || strings.HasSuffix(ctx.URL().Path, "/auth/refresh") || strings.HasSuffix(ctx.URL().Path, "/auth/password") {
-		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Local authentication is disabled")
+	if isLocalCredentialPathInternal(ctx.URL().Path) {
+		if p.Pending {
+			_ = access.WriteProblem(ctx, http.StatusUnauthorized, authtypes.CodeSetupPending)
+		} else {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Local authentication is disabled")
+		}
 		return true
 	}
 	if !parseSecurityRequirementsInternal(api, ctx).isRequired {
+		if p.Pending {
+			// Public operations run without a user; no opportunistic credential while setup is pending.
+			next(ctx)
+			return true
+		}
 		return false
 	}
 	for _, header := range []string{middleware.HeaderAgentToken, middleware.HeaderApiKey} {
@@ -125,10 +148,10 @@ func handleModeAuthInternal(api huma.API, ctx huma.Context, service *AuthService
 			return true
 		}
 	}
-	requestUser, err := service.ModeRequestUser(ctx.Context(), humaecho.Unwrap(ctx).Request())
+	requestUser, err := service.modeRequestUserInternal(ctx.Context(), humaecho.Unwrap(ctx).Request(), p)
 	if err != nil {
 		status, code := modeAuthError(err)
-		if strings.HasPrefix(code, "access.") {
+		if strings.HasPrefix(code, "access.") || strings.HasPrefix(code, "setup.") {
 			_ = access.WriteProblem(ctx, status, code)
 		} else {
 			_ = huma.WriteErr(api, ctx, status, code)
@@ -143,17 +166,31 @@ func (s *AuthService) IsLocalAuthEnabled(_ context.Context) (bool, error) {
 	if s == nil {
 		return false, errors.New("authentication service unavailable")
 	}
-	return s.SignInMode() == authtypes.SignInModeLocal, nil
+	return s.CurrentPolicy().LocalActive(), nil
 }
 
 func (s *AuthService) InitializeSignIn(ctx context.Context) error {
 	if err := s.config.ValidateSignIn(); err != nil {
 		return err
 	}
-	if err := s.sessionService.ActivateSignInMode(ctx, s.SignInMode()); err != nil {
+	if s.config.AgentMode || s.config.EdgeAgent {
+		return nil
+	}
+	// User handlers follow the runtime policy once it is published.
+	s.userService.SetSignInModeSource(s.SignInMode)
+	p, err := s.loadPolicyInternal(ctx)
+	if err != nil {
 		return err
 	}
+	if err := s.sessionService.ActivateSignInMode(ctx, p.Mode); err != nil {
+		return err
+	}
+	s.policy.Store(p)
 	s.InvalidateAllTokenCache()
+	if p.Pending {
+		s.startSetupInternal(ctx)
+		return nil
+	}
 	return s.recoverAdministrator(ctx)
 }
 

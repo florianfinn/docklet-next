@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Explicit Origin and double-submit CSRF checks for every hub sign-in mode; independently authenticated transports retain their ingress; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Explicit Origin and double-submit CSRF checks for every hub sign-in mode; independently authenticated transports retain their ingress; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; M29 runtime sign-in policy and strict first-run claim.
 
 package middleware
 
@@ -36,6 +36,7 @@ type CSRFMiddleware struct {
 	cfg                    *config.Config
 	transportAuthenticated func(*http.Request) bool
 	localCredential        func(*http.Request) (bool, error)
+	localActive            func() bool
 }
 
 func NewCSRFMiddleware(cfg *config.Config) *CSRFMiddleware {
@@ -50,6 +51,19 @@ func (m *CSRFMiddleware) WithTransportValidator(validate func(*http.Request) boo
 func (m *CSRFMiddleware) WithLocalCredentialValidator(validate func(*http.Request) (bool, error)) *CSRFMiddleware {
 	m.localCredential = validate
 	return m
+}
+
+// WithLocalSignInActive follows the runtime sign-in policy; without it the env view (AUTH_MODE) applies.
+func (m *CSRFMiddleware) WithLocalSignInActive(active func() bool) *CSRFMiddleware {
+	m.localActive = active
+	return m
+}
+
+func (m *CSRFMiddleware) localSignInActiveInternal() bool {
+	if m.localActive != nil {
+		return m.localActive()
+	}
+	return m.cfg.SignInMode() == "local"
 }
 
 func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
@@ -83,22 +97,23 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 			}
 			// These routes authenticate only their own transport/path tokens downstream.
 			cookieLess := len(req.Header.Values("Cookie")) == 0
-			if cookieLess && m.transportAuthenticated != nil && m.transportAuthenticated(req) {
+			// The first-run claim is a browser flow: no credential exemption applies.
+			strict := strings.HasPrefix(req.URL.Path, "/api/setup/")
+			if !strict && cookieLess && m.transportAuthenticated != nil && m.transportAuthenticated(req) {
 				return next(c)
 			}
-			if m.cfg.SignInMode() == "local" {
-				// An operation may ignore a header credential and authenticate its cookie instead.
-				if cookieLess && m.localCredential != nil {
-					valid, err := m.localCredential(req)
-					if err != nil {
-						if isVulnerabilityOperation(c) {
-							return genericProblem(c, http.StatusUnauthorized, "Invalid or expired credential")
-						}
-						return c.JSON(http.StatusUnauthorized, common.APIError{Code: common.APIErrorCodeUnauthorized, Message: "Invalid or expired credential"})
+			// Header credentials count only while local sign-in is active.
+			// An operation may ignore a header credential and authenticate its cookie instead.
+			if !strict && cookieLess && m.localCredential != nil && m.localSignInActiveInternal() {
+				valid, err := m.localCredential(req)
+				if err != nil {
+					if isVulnerabilityOperation(c) {
+						return genericProblem(c, http.StatusUnauthorized, "Invalid or expired credential")
 					}
-					if valid {
-						return next(c)
-					}
+					return c.JSON(http.StatusUnauthorized, common.APIError{Code: common.APIErrorCodeUnauthorized, Message: "Invalid or expired credential"})
+				}
+				if valid {
+					return next(c)
 				}
 			}
 			originOK := false

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut; M15 simple-user rights and identity contracts; M29 first administrator created in setup instead of the built-in default account.
 
 package user
 
@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	authtypes "github.com/florianfinn/docklet-next/types/auth"
 	"log/slog"
 	"maps"
 	"slices"
@@ -56,6 +57,8 @@ type UserService struct {
 	roleService          *role.RoleService
 	argon2Params         *Argon2Params
 	revokeSessionsExcept func(context.Context, *gorm.DB, string, string) error
+	// signInMode reads the effective hub policy (set by the auth service); nil falls back to the env view.
+	signInMode func() authtypes.SignInMode
 }
 
 var (
@@ -374,115 +377,6 @@ func (s *UserService) SetPasswordAndRevokeSessionsExcept(ctx context.Context, lo
 
 	*localUser = updatedUser
 	return localUser, nil
-}
-
-func (s *UserService) CreateDefaultAdmin(ctx context.Context) error {
-	// If users already exist and at least one effective global admin remains,
-	// there is nothing to bootstrap or recover — bail before touching the
-	// `arcane` username at all. The username is mutable, so treating it as a
-	// provenance marker would let anyone with users:create/users:update rename
-	// an account to `arcane` and get promoted on the next restart.
-	if s.roleService != nil {
-		var count int64
-		if err := s.db.WithContext(ctx).Model(&User{}).Count(&count).Error; err != nil {
-			return fmt.Errorf("failed to count users: %w", err)
-		}
-		if count > 0 {
-			admins, err := s.roleService.CountGlobalAdminsExcludingUser(ctx, "")
-			if err != nil {
-				return fmt.Errorf("failed to count global admins: %w", err)
-			}
-			if admins > 0 {
-				return nil
-			}
-		}
-	}
-
-	hashedPassword, err := s.HashPassword("arcane-admin")
-	if err != nil {
-		return fmt.Errorf("failed to hash default admin password: %w", err)
-	}
-
-	var adminUserID string
-	err = dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&User{}).Count(&count).Error; err != nil {
-			return fmt.Errorf("failed to count users: %w", err)
-		}
-
-		if count == 0 {
-			email := "admin@localhost"
-			displayName := "Arcane Admin"
-			userModel := &User{
-				Username:               "arcane",
-				Email:                  new(email),
-				DisplayName:            new(displayName),
-				PasswordHash:           hashedPassword,
-				RequiresPasswordChange: true,
-			}
-			if createAdminUserErr := tx.Create(userModel).Error; createAdminUserErr != nil {
-				return fmt.Errorf("failed to create default admin user: %w", createAdminUserErr)
-			}
-			adminUserID = userModel.ID
-			slog.InfoContext(ctx, "👑 Default admin user created!")
-			slog.InfoContext(ctx, "🔑 Username: arcane")
-			slog.InfoContext(ctx, "🔑 Password: arcane-admin")
-			slog.InfoContext(ctx, "⚠️  User will be prompted to change password on first login")
-			return nil
-		}
-
-		// Users exist but no global admin does (recovery only — the early
-		// return above skips this path on healthy installs). See if `arcane`
-		// is present; if not, leave the install alone.
-		var existing User
-		err := tx.Where("username = ?", "arcane").First(&existing).Error
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil
-			}
-			return fmt.Errorf("failed to look up default admin user: %w", err)
-		}
-		adminUserID = existing.ID
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	if adminUserID == "" || s.roleService == nil {
-		return nil
-	}
-	return s.grantDefaultAdminRoleInternal(ctx, adminUserID)
-}
-
-// grantDefaultAdminRoleInternal grants the global Admin role to the bootstrap
-// user on fresh bootstrap or zero-admin recovery. Preserve manual assignments;
-// other sources remain managed by their own assignment writers.
-func (s *UserService) grantDefaultAdminRoleInternal(ctx context.Context, adminUserID string) error {
-	assignments, err := s.roleService.ListUserAssignments(ctx, adminUserID)
-	if err != nil {
-		return fmt.Errorf("failed to list default admin assignments: %w", err)
-	}
-	for _, a := range assignments {
-		if a.RoleID == authz.BuiltInRoleAdmin && a.EnvironmentID == nil {
-			return nil // already has it
-		}
-	}
-	manual := make([]role.UserRoleAssignment, 0, len(assignments)+1)
-	for _, a := range assignments {
-		if a.Source == role.RoleAssignmentSourceManual {
-			manual = append(manual, role.UserRoleAssignment{RoleID: a.RoleID, EnvironmentID: a.EnvironmentID})
-		}
-	}
-	manual = append(manual, role.UserRoleAssignment{
-		RoleID:        authz.BuiltInRoleAdmin,
-		EnvironmentID: nil,
-	})
-	if setUserAssignmentsErr := s.roleService.SetUserAssignments(ctx, adminUserID, manual); setUserAssignmentsErr != nil {
-		return fmt.Errorf("failed to grant default admin global role: %w", setUserAssignmentsErr)
-	}
-	slog.InfoContext(ctx, "Default admin granted global Admin role assignment", "userId", adminUserID)
-	return nil
 }
 
 // DeleteUser removes the user with the given id. actorPerms identifies the

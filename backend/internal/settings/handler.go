@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472).
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472); M29 setup completion no longer waits for an initial password change.
 
 package settings
 
@@ -284,19 +284,6 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 func (h *SettingsHandler) validateSettingsUpdateInput(ctx context.Context, input settings.Update) error {
 	if AutoHealUpdateManaged(input) {
 		return &autohealDTO.Problem{Code: "settings.key-managed", Status: 400}
-	}
-	if input.SetupCompleted != nil && *input.SetupCompleted == "true" && (h.cfg == nil || h.cfg.SignInMode() == "local") {
-		userID, ok := middleware.GetUserIDFromContext(ctx)
-		if !ok {
-			return huma.Error401Unauthorized("Sign-in required")
-		}
-		var requiresPasswordChange bool
-		if err := h.settingsService.db.WithContext(ctx).Table("users").Select("requires_password_change").Where("id = ?", userID).Scan(&requiresPasswordChange).Error; err != nil {
-			return huma.Error500InternalServerError("Failed to check administrator password")
-		}
-		if requiresPasswordChange {
-			return huma.Error409Conflict("Change the initial administrator password before completing setup")
-		}
 	}
 	// Validate projects directory if provided and changed from current value.
 	// Skip validation when the value matches the current (possibly env-overridden) setting

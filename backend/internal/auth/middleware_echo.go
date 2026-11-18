@@ -161,11 +161,11 @@ func (m *AuthMiddleware) managerAuth(ctx context.Context, c *echo.Context, next 
 	}
 
 	// First, check for API key in X-API-Key header
-	if m.authService.SignInMode() != "local" {
+	if policy := m.authService.CurrentPolicy(); !policy.LocalActive() {
 		if env, ok := m.resolveEnvironmentAccessToken(ctx, req.Header.Get(middleware.HeaderApiKey)).Get(); ok {
 			return m.authorizeAndContinueInternal(c, next, environmentScopedInternal(c, env))
 		}
-		requestUser, err := m.authService.ModeRequestUser(ctx, req)
+		requestUser, err := m.authService.modeRequestUserInternal(ctx, req, policy)
 		if err != nil {
 			status, code := modeAuthError(err)
 			return c.JSON(status, common.APIError{Code: common.APIErrorCode(code), Message: code})

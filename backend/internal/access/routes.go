@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474).
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474); M29 first-run claim and sign-in policy routes.
 
 package access
 
@@ -69,6 +69,7 @@ var Routes = []Route{
 	{"GET", "/auth/me", "get-current-user"},
 	{"GET", "/auth/me/api-keys", "list-my-api-keys"},
 	{"GET", "/auth/mode", "get-sign-in-mode"},
+	{"GET", "/auth/sign-in", "get-sign-in"},
 	{"GET", "/backup-targets", "list-backup-targets"},
 	{"GET", "/backup-targets/{id}", "get-backup-target"},
 	{"GET", "/backup-targets/{id}/recovery-key", "get-backup-target-recovery-key"},
@@ -216,6 +217,7 @@ var Routes = []Route{
 	{"POST", "/auth/password", "change-password"},
 	{"POST", "/auth/refresh", "refresh-token"},
 	{"POST", "/auth/sessions/logout-all", "logout-all-other-sessions"},
+	{"POST", "/setup/identity", "claim-setup-identity"},
 	{"POST", "/backup-targets", "create-backup-target"},
 	{"POST", "/backup-targets/{id}/test", "test-backup-target"},
 	{"POST", "/backups", "create-system-backup"},
@@ -320,6 +322,7 @@ var Routes = []Route{
 	{"POST", "/users/{userId}/reset-password", "reset-user-password"},
 	{"PUT", "/api-keys/{id}", "update-api-key"},
 	{"PUT", "/auth/me/profile", "update-my-profile"},
+	{"PUT", "/auth/sign-in", "update-sign-in"},
 	{"PUT", "/backup-targets/{id}", "update-backup-target"},
 	{"PUT", "/backups/policies", "update-system-backup-policies"},
 	{"PUT", "/container-registries/{id}", "updateContainerRegistry"},

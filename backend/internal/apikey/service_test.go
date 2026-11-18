@@ -61,7 +61,7 @@ func createDefaultAdminUser(t *testing.T, ctx context.Context, userService *user
 
 	localUser := &user.User{
 		ID:       "default-admin-user",
-		Username: defaultAdminUsername,
+		Username: "admin",
 	}
 
 	created, err := userService.CreateUser(ctx, localUser)
