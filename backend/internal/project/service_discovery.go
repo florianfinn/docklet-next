@@ -584,6 +584,12 @@ func (s *ProjectService) SyncProjectsFromFileSystem(ctx context.Context) error {
 			deletions = append(deletions, projectCleanupDecision{project: p, reason: "removed internal Arcane scratch record (project-update temp dir)"})
 			continue
 		}
+		// Docklet's own labelled install directory is skipped by the scan; a record stored by an
+		// earlier scan is removed (files and containers stay untouched).
+		if projects.IsDockletInstallDirectory(ctx, projectsDir, p.Path) {
+			deletions = append(deletions, projectCleanupDecision{project: p, reason: "removed record of Docklet's own install directory"})
+			continue
+		}
 		if rel := listing.RelativePath(projectsDir, p.Path); rel != "" && projects.PathContainsSnapshotDirectory(rel) {
 			deletions = append(deletions, projectCleanupDecision{project: p, reason: "removed project inside a filesystem snapshot/trash directory"})
 			continue

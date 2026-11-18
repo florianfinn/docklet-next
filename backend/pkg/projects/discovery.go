@@ -400,3 +400,13 @@ func isDockletInstallComposeInternal(path string) bool {
 }
 
 func dockletRoleInternal(role string) bool { return role == "agent" || role == "hub" }
+
+// IsDockletInstallDirectory reports whether dir holds Docklet's own labelled hub or agent
+// Compose file; such a directory is never a stack, even if an earlier scan stored it.
+func IsDockletInstallDirectory(ctx context.Context, projectsDir, dir string) bool {
+	composePath, err := DetectComposeFile(ctx, projectsDir, dir)
+	if composePath == "" || (err != nil && !errors.Is(err, common.ErrProjectEnvUnreadable)) {
+		return false
+	}
+	return isDockletInstallComposeInternal(composePath)
+}

@@ -130,3 +130,42 @@ func TestProjectStatusCountsSkipDockletProjectsFakeDocker(t *testing.T) {
 		})
 	}
 }
+
+// F-R9-1: a Docklet install directory stored by an earlier scan is removed on the next sync, so its
+// private .env can no longer block ordinary stacks; its files stay in place.
+func TestSyncRemovesStoredDockletInstallDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("file modes do not restrict root")
+	}
+	db := setupProjectTestDB(t)
+	settings, err := newSettingsServiceForTest(t, t.Context(), db)
+	require.NoError(t, err)
+	dir := t.TempDir()
+	require.NoError(t, settings.SetStringSetting(t.Context(), "projectsDirectory", dir))
+	install := filepath.Join(dir, "docklet")
+	require.NoError(t, os.MkdirAll(install, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(install, "compose.yaml"), []byte("name: docklet\nservices:\n  hub:\n    image: example:1.0.0\n    labels:\n      io.docklet.system: hub\n"), 0o644))
+	env := filepath.Join(install, ".env")
+	require.NoError(t, os.WriteFile(env, []byte("APP_URL=https://docklet.example.com\n"), 0))
+	t.Cleanup(func() { _ = os.Chmod(env, 0o600) })
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "user"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "user", "compose.yaml"), []byte("name: user\nservices:\n  web:\n    image: example:1.0.0\n"), 0o644))
+	require.NoError(t, db.Create(&[]Project{
+		{ID: "docklet", Name: "docklet", Path: install, Status: ProjectStatusRunning},
+		{ID: "user", Name: "user", Path: filepath.Join(dir, "user"), Status: ProjectStatusStopped},
+	}).Error)
+	server := newProjectRuntimeDockerServer(t, nil)
+	service := NewProjectService(db, settings, nil, nil, &docker.DockerClientService{Client: newTestDockerClient(t, server)}, nil, nil, config.Load(), nil, nil)
+	_, _, err = service.ResolveRuntimeProjectIdentity(t.Context(), "user", "")
+	require.Error(t, err, "precondition: the stored, unreadable install row blocks")
+
+	require.NoError(t, service.SyncProjectsFromFileSystem(t.Context()))
+	var remaining []string
+	require.NoError(t, db.Model(&Project{}).Order("id").Pluck("id", &remaining).Error)
+	require.Equal(t, []string{"user"}, remaining)
+	require.FileExists(t, filepath.Join(install, "compose.yaml"), "files stay in place")
+	ref, ok, err := service.ResolveRuntimeProjectIdentity(t.Context(), "user", "")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "user", ref.Name)
+}
