@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original discovery and one-time credential HTTP tests.
+// Deviations: Original discovery and one-time credential HTTP tests; M29 container-aware candidate expectations.
 
 package environment
 
@@ -28,44 +28,43 @@ import (
 
 func TestHubDiscoveryRanksConfiguredURLAndPinsImage(t *testing.T) {
 	cfg := &config.Config{AppUrl: "https://hub.example.com", Port: "3552"}
-	discovery, err := hubDiscovery(cfg, "https://public.example.com/", "192.0.2.10:3552", []string{"192.0.2.20", "127.0.0.1", "192.0.2.20"})
+	discovery, err := buildHubDiscovery(cfg, "https://public.example.com/", "192.0.2.10:3552", hostHubSelf(), []string{"192.0.2.20", "127.0.0.1", "192.0.2.20"}, "")
 	require.NoError(t, err)
 	require.Equal(t, "https://public.example.com", discovery.Candidates[0].URL)
 	require.Equal(t, "configured", discovery.Candidates[0].Source)
 	require.Equal(t, "unknown", discovery.Candidates[0].Reach)
-	require.Len(t, discovery.Candidates, 5)
-	require.Equal(t, "http://127.0.0.1:3552", discovery.Candidates[3].URL)
-	require.Equal(t, "same-host", discovery.Candidates[3].Reach)
-	require.Equal(t, "interface", discovery.Candidates[4].Source)
+	require.Len(t, discovery.Candidates, 4)
+	require.Equal(t, "http://192.0.2.20:3552", discovery.Candidates[3].URL)
+	require.Equal(t, "interface", discovery.Candidates[3].Source)
 	require.Equal(t, "docklet-next-agent:0.0.0", discovery.AgentImage, "unstamped builds use the source-build fallback")
 	// K-P3: operator overrides are free, including mutable tags and digest-only references.
 	for _, override := range []string{"registry.example.com/docklet/agent:1.2.3@sha256:" + strings.Repeat("a", 64), "agent:latest", "agent", "registry.example.com:5000/agent@sha256:" + strings.Repeat("b", 64)} {
 		cfg.AgentImage = override
-		overridden, err := hubDiscovery(cfg, "", "", nil)
+		overridden, err := buildHubDiscovery(cfg, "", "", nil, nil, "")
 		require.NoError(t, err, override)
 		require.Equal(t, override, overridden.AgentImage)
 	}
 	for _, invalid := range []string{"UPPER/Case:tag", "bad ref!", "agent:1.2.3@sha256:abc"} {
 		cfg.AgentImage = invalid
-		_, err = hubDiscovery(cfg, "", "", nil)
+		_, err = buildHubDiscovery(cfg, "", "", nil, nil, "")
 		require.Error(t, err, invalid)
 	}
 	cfg.AgentImage = ""
 	saved := config.DefaultAgentImage
 	defer func() { config.DefaultAgentImage = saved }()
 	config.DefaultAgentImage = "ghcr.io/florianfinn/docklet-next-agent:1.0.0@sha256:" + strings.Repeat("c", 64)
-	stamped, err := hubDiscovery(cfg, "", "", nil)
+	stamped, err := buildHubDiscovery(cfg, "", "", nil, nil, "")
 	require.NoError(t, err)
 	require.Equal(t, config.DefaultAgentImage, stamped.AgentImage)
 	config.DefaultAgentImage = "ghcr.io/florianfinn/docklet-next-agent:latest"
-	_, err = hubDiscovery(cfg, "", "", nil)
+	_, err = buildHubDiscovery(cfg, "", "", nil, nil, "")
 	require.Error(t, err, "a stamped default must be a release pin")
 }
 
 func TestHubDiscoveryRejectsUnsafeAddressHints(t *testing.T) {
 	cfg := &config.Config{AppUrl: "https://hub.example.com"}
 	for _, invalid := range []string{"https://operator:example@hub.example.com", "file:///tmp/example", "https://hub.example.com/path", "https://hub.example.com?token=example"} {
-		discovery, err := hubDiscovery(cfg, invalid, "", []string{"0.0.0.0", "invalid"})
+		discovery, err := buildHubDiscovery(cfg, invalid, "", nil, []string{"0.0.0.0", "invalid"}, "")
 		require.NoError(t, err)
 		require.Len(t, discovery.Candidates, 1)
 		require.Equal(t, cfg.AppUrl, discovery.Candidates[0].URL)

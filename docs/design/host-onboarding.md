@@ -99,9 +99,9 @@ plain-HTTP warnings follow decision D5 in the threat review.
 5. Version check, then sync and completion as in direct steps 4 to 6.
 
 The hub supplies `/hub/discovery` to global administrators. It ranks the configured
-public `domainUrl` first, then `APP_URL`, `hubAddress` and detected process
-interface addresses. Candidates carry reachability hints, not an agent-side
-connectivity verdict; loopback is marked same-host and other candidates unknown.
+public `domainUrl` first, then `APP_URL`, `hubAddress`, published bindings,
+reachable container attachments and request-derived hints (see [Hub self-detection](#hub-self-detection)). Candidates carry reachability hints, not an agent-side
+connectivity verdict; published loopback bindings are marked same-host and other candidates unknown.
 The operator selects or edits the hub URL in onboarding. The reference allows an internal LAN or VPN address
 (`hubUrl` in `web/src/domain/agent-install.ts`), and the planned `HubDiscovery`
 contract ranks address candidates ([API contract](api-contract.md)). The agent
@@ -427,3 +427,174 @@ this record on 2026-10-17. B1 to B3, S2 and S3 are in the
   check rejects an install directory holding an unrelated stack and allows a
   recognised agent reinstall, as listed under
   [Checks before installation](#checks-before-installation).
+
+## Hub self-detection
+
+Discovery uses the current container ID and the local Docker service to inspect
+its own container and resolve every attached network driver. Successful snapshots
+are cached for the process lifetime; errors are retried. Detection is `container`
+or `unknown`: a missing ID cannot establish that the hub runs on bare metal.
+Unknown detection offers configured and request candidates, never interfaces.
+
+Host networking offers filtered interface addresses. Macvlan and ipvlan offer only
+their attachment addresses. Bridge, overlay and other drivers never expose their
+container IPs as hints. Published bindings for the TCP listen port supply specific
+host IPs; wildcard bindings use an IP literal request host with the published port.
+Published loopback bindings are marked `same-host`. Interface addresses exclude
+loopback, link-local, multicast and unspecified addresses.
+
+Request discovery uses `Host`; `X-Forwarded-Host` is used only for a direct peer in
+a valid `TRUSTED_PROXIES` CIDR, matching the router's forwarding policy. Malformed
+host hints are ignored. Candidates keep their existing fields and add `kind`
+(`ip` or `domain`) and the `published`/`request` sources. Container metadata adds
+name, numeric listen port, network names/drivers and numeric published host ports.
+The order is configured domain, APP_URL, hubAddress, published, interface, request;
+the first occurrence of each URL wins. These remain hints, not reachability checks.
+
+The complete design note follows for the coordinated backend and web change.
+Its revisions override the earlier wording; the final design verification drops
+`none`, including the older UI wording and interface fallback described below.
+
+### Design note: hub self-detection and the two hub addresses (#519, #520)
+
+Base: main 462df7e945082b44e1d90532d8296aa9743c4b6e. Enters the feature branch as an update of
+docs/design/host-onboarding.md (discovery section).
+
+#### Decision
+
+Discovery inspects the hub's own container through the mounted Docker socket and offers only addresses
+that agents can actually reach. The UI keeps two named addresses:
+
+- **IP address** (`hubAddress`): host or IP with port. Agents use it, and it is the fallback for links.
+- **Domain** (`domainUrl`): the public HTTPS origin, usually `APP_URL`. Notification links use it.
+
+"Internal/external" wording disappears. The stored keys stay the same, so there is no migration.
+
+Rejected alternatives:
+- Reading the host IP from inside a bridge container. That is impossible without host access.
+- A new address model or keys. That would need a settings migration for no user benefit.
+
+#### Contract
+
+Owner: step S2. Wire type in `types/environment/onboarding.go`, plus OpenAPI and generated DTOs.
+
+- `HubDiscovery.container` (optional), present when the hub runs in a container:
+  - `name`
+  - `networkMode`: `bridge`, `host`, `macvlan`, `ipvlan`, `none` or `other`
+  - `listenPort`
+  - `publishedPorts[]`: `{hostIp, hostPort}` for the listen port
+- `HubAddressCandidate`:
+  - New `kind`: `ip` or `domain`, depending on whether the host is an IP literal.
+  - New `source` value `published` and `request`, next to `configured` and `interface`.
+  - `reach` stays.
+- `DiscoverHub` additionally reads the request `Host`. It uses the forwarded host only when the peer is in
+  `TRUSTED_PROXIES`, as the existing forwarding policy does.
+
+#### Candidate rules
+
+- **Own container.** Found with `cgroup.CurrentContainerID()` and then inspected.
+  - If lookup or inspect fails, `container` is absent and the candidates come from the interfaces as today,
+    minus loopback.
+  - The inspect result is cached for the process lifetime. A Docker error is retried at the next
+    discovery.
+- **Container networks.**
+  - `host`, `macvlan` and `ipvlan`: the container or interface IPs are LAN-reachable. Offer them as
+    `interface`, with `listenPort`.
+  - `bridge` and user-defined bridge: container IPs are never offered. Published bindings for
+    `listenPort` are offered as follows:
+    - A specific non-loopback host IP (for example `192.0.2.10:3552`) becomes `published` with that IP
+      and host port.
+    - An all-address binding (`0.0.0.0` or `::`) has no host IP that is knowable from inside. The
+      request host, if it is an IP literal, is offered as `request` with the published host port.
+    - A loopback binding is offered only as `published` with reach `same-host`, for agents on the same
+      host.
+    - Without any published port, only configured and request candidates remain.
+- **Excluded.** Loopback, link-local, multicast and unspecified interface addresses are never offered as
+  `interface`.
+- **Order.**
+  1. Configured domain (`domainUrl`, then `APP_URL`).
+  2. Configured IP address (`hubAddress`).
+  3. Published.
+  4. Interface.
+  5. Request.
+
+  Duplicates are removed, as today.
+- **Web prefill** (`applyDiscovery`).
+  - **IP address**: the first candidate of kind `ip` that is not `same-host`.
+  - **Domain**: `APP_URL` when it is a name. Otherwise the first `domain` candidate.
+
+  This fixes the bug where the session's domain was prefilled as the internal address.
+
+#### UI (#520)
+
+- Setup and General settings show two fields, "IP address" and "Domain", each with a one-line hint:
+  - IP address: "Agents connect here".
+  - Domain: "Public address with HTTPS".
+- "Links in notifications" shows two options, Domain and IP address.
+  - Stored `auto` is shown as Domain when a domain is set, otherwise as IP address.
+  - The Domain option is disabled until a domain is set, with the visible reason "Enter a domain first".
+  - When both addresses are set, both options are selectable.
+  - The backend `resolveLinkBase` is unchanged; `auto` and `domain` already resolve the same way.
+- Setup shows the container line ("Runs in Docker container <name>, network <mode>") from
+  `container`, or "Not in a container" when it is absent.
+
+#### State and lifecycle
+
+Discovery stays a stateless read. The only state is the in-memory inspect cache, which has no
+persistence and no concurrency hazard beyond `sync.Once`-style initialisation with retry on error.
+
+#### Break map
+
+| # | Row kind | Case | Decision | Entry boundary | Test | Red mutation |
+|---|---|---|---|---|---|---|
+| 1 | external data entry | Docker socket missing, inspect error, container ID not found | `container` absent, interface fallback without loopback; no 5xx | DiscoverHub | Go with fake Docker client returning errors | return error → 503 |
+| 2 | external data entry | bridge with `0.0.0.0` binding, `127.0.0.1` binding, specific IP binding, no binding; host network; macvlan | rules above, container IPs never in bridge | candidate builder (pure function over inspect result + request host) | Go table test over real `container.InspectResponse` shapes | offer bridge IPs → table fails |
+| 3 | external data entry | spoofed `X-Forwarded-Host` from an untrusted peer | ignored; Host header only | request host extraction | httptest with RemoteAddr outside TRUSTED_PROXIES | trust header always → candidate from header |
+| 4 | new field | `container`, `kind`, `published`/`request` sources in types, OpenAPI, generated DTO, web validator | contract test; web adapter no longer drops `container` | `host-commands.ts` validator | vitest on validator with real-shaped JSON | drop `container` mapping → test fails |
+| 5 | consumer | agent onboarding (`OnboardingPage.tsx:60`) default hub URL | prefers first `ip` candidate over domain unless the operator picks | onboarding draft | vitest | — ordinary test |
+
+#### Open product questions
+
+None. Field naming follows the maintainer ("only IP and domain matter").
+
+#### Acceptance cells this step needs
+
+- **A7 discovery (H):** hub in a bridge network with a published port. `container` is shown with name
+  and `bridge`; no `172.x` or loopback candidates; the request-IP candidate uses the published port.
+- **A8 addresses (H):** two fields with prefill; link choice with Domain disabled plus hint without a
+  domain, and both options selectable with both set.
+- Host-network and macvlan rows are unit-tested. Whether the sandbox can run them is checked by the design
+  review.
+
+#### Revision r1 (design review findings R7, R8; overrides the text above where they differ)
+
+- **R7 detection state and network drivers.** `HubDiscovery.containerDetection`: `container` | `none` | `unknown`.
+  `none` only when cgroup/mountinfo/hostname find no container ID; `unknown` when an ID exists but inspect fails or the
+  socket is missing. In `unknown`, interface addresses are **not** offered (they may be bridge IPs); only configured and
+  request candidates; the UI says "Container not detected (Docker socket unavailable)". For `container`, every attached
+  network is resolved with `NetworkInspect` to its driver; `HostConfig.NetworkMode` may be a network name. Classification
+  per attachment: driver `host` (or NetworkMode `host`) → interface addresses; `macvlan`/`ipvlan` → that attachment's IP;
+  `bridge`/`overlay`/other → never offered, only published bindings. Mixed attachments combine the per-attachment results.
+  `container.networks[]: {name, driver}` replaces the single `networkMode` string.
+- **R8 consumers.** One coordinated change: Go wire type, OpenAPI, generated DTO, `web/src/data/http/host-commands.ts`
+  validator (now maps `container`, `containerDetection`, `kind`, new sources), `web/src/domain/hub-discovery.ts` types and
+  `hubAddressCandidates()` ranking (server candidates authoritative; the local ranker stays for demo only), setup prefill
+  (`applyDiscovery`) and onboarding default. Tests feed real-shaped HTTP JSON through the adapter into the consumers,
+  including IPv6 bracket formatting and `none`/`unknown` detection.
+- **Prefill keeps operator values.** Prefill fills only empty fields; saved values and a manually cleared field are never
+  overwritten by discovery. Field validation stays as today (URLs or host:port; no HTTPS enforcement); candidates are hints.
+- **Onboarding default.** Agent onboarding preselects the configured IP address, then the first `ip` candidate, then the
+  domain (agents usually sit in the LAN); the operator can pick any candidate. AUTO-able, reversible.
+- **Link parity.** The selector state shown equals `resolveLinkBase` for every stored value (`auto`/`internal`/`domain`,
+  with and without domain) — table test against the backend resolver's documented rules.
+- **Additional rows:** malformed Host / forwarded headers (ignored), inspect retry after a Docker error (cache only
+  successful results), trusted forwarding through the real router (httptest with TRUSTED_PROXIES peer).
+- **Acceptance A7 (feasible per review probes: host network and macvlan containers can be created in DinD).** A7a bridge
+  with wildcard published port: discovery API called directly on the hub with `Host: 192.0.2.10:<port>` → `request`
+  candidate with the published port, no bridge IPs. A7b loopback binding (kit H) → `published` same-host only. A7c hub
+  variant with `--network host` → interface candidates, `networks[].driver=host`. A7d hub variant attached to a macvlan
+  network → macvlan IP offered. External LAN reachability of those addresses is not tested (environment limit, named).
+
+
+#### Revision v1 (design verify R7, AUTO in phase 0)
+`containerDetection` is `container` | `unknown`; `none` is dropped because a missing container ID does not prove bare metal (cgroup probes fail the same way). `unknown` never offers interface addresses.

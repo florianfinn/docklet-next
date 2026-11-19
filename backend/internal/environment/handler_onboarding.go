@@ -2,17 +2,14 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original hub discovery and installation metadata; operator agent image overrides are free (K-P3, #362).
+// Deviations: Original hub discovery and installation metadata; operator agent image overrides are free (K-P3, #362); M29 container-aware discovery.
 
 package environment
 
 import (
 	"context"
+	"errors"
 	"net"
-	"net/url"
-	"slices"
-	"strings"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/distribution/reference"
@@ -21,6 +18,8 @@ import (
 	"github.com/florianfinn/docklet-next/types/base"
 	environmenttypes "github.com/florianfinn/docklet-next/types/environment"
 	productVersion "github.com/florianfinn/docklet-next/types/version"
+	"github.com/moby/moby/client"
+	"go.getarcane.app/sys/cgroup"
 )
 
 // agentImageReference accepts any valid operator override (K-P3); only the
@@ -39,72 +38,36 @@ func agentImageReference(cfg *config.Config) (string, error) {
 	return image, nil
 }
 
-func hubDiscovery(cfg *config.Config, publicURL, hubAddress string, addresses []string) (environmenttypes.HubDiscovery, error) {
-	image, err := agentImageReference(cfg)
-	if err != nil {
-		return environmenttypes.HubDiscovery{}, err
-	}
-	result := environmenttypes.HubDiscovery{DetectedAt: time.Now().UTC(), AgentImage: image, Candidates: []environmenttypes.HubAddressCandidate{}}
-	seen := map[string]bool{}
-	add := func(raw, source string) {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			return
-		}
-		if !strings.Contains(raw, "://") {
-			raw = "http://" + raw
-		}
-		parsed, err := url.Parse(raw)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
-			return
-		}
-		parsed.Path = ""
-		value := parsed.String()
-		if seen[value] {
-			return
-		}
-		seen[value] = true
-		reach := "unknown"
-		if ip := net.ParseIP(parsed.Hostname()); (ip != nil && ip.IsLoopback()) || parsed.Hostname() == "localhost" {
-			reach = "same-host"
-		}
-		result.Candidates = append(result.Candidates, environmenttypes.HubAddressCandidate{ID: source + ":" + value, URL: value, Reach: reach, Source: source})
-	}
-	add(publicURL, "configured")
-	add(cfg.GetAppURL(), "configured")
-	add(hubAddress, "configured")
-	slices.Sort(addresses)
-	for _, address := range addresses {
-		ip := net.ParseIP(address)
-		if ip == nil || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
-			continue
-		}
-		scheme := "http"
-		if cfg.TLSEnabled {
-			scheme = "https"
-		}
-		port := cfg.Port
-		if port == "" {
-			port = "3552"
-		}
-		add(scheme+"://"+net.JoinHostPort(address, port), "interface")
-	}
-	return result, nil
+// HubDiscoveryInput keeps request metadata out of the public input schema.
+type HubDiscoveryInput struct {
+	host          string
+	forwardedHost string
+	remoteAddr    string
 }
 
-func (h *EnvironmentHandler) DiscoverHub(ctx context.Context, _ *struct{}) (*handlerutil.Out[environmenttypes.HubDiscovery], error) {
+func (i *HubDiscoveryInput) Resolve(ctx huma.Context) []error {
+	i.host, i.forwardedHost, i.remoteAddr = ctx.Host(), ctx.Header("X-Forwarded-Host"), ctx.RemoteAddr()
+	return nil
+}
+
+func (h *EnvironmentHandler) DiscoverHub(ctx context.Context, input *HubDiscoveryInput) (*handlerutil.Out[environmenttypes.HubDiscovery], error) {
 	settings := h.settingsService.GetSettingsOrDefaults(ctx)
+	self := processHubSelf.detect(ctx, cgroup.CurrentContainerID, func(ctx context.Context) (client.APIClient, error) {
+		if h.environmentService == nil || h.environmentService.dockerService == nil {
+			return nil, errors.New("Docker client unavailable")
+		}
+		return h.environmentService.dockerService.GetClient(ctx)
+	})
 	addresses := []string{}
-	interfaces, err := net.InterfaceAddrs()
-	if err == nil {
+	if interfaces, err := net.InterfaceAddrs(); err == nil {
 		for _, address := range interfaces {
-			ip, _, parseErr := net.ParseCIDR(address.String())
-			if parseErr == nil {
+			if ip, _, err := net.ParseCIDR(address.String()); err == nil {
 				addresses = append(addresses, ip.String())
 			}
 		}
 	}
-	discovery, err := hubDiscovery(h.cfg, settings.DomainURL.Value, settings.HubAddress.Value, addresses)
+	host := discoveryRequestHost(h.cfg.TrustedProxies, input.host, input.forwardedHost, input.remoteAddr)
+	discovery, err := buildHubDiscovery(h.cfg, settings.DomainURL.Value, settings.HubAddress.Value, self, addresses, host)
 	if err != nil {
 		return nil, err
 	}

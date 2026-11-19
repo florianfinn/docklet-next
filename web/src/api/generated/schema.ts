@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 28b61ac79c60258e6f6135359f008f0376de614fac30f791075b93832cebed15
+// Revision: 3a07b03cb978befcb51af68d9ce74309e119bb38171e17d4585bc31a9bce9245
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10137,16 +10137,37 @@ export interface components {
         EnvironmentHubAddressCandidate: {
             id: string;
             /** @enum {string} */
+            kind: "ip" | "domain";
+            /** @enum {string} */
             reach: "unknown" | "same-host";
             /** @enum {string} */
-            source: "configured" | "interface";
+            source: "configured" | "interface" | "published" | "request";
             url: string;
+        };
+        EnvironmentHubContainer: {
+            /** Format: int64 */
+            listenPort: number;
+            name: string;
+            networks: components["schemas"]["EnvironmentHubContainerNetwork"][] | null;
+            publishedPorts: components["schemas"]["EnvironmentHubPublishedPort"][] | null;
+        };
+        EnvironmentHubContainerNetwork: {
+            driver: string;
+            name: string;
         };
         EnvironmentHubDiscovery: {
             agentImage: string;
             candidates: components["schemas"]["EnvironmentHubAddressCandidate"][] | null;
+            container?: components["schemas"]["EnvironmentHubContainer"];
+            /** @enum {string} */
+            containerDetection: "container" | "unknown";
             /** Format: date-time */
             detectedAt: string;
+        };
+        EnvironmentHubPublishedPort: {
+            hostIp: string;
+            /** Format: int64 */
+            hostPort: number;
         };
         EnvironmentLatestAgentRestart: {
             run?: components["schemas"]["EnvironmentAgentRestartRun"];
