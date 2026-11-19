@@ -32,7 +32,7 @@ func resolveLinkBase(linkBase, domainURL, hubAddress, appURL string) string {
 	if address := strings.TrimRight(strings.TrimSpace(hubAddress), "/"); address != "" {
 		if !schemePattern.MatchString(address) {
 			// A bare IPv6 literal (stored without port) needs brackets inside a URL.
-			if ip := net.ParseIP(address); ip != nil && ip.To4() == nil {
+			if net.ParseIP(address) != nil && strings.Contains(address, ":") {
 				address = "[" + address + "]"
 			}
 			address = "http://" + address

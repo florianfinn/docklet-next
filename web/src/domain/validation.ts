@@ -108,7 +108,9 @@ export function hubAddress(value: string): ValidationKey | undefined {
 /** A legacy "http(s)://IP[:port]" value as the bare IP address the field stores, else undefined. */
 export function ipFromLegacyUrl(value: string): string | undefined {
   const m = /^https?:\/\/([^/?#@\s]+)\/?$/i.exec(value.trim());
-  return m && !hubAddress(m[1]!) ? m[1] : undefined;
+  // Bracketed IPv6 without a port is stored bare.
+  const authority = m?.[1]?.replace(/^\[([^\]]+)\]$/, "$1");
+  return authority && !hubAddress(authority) ? authority : undefined;
 }
 
 /** http:// is assumed for IP addresses; bare IPv6 needs brackets in a URL. */

@@ -113,7 +113,7 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		}
 		if !strings.Contains(raw, "://") {
 			// A bare IPv6 literal (stored without port) needs brackets inside a URL.
-			if ip := net.ParseIP(raw); ip != nil && ip.To4() == nil {
+			if net.ParseIP(raw) != nil && strings.Contains(raw, ":") {
 				raw = "[" + raw + "]"
 			}
 			raw = "http://" + raw

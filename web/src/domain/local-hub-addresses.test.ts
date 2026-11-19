@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 
 import { discoveryAppUrl, hubAddressCandidates, type HubDiscovery } from "./hub-discovery";
 import { agentHubUrl } from "./settings";
-import { hubAddress, normalizeDomainUrl } from "./validation";
+import { hubAddress, ipFromLegacyUrl, normalizeDomainUrl } from "./validation";
 import { freshSetupDraft } from "@/features/setup/setup-draft";
 
 // Literal/port grammar shared with Go net/netip and net.JoinHostPort; only documentation addresses.
@@ -64,4 +64,9 @@ it("maps merged origins and source fallback without losing domain schemes or cre
     ["[2001:db8::10]:3552", "ip", ["request"], false],
   ]);
   expect(discoveryAppUrl(discovery)).toBe("https://hub.example.com");
+});
+
+it("AUTO-2 legacy http(s) IP values map to the stored bare form", () => {
+  expect(["http://192.0.2.10:8080", "https://[2001:db8::10]:3552", "https://[2001:db8::10]", "http://[2001:db8::10]/", "http://hub.example.com"].map(ipFromLegacyUrl))
+    .toEqual(["192.0.2.10:8080", "[2001:db8::10]:3552", "2001:db8::10", "2001:db8::10", undefined]);
 });

@@ -222,7 +222,9 @@ func TestHubCandidatesMergeEquivalentAddresses(t *testing.T) {
 
 // A stored bare IPv6 hub address becomes a bracketed IP candidate, not a malformed domain.
 func TestHubCandidatesBareIPv6Address(t *testing.T) {
-	result, err := buildHubDiscovery(&config.Config{}, "", "2001:db8::10", nil, nil, "")
-	require.NoError(t, err)
-	require.Equal(t, []environmenttypes.HubAddressCandidate{candidate("http://[2001:db8::10]", "configured", "ip", "unknown", "settingsAddress")}, result.Candidates)
+	for address, want := range map[string]string{"2001:db8::10": "http://[2001:db8::10]", "::ffff:192.0.2.10": "http://[::ffff:192.0.2.10]", "::ffff:c000:20a": "http://[::ffff:c000:20a]"} {
+		result, err := buildHubDiscovery(&config.Config{}, "", address, nil, nil, "")
+		require.NoError(t, err)
+		require.Equal(t, []environmenttypes.HubAddressCandidate{candidate(want, "configured", "ip", "unknown", "settingsAddress")}, result.Candidates, address)
+	}
 }

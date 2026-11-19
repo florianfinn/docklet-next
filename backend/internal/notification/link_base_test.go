@@ -19,6 +19,8 @@ func TestResolveLinkBaseLocalAddresses(t *testing.T) {
 		{"internal", "https://hub.example.com", "192.0.2.10:3552", "http://192.0.2.10:3552"},
 		{"internal", "", "2001:db8::10", "http://[2001:db8::10]"},
 		{"internal", "", "[2001:db8::10]:3552", "http://[2001:db8::10]:3552"},
+		{"internal", "", "::ffff:192.0.2.10", "http://[::ffff:192.0.2.10]"},
+		{"internal", "", "::ffff:c000:20a", "http://[::ffff:c000:20a]"},
 	} {
 		got := resolveLinkBase(tc.linkBase, tc.domain, tc.address, "https://app.example.com")
 		require.Equal(t, tc.want, got)
