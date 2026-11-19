@@ -130,7 +130,7 @@ it("B19 confirmation becomes preparing immediately while intake has no response"
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); await user.click(button);
   await user.click(screen.getByRole("button", { name: "Start update" }));
   expect(session.get().state.phase).toBe("starting");
-  expect(document.querySelector('[data-slot="hub-update-overlay"]')?.textContent).toContain("Preparing update");
+  expect(document.querySelector("[data-hub-update-overlay]")?.textContent).toContain("Preparing update");
   expect(f.adapter.selfUpdate).toHaveBeenCalledTimes(1);
   await act(async () => { session.clear(); accept({ accepted: true, opId: "operation", runId: "update-run", phase: "reserved" }); });
 });

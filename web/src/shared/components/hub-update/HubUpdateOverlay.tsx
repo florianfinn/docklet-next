@@ -56,7 +56,7 @@ export function HubUpdateOverlay({ reload = reloadDocument }: { reload?: () => v
   const code = state.phase === "failed" ? selfUpdateCodeKey(state.code) : undefined;
   const status = state.phase === "starting" ? "preparing" : state.phase === "running" ? !state.online ? "offline" : state.targetSeen ? "checking" : "waiting" : undefined;
   return <Dialog open modal>
-    <DialogContent aria-modal="true" showCloseButton={false} data-slot="hub-update-overlay" className="inset-0 top-0 left-0 z-[120] h-svh w-screen max-w-none grid-cols-[minmax(0,1fr)] translate-x-0 translate-y-0 place-content-center justify-items-center rounded-none border-0 bg-background p-6 text-center font-sans sm:max-w-none" style={{ fontFamily: "system-ui, sans-serif" }} onOpenAutoFocus={() => { previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
+    <DialogContent aria-modal="true" showCloseButton={false} data-hub-update-overlay="" className="inset-0 top-0 left-0 z-[120] h-svh w-screen max-w-none grid-cols-[minmax(0,1fr)] translate-x-0 translate-y-0 place-content-center justify-items-center rounded-none border-0 bg-background p-6 text-center font-sans sm:max-w-none" style={{ fontFamily: "system-ui, sans-serif" }} onOpenAutoFocus={() => { previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
       event.preventDefault();
       const target = previousFocus.current?.isConnected && previousFocus.current !== document.body ? previousFocus.current : document.querySelector<HTMLElement>("#hub-update button:not(:disabled)") ?? document.querySelector<HTMLElement>("#hub-update h4");
       target?.focus();
