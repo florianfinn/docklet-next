@@ -16,7 +16,7 @@
     },
     {
       "path": "deploy/tools/probe/go.mod",
-      "sha256": "dbe22b68dba00c5378e7d9b6bef34daff6826d2c26b0cf0fac7f18f568242076"
+      "sha256": "1b96b3a6db01acf8ed0793df11a832200ad08640bc38b527541e52aaa54ca5c6"
     },
     {
       "path": "go.work",

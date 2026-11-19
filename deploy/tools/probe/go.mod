@@ -5,4 +5,4 @@
 // Deviations: Original stdlib-only HTTP/TLS probe and its isolated contract tests.
 module docklet.invalid/tools/probe
 
-go 1.27.2
+go 1.27.1

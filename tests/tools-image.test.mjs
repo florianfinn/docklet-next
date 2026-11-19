@@ -199,7 +199,7 @@ test("tools CI keys verified source by version and hash and supplies both build 
 
 test("tools probe is an isolated stdlib-only module built and tested offline", () => {
   const module = readFileSync("deploy/tools/probe/go.mod", "utf8");
-  assert.match(module, /module docklet\.invalid\/tools\/probe\n\ngo 1\.27\.2\n$/);
+  assert.match(module, /module docklet\.invalid\/tools\/probe\n\ngo 1\.27\.1\n$/);
   assert.doesNotMatch(readFileSync("go.work", "utf8"), /deploy\/tools\/probe/);
   const stage = executable.split(" AS probe\n")[1].split("FROM scratch AS busybox-cache")[0];
   assert.match(stage, /COPY deploy\/tools\/probe \/src\/probe/);

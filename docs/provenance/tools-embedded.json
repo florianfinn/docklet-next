@@ -106,7 +106,7 @@
     "sourceFiles": {
       "deploy/tools/probe/main.go": "f8e3a339ddfea0c7b409e0e12d0e229e1a51f9f884d0af8e060522c048979899",
       "deploy/tools/probe/selftest.go": "37f5f57c89d17b7489975cf4edb565e20fc33e4df608ee6c6254da83ef517d9e",
-      "deploy/tools/probe/go.mod": "dbe22b68dba00c5378e7d9b6bef34daff6826d2c26b0cf0fac7f18f568242076"
+      "deploy/tools/probe/go.mod": "1b96b3a6db01acf8ed0793df11a832200ad08640bc38b527541e52aaa54ca5c6"
     },
     "assessment": "go list -deps and go version -m on the exact independent module; the only non-stdlib package/module is original Apache-2.0 Docklet code. No external Go dependencies; Go standard library BSD-3-Clause notice is already packaged."
   }
