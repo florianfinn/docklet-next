@@ -7,7 +7,7 @@ The sandbox kit built the packages locally from the exact source; no registry
 image was used.
 
 This file records sandbox acceptance. It is not a production deployment; the
-release of this package is recorded on #517.
+release of this package will be recorded on #517.
 
 ## Integrated steps
 
@@ -42,7 +42,7 @@ and regression checks. The candidate run and the deltas found:
   Each field now fills on its own.
 - **PD3, A10.** A shared field rule stretched the "TZ verwenden" link to the full
   width; it now spans its text.
-- **PD4, A5 (delta 2).** After a successful claim, "Passwort eingeben" appeared
+- **PD4, A5 (delta 2, PD1 in that run's report).** After a successful claim, "Passwort eingeben" appeared
   briefly before the wizard opened, because the cleared form kept its validation
   state. It now resets with the fields.
 
@@ -50,8 +50,11 @@ and regression checks. The candidate run and the deltas found:
 
 The sandbox had the hub-local host H, one Direct agent D and one Edge agent E,
 plus disposable discovery fixtures (bridge, host network, macvlan) and a frozen
-1.0.0 database for the upgrade cell. Writes used real browser gestures; API reads
-served as witnesses. Visible UI errors count as failures.
+1.0.0 database for the upgrade cell. Product checks used real browser gestures,
+with API reads as witnesses; visible UI errors count as failures. Some setup
+writes used the real hub APIs: A2 completed the configuration through the partial
+settings API after a UI claim, and A11 registered the agents through the
+registration API.
 
 | Cell | Behaviour |
 | --- | --- |
