@@ -57,18 +57,20 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
       />
       <FieldSet>
         <HelpLegend topic="settingsGeneral.linkBase">{t("linkBase")}</HelpLegend>
-        <RadioGroup value={hasDomain ? value.linkBase : "internal"} onValueChange={(v) => onChange({ linkBase: v as LinkBase })} aria-label={t("linkBase")} className="gap-2">
-          {(["auto", "internal", "domain"] as const).map((k) => (
-            <div key={k} className="flex items-center gap-2">
-              <RadioGroupItem id={`${idPrefix}-link-${k}`} value={k} disabled={!hasDomain && k !== "internal"} />
+        {/* Shown as the backend resolves it: auto and domain both use the domain once one is set. */}
+        <RadioGroup value={hasDomain && value.linkBase !== "internal" ? "domain" : "internal"} onValueChange={(v) => onChange({ linkBase: v as LinkBase })} aria-label={t("linkBase")} className="gap-2">
+          {(["domain", "internal"] as const).map((k) => (
+            <div key={k} className="flex flex-wrap items-center gap-x-2">
+              <RadioGroupItem id={`${idPrefix}-link-${k}`} value={k} disabled={k === "domain" && !hasDomain} aria-describedby={k === "domain" && !hasDomain ? `${idPrefix}-link-domain-reason` : undefined} />
               <Label htmlFor={`${idPrefix}-link-${k}`} className="text-sm font-normal">
                 {t(`linkBases.${k}`)}
               </Label>
+              {k === "domain" && !hasDomain && <span id={`${idPrefix}-link-domain-reason`} className="text-xs text-muted-foreground">{t("linkDomainFirst")}</span>}
             </div>
           ))}
         </RadioGroup>
         <FieldDescription>
-          {t("linkPreview", { url: links.url || "–", source: links.source })} {!hasDomain && t("linkNoDomain")}
+          {t("linkPreview", { url: links.url || "–", source: links.source })}
         </FieldDescription>
       </FieldSet>
       <Field>
@@ -77,7 +79,7 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
         </HelpLabel>
         <Input id={`${idPrefix}-tz`} className="font-mono" list={`${idPrefix}-zones`} value={value.configuredTimeZone ?? value.timeZone} placeholder={processZone ?? t("systemTZ")} onChange={(e) => onChange({ configuredTimeZone: e.target.value })} />
         <datalist id={`${idPrefix}-zones`}>{[...new Set(["UTC", value.timeZone, ...(value.configuredTimeZone ? [value.configuredTimeZone] : []), ...Intl.supportedValuesOf("timeZone")])].map((zone) => <option key={zone} value={zone} />)}</datalist>
-        <Button type="button" variant="link" className="self-start px-0" onClick={() => onChange({ configuredTimeZone: "" })}>{t("useTZ", { zone: processZone ?? t("systemTZ") })}</Button>
+        <Button type="button" variant="link" className="w-fit self-start px-0" onClick={() => onChange({ configuredTimeZone: "" })}>{t("useTZ", { zone: processZone ?? t("systemTZ") })}</Button>
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
       {showLanguage && <Field>

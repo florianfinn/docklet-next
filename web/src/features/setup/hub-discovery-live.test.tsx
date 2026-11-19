@@ -59,7 +59,10 @@ it("maps the live container, recommends the reachable IP and never prefills a na
     ["[2001:db8::10]:8080", "request", true],
   ]);
   const filled = applyDiscovery(freshSetupDraft(), discovery);
-  expect([filled.general.hubAddress, filled.hubAddressOrigin]).toEqual(["[2001:db8::10]:8080", { kind: "discovered", candidateId: "request-ip" }]);
+  expect([filled.general.hubAddress, filled.general.domainUrl, filled.hubAddressOrigin]).toEqual(["[2001:db8::10]:8080", "https://hub.example.com", { kind: "discovered", candidateId: "request-ip" }]);
+  // A domain the operator already entered stays.
+  const typed = freshSetupDraft();
+  expect(applyDiscovery({ ...typed, general: { ...typed.general, domainUrl: "https://own.example.org" } }, discovery).general.domainUrl).toBe("https://own.example.org");
   // Only a name: the internal address stays empty for the operator.
   const domainOnly = await adapter({ ...bridge, candidates: [bridge.candidates[0]] }).discoverHub();
   expect(applyDiscovery(freshSetupDraft(), domainOnly).general.hubAddress).toBe("");

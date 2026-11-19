@@ -7,7 +7,7 @@
  * hosts, host order, service addresses or other operating data.
  */
 export const SHIPPED_DESIGN = {
-  tokens: { theme: "dark", palette: { primary: "#9333ea", secondary: "#00ffcc", surface: "#13111c" }, semantic: 1.12, glow: 1, motion: "playful", speed: 1, density: "compact", radius: 0.8, fontScale: 1 },
+  tokens: { theme: "dark", palette: { primary: "#9333ea", secondary: "#22d3ee", surface: "#13111c" }, semantic: 1.12, glow: 1, motion: "playful", speed: 1, density: "compact", radius: 0.8, fontScale: 1 },
   uiStyle: {
     toggleStyle: "minimal",
     metricDisplay: "bars",

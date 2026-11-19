@@ -21,7 +21,8 @@ export const PALETTE_PRESETS: readonly { id: PalettePresetId; palette: Palette }
   { id: "nebula", palette: { primary: "#9333ea", secondary: "#22d3ee", surface: "#13111c" } },
 ];
 
-export const DEFAULT_PALETTE: Palette = PALETTE_PRESETS[0]!.palette;
+/** Docklet default: the nebula preset (purple and cyan); stored palettes are never rewritten to it. */
+export const DEFAULT_PALETTE: Palette = PALETTE_PRESETS.find((p) => p.id === "nebula")!.palette;
 
 export function matchPreset(palette: Palette): PalettePresetId | null {
   return PALETTE_PRESETS.find((p) => PALETTE_ROLES.every((r) => p.palette[r] === palette[r]))?.id ?? null;

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_TOKENS, normalizeTokens } from "@/shared/theme/design-tokens";
+import { SHIPPED_DESIGN } from "@/shared/preferences/shipped-design";
 
 import { hexToOklch, normalizeHex, oklchToHex } from "./color";
-import { matchPreset, PALETTE_PRESETS, PALETTE_VARS, paletteTokens, sanitizePalette, type Palette } from "./palette";
+import { DEFAULT_PALETTE, matchPreset, PALETTE_PRESETS, PALETTE_VARS, paletteTokens, sanitizePalette, type Palette } from "./palette";
 
 /** Small deterministic PRNG so the random palettes are the same on every run. */
 function prng(seed: number) {
@@ -57,7 +58,14 @@ describe("palette tokens", () => {
     expect(matchPreset(PALETTE_PRESETS[2]!.palette)).toBe("magenta");
     expect(matchPreset({ primary: "#9333ea", secondary: "#22d3ee", surface: "#13111c" })).toBe("nebula");
     expect(matchPreset({ ...PALETTE_PRESETS[2]!.palette, secondary: "#00ff00" })).toBe(null);
-    expect(sanitizePalette({ primary: "#123456", secondary: "red", surface: 3 })).toEqual({ ...PALETTE_PRESETS[0]!.palette, primary: "#123456" });
+    const nebula = PALETTE_PRESETS.find((p) => p.id === "nebula")!.palette;
+    expect(sanitizePalette({ primary: "#123456", secondary: "red", surface: 3 })).toEqual({ ...nebula, primary: "#123456" });
+  });
+
+  it("ships nebula as the Docklet default and leaves a stored palette alone", () => {
+    expect([matchPreset(DEFAULT_PALETTE), matchPreset(SHIPPED_DESIGN.tokens.palette)]).toEqual(["nebula", "nebula"]);
+    const stored = PALETTE_PRESETS.find((p) => p.id === "arcane")!.palette;
+    expect(sanitizePalette(stored)).toEqual(stored);
   });
 
   it("migrates stored four-role palettes to three roles deterministically", () => {

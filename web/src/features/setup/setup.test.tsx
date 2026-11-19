@@ -36,13 +36,13 @@ describe("first-run setup", () => {
     await next();
 
     // Discovery prefills the LAN address of the hub container; clearing it is a manual choice that stays.
-    await waitFor(() => expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
-    await userEvent.clear(screen.getByLabelText("Interne Hub-Adresse"));
+    await waitFor(() => expect((screen.getByLabelText("IP-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
+    await userEvent.clear(screen.getByLabelText("IP-Adresse"));
     await next();
     expect(screen.getByText("1 Feld prüfen") !== null).toBe(true);
     // The internal address comes first; a domain stays optional and is not required.
-    expect((screen.getByLabelText("Domain (optional)") as HTMLInputElement).value).toBe("");
-    await userEvent.type(screen.getByLabelText("Interne Hub-Adresse"), "192.0.2.10:8080");
+    expect((screen.getByLabelText("Domain") as HTMLInputElement).value).toBe("");
+    await userEvent.type(screen.getByLabelText("IP-Adresse"), "192.0.2.10:8080");
     await next();
 
     expect(await screen.findByLabelText("Standard-Projektverzeichnis") !== null).toBe(true);
@@ -54,7 +54,7 @@ describe("first-run setup", () => {
     await next();
 
     await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Hub" }));
-    expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
+    expect((screen.getByLabelText("IP-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
     expect(screen.getByText(/Links zeigen auf http:\/\/192\.0\.2\.10:8080/) !== null).toBe(true);
     await waitFor(() => expect(router.state.location.search).toBe("?step=hub"));
     await userEvent.click(screen.getByRole("button", { name: /Prüfen/ }));

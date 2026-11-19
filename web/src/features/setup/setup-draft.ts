@@ -1,5 +1,5 @@
 import { defaultModules, type ModuleChoices } from "@/domain/modules";
-import { hubAddressCandidates, type HubDiscovery } from "@/domain/hub-discovery";
+import { hubAddressCandidates, serverCandidateKind, type HubDiscovery } from "@/domain/hub-discovery";
 import type { AuthSettings, GeneralSettings, HostDefaults } from "@/domain/settings";
 import type { PasswordDraft } from "@/features/settings/field-rules";
 import { createStore, useStore } from "@/shared/lib/store";
@@ -65,7 +65,10 @@ export function applyDiscovery(draft: SetupDraft, discovery: HubDiscovery): Setu
   if (draft.hubAddressOrigin !== null || draft.general.hubAddress.trim()) return draft;
   const best = hubAddressCandidates(discovery).find((c) => c.recommended);
   if (!best) return draft;
-  return { ...draft, general: { ...draft.general, hubAddress: best.address }, hubAddressOrigin: { kind: "discovered", candidateId: best.id } };
+  // The same pass fills an empty domain with the first name the hub reports (APP_URL comes first).
+  const domain = discovery.candidates?.find((c) => serverCandidateKind(c) === "domain")?.url.replace(/\/+$/, "");
+  const domainUrl = draft.general.domainUrl.trim() || !domain ? draft.general.domainUrl : domain;
+  return { ...draft, general: { ...draft.general, hubAddress: best.address, domainUrl }, hubAddressOrigin: { kind: "discovered", candidateId: best.id } };
 }
 
 /**

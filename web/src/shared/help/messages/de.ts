@@ -16,7 +16,7 @@ export const deHelp: typeof enHelp = {
         impact: "Hilft, mehrere Docklet-Hubs auseinanderzuhalten.",
       },
       hubAddress: {
-        title: "Interne Hub-Adresse",
+        title: "IP-Adresse",
         short: "Adresse, unter der Agents den Hub erreichen.",
         full: "IP-Adresse oder interne URL des Hubs im LAN oder in einem bestehenden VPN. Edge-Agents bauen ihre Verbindung zu dieser Adresse auf; Links in Benachrichtigungen nutzen sie, wenn keine Domain gewählt ist.",
         impact: "Eine falsche Adresse trennt Edge-Agents vom Hub. Eine Freigabe ins Internet ist nicht nötig.",

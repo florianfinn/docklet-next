@@ -75,7 +75,7 @@ it("claims a pending hub, runs first setup, connected settings and profile on pr
   await userEvent.type(screen.getByLabelText("Neues Passwort"), "New-password1!");
   await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "New-password1!");
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
-  await userEvent.type(await screen.findByLabelText("Interne Hub-Adresse"), "192.0.2.10:8080");
+  await userEvent.type(await screen.findByLabelText("IP-Adresse"), "192.0.2.10:8080");
   await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
   await screen.findByLabelText("Standard-Projektverzeichnis");
   await userEvent.click(screen.getByRole("button", { name: "Weiter" }));

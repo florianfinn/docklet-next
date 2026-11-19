@@ -60,11 +60,11 @@ describe("language switch", () => {
     setupStore.set((d) => ({ ...d, reached: 1 }));
     renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=hub"]);
     await switchTo("English (US)");
-    await waitFor(() => expect((screen.getByLabelText("Internal hub address") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
-    await userEvent.clear(screen.getByLabelText("Internal hub address"));
+    await waitFor(() => expect((screen.getByLabelText("IP address") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
+    await userEvent.clear(screen.getByLabelText("IP address"));
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByText("Check 1 field") !== null).toBe(true);
-    expect(screen.getByRole("button", { name: "Explanation: Internal hub address" }) !== null).toBe(true);
+    expect(screen.getByRole("button", { name: "Explanation: IP address" }) !== null).toBe(true);
   });
 
   it("offers the switch in hub settings as a browser preference and in the design lab flows", async () => {

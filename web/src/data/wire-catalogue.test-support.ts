@@ -58,6 +58,7 @@ export const GUARDED_WIRE_ENUMS = [
 
 export const EXEMPT_WIRE_ENUMS = [
  ...["ProxyOperation.phase", "ProxyInstance.kind", "ProxyDiscovery.kind", "ProxyCreateInstanceRequest.kind", "ProxySource.kind", "ProxyReference.kind"].map((property) => ({ property, reason: "S2 contract foundation has no production proxy page; S5 owns these rendered consumers and their render proofs. Total typed bilingual maps are frozen in wire-catalogue-proxy.ts. Outcome state/reason consumers already have guarded render proofs." })),
+{property:"EnvironmentHubAddressCandidate.kind",reason:"Address classification (ip or domain) read only by the discovery ranker and prefill; candidate labels come from their source, never from this wire value."},
 {property:"ProxyChange.kind",reason:"Request action discriminator selected by the proxy editor; action captions come from feature labels and never display this transport selector."},
  {property:"ModulesState.kind",reason:"Static registry discriminator validated by the module decoder; the module settings UI renders translated module names, never this wire selector."},
   { property: "VulnerabilityAdvisoryUpdate.state", reason: "Consumer update states are translated with security.detail.updateAvailable, noUpdate and updateUnknown in AdvisoryContent." },

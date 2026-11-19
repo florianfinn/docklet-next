@@ -45,11 +45,11 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => ({ close() {}, onopen: null, onmessage: null, onerror: null }) });
   const { router } = renderRoutes([{ path: "/setup", element: <SetupGate /> }, { element: <AuthGate />, children: [{ path: "/dashboard", element: <p>Dashboard target</p> }, { path: "/settings/:section", element: <SettingsPage /> }] }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
   const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }));
-  await userEvent.type(await screen.findByLabelText("Interne Hub-Adresse"), "192.0.2.10:8080");
+  await userEvent.type(await screen.findByLabelText("IP-Adresse"), "192.0.2.10:8080");
   const name = screen.getByLabelText("Name des Hubs");
   await userEvent.clear(name);
   await userEvent.type(name, "Setup Hub");
-  await userEvent.type(screen.getByLabelText("Domain (optional)"), "https://docklet.example.com");
+  await userEvent.type(screen.getByLabelText("Domain"), "https://docklet.example.com");
   await next();
   await screen.findByLabelText("Standard-Projektverzeichnis");
   await next();
@@ -74,9 +74,9 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
     if (target === "/settings/general") {
       await router.navigate("/settings/general");
       await waitFor(() => expect((screen.getByLabelText("Name des Hubs") as HTMLInputElement).value).toBe("Setup Hub"));
-      expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
-      expect((screen.getByLabelText("Domain (optional)") as HTMLInputElement).value).toBe("https://docklet.example.com");
-      const domain = screen.getByLabelText("Domain (optional)");
+      expect((screen.getByLabelText("IP-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
+      expect((screen.getByLabelText("Domain") as HTMLInputElement).value).toBe("https://docklet.example.com");
+      const domain = screen.getByLabelText("Domain");
       await userEvent.clear(domain);
       await userEvent.type(domain, "https://hub.example.com");
       await userEvent.click(screen.getByRole("button", { name: "Speichern" }));

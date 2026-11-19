@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const best = (d: HubDiscovery) => hubAddressCandidates(d).find((c) => c.recommended)?.address;
-const field = () => screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement;
+const field = () => screen.getByLabelText("IP-Adresse") as HTMLInputElement;
 
 describe("hub address candidates", () => {
   it("prefers LAN interfaces, then host addresses, and never recommends a bridge address", () => {

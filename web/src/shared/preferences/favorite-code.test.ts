@@ -127,11 +127,11 @@ describe("design code", () => {
   });
 });
 
-/** The user's favourite DOCKLET-DESIGN-1 code from the designer trial, decoded; the shipped default. */
+/** The user's favourite DOCKLET-DESIGN-1 code from the designer trial, decoded; the shipped default with the nebula palette (#521). */
 const USER_FAVORITE = {
   schema: "docklet-design",
   sections: {
-    tokens: { theme: "dark", palette: { primary: "#9333ea", secondary: "#00ffcc", surface: "#13111c" }, semantic: 1.12, glow: 1, motion: "playful", speed: 1, density: "compact", radius: 0.8, fontScale: 1 },
+    tokens: { theme: "dark", palette: { primary: "#9333ea", secondary: "#22d3ee", surface: "#13111c" }, semantic: 1.12, glow: 1, motion: "playful", speed: 1, density: "compact", radius: 0.8, fontScale: 1 },
     uiStyle: { toggleStyle: "minimal", metricDisplay: "bars", hostFilterStyle: "menu", pointerGlow: true, pointerGlowIntensity: 0.6, toastScale: 1.6, toastDesign: "bar", actionDialogDesign: "focus", actionPresentationOverride: "hub", runMotion: "sweep" },
     visual: { logoVariant: "dropcap", logoMotion: "relay", logoEntrance: true, glowInside: 50, glowOutside: 4, glowSize: 128, glowLine: 2, dotWave: true, dotWaveStrength: 0.9, dotWavePeriod: 32, dotDrift: 0, sidebarWidth: 17.5 },
     dashboard: {

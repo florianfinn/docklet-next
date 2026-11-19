@@ -23,9 +23,9 @@ const routes = [{ path: "/settings/:section", element: <SettingsPage /> }];
 describe("explanations in hub settings", () => {
   it("explains fields beside their labels and hides only those explanations once switched off", async () => {
     const { router } = renderRoutes(routes, ["/settings/general"]);
-    const address = await screen.findByLabelText("Interne Hub-Adresse");
+    const address = await screen.findByLabelText("IP-Adresse");
     expect(address.id).toBe("gen-address");
-    const info = screen.getByRole("button", { name: "Erklärung: Interne Hub-Adresse" });
+    const info = screen.getByRole("button", { name: "Erklärung: IP-Adresse" });
     info.focus();
     expect(((await screen.findByRole("tooltip")).textContent ?? "").includes("Edge-Agents")).toBe(true);
     expect(screen.getAllByRole("button", { name: /^Erklärung: / }).length >= 5).toBe(true);
@@ -37,7 +37,7 @@ describe("explanations in hub settings", () => {
     await waitFor(() => expect(helpStore.get().mode).toBe("off"));
 
     await act(() => router.navigate("/settings/general"));
-    await screen.findByLabelText("Interne Hub-Adresse");
+    await screen.findByLabelText("IP-Adresse");
     expect(screen.queryAllByRole("button", { name: /^Erklärung: / }).length).toBe(0);
   });
 });

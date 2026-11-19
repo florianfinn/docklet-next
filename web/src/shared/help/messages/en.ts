@@ -15,7 +15,7 @@ export const enHelp = {
         impact: "Helps tell several Docklet hubs apart.",
       },
       hubAddress: {
-        title: "Internal hub address",
+        title: "IP address",
         short: "Address at which agents reach the hub.",
         full: "IP address or internal URL of the hub on the LAN or in an existing VPN. Edge agents connect to this address; links in notifications use it when no domain is selected.",
         impact: "A wrong address disconnects edge agents from the hub. Exposing it to the internet is not required.",

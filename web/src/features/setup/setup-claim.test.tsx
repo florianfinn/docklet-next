@@ -76,7 +76,7 @@ it("claims with code, mode and administrator, then continues in the wizard", asy
   await waitFor(() => expect(screen.queryByLabelText("Setup-Code") === null).toBe(true));
   expect(hub.claims.at(-1)).toEqual({ code: "ABCD-EFGH-JKMN", mode: "local", username: "owner", password: "Example-Setup-Password1!" });
   // The wizard continues with the hub step; the access step is complete.
-  expect(await screen.findByLabelText("Interne Hub-Adresse") !== null).toBe(true);
+  expect(await screen.findByLabelText("IP-Adresse") !== null).toBe(true);
 });
 
 it("sends no password outside local mode and needs trusted proxies for proxy mode", async () => {

@@ -30,7 +30,7 @@ function Form() {
   );
 }
 
-const trigger = () => screen.queryByRole("button", { name: "Erklärung: Interne Hub-Adresse" });
+const trigger = () => screen.queryByRole("button", { name: "Erklärung: IP-Adresse" });
 const tooltipText = async () => (await screen.findByRole("tooltip")).textContent ?? "";
 
 describe("extended explanations", () => {
@@ -78,7 +78,7 @@ describe("extended explanations", () => {
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null));
 
     await userEvent.click(trigger()!);
-    expect((await tooltipText()).includes("Interne Hub-Adresse")).toBe(true);
+    expect((await tooltipText()).includes("IP-Adresse")).toBe(true);
     await userEvent.click(trigger()!);
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null));
 

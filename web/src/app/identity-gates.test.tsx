@@ -61,7 +61,7 @@ it.each(states)("terminates both entry routes for $mode completed=$completed cha
       if (authenticated) {
         if (expectedPath === "/dashboard") expect(screen.queryByText("Dashboard terminal") !== null).toBe(true);
         else if (completed && needsPassword) expect(screen.queryByLabelText("Bisheriges Passwort") !== null).toBe(true);
-        else expect(screen.queryByLabelText("Interne Hub-Adresse") !== null).toBe(true);
+        else expect(screen.queryByLabelText("IP-Adresse") !== null).toBe(true);
       } else if (mode === "local") expect(screen.queryByLabelText("Benutzername") !== null).toBe(true);
       else expect(document.body.textContent).toMatch(mode === "proxy" ? /Proxy/ : /nicht/);
     });
