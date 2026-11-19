@@ -55,7 +55,7 @@ export function HubAddressDiscovery({ discovery, address, origin, onPick }: Prop
         data && (
           <>
             <p className="text-xs text-muted-foreground">
-              {data.container ? t("container", { name: data.container.name, mode: data.container.networkMode, port: data.container.listenPort }) : t("noContainer")}
+              {data.container ? t("container", { name: data.container.name, mode: data.container.networkMode, port: data.container.listenPort }) : data.containerDetection === "unknown" ? t("containerUnknown") : t("noContainer")}
             </p>
             <p className="text-xs" role="status">
               {origin?.kind === "manual" ? t("originManual") : picked ? t("originDiscovered", { address: picked.address, source: t(`kinds.${picked.kind}`, { via: picked.via ?? "" }) }) : t("originNone")}

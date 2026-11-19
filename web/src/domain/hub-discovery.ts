@@ -16,11 +16,23 @@ export interface HubInterface {
   parent?: string;
 }
 
+export interface HubServerCandidate {
+  id: string;
+  url: string;
+  reach: "unknown" | "same-host";
+  source: "configured" | "interface" | "published" | "request";
+  /** Whether the host is an IP literal or a name; older hubs omit it. */
+  kind?: "ip" | "domain";
+}
+
 export interface HubDiscovery {
   detectedAt: string;
   /** Present on live hubs; supplied by the server rather than the browser. */
   agentImage?: string;
-  candidates?: { id: string; url: string; reach: "unknown" | "same-host"; source: "configured" | "interface" }[];
+  /** Server-ranked candidates of live hubs: configured, published, interface, then request addresses. */
+  candidates?: HubServerCandidate[];
+  /** Live hubs: whether the hub found its own container; "unknown" when Docker could not be inspected. */
+  containerDetection?: "container" | "unknown";
   /** The hub's own container; absent when the hub does not run in Docker. */
   container?: {
     name: string;
@@ -40,7 +52,7 @@ export interface HubDiscovery {
   simulated: boolean;
 }
 
-export type CandidateKind = "lan-interface" | "host-address" | "request" | "bridge-local";
+export type CandidateKind = "lan-interface" | "host-address" | "request" | "bridge-local" | "configured" | "interface";
 /** Who can reach the address: other machines, only processes on the same host, or not knowable. */
 export type CandidateReach = "lan" | "same-host" | "unknown";
 
@@ -78,12 +90,29 @@ function splitHost(hostHeader: string): { host: string; port?: number } {
  * from the same host and are never recommended. The request host is a hint
  * of how the browser reached the hub, never a container address.
  */
+const SERVER_KIND: Record<HubServerCandidate["source"], CandidateKind> = { configured: "configured", published: "host-address", interface: "interface", request: "request" };
+
+/** IP literal or name; the server reports it, older hubs are classified from the URL. */
+export function serverCandidateKind(candidate: HubServerCandidate): "ip" | "domain" {
+  if (candidate.kind) return candidate.kind;
+  const host = new URL(candidate.url).hostname;
+  return host.startsWith("[") || parseIp(host) !== undefined ? "ip" : "domain";
+}
+
+/** The IP candidate agents should use: the first one that other hosts can reach. */
+export function preferredIpCandidate(candidates: HubServerCandidate[] | undefined): HubServerCandidate | undefined {
+  return candidates?.find((c) => serverCandidateKind(c) === "ip" && c.reach !== "same-host");
+}
+
 export function hubAddressCandidates(d: HubDiscovery): HubAddressCandidate[] {
-  if (d.candidates) return d.candidates.map((candidate, index) => ({
-    id: candidate.id, address: new URL(candidate.url).host,
-    kind: candidate.source === "configured" ? "request" : "host-address",
-    reach: candidate.reach, recommended: index === 0,
-  }));
+  if (d.candidates) {
+    // The internal hub address is an IP address: a name is listed but never recommended.
+    const best = preferredIpCandidate(d.candidates);
+    return d.candidates.map((candidate) => ({
+      id: candidate.id, address: new URL(candidate.url).host, kind: SERVER_KIND[candidate.source],
+      reach: candidate.reach, recommended: candidate === best,
+    }));
+  }
   const out: Omit<HubAddressCandidate, "recommended">[] = [];
   const c = d.container;
   const listen = c?.listenPort ?? 8080;

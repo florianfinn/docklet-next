@@ -9,6 +9,7 @@ import { runtimeResponseError } from "./runtime-mapping";
 import { CancelledError } from "@tanstack/react-query";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { components } from "@/api/generated/schema";
+import type { HubDiscovery } from "@/domain/hub-discovery";
 import type { HostsApi, HubApi } from "@/data/api";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { CsrfClient } from "./csrf-client";
@@ -95,9 +96,22 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
       if (!Number.isFinite(Date.parse(discovery.detectedAt)) || (typeof discovery.agentImage !== "string" || discovery.agentImage.length > 512 || !IMAGE_REFERENCE.test(discovery.agentImage)) || !Array.isArray(discovery.candidates)) throw new Error("hosts.invalid-discovery");
       for (const candidate of discovery.candidates) {
         const url = new URL(candidate.url);
-        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !["", "/"].includes(url.pathname) || !["unknown", "same-host"].includes(candidate.reach) || !["configured", "interface"].includes(candidate.source)) throw new Error("hosts.invalid-candidate");
+        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !["", "/"].includes(url.pathname) || !["unknown", "same-host"].includes(candidate.reach) || !["configured", "interface", "published", "request"].includes(candidate.source) || (candidate.kind !== undefined && !["ip", "domain"].includes(candidate.kind))) throw new Error("hosts.invalid-candidate");
       }
-      return { ...discovery, candidates: discovery.candidates, interfaces: [], hostAddresses: [], simulated: false };
+      const detection = discovery.containerDetection === "container" || discovery.containerDetection === "unknown" ? discovery.containerDetection : undefined;
+      return { detectedAt: discovery.detectedAt, agentImage: discovery.agentImage, candidates: discovery.candidates, containerDetection: detection, container: hubContainerInternal(discovery.container), interfaces: [], hostAddresses: [], simulated: false };
     },
   };
+}
+
+const NETWORK_MODES = ["host", "macvlan", "ipvlan"] as const;
+
+/** The hub's own container for the setup container line; networks are summarised to one mode. */
+function hubContainerInternal(container: Discovery["container"]): HubDiscovery["container"] {
+  if (!container || typeof container.name !== "string" || !Number.isInteger(container.listenPort)) return undefined;
+  const drivers = (container.networks ?? []).map((network) => network.driver);
+  const networkMode = NETWORK_MODES.find((mode) => drivers.includes(mode)) ?? "bridge";
+  const publishedPorts = (container.publishedPorts ?? []).filter((p) => Number.isInteger(p.hostPort))
+    .map((p) => ({ hostPort: p.hostPort, containerPort: container.listenPort, ...(p.hostIp ? { hostIp: p.hostIp } : {}) }));
+  return { name: container.name, networkMode, listenPort: container.listenPort, publishedPorts };
 }

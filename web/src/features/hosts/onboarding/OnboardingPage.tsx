@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAdapter } from "@/data/use-adapter";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { useConnectedSettings } from "@/data/queries";
+import { preferredIpCandidate } from "@/domain/hub-discovery";
 import { agentHubUrl } from "@/domain/settings";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { PageHeader, QueryError } from "@/shared/components/page";
@@ -57,7 +58,7 @@ function OnboardingFlow() {
   const taken = useMemo(() => hosts.all.filter((h) => h.id !== draft?.hostId).map((h) => h.name), [hosts.all, draft?.hostId]);
   const errors = draft ? validateStep(step, draft, taken) : {};
   const general = settings.data?.general;
-  const plan = draft && general ? planFromDraft(draft, draft.hubUrl ?? discovery.data?.candidates?.[0]?.url ?? agentHubUrl(general), general.timeZone) : undefined;
+  const plan = draft && general ? planFromDraft(draft, draft.hubUrl ?? (preferredIpCandidate(discovery.data?.candidates) ?? discovery.data?.candidates?.[0])?.url ?? agentHubUrl(general), general.timeZone) : undefined;
 
   if (plan && discovery.data?.agentImage) plan.image = discovery.data.agentImage;
 
