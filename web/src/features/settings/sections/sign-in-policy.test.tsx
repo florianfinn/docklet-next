@@ -23,7 +23,7 @@ function adapter(policy: { mode: "local" | "proxy" | "none"; forced?: boolean },
     if (path === "/api/auth/mode") return json({ mode: policy.mode, setupPending: false, forced: policy.forced ?? false });
     if (path === "/api/auth/sign-in" && init?.method === "PUT") {
       puts.push(JSON.parse(String(init.body)));
-      if (refuse) return new Response(JSON.stringify({ status: 409, code: refuse }), { status: 409 });
+      if (refuse) return new Response(JSON.stringify({ status: 409, code: refuse }), { status: 409, headers: { "Content-Type": "application/problem+json" } });
       policy.mode = (puts.at(-1) as { mode: typeof policy.mode }).mode;
       return json({ success: true, status: "authenticated", user: admin });
     }

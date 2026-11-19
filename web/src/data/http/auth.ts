@@ -65,7 +65,8 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     if (!response.ok) {
       const refused = maintenanceOutcome(response);
       if (refused) { discardResponse(response); throw refused; }
-      // Setup and sign-in policy refusals carry their problem code for the setup and settings screens.
+      // Setup and sign-in policy refusals carry a JSON problem code; other bodies are never awaited.
+      if (!/json/.test(response.headers.get("Content-Type") ?? "")) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
       const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
       const code = typeof problem?.code === "string" && /^(?:setup|auth|user)\.[a-z-]+$/.test(problem.code) ? problem.code : "http.error";
       throw new AdapterOutcomeError({ kind: "error", code, status: response.status });

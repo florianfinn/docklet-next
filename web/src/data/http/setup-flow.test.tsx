@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original connected first-run flow contract test; optional-module foundation (#472).
+// Deviations: Original connected first-run flow contract test; optional-module foundation (#472); M29 setup without the initial password step, completion opens the dashboard.
 
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -20,27 +20,18 @@ import { createHttpAdapter } from "./http-adapter";
 
 afterEach(() => { restartSetup(); localStorage.clear(); });
 
-it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults separately and localizes setup write errors (fail=%s)", async (target) => {
+it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults separately and localizes setup write errors (then=%s)", async (target) => {
   const fail = target === "failure";
   const errorToast = vi.spyOn(toast, "error");
   restartSetup();
   const settings: Record<string, string> = { setupCompleted: "false", hubName: "Before setup", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin", actionPresentation: "dialog", keepActionOutput: "true" };
-  let changedPassword = false;
   const writes: Record<string, string>[] = [];
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
-    if (path === "/api/auth/mode") return new Response(JSON.stringify({ success: true, data: { mode: "local" } }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
-    if (path === "/api/auth/me") return new Response(JSON.stringify({ success: true, data: { id: "admin", username: "admin", requiresPasswordChange: !changedPassword } }));
-    if (path === "/api/auth/password") {
-      const body = JSON.parse(String(init?.body)) as { currentPassword: string; newPassword: string };
-      expect(body.currentPassword).toBe("old-password");
-      expect(body.newPassword).toBe("New-password1!");
-      changedPassword = true;
-      return new Response(JSON.stringify({ success: true, data: { message: "changed" } }));
-    }
+    if (path === "/api/auth/mode") return new Response(JSON.stringify({ success: true, data: { mode: "local", setupPending: false } }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
+    if (path === "/api/auth/me") return new Response(JSON.stringify({ success: true, data: { id: "admin", username: "admin", requiresPasswordChange: false, isAdmin: true, assignments: [] } }));
     if (path === "/api/environments/0/settings") {
       if (init?.method === "PUT") {
-        expect(changedPassword).toBe(true);
         const values = JSON.parse(String(init.body)) as Record<string, string>;
         writes.push(values);
         if (fail) return new Response(JSON.stringify({ detail: "Not writable" }), { status: 400 });
@@ -62,10 +53,6 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   await next();
   await screen.findByLabelText("Standard-Projektverzeichnis");
   await next();
-  await userEvent.type(await screen.findByLabelText("Bisheriges Administratorpasswort"), "old-password");
-  await userEvent.type(screen.getByLabelText("Neues Administratorpasswort"), "New-password1!");
-  await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
-  await next();
   const moduleSwitch=await screen.findByRole("switch",{name:"Proxy"});
   expect(moduleSwitch.getAttribute("aria-checked")).toBe("false");
   if(target!=="/settings/general") await userEvent.click(moduleSwitch);
@@ -79,21 +66,13 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   expect(writes[0]?.moduleProxyEnabled).toBe(String(target!=="/settings/general"));
   expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
   expect(writes[0]?.projectsDirectory).toBeUndefined();
-  if (!fail) {
-    const locations: string[] = [];
-    const unsubscribe = router.subscribe((state) => locations.push(state.location.pathname));
-    const doneLink = await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" });
-    // Publish completion first, so batching with Link navigation cannot hide a gate redirect.
-    doneLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
-    await userEvent.click(doneLink);
-    expect(router.state.location.pathname).toBe("/setup");
-    expect(locations).toEqual([]);
-    expect(screen.queryByRole("link", { name: "Hub-Einstellungen ansehen" }) !== null).toBe(true);
-    await userEvent.click(doneLink);
-    unsubscribe();
-    expect(locations).toEqual([target]);
-    if (target === "/dashboard") await screen.findByText("Dashboard target");
-    else {
+  if (fail) expect(router.state.location.pathname).toBe("/setup");
+  else {
+    // Completion shows the preparing screen once, then opens the dashboard.
+    await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"), { timeout: 5_000 });
+    await screen.findByText("Dashboard target");
+    if (target === "/settings/general") {
+      await router.navigate("/settings/general");
       await waitFor(() => expect((screen.getByLabelText("Name des Hubs") as HTMLInputElement).value).toBe("Setup Hub"));
       expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
       expect((screen.getByLabelText("Domain (optional)") as HTMLInputElement).value).toBe("https://docklet.example.com");
@@ -106,11 +85,8 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
       expect(settings.hubAddress).toBe("192.0.2.10:8080");
       expect(settings.domainUrl).toBe("https://hub.example.com");
     }
-    expect(router.state.location.pathname).toBe(target);
   }
   errorToast.mockRestore();
-  expect(changedPassword).toBe(true);
   expect(writes).toHaveLength(target === "/settings/general" ? 2 : 1);
   expect(writes[0]?.timeZone).toBeUndefined();
-  expect(JSON.stringify(writes).includes("old-password") || JSON.stringify(writes).includes("New-password1!")).toBe(false);
 });
