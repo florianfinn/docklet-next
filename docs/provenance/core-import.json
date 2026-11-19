@@ -15,6 +15,10 @@
       "sha256": "83aefe5788d8b14a0555abc9797a6ca6bf4927d0e6aefc72afa31866acc05afc"
     },
     {
+      "path": "deploy/tools/probe/go.mod",
+      "sha256": "dbe22b68dba00c5378e7d9b6bef34daff6826d2c26b0cf0fac7f18f568242076"
+    },
+    {
       "path": "go.work",
       "sha256": "3817e82b00b244ab3b44f55d24316c70d94b8eee87d6db7da1eddf64d23c61d4"
     },

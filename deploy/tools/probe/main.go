@@ -28,7 +28,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -102,7 +101,9 @@ func emit(out io.Writer, value any, code int) int {
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
 	if enc.Encode(value) != nil || b.Len() > 32768 {
-		return 3
+		b.Reset()
+		b.WriteString(`{"v":1,"error":"output-limit"}` + "\n")
+		code = 3
 	}
 	if _, err := io.WriteString(out, b.String()); err != nil {
 		return 3
@@ -139,11 +140,12 @@ func parse(args []string) (options, error) {
 	if !ok || o.timeout <= 0 || o.timeout > 10*time.Second || o.maxBody != bodyLimit {
 		return o, bad
 	}
-	if len(o.target) == 0 || len(o.target) > 2048 || o.target[0] != '/' || !targetPrintable(o.target) {
+	if len(o.target) == 0 || len(o.target) > 2048 || o.target[0] != '/' || !printable(o.target) {
 		return o, bad
 	}
+	// The request line must carry the target byte for byte, so anything Go would re-encode is refused.
 	u, err := url.ParseRequestURI(o.target)
-	if err != nil || u.IsAbs() || u.Host != "" || strings.Contains(o.target, "#") {
+	if err != nil || u.IsAbs() || u.Host != "" || strings.Contains(o.target, "#") || u.RequestURI() != o.target {
 		return o, bad
 	}
 	if !o.tls && o.sni != "" {
@@ -163,14 +165,6 @@ func parse(args []string) (options, error) {
 	return o, nil
 }
 
-func targetPrintable(s string) bool {
-	for _, c := range s {
-		if unicode.IsControl(c) || unicode.IsSpace(c) {
-			return false
-		}
-	}
-	return utf8.ValidString(s)
-}
 func printable(s string) bool {
 	for _, c := range s {
 		if c <= 32 || c >= 127 {
@@ -240,8 +234,7 @@ func probe(o options) (result, int) {
 		pem, e := os.ReadFile(o.roots)
 		roots = x509.NewCertPool()
 		if e != nil || !roots.AppendCertsFromPEM(pem) {
-			r.Error = "usage"
-			return r, 2
+			return result{V: 1, Error: "usage"}, 2
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)

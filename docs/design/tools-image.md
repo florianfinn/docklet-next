@@ -221,8 +221,9 @@ variables and disables automatic compression. `--connect` must be a loopback
 IPv4/IPv6 literal with a port from 1 through 65535. Host is independent of the
 connection address and TLS SNI. `--host` is a hostname or IP literal with optional
 port, at most 253 bytes, without spaces or controls; IPv6 uses brackets.
-`--target` is a path and optional query starting with `/`, at most 2048 bytes,
-without spaces, controls or a fragment. `--timeout` is required, positive and at
+`--target` is a path and optional query starting with `/`, at most 2048 bytes of
+printable ASCII without spaces or a fragment, already in the form Go sends: a
+target that Go would re-encode is refused, so the request line carries it verbatim. `--timeout` is required, positive and at
 most 10 seconds, covering connection, handshake, response and body reading.
 `--max-body` is required and fixed at 65536. SNI is an LDH DNS name of at most
 253 bytes, with labels of at most 63 bytes; it defaults to Host without its port.
@@ -246,7 +247,8 @@ preserve UTF-8 and replace control characters and invalid UTF-8 with `?`.
 
 TLS handshakes accept untrusted certificates so their HTTP answer can be
 inspected. The three verification results are independent: `chainTrusted` uses
-`x509.Verify` with the image's system CA pool, presented intermediates, ServerAuth
+`x509.Verify` with the image's system CA pool (the image sets `SSL_CERT_FILE`; the
+agent starts helpers without environment overrides), presented intermediates, ServerAuth
 usage, current time and no DNSName; `hostnameMatch` uses `VerifyHostname(sni)`;
 `validity` is `valid`, `expired` or `not-yet-valid` from the leaf's timestamps.
 Chain verification failure reports `chain-untrusted`; an otherwise trusted chain
@@ -263,3 +265,5 @@ handshake failures, `protocol` for other connection or HTTP framing failures,
 and `body-read` when the response body fails before the capped read finishes
 (including a deadline during that read). Error messages do not expose raw
 network or certificate errors. A failed selftest reports `selftest` with exit 3.
+If a result would exceed 32 KiB, the line is `{"v":1,"error":"output-limit"}`
+with exit 3.

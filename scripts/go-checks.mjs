@@ -1,14 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { tracked, main, run } from "./repository.mjs";
 
+// Modules outside go.work (vendored third_party, isolated tool modules) build with the workspace off.
+const workspaceModules = new Set([...readFileSync("go.work", "utf8").matchAll(/^\s*\.\/(\S+)\s*$/gm)].map((m) => m[1]));
 function go(args, cwd = process.cwd(), overrides = {}) {
   // Container wrappers need their transport environment; Go tools and test
   // subprocesses must never inherit a Docker endpoint.
   const env = { ...process.env, ...overrides };
   const launcher = ["run", resolve("scripts/go-command.go"), "--"];
-  if (cwd.startsWith("third_party/")) launcher.push("--work-off");
+  if (cwd !== process.cwd() && !workspaceModules.has(cwd)) launcher.push("--work-off");
   const result = spawnSync("go", [...launcher, ...args], {
     cwd, env, encoding: "utf8", stdio: ["inherit", "pipe", "inherit"],
   });

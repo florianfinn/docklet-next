@@ -104,7 +104,7 @@
       "docklet.invalid/tools/probe"
     ],
     "sourceFiles": {
-      "deploy/tools/probe/main.go": "ac112c0815332938bc750cf38d2e77528f7c61dcc0349572e3620f5110d6c0ed",
+      "deploy/tools/probe/main.go": "f8e3a339ddfea0c7b409e0e12d0e229e1a51f9f884d0af8e060522c048979899",
       "deploy/tools/probe/selftest.go": "37f5f57c89d17b7489975cf4edb565e20fc33e4df608ee6c6254da83ef517d9e",
       "deploy/tools/probe/go.mod": "dbe22b68dba00c5378e7d9b6bef34daff6826d2c26b0cf0fac7f18f568242076"
     },

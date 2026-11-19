@@ -87,6 +87,29 @@ func TestP2SNIIndependentOfHost(t *testing.T) {
 	}
 }
 
+func TestDefaultSNIIsHostWithoutPort(t *testing.T) {
+	var seenSNI string
+	s := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	s.TLS = &tls.Config{GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) { seenSNI = hello.ServerName; return nil, nil }}
+	s.StartTLS()
+	defer s.Close()
+	args := append(cli(endpoint(s)), "--host", "default.example.test:8443", "--tls")
+	if r, code, _ := invoke(t, args...); code != 0 || seenSNI != "default.example.test" || r.TLS.SNI != seenSNI {
+		t.Fatalf("default SNI=%q code=%d", seenSNI, code)
+	}
+}
+
+func TestTargetSentVerbatim(t *testing.T) {
+	var seen string
+	s := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { seen = r.RequestURI }))
+	defer s.Close()
+	target := "/a%2Fb/c%20d?x=%C3%A9&y=1"
+	args := append(cli(endpoint(s)), "--target", target)
+	if _, code, _ := invoke(t, args...); code != 0 || seen != target {
+		t.Fatalf("request target %q; want %q", seen, target)
+	}
+}
+
 func TestHTTPStatusesHeadersAndProxy(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://192.0.2.1:1")
 	t.Setenv("HTTPS_PROXY", "http://192.0.2.1:1")
@@ -170,7 +193,7 @@ func TestArguments(t *testing.T) {
 	}{
 		{"--connect", []string{"example.test:80", "192.0.2.1:80", "0.0.0.0:80", "127.0.0.1:0", "[::1]:65536", "127.0.0.1:abc", "127.0.0.1:+80", "[::1%lo]:80"}},
 		{"--host", []string{"", "user@example.test", "https://example.test", "a b", "a\nb", "-a.test", "example.test:0", "[example.test]", "example.test:+80", strings.Repeat("a", 254)}},
-		{"--target", []string{"", "http://example.test/", "path", "/a b", "/a\nb", "/a#fragment", "/" + strings.Repeat("a", 2048), "/%zz", "/a\u0085b", "/a\u00a0b"}},
+		{"--target", []string{"", "http://example.test/", "path", "/a b", "/a\nb", "/a#fragment", "/" + strings.Repeat("a", 2048), "/%zz", "/a\u0085b", "/a\u00a0b", "/caf\u00e9", "/a\"b", "/a{b}|c"}},
 		{"--timeout", []string{"0", "-1s", "11s", "bad"}}, {"--max-body", []string{"0", "1", "65537"}},
 		{"--roots", []string{"/unused"}}, {"--sni", []string{"example.test"}},
 	} {
