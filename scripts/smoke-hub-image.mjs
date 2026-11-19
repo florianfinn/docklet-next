@@ -47,12 +47,14 @@ try {
   const logged = docker(["logs", id]);
   const code = [...`${logged.stdout}${logged.stderr}`.matchAll(/Setup code: ([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/g)].at(-1)?.[1];
   if (!code) throw new Error("candidate did not log a setup code");
+  // Random per run and policy-compliant (upper, lower, digit, symbol); never stored.
+  const adminPassword = randomBytes(16).toString("hex") + "Aa1!";
   const mode = await fetch(`${base}/api/auth/mode`);
   const cookies = mode.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
   const claim = await fetch(`${base}/api/setup/identity`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: "http://localhost:3552", "X-CSRF-Token": mode.headers.get("X-CSRF-Token") ?? "", Cookie: cookies },
-    body: JSON.stringify({ code, mode: "local", username: "smoke-admin", password: `Aa1!${randomBytes(16).toString("hex")}` }),
+    body: JSON.stringify({ code, mode: "local", username: "smoke-admin", password: adminPassword }),
   });
   if (!claim.ok) throw new Error(`candidate refused the setup claim (${claim.status})`);
   // The static admin key must work right after the claim, without a restart.

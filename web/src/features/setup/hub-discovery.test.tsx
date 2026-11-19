@@ -85,3 +85,20 @@ describe("setup prefill", () => {
     expect(field().value).toBe("");
   });
 });
+
+it("preserves an operator-cleared domain when discovery arrives late", async () => {
+  setupStore.set((d) => ({ ...d, reached: 1 }));
+  let answer!: (d: HubDiscovery) => void;
+  const adapter = { ...createDemoAdapter(), discoverHub: () => new Promise<HubDiscovery>((r) => { answer = r; }) };
+  renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=hub"], adapter);
+  await screen.findByText("Hub erkennt seine Netzwerke …");
+  const domain = screen.getByLabelText("Domain") as HTMLInputElement;
+  await userEvent.type(domain, "https://own.example.org");
+  await userEvent.clear(domain);
+  answer({ detectedAt: "2026-11-19T12:00:00Z", simulated: false, interfaces: [], hostAddresses: [], candidates: [
+    { id: "domain", url: "https://hub.example.com", kind: "domain", source: "configured", reach: "unknown" },
+    { id: "ip", url: "http://192.0.2.10:8080", kind: "ip", source: "request", reach: "unknown" },
+  ] });
+  await waitFor(() => expect((screen.getByLabelText("IP-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
+  expect(domain.value).toBe("");
+});

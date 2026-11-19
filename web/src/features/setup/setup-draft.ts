@@ -14,6 +14,8 @@ export interface SetupDraft {
   modules: ModuleChoices;
   general: GeneralSettings;
   hubAddressOrigin: HubAddressOrigin;
+  /** The operator typed in or cleared the domain; discovery then never fills it. */
+  domainEdited: boolean;
   hostDefaults: HostDefaults;
   auth: AuthSettings;
   /** In memory only; cleared on finish and never sent to the adapter. */
@@ -29,6 +31,7 @@ export function freshSetupDraft(): SetupDraft {
     modules: defaultModules(),
     general: { hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", timeZone: "Europe/Berlin" },
     hubAddressOrigin: null,
+    domainEdited: false,
     hostDefaults: { projectDir: "/home/docker", installDir: "/home/docker/docklet-agent", connection: "direct", puid: "", pgid: "", detectSocketGroup: true },
     auth: {
       mode: "local",
@@ -67,7 +70,7 @@ export function applyDiscovery(draft: SetupDraft, discovery: HubDiscovery): Setu
   if (!best) return draft;
   // The same pass fills an empty domain with the first name the hub reports (APP_URL comes first).
   const domain = discovery.candidates?.find((c) => serverCandidateKind(c) === "domain")?.url.replace(/\/+$/, "");
-  const domainUrl = draft.general.domainUrl.trim() || !domain ? draft.general.domainUrl : domain;
+  const domainUrl = draft.domainEdited || draft.general.domainUrl.trim() || !domain ? draft.general.domainUrl : domain;
   return { ...draft, general: { ...draft.general, hubAddress: best.address, domainUrl }, hubAddressOrigin: { kind: "discovered", candidateId: best.id } };
 }
 

@@ -157,7 +157,7 @@ export default function SetupPage() {
               />
               <GeneralFields
                 value={{ ...draft.general, timeZone }}
-                onChange={(p) => patchSetup({ general: { ...draft.general, ...p }, ...(p.hubAddress !== undefined ? { hubAddressOrigin: { kind: "manual" as const } } : {}) })}
+                onChange={(p) => patchSetup({ general: { ...draft.general, ...p }, ...(p.hubAddress !== undefined ? { hubAddressOrigin: { kind: "manual" as const } } : {}), ...(p.domainUrl !== undefined ? { domainEdited: true } : {}) })}
                 showErrors={show}
                 idPrefix="setup-gen"
               />
