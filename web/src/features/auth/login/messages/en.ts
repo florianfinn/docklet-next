@@ -5,6 +5,7 @@ export const enLogin = {
   title: "Sign in to {hub}",
   exit: (import.meta.env.DEV ? "Leave demo" : "Back to hub"),
   loading: "Loading sign-in method …",
+  unreachable: "The hub is not reachable. Retrying automatically…",
   settingsError: "The sign-in method could not be loaded. Try again.",
   retry: "Reload",
   proxyRejected: "Sign in through your proxy, then reload this page. The hub rejected the proxy identity.",

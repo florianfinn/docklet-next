@@ -11,10 +11,11 @@ import { useTranslations } from "use-intl";
 
 import { LOCALES, setAppLocale, useAppLocale } from "@/app/i18n/locale-store";
 import { useAdapter } from "@/data/use-adapter";
-import { useAuthMode, useCurrentUser } from "@/data/queries";
+import { useAuthMode, useCurrentUser, useHubVersionHint } from "@/data/queries";
 import { setTokens } from "@/shared/theme/design-tokens";
 import { useTokens } from "@/shared/theme/use-design-tokens";
 import { LabMenuItem } from "@/runtime";
+import { HubUpdateHint } from "@/shared/components/hub-update/HubUpdateHint";
 import { Avatar, AvatarFallback } from "@/shared/ui/avatar";
 import {
   DropdownMenu,
@@ -37,6 +38,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
   const locale = useAppLocale();
   const navigate = useNavigate();
   const tokens = useTokens();
+  const hubVersion = useHubVersionHint();
   const { isMobile } = useSidebar();
   const [logout, setLogout] = useState(false);
   const disconnected = useAdapter().kind === "disconnected";
@@ -68,6 +70,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
                 <span className="truncate text-sm font-medium">{name}</span>
                 <span className="truncate text-xs text-muted-foreground">{detail}</span>
               </span>
+              {hubVersion && <span aria-hidden className="size-2 rounded-full bg-primary" />}
               <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -82,9 +85,9 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
               <UserRound />
               {t("profile")}
             </DropdownMenuItem>
-            {currentUser.data?.isAdmin !== false && <DropdownMenuItem onSelect={() => go("/settings")}>
+            {currentUser.data?.isAdmin !== false && <DropdownMenuItem onSelect={() => go(hubVersion ? "/settings/updates#hub-update" : "/settings")}>
               <Settings2 />
-              {t("settings")}
+              {t("settings")}<HubUpdateHint version={hubVersion} />
             </DropdownMenuItem>}
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="py-1 text-xs font-normal text-muted-foreground">{t("theme")}</DropdownMenuLabel>

@@ -53,7 +53,7 @@ it.each(paths)("settles with the product HTTP adapter when the backend is unavai
   });
   try {
     renderProductRoutes(bounded(routes), [path], productAdapter());
-    await screen.findByText(path === "/setup" ? "Der Status der Ersteinrichtung konnte nicht geprüft werden." : "Die Anmeldeart konnte nicht geladen werden. Bitte erneut versuchen.");
+    await screen.findByText("Der Hub ist nicht erreichbar. Wird automatisch erneut versucht…");
     expect(commits).toBeLessThanOrEqual(40);
     expect(timers.mock.calls.length).toBeLessThan(200);
     expect(errors).toEqual([]);
@@ -67,7 +67,7 @@ it.each(paths)("settles with the product HTTP adapter when the backend is unavai
 
 it("keeps protected navigation hidden while the sign-in policy is unavailable", async () => {
   renderProductRoutes(routes, ["/dashboard"], productAdapter());
-  await screen.findByText("Die Anmeldeart konnte nicht geladen werden. Bitte erneut versuchen.");
+  await screen.findByText("Der Hub ist nicht erreichbar. Wird automatisch erneut versucht…");
   expect(document.querySelector('[data-slot="sidebar"]')).toBeNull();
   const links = navigation.flatMap((group) => group.items);
   expect(links.length).toBeGreaterThan(0);

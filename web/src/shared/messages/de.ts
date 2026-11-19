@@ -2,6 +2,38 @@
 import type { enCommon } from "./en";
 
 export const deCommon: typeof enCommon = {
+  hubUpdate: {
+      "available": "Hub-Update {version} verfügbar",
+      "availableTooltip": "Version {version} verfügbar",
+      "preparing": "Update wird vorbereitet",
+      "running": "Hub wird auf Version {version} aktualisiert",
+      "done": "Fertig — Docklet läuft jetzt mit Version {version}",
+      "failed": "Das Update wurde nicht abgeschlossen",
+      "unknown": "Das Ergebnis ist unbekannt",
+      "signin": "Anmelden, um das Ergebnis zu sehen",
+      "signinHelp": "Der Hub antwortet mit Version {version}. Melde dich an, um das Ergebnis zu sehen.",
+      "signinProxy": "Der Hub antwortet mit Version {version}. Melde dich über deinen Proxy an und lade die Seite neu, um das Ergebnis zu sehen.",
+      "versionUnknown": "unbekannt",
+      "unknownHelp": "Prüfe den Hub. Die laufende Version allein bestätigt das Ergebnis nicht.",
+      "failedHelp": "Prüfe den Update-Lauf und den Hub, bevor du es erneut versuchst.",
+      "doneHelp": "Docklet kann geöffnet werden.",
+      "estimate": "Meist etwa eine Minute. Der Fortschritt ist eine Schätzung.",
+      "progress": "Geschätzter Update-Fortschritt",
+      "offline": "Hub offline — Neustart",
+      "checking": "Neue Version wird geprüft",
+      "waiting": "Warte auf den Hub",
+      "elapsed": "Vergangen: {time}",
+      "longer": "Das dauert länger als üblich",
+      "open": "Docklet öffnen",
+      "countdown": "Docklet wird in {seconds, plural, one {# Sekunde} other {# Sekunden}} geöffnet",
+      "viewRun": "Lauf ansehen",
+      "close": "Schließen",
+      "runId": "Lauf {id}",
+      "errorCode": "Fehler: {code}",
+      "versionSeen": "Laufende Version: {version}",
+      "signinAction": "Anmelden",
+      "reload": "Neu laden"
+  },
   relativeTime: { justNow: "gerade eben", soon: "gleich", now: "jetzt", day: "Tag", days: "Tagen" },
   bulkRun: {
     summary: "{action}: {started} gestartet, {joined} verbunden, {skipped} übersprungen, {failed} fehlgeschlagen",
