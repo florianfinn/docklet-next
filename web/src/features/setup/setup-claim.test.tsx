@@ -24,6 +24,8 @@ interface Hub {
   mode?: "local" | "proxy" | "none";
   claims: unknown[];
   refuse?: { status: number; code: string };
+  /** Holds the gates' post-claim mode refetch so the claim form stays mounted. */
+  hold?: Promise<void>;
 }
 
 function hubAdapter(hub: Hub) {
@@ -32,6 +34,7 @@ function hubAdapter(hub: Hub) {
     const json = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
     const problem = (status: number, code: string) => new Response(JSON.stringify({ status, code, detail: code }), { status, headers: { "Content-Type": "application/problem+json" } });
     const admin = { id: "admin", username: "owner", requiresPasswordChange: false, isAdmin: true, assignments: [] };
+    if (path === "/api/auth/mode" && !hub.pending && hub.hold) await hub.hold;
     if (path === "/api/auth/mode") return json({ mode: hub.mode ?? "local", setupPending: hub.pending, forced: hub.forced ?? false, ...(hub.pending ? { proxyHeader: "Remote-User", trustedProxies: "" } : {}) });
     if (path === "/api/setup/identity") {
       hub.claims.push(JSON.parse(String(init?.body)));
@@ -76,6 +79,21 @@ it("claims with code, mode and administrator, then continues in the wizard", asy
   await waitFor(() => expect(screen.queryByLabelText("Setup-Code") === null).toBe(true));
   expect(hub.claims.at(-1)).toEqual({ code: "ABCD-EFGH-JKMN", mode: "local", username: "owner", password: "Example-Setup-Password1!" });
   // The wizard continues with the hub step; the access step is complete.
+  expect(await screen.findByLabelText("IP-Adresse") !== null).toBe(true);
+});
+
+it("shows no validation error while a successful claim hands over to the wizard", async () => {
+  let release!: () => void;
+  const hub: Hub = { pending: true, claims: [], hold: new Promise<void>((r) => { release = r; }) };
+  renderRoutes(routes, ["/setup"], hubAdapter(hub));
+  await userEvent.type(await screen.findByLabelText("Setup-Code"), "ABCD-EFGH-JKMN");
+  await userEvent.type(screen.getByLabelText("Benutzername des Administrators"), "owner");
+  await userEvent.type(screen.getByLabelText("Neues Passwort"), "Example-Setup-Password1!");
+  await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "Example-Setup-Password1!");
+  await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
+  await waitFor(() => expect([hub.claims.length, (screen.getByLabelText("Neues Passwort") as HTMLInputElement).value]).toEqual([1, ""]));
+  expect([screen.queryByText("Passwort eingeben") === null, screen.queryByText(/Passwörter stimmen nicht/) === null]).toEqual([true, true]);
+  release();
   expect(await screen.findByLabelText("IP-Adresse") !== null).toBe(true);
 });
 

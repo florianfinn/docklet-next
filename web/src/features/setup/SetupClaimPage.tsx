@@ -82,6 +82,8 @@ export default function SetupClaimPage({ configuration }: { configuration: Confi
         ...(effective === "proxy" && !forced ? { proxyHeader: proxyHeader.trim(), trustedProxies: trustedProxies.trim() } : {}),
         ...(effective === "local" ? { password } : {}),
       });
+      // The form stays mounted until the gates refetch; cleared fields must not show validation errors.
+      setTried(false);
       setPassword("");
       setConfirm("");
       patchSetup({ reached: 1 });
