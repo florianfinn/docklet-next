@@ -28,8 +28,10 @@ brand colours and hub addresses are local only.
   personal palette.
 - **Local addresses.** The IP address field holds the host's IP (agents connect there) and the
   domain field an optional local name. Docklet does not model public exposure through a proxy.
-  Discovery lists each URL once with all of its origins (`settingsDomain`, `appUrl`,
-  `settingsAddress`, `published`, `interface`, `request`). IP-only validation applies when a value
+  Discovery lists each address once with all of its origins (`settingsDomain`, `appUrl`,
+  `settingsAddress`, `published`, `interface`, `request`): IP candidates are the same address when
+  IP and port match (whatever the scheme), domain candidates when scheme, host (case-insensitive)
+  and port match, with default ports filled in. IP-only validation applies when a value
   is written; stored legacy values are read unchanged and get an explicit "move to domain" hint.
 - **Setup code.** Removed; see [first-run setup](first-run-setup.md).
 
@@ -50,7 +52,8 @@ others. Only the operation and run of this update count.
 | operation settled unknown | unknown (wins over the failed run the hub records for it) |
 | operation unreadable, run succeeded | done |
 | operation unreadable, run failed with `update.outcome-unknown` | unknown |
-| operation unreadable, run failed otherwise | failed |
+| operation unreadable, run failed or cancelled otherwise | failed |
+| run terminal, operation readable but not settled | still running for up to two more polls, then the rules above |
 | new version answers, operation not settled | still running |
 | every read fails (network, 502, 503, 504) | still running, hub offline |
 
@@ -72,6 +75,6 @@ in clears the view.
 | 7 | reload during update | recovery read outside Settings | real app on another route |
 | 8 | logout | session cleared, no late reload | late poll after logout |
 | 9 | setup without code | schema without `code` | legacy body 422 |
-| 10 | candidate origins | one row per URL | producer → DTO → mapper |
+| 10 | candidate origins | one row per equivalent address | producer → DTO → mapper |
 | 11 | IP grammar | write-time validation | IPv4, bracketed IPv6 with port |
 | 12 | logo colours | fixed tokens | computed colours under another palette |

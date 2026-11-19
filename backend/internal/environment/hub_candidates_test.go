@@ -205,3 +205,17 @@ func TestHubDiscoveryKeepsConfiguredNames(t *testing.T) {
 	}
 	require.Equal(t, []string{"https://b%C3%BCcher.example", "http://docklet_hub:3552"}, urls)
 }
+
+// Equivalent spellings merge: domain case and default port, IP candidates across schemes, IPv6 spelling.
+func TestHubCandidatesMergeEquivalentAddresses(t *testing.T) {
+	result, err := buildHubDiscovery(&config.Config{AppUrl: "https://hub.example.com:443"}, "https://HUB.example.com/", "192.0.2.10:3552", nil, nil, "https://192.0.2.10:3552")
+	require.NoError(t, err)
+	require.Equal(t, []environmenttypes.HubAddressCandidate{
+		candidate("https://HUB.example.com", "configured", "domain", "unknown", "settingsDomain", "appUrl"),
+		candidate("http://192.0.2.10:3552", "configured", "ip", "unknown", "settingsAddress", "request"),
+	}, result.Candidates)
+	v6, err := buildHubDiscovery(&config.Config{AppUrl: "http://[2001:db8:0:0::10]:3552"}, "", "[2001:db8::10]:3552", nil, nil, "")
+	require.NoError(t, err)
+	require.Len(t, v6.Candidates, 1)
+	require.Equal(t, []string{"appUrl", "settingsAddress"}, v6.Candidates[0].Origins)
+}

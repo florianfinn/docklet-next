@@ -121,13 +121,14 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		}
 		parsed.Path = ""
 		value := parsed.String()
-		if index, ok := seen[value]; ok {
+		key := hubCandidateKey(parsed)
+		if index, ok := seen[key]; ok {
 			if candidate := &result.Candidates[index]; !slices.Contains(candidate.Origins, origin) {
 				candidate.Origins = append(candidate.Origins, origin)
 			}
 			return
 		}
-		seen[value] = len(result.Candidates)
+		seen[key] = len(result.Candidates)
 		kind, reach := "domain", "unknown"
 		if ip := net.ParseIP(parsed.Hostname()); ip != nil {
 			kind = "ip"
@@ -224,4 +225,17 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		add(requestScheme+requestHost, "request", "request")
 	}
 	return result, nil
+}
+
+// hubCandidateKey decides which candidates are the same address: IP candidates by canonical IP and port
+// (agents connect without regard to the scheme), domain candidates by scheme, lower-case host and port.
+func hubCandidateKey(parsed *url.URL) string {
+	port := parsed.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[parsed.Scheme]
+	}
+	if ip := net.ParseIP(parsed.Hostname()); ip != nil {
+		return "ip:" + net.JoinHostPort(ip.String(), port)
+	}
+	return parsed.Scheme + "://" + net.JoinHostPort(strings.ToLower(parsed.Hostname()), port)
 }

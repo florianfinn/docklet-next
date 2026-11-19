@@ -26,7 +26,7 @@ var ErrSetupPending = errors.New(authtypes.CodeSetupPending)
 const defaultProxyHeader = "Remote-User"
 
 // signInState is embedded in AuthService: the published snapshot (nil before InitializeSignIn means
-// the env view), the memoised env view, the writer mutex and this process's setup code.
+// the env view), the memoised env view, the writer mutex and the process-local setup hooks.
 type signInState struct {
 	policy    atomic.Pointer[Policy]
 	envPolicy atomic.Pointer[envPolicyEntry]
