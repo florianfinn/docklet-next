@@ -15,6 +15,7 @@ const REACH_TONE: Record<CandidateReach, Tone> = { lan: "ok", "same-host": "warn
 interface Props {
   discovery: UseQueryResult<HubDiscovery>;
   address: string;
+  domain?: string;
   origin: HubAddressOrigin;
   onPick: (candidate: HubAddressCandidate) => void;
 }
@@ -23,7 +24,7 @@ interface Props {
  * Address proposals from the hub's own server-side inspection. Each entry says
  * where it comes from and who can reach it; the field stays freely editable.
  */
-export function HubAddressDiscovery({ discovery, address, origin, onPick }: Props) {
+export function HubAddressDiscovery({ discovery, address, domain = "", origin, onPick }: Props) {
   const t = useTranslations("setup.discovery");
   const data = discovery.data;
   const candidates = data ? hubAddressCandidates(data) : [];
@@ -63,29 +64,37 @@ export function HubAddressDiscovery({ discovery, address, origin, onPick }: Prop
             {candidates.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("none")}</p>
             ) : (
-              <ul className="flex flex-col" aria-label={t("candidates")}>
-                {candidates.map((c) => {
-                  const current = c.address === address.trim();
-                  return (
-                    <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/50 py-2 first:border-0">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-[13px]">{c.address}</span>
-                          <ToneBadge tone={REACH_TONE[c.reach]}>{t(`reach.${c.reach}`)}</ToneBadge>
-                          {c.recommended && <ToneBadge tone="accent">{t("recommended")}</ToneBadge>}
-                        </div>
-                        <p className="text-[11.5px] text-muted-foreground">
-                          {t(`kinds.${c.kind}`, { via: c.via ?? "" })} · {t(`explain.${c.kind}`)}
-                        </p>
-                      </div>
-                      <Button size="sm" variant={current ? "ghost" : "outline"} disabled={current} onClick={() => onPick(c)} aria-label={t("useAria", { address: c.address })}>
-                        {current && <Check data-icon="inline-start" />}
-                        {current ? t("inUse") : t("use")}
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div role="group" aria-label={t("candidates")} className="flex flex-col gap-3">
+                {(["ip", "domain"] as const).map((kind) => candidates.some((c) => c.addressKind === kind) && (
+                  <section key={kind}>
+                    <h4 className="text-sm font-medium">{t(`fields.${kind}`)}</h4>
+                    <ul className="flex flex-col" aria-label={t("candidateList", { field: t(`fields.${kind}`) })}>
+                      {candidates.filter((c) => c.addressKind === kind).map((c) => {
+                        const current = c.address === (kind === "ip" ? address.trim() : domain.trim().replace(/\/+$/, ""));
+                        return (
+                          <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/50 py-2 first:border-0">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-[13px]">{c.address}</span>
+                                {c.origins.map((source) => <ToneBadge key={source} tone="gray">{t(`origins.${source}`)}</ToneBadge>)}
+                                <ToneBadge tone={REACH_TONE[c.reach]}>{t(`reach.${c.reach}`)}</ToneBadge>
+                                {c.recommended && <ToneBadge tone="accent">{t("recommended")}</ToneBadge>}
+                              </div>
+                              <p className="text-[11.5px] text-muted-foreground">
+                                {t(`kinds.${c.kind}`, { via: c.via ?? "" })} · {t(`explain.${c.kind}`)}
+                              </p>
+                            </div>
+                            <Button size="sm" variant={current ? "ghost" : "outline"} disabled={current} onClick={() => onPick(c)} aria-label={t("useAria", { address: c.address })}>
+                              {current && <Check data-icon="inline-start" />}
+                              {current ? t("inUse") : t("use")}
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
+              </div>
             )}
           </>
         )

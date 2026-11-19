@@ -110,11 +110,11 @@ export interface GeneralSettings {
   stackStopMode?: "down" | "stop";
   hubName: string;
   /**
-   * IP or internal URL the agents reach the hub at (LAN, VPN). This is the
-   * only address Docklet needs; no internet exposure is assumed.
+   * Host IP and optional port that agents reach over LAN or VPN.
+   * Legacy values remain unchanged until the operator edits the field.
    */
   hubAddress: string;
-  /** Optional domain, e.g. behind an existing reverse proxy. */
+  /** Optional local name as a root HTTP(S) origin. */
   domainUrl: string;
   linkBase: LinkBase;
   timeZone: string;

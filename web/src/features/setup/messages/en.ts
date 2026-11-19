@@ -59,7 +59,7 @@ export const enSetup = {
   finishing: "Finishing …",
   fixErrors: "{count, plural, one {Check # field} other {Check # fields}}",
   discovery: {
-    title: "Internal address from hub discovery",
+    title: "Detected addresses",
     lead: "The hub inspects its container and its Docker networks on the server. The browser itself cannot see Docker addresses.",
     simulated: "Simulated",
     loading: "Hub is discovering its networks …",
@@ -77,6 +77,9 @@ export const enSetup = {
     use: "Apply",
     useAria: "Apply {address}",
     inUse: "In field",
+    candidateList: "Detected addresses: {field}",
+    fields: { ip: "IP address", domain: "Domain" },
+    origins: { settingsDomain: "Domain in settings", settingsAddress: "IP address in settings", appUrl: "APP_URL", published: "Published port", interface: "Hub interface", request: "Address of this session", configured: "Configured address" },
     reach: { lan: "reachable from the LAN", "same-host": "only on this host", unknown: "reachability unclear" },
     kinds: {
       "lan-interface": "Network {via}",
@@ -89,7 +92,7 @@ export const enSetup = {
     explain: {
       "lan-interface": "the hub container’s own LAN address (macvlan/ipvlan)",
       "host-address": "address of the Docker host with the hub’s port",
-      request: "how your browser reached the hub, e.g. via a proxy",
+      request: "how your browser reached the hub",
       "bridge-local": "agents on other hosts cannot reach this address",
       configured: "from the hub settings or APP_URL",
       interface: "an address of the hub’s own network interface",
