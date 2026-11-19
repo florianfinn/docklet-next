@@ -108,6 +108,8 @@ func policyProblemInternal(ctx context.Context, err error) error {
 		return access.Problem(http.StatusTooManyRequests, err.Error())
 	case errors.Is(err, ErrSetupPending):
 		return access.Problem(http.StatusUnauthorized, err.Error())
+	case errors.Is(err, user.ErrUsernameRequired):
+		return huma.Error400BadRequest("A username is required")
 	case errors.Is(err, user.ErrUsernameTaken):
 		return access.Problem(http.StatusBadRequest, auth.CodeUsernameTaken)
 	case err != nil && err.Error() == "Local usernames cannot contain @":

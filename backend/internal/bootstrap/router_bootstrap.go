@@ -136,7 +136,7 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 			}
 			requestUser, err := deps.Auth.Service().ModeRequestUser(ctx, req)
 			if err != nil {
-				if strings.HasPrefix(err.Error(), "access.") {
+				if strings.HasPrefix(err.Error(), "access.") || strings.HasPrefix(err.Error(), "setup.") {
 					c.Set("accessAuthError", err.Error())
 				}
 				return nil, nil, false

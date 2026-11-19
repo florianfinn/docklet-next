@@ -180,7 +180,16 @@ func (s *AuthService) InitializeSignIn(ctx context.Context) error {
 	s.userService.SetSignInModeSource(s.SignInMode)
 	p, err := s.loadPolicyInternal(ctx)
 	if err != nil {
-		return err
+		// Recovery replaces an unusable stored policy with local sign-in (recoverAdministrator stores it).
+		_, forced := s.config.ForcedSignInMode()
+		if s.config.AuthResetAdminPassword == "" || forced {
+			return err
+		}
+		_, claimed, stateErr := s.sessionService.LoadSignInState(ctx)
+		if stateErr != nil {
+			return stateErr
+		}
+		p = &Policy{Mode: authtypes.SignInModeLocal, Header: defaultProxyHeader, Pending: !claimed}
 	}
 	if err := s.sessionService.ActivateSignInMode(ctx, p.Mode); err != nil {
 		return err

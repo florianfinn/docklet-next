@@ -337,9 +337,7 @@ func initializeStartupState(p initializeStartupStateParams) error {
 	)
 	startup.CleanupUnknownSettings(appCtx, p.Settings)
 	if !cfg.AgentMode {
-		p.Auth.SetAfterClaim(func(ctx context.Context) error {
-			return p.ApiKey.ReconcileDefaultAdminAPIKey(ctx, runtimeCfg.AdminStaticAPIKey)
-		})
+		p.Auth.SetAfterClaim(staticKeyAfterClaimInternal(p.ApiKey, p.Role, runtimeCfg.AdminStaticAPIKey))
 		if err := p.Auth.InitializeSignIn(appCtx); err != nil {
 			return fmt.Errorf("initialize sign-in: %w", err)
 		}
@@ -513,4 +511,19 @@ func initializeDBAndMigrateInternal(ctx context.Context, cfg *config.Config) (*d
 
 	slog.InfoContext(ctx, "Database initialized successfully")
 	return db, nil
+}
+
+// staticKeyAfterClaimInternal makes the configured static admin key usable right after the claim:
+// create it, seed its grants and drop cached permissions.
+func staticKeyAfterClaimInternal(keys *apikey.ApiKeyService, roles *role.RoleService, raw string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := keys.ReconcileDefaultAdminAPIKey(ctx, raw); err != nil {
+			return err
+		}
+		if err := keys.BackfillApiKeyPermissions(ctx); err != nil {
+			return err
+		}
+		roles.InvalidateAllPermissions()
+		return nil
+	}
 }

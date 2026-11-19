@@ -168,13 +168,17 @@ copies. See the [hub backup contract](design/hub-backup.md) for archive boundari
 
 ### Sign-in recovery
 
-Set `AUTH_RESET_ADMIN_PASSWORD` in the hub's private env file to a new password
-satisfying the configured policy, then recreate the hub with the same Compose
-inputs. Startup resets the global administrator's password and revokes its
-sessions. Remove the value after successful recovery and recreate again; a value
-left set is applied on each startup. The setting also supports secret files.
-Alternatively, set `AUTH_MODE=none` for one start, change the sign-in in
-**Settings** › **Sign-in**, then remove the variable again.
+Use this when the administrator password is lost or a proxy setting locks you
+out. Set `AUTH_RESET_ADMIN_PASSWORD` in the hub's private env file to a new
+password satisfying the configured policy and leave `AUTH_MODE` empty, then
+recreate the hub with the same Compose inputs. Startup resets the global
+administrator's password, switches the stored sign-in to the local administrator
+and revokes all sessions; an unreadable stored sign-in setting is replaced the
+same way. Sign in with the administrator's username and the new password, change
+the sign-in in **Settings** › **Sign-in** if needed, then remove the value and
+recreate again; a value left set is applied on each startup. The setting also
+supports secret files. With a non-empty `AUTH_MODE` the forced mode stays in
+effect and only the password is reset.
 
 ## Upgrade from 1.0.0
 

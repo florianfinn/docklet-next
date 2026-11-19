@@ -146,9 +146,11 @@ func requestedPolicyInternal(current *Policy, in authtypes.SignInPolicyInput) (*
 	return next, nil
 }
 
-// verifyProxyPrincipalInternal requires that this request, under the next policy, resolves to the given
-// administrator: the caller would still be signed in after the change (lockout guard).
-func (s *AuthService) verifyProxyPrincipalInternal(ctx context.Context, req *http.Request, next *Policy, adminID, adminUsername string) error {
+// verifyClaimProxyInternal requires that this request, under the next policy, resolves to the administrator
+// being claimed. The claimed account is the hub's global administrator after commit (only administrator on a
+// fresh hub; the taken-over oldest one on an upgraded hub), so a listed or unlisted-but-same-name identity
+// maps to it; the claim cannot resolve through the database before its transaction commits.
+func (s *AuthService) verifyClaimProxyInternal(req *http.Request, next *Policy, adminUsername string) error {
 	identity, err := proxyIdentityInternal(req, next)
 	if err != nil {
 		return ErrProxyUnverified
@@ -161,7 +163,7 @@ func (s *AuthService) verifyProxyPrincipalInternal(ctx context.Context, req *htt
 			return nil
 		}
 	}
-	if identity == adminUsername && adminID != "" {
+	if identity == adminUsername {
 		return nil
 	}
 	return ErrProxyUnverified
@@ -206,7 +208,7 @@ func (s *AuthService) ClaimSetup(ctx context.Context, req *http.Request, in auth
 		}
 	}
 	if next.Mode == authtypes.SignInModeProxy {
-		if err := s.verifyProxyPrincipalInternal(ctx, req, next, "claimed", strings.TrimSpace(in.Username)); err != nil {
+		if err := s.verifyClaimProxyInternal(req, next, strings.TrimSpace(in.Username)); err != nil {
 			return nil, err
 		}
 	}
@@ -298,8 +300,10 @@ func (s *AuthService) UpdateSignIn(ctx context.Context, req *http.Request, calle
 		return nil, ErrPasswordRequired
 	}
 	if next.Mode == authtypes.SignInModeProxy {
-		if err := s.verifyProxyPrincipalInternal(ctx, req, next, caller.ID, caller.Username); err != nil {
-			return nil, err
+		// Resolve the principal exactly as requests will after the change; it must be the caller.
+		principal, err := s.modeRequestUserInternal(ctx, req, next)
+		if err != nil || principal == nil || principal.ID != caller.ID {
+			return nil, ErrProxyUnverified
 		}
 	}
 	hash := ""

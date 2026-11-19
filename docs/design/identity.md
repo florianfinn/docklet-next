@@ -142,8 +142,11 @@ the in-memory value once per start and logs the reset without the value. Failure
 prevents startup. Operators remove the environment value after use; leaving it in
 the environment applies it again after the next restart.
 
-While first-run setup is pending the reset is ignored. Recovery is also possible
-by forcing `AUTH_MODE=none` and restarting. There is no password-reset CLI.
+Without a forced `AUTH_MODE`, the reset also stores local sign-in and revokes all
+sessions, so it recovers from a lost password, a locking proxy setting and an
+unreadable stored policy alike. A forced mode stays in effect; only the password
+changes. While first-run setup is pending the reset is ignored. There is no
+password-reset CLI.
 All four startup variables support the existing `_FILE` and
 `__FILE` loader variants; deployment and secret-file details belong to the
 [hub package](../../deploy/hub/README.md). The active mode and token bootstrap are

@@ -111,7 +111,9 @@ forced, pending), and every request reads it once.
 Removing `AUTH_MODE` resumes the stored triple. The claim recorded the forced
 values, so removing the variable never changes the mode silently. Startup revokes
 sessions when the mode differs from `authLastMode`, as before. An invalid stored
-policy fails startup with a message naming `AUTH_MODE=none` as recovery.
+policy fails startup unless `AUTH_RESET_ADMIN_PASSWORD` is set without a forced
+mode; that recovery stores local sign-in with the new password (see
+[identity](identity.md#operator-recovery)).
 
 ## Runtime mode change
 

@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/types/features"
 	"net/http"
+	"strings"
 )
 
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
@@ -32,4 +33,12 @@ type EnvironmentProxySecurity struct {
 	// ProxyIdentityHeaderFunc follows runtime sign-in changes; it takes precedence over ProxyIdentityHeader.
 	ProxyIdentityHeaderFunc func() string
 	AgentAccess             remenv.AgentAccessCheck
+}
+
+// accessAuthStatusInternal: a pending first-run setup is unauthenticated (401); access refusals are 403.
+func accessAuthStatusInternal(code string) int {
+	if strings.HasPrefix(code, "setup.") {
+		return http.StatusUnauthorized
+	}
+	return http.StatusForbidden
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	authtypes "github.com/florianfinn/docklet-next/types/auth"
 )
 
@@ -144,7 +145,7 @@ func (s *AuthService) loadPolicyInternal(ctx context.Context) (*Policy, error) {
 	}
 	p, err := newPolicyInternal(stored)
 	if err != nil {
-		return nil, fmt.Errorf("stored sign-in policy is invalid (%w); set AUTH_MODE=none and restart to recover", err)
+		return nil, fmt.Errorf("stored sign-in policy is invalid (%w); set AUTH_RESET_ADMIN_PASSWORD with an empty AUTH_MODE and restart to recover", err)
 	}
 	p.Pending = !claimed
 	return p, nil
@@ -160,5 +161,8 @@ func (s *AuthService) publishPolicyInternal(ctx context.Context, next *Policy, w
 	}
 	s.policy.Store(next)
 	s.InvalidateAllTokenCache()
+	// Sessionless streams (none and proxy mode) carry no session to revoke: close every user stream so
+	// it reconnects under the new policy. Machine ingress registers no user binding and stays open.
+	sessionlife.Revoke("", "", "")
 	return nil
 }

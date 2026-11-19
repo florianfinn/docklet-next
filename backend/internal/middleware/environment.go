@@ -185,7 +185,7 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		ps, u, ok := m.authValidator(c.Request().Context(), c)
 		if !ok {
 			if code, ok := c.Get("accessAuthError").(string); ok {
-				return genericProblem(c, 403, code)
+				return genericProblem(c, accessAuthStatusInternal(code), code)
 			}
 			if vulnerabilityShape {
 				return genericProblem(c, http.StatusUnauthorized, "Authentication required to access remote environments")

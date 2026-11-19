@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original offline release packaging and verification.
+// Deviations: Original offline release packaging and verification; M29 first-run claim through the setup code before protected operations.
 
 import { docker, smokeRuntime } from "./release-smoke.mjs";
 import { randomBytes, createHash } from "node:crypto";
@@ -41,6 +41,22 @@ try {
     throw new Error("candidate never became healthy");
   }
   await ready();
+  // An empty install stays in setup: claim it with the logged code, as an operator does in the browser.
+  const held = await fetch(`${base}/api/environments/0/settings`, { headers: { "X-API-Key": adminKey } });
+  if (held.status !== 401 || !(await held.text()).includes("setup.pending")) throw new Error("candidate did not hold the empty install in setup");
+  const logged = docker(["logs", id]);
+  const code = [...`${logged.stdout}${logged.stderr}`.matchAll(/Setup code: ([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/g)].at(-1)?.[1];
+  if (!code) throw new Error("candidate did not log a setup code");
+  const mode = await fetch(`${base}/api/auth/mode`);
+  const cookies = mode.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
+  const claim = await fetch(`${base}/api/setup/identity`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://localhost:3552", "X-CSRF-Token": mode.headers.get("X-CSRF-Token") ?? "", Cookie: cookies },
+    body: JSON.stringify({ code, mode: "local", username: "smoke-admin", password: `Aa1!${randomBytes(16).toString("hex")}` }),
+  });
+  if (!claim.ok) throw new Error(`candidate refused the setup claim (${claim.status})`);
+  // The static admin key must work right after the claim, without a restart.
+  if (!(await fetch(`${base}/api/environments/0/settings`, { headers: { "X-API-Key": adminKey } })).ok) throw new Error("static admin key was not authorized after the claim");
   smokeRuntime(image, "hub", id);
   const html = await (await fetch(base)).text();
   const asset = html.match(/src="(\/assets\/[^\"]+\.js)"/);
@@ -92,7 +108,7 @@ try {
   for(const module of web) for(const file of module.evidence)
     if(digest(join(target,"web",`${module.name}@${module.version}`,file.path)) !== file.sha256) throw new Error("extracted web licence hash mismatch");
   if (!readdirSync(join(target, "web")).length) throw new Error("web licence bundle is empty");
-  console.log("Candidate image: empty install, health, production UI, Europe/Berlin time zone, second-hub refusal, restart, SQLite create/download/upload/offline restore and extracted licence evidence passed.");
+  console.log("Candidate image: empty install, setup claim with static key authority, health, production UI, Europe/Berlin time zone, second-hub refusal, restart, SQLite create/download/upload/offline restore and extracted licence evidence passed.");
 } finally {
   if (id) docker(["rm", "-f", id], false);
   docker(["volume", "rm", volume], false);

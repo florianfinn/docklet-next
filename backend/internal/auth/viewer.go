@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original session-bound viewer and browser identity lifecycle implementation; M15 simple-user rights and identity contracts.
+// Deviations: Original session-bound viewer and browser identity lifecycle implementation; M15 simple-user rights and identity contracts; M29 policy-bound viewers.
 
 package auth
 
@@ -45,14 +45,22 @@ func (s *AuthService) ViewerContextForPermissions(ctx context.Context, sessionID
 		return ctx
 	}
 	original := ctx
+	// A published sign-in policy change ends every user binding made under the previous one,
+	// including sessionless none and proxy viewers that have no session row to revoke.
+	bound := s.policy.Load()
 	if ps.IsGlobalAdmin() {
 		// Administrators (also sessionless key, proxy and static principals) only join the user-ID
 		// registry, so an explicit status change can close their streams; no extra durable checks.
-		return sessionlife.WithSession(ctx, sessionID, userID, func(context.Context) error { return sessionlife.Check(original) })
+		return sessionlife.WithSession(ctx, sessionID, userID, func(context.Context) error {
+			if s.policy.Load() != bound {
+				return access.ErrRevoked
+			}
+			return sessionlife.Check(original)
+		})
 	}
 	revision := ps.RightsRevision
 	return sessionlife.WithSession(ctx, sessionID, userID, func(check context.Context) error {
-		if sessionlife.Check(original) != nil {
+		if s.policy.Load() != bound || sessionlife.Check(original) != nil {
 			return access.ErrRevoked
 		}
 		u, err := s.userService.GetUserByID(check, userID)

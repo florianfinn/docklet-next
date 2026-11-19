@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
@@ -115,5 +117,26 @@ func TestSettingsReadEffectiveTimeZoneFromProcessTZ(t *testing.T) {
 			require.Equal(t, cfg.GetLocation().String(), values["effectiveTimeZone"])
 			require.Contains(t, values, "timeZone")
 		})
+	}
+}
+
+func TestSettingsPutRefusesStoredSignInKeys(t *testing.T) {
+	svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
+	require.NoError(t, err)
+	_, api := humatest.New(t)
+	api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
+		next(huma.WithContext(ctx, context.WithValue(ctx.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())))
+	})
+	RegisterSettings(api, svc, nil, &config.Config{})
+	require.Equal(t, 200, api.Put("/environments/0/settings", map[string]string{"hubName": "Example Hub"}).Code, "an ordinary key reaches the handler")
+	for _, key := range []string{"authMode", "authProxyHeader", "authTrustedProxies", "setupIdentity"} {
+		resp := api.Put("/environments/0/settings", map[string]string{key: "none"})
+		// The stored policy keys are not part of the settings schema, so the request fails validation.
+		require.Equal(t, 422, resp.Code, "%s: %s", key, resp.Body.String())
+		stored, err := svc.GetSettings(t.Context())
+		require.NoError(t, err)
+		for _, value := range []string{stored.AuthMode.Value, stored.AuthProxyHeader.Value, stored.AuthTrustedProxies.Value, stored.SetupIdentity.Value} {
+			require.Empty(t, value, "the generic settings write must never reach %s", key)
+		}
 	}
 }

@@ -443,7 +443,7 @@ func TestStoredPolicyInvalidFailsStartup(t *testing.T) {
 	require.NoError(t, err)
 	svc := NewAuthService(users, settingsSvc, nil, session.NewSessionService(db), &config.Config{AppUrl: "https://hub.example.com"})
 	err = svc.InitializeSignIn(t.Context())
-	require.ErrorContains(t, err, "AUTH_MODE=none")
+	require.ErrorContains(t, err, "AUTH_RESET_ADMIN_PASSWORD")
 }
 
 func TestSignInChangeRollbackKeepsPolicy(t *testing.T) {
