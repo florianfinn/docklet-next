@@ -79,7 +79,8 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
         </HelpLabel>
         <Input id={`${idPrefix}-tz`} className="font-mono" list={`${idPrefix}-zones`} value={value.configuredTimeZone ?? value.timeZone} placeholder={processZone ?? t("systemTZ")} onChange={(e) => onChange({ configuredTimeZone: e.target.value })} />
         <datalist id={`${idPrefix}-zones`}>{[...new Set(["UTC", value.timeZone, ...(value.configuredTimeZone ? [value.configuredTimeZone] : []), ...Intl.supportedValuesOf("timeZone")])].map((zone) => <option key={zone} value={zone} />)}</datalist>
-        <Button type="button" variant="link" className="w-fit self-start px-0" onClick={() => onChange({ configuredTimeZone: "" })}>{t("useTZ", { zone: processZone ?? t("systemTZ") })}</Button>
+        {/* Field stretches its direct children; the wrapper takes that width so the link keeps its text width. */}
+        <div><Button type="button" variant="link" className="w-fit px-0" onClick={() => onChange({ configuredTimeZone: "" })}>{t("useTZ", { zone: processZone ?? t("systemTZ") })}</Button></div>
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
       {showLanguage && <Field>

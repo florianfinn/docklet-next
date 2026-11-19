@@ -53,7 +53,7 @@ func (i *HubDiscoveryInput) Resolve(ctx huma.Context) []error {
 
 func (h *EnvironmentHandler) DiscoverHub(ctx context.Context, input *HubDiscoveryInput) (*handlerutil.Out[environmenttypes.HubDiscovery], error) {
 	settings := h.settingsService.GetSettingsOrDefaults(ctx)
-	self := processHubSelf.detect(ctx, cgroup.CurrentContainerID, func(ctx context.Context) (client.APIClient, error) {
+	self := processHubSelf.detect(ctx, hubContainerID(cgroup.CurrentContainerID), func(ctx context.Context) (client.APIClient, error) {
 		if h.environmentService == nil || h.environmentService.dockerService == nil {
 			return nil, errors.New("Docker client unavailable")
 		}

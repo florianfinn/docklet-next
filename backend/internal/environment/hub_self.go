@@ -2,13 +2,16 @@
 // Revision: 462df7e945082b44e1d90532d8296aa9743c4b6e
 // Retrieved: 2026-11-19
 // License: Apache-2.0
-// Deviations: Original process-local hub container detection with retry on errors.
+// Deviations: Original process-local hub container detection with retry on errors and a fallback for custom Docker data roots.
 
 package environment
 
 import (
 	"context"
+	"os"
+	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,4 +80,40 @@ func sortedHubNetworkNames(inspect container.InspectResponse) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// hubContainerID adds a fallback to the shared cgroup lookup for layouts it does not know: a Docker data
+// root outside /var/lib/docker, a cgroup v2 path that ends in the ID, and host networking, where the
+// hostname is the host's. Inspect still has to confirm the ID, so a wrong match only yields "unknown".
+func hubContainerID(primary func() (string, error)) func() (string, error) {
+	return func() (string, error) {
+		if id, err := primary(); err == nil && id != "" {
+			return id, nil
+		}
+		mountinfo, _ := os.ReadFile("/proc/self/mountinfo")
+		cgroups, _ := os.ReadFile("/proc/self/cgroup")
+		if id := containerIDFromProcInternal(string(mountinfo), string(cgroups)); id != "" {
+			return id, nil
+		}
+		return "", os.ErrNotExist
+	}
+}
+
+var (
+	containerMountID  = regexp.MustCompile(`/containers/([0-9a-f]{64})/(?:hostname|hosts|resolv\.conf) `)
+	containerCgroupID = regexp.MustCompile(`^0::.*/(?:docker-)?([0-9a-f]{64})(?:\.scope)?$`)
+)
+
+// containerIDFromProcInternal reads the container ID from the files Docker bind-mounts into every
+// container, then from a cgroup v2 path that ends in it.
+func containerIDFromProcInternal(mountinfo, cgroups string) string {
+	if m := containerMountID.FindStringSubmatch(mountinfo); m != nil {
+		return m[1]
+	}
+	for _, line := range strings.Split(cgroups, "\n") {
+		if m := containerCgroupID.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
+			return m[1]
+		}
+	}
+	return ""
 }

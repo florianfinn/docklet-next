@@ -56,4 +56,6 @@ it("keeps the time zone link button to its text width", async () => {
   renderWithApp(<Fields initial={{}} />);
   const button = await screen.findByRole("button", { name: /^TZ verwenden|^Use TZ/ });
   expect(button.className.split(" ").includes("w-fit")).toBe(true);
+  // Field gives its direct children full width ([&>*]:w-full); the link must sit inside a wrapper.
+  expect(button.parentElement?.getAttribute("data-slot") === "field").toBe(false);
 });

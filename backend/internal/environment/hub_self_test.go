@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -128,4 +129,17 @@ func TestHubSelfResolvesEveryAttachment(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Candidates, 1)
 	require.Equal(t, "http://192.0.2.40:3552", result.Candidates[0].URL)
+}
+
+func TestContainerIDFromProcCustomLayouts(t *testing.T) {
+	id := strings.Repeat("ab12", 16)
+	mount := "3203 3187 0:43 /srv/docker-data/containers/" + id + "/hostname /etc/hostname rw,noatime - ext4 /dev/example rw\n"
+	require.Equal(t, id, containerIDFromProcInternal(mount, ""), "a data root outside /var/lib/docker")
+	require.Equal(t, id, containerIDFromProcInternal("", "0::/../"+id+"\n"), "a cgroup v2 path ending in the ID")
+	require.Equal(t, id, containerIDFromProcInternal("", "0::/system.slice/docker-"+id+".scope\n"))
+	require.Empty(t, containerIDFromProcInternal("12 1 0:1 / / rw - overlay overlay rw\n", "0::/user.slice\n"), "a process outside a container")
+	require.Empty(t, containerIDFromProcInternal("1 1 0:1 /containers/short/hostname /etc/hostname rw - ext4 x rw\n", ""))
+	found, err := hubContainerID(func() (string, error) { return "primary", nil })()
+	require.NoError(t, err)
+	require.Equal(t, "primary", found, "the shared lookup wins when it finds an ID")
 }

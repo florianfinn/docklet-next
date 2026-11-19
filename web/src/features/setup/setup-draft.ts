@@ -65,13 +65,16 @@ export function restartSetup(): void {
  * (origin "manual") and any already filled address stay untouched.
  */
 export function applyDiscovery(draft: SetupDraft, discovery: HubDiscovery): SetupDraft {
-  if (draft.hubAddressOrigin !== null || draft.general.hubAddress.trim()) return draft;
-  const best = hubAddressCandidates(discovery).find((c) => c.recommended);
-  if (!best) return draft;
-  // The same pass fills an empty domain with the first name the hub reports (APP_URL comes first).
-  const domain = discovery.candidates?.find((c) => serverCandidateKind(c) === "domain")?.url.replace(/\/+$/, "");
-  const domainUrl = draft.domainEdited || draft.general.domainUrl.trim() || !domain ? draft.general.domainUrl : domain;
-  return { ...draft, general: { ...draft.general, hubAddress: best.address, domainUrl }, hubAddressOrigin: { kind: "discovered", candidateId: best.id } };
+  // Each field is filled on its own, only while empty and untouched (a hub without a reachable IP still has its domain).
+  const best = draft.hubAddressOrigin === null && !draft.general.hubAddress.trim() ? hubAddressCandidates(discovery).find((c) => c.recommended) : undefined;
+  const domain = draft.domainEdited || draft.general.domainUrl.trim() ? undefined
+    : discovery.candidates?.find((c) => serverCandidateKind(c) === "domain")?.url.replace(/\/+$/, "");
+  if (!best && !domain) return draft;
+  return {
+    ...draft,
+    general: { ...draft.general, ...(best ? { hubAddress: best.address } : {}), ...(domain ? { domainUrl: domain } : {}) },
+    ...(best ? { hubAddressOrigin: { kind: "discovered" as const, candidateId: best.id } } : {}),
+  };
 }
 
 /**
@@ -81,5 +84,5 @@ export function applyDiscovery(draft: SetupDraft, discovery: HubDiscovery): Setu
 export function hydrateFromSettings(draft: SetupDraft, saved: { general: GeneralSettings; hostDefaults: HostDefaults }, modules?: ModuleChoices): SetupDraft {
   if (draft.hydrated) return draft;
   if (!saved.general.hubAddress.trim() && !saved.general.domainUrl.trim()) return { ...draft, hydrated: true };
-  return { ...draft, general: { ...saved.general }, hostDefaults: { ...saved.hostDefaults }, ...(modules ? { modules } : {}), hubAddressOrigin: { kind: "manual" }, hydrated: true };
+  return { ...draft, general: { ...saved.general }, hostDefaults: { ...saved.hostDefaults }, ...(modules ? { modules } : {}), hubAddressOrigin: { kind: "manual" }, domainEdited: true, hydrated: true };
 }

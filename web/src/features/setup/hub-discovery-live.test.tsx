@@ -14,7 +14,7 @@ import { hubAddressCandidates } from "@/domain/hub-discovery";
 import { renderWithApp } from "@/test/render";
 
 import { HubAddressDiscovery } from "./HubAddressDiscovery";
-import { applyDiscovery, freshSetupDraft } from "./setup-draft";
+import { applyDiscovery, freshSetupDraft, hydrateFromSettings } from "./setup-draft";
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
@@ -63,9 +63,13 @@ it("maps the live container, recommends the reachable IP and never prefills a na
   // A domain the operator already entered stays.
   const typed = freshSetupDraft();
   expect(applyDiscovery({ ...typed, general: { ...typed.general, domainUrl: "https://own.example.org" } }, discovery).general.domainUrl).toBe("https://own.example.org");
-  // Only a name: the internal address stays empty for the operator.
-  const domainOnly = await adapter({ ...bridge, candidates: [bridge.candidates[0]] }).discoverHub();
-  expect(applyDiscovery(freshSetupDraft(), domainOnly).general.hubAddress).toBe("");
+  // Only a name (the published port is loopback): the IP stays empty for the operator, the domain is filled.
+  const domainOnly = await adapter({ ...bridge, candidates: [bridge.candidates[0], bridge.candidates[1]] }).discoverHub();
+  const named = applyDiscovery(freshSetupDraft(), domainOnly);
+  expect([named.general.hubAddress, named.general.domainUrl, named.hubAddressOrigin]).toEqual(["", "https://hub.example.com", null]);
+  // An operator-typed IP does not stop the untouched domain from being filled.
+  const typedIp = { ...freshSetupDraft(), hubAddressOrigin: { kind: "manual" as const } };
+  expect(applyDiscovery(typedIp, discovery).general.domainUrl).toBe("https://hub.example.com");
 });
 
 it("shows the container line, and the unknown-detection hint without a container", async () => {
@@ -86,9 +90,15 @@ it("refuses a candidate with an unknown source or kind", async () => {
 it("preserves operator values with live HTTP discovery", async () => {
  const d = await adapter(bridge).discoverHub();
  const saved = freshSetupDraft(); saved.general.hubAddress = "192.0.2.45:3552";
- expect(applyDiscovery(saved, d)).toBe(saved);
+ expect(applyDiscovery(saved, d).general.hubAddress).toBe("192.0.2.45:3552");
  const cleared = freshSetupDraft(); cleared.hubAddressOrigin = {kind: "manual"};
- expect(applyDiscovery(cleared, d)).toBe(cleared);
+ expect(applyDiscovery(cleared, d).general.hubAddress).toBe("");
+ const both = { ...freshSetupDraft(), hubAddressOrigin: { kind: "manual" as const }, domainEdited: true };
+ expect(applyDiscovery(both, d)).toBe(both);
+ // An upgraded hub saved an IP and no domain: its saved empty domain stays empty.
+ const fresh = freshSetupDraft();
+ const upgraded = hydrateFromSettings(fresh, { general: { ...fresh.general, hubAddress: "192.0.2.45:3552", domainUrl: "" }, hostDefaults: fresh.hostDefaults });
+ expect(applyDiscovery(upgraded, d).general.domainUrl).toBe("");
 });
 it("does not label overlay networking as bridge", async () => {
  const d = await adapter({...bridge, container: {...bridge.container, networks: [{name: "mesh", driver: "overlay"}]}}).discoverHub();
