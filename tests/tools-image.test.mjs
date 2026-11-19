@@ -196,3 +196,29 @@ test("tools CI keys verified source by version and hash and supplies both build 
   assert.match(dockerfile, /FROM scratch AS busybox-cache/);
   assert.match(dockerfile, /RUN --mount=type=bind,from=busybox-cache,target=\/busybox-cache/);
 });
+
+test("tools probe is an isolated stdlib-only module built and tested offline", () => {
+  const module = readFileSync("deploy/tools/probe/go.mod", "utf8");
+  assert.match(module, /module docklet\.invalid\/tools\/probe\n\ngo 1\.27\.2\n$/);
+  assert.doesNotMatch(readFileSync("go.work", "utf8"), /deploy\/tools\/probe/);
+  const stage = executable.split(" AS probe\n")[1].split("FROM scratch AS busybox-cache")[0];
+  assert.match(stage, /COPY deploy\/tools\/probe \/src\/probe/);
+  assert.match(stage, /CGO_ENABLED=0 GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local/);
+  assert.match(stage, /RUN --network=none go test \.\/\.\.\. && go vet \.\/\.\.\./);
+  assert.match(stage, /-trimpath -buildvcs=false/);
+  assert.match(stage, /-ldflags "-s -w -X main.version=\$TOOLS_VERSION"/);
+  assert.match(stage, /-o \/out\/usr\/bin\/docklet-probe/);
+  assert.match(executable, /COPY --from=probe \/out\/ \/out\//);
+  assert.match(executable, /ENV PATH=\/usr\/local\/bin:\/bin /, "PATH contract stays unchanged");
+  const data = dependencies();
+  assert.deepEqual(data.embedded.probe.modules, ["docklet.invalid/tools/probe"]);
+  assert.deepEqual(data.embedded.probe.packages, ["docklet.invalid/tools/probe"]);
+  for (const [path, hash] of Object.entries(data.embedded.probe.sourceFiles))
+    assert.equal(digest(readFileSync(path)), hash, `probe source/import change requires dependency refresh: ${path}`);
+  const component = data.inventory.components.find((entry) => entry.name === "docklet-probe");
+  assert.equal(component.license, "Apache-2.0");
+  assert.ok(component.legalFiles.some((entry) => entry.imagePath.endsWith("/Docklet-Apache-2.0.txt")));
+  const contract = readFileSync("deploy/tools/contract.mjs", "utf8");
+  assert.match(contract, /run\("\/usr\/bin\/docklet-probe", "version"\)/);
+  assert.match(contract, /run\("\/usr\/bin\/docklet-probe", "selftest"\)/);
+});

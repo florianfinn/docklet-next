@@ -80,6 +80,14 @@ export function checkBuildEvidence(data, evidence, arch) {
   assert.deepEqual(acfsModules, data.embedded.acfs.modules, "actual linked acfs module graph");
   const acfs = evidence("acfs-packages.txt").trim().split("\n").sort();
   assert.deepEqual(acfs, data.embedded.acfs.packages, "acfs embedded dependency graph");
+  const probeInfo = evidence("probe-buildinfo.txt");
+  const probeModules = probeInfo.split("\n").map((line) => line.trim().split(/\s+/))
+    .filter(([kind]) => ["mod", "dep"].includes(kind)).map(([, name]) => name).sort();
+  assert.deepEqual(probeModules, data.embedded.probe.modules, "actual linked probe module graph");
+  assert.deepEqual(evidence("probe-packages.txt").trim().split("\n").sort(), data.embedded.probe.packages, "probe stdlib-only package graph");
+  assert.match(probeInfo, /CGO_ENABLED=0/);
+  assert.match(probeInfo, /-trimpath=true/);
+  assert.match(probeInfo, new RegExp(`GOARCH=${arch}`));
   const packages = evidence("toolchain-packages.txt");
   for (const [name, version] of [["musl", data.pins.MUSL_VERSION], ["gcc", data.pins.GCC_VERSION]])
     assert.match(packages, new RegExp(`^${name}-${version.replaceAll(".", "\\.")}-r\\d+$`, "m"), `embedded ${name} version`);

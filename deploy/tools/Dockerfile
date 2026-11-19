@@ -10,6 +10,7 @@
 # Explicit root user and shell CMD support volume ownership access and direct helper commands.
 # Omit the unpinned frontend directive (daemon frontend) and upstream product labels (Docklet ownership).
 # Add Node licence assembly, exact dependency evidence, source export/digests and OCI source/revision labels.
+# Add the local stdlib-only HTTP/TLS probe, built and tested offline.
 ARG GO_IMAGE
 ARG BUILD_IMAGE
 ARG NODE_IMAGE
@@ -31,6 +32,20 @@ RUN --network=none case "$TARGETARCH" in amd64|arm64) ;; *) exit 1 ;; esac && \
     cp /usr/local/go/LICENSE /out/usr/share/licenses/docklet-tools/Go-BSD-3-Clause.txt && \
     cp /src/acfs/LICENSE /out/usr/share/licenses/docklet-tools/acfs-BSD-3-Clause.txt && \
     cp /src/kit/LICENSE /out/usr/share/licenses/docklet-tools/kit-BSD-3-Clause.txt
+
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS probe
+ARG TARGETARCH
+ARG TOOLS_VERSION
+WORKDIR /src/probe
+COPY deploy/tools/probe /src/probe
+ENV CGO_ENABLED=0 GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOMAXPROCS=2
+RUN --network=none go test ./... && go vet ./... && \
+    case "$TARGETARCH" in amd64|arm64) ;; *) exit 1 ;; esac && \
+    GOOS=linux GOARCH=$TARGETARCH go build -trimpath -buildvcs=false \
+    -ldflags "-s -w -X main.version=$TOOLS_VERSION" -o /out/usr/bin/docklet-probe . && \
+    mkdir -p /out/usr/share/licenses/docklet-tools && \
+    GOOS=linux GOARCH=$TARGETARCH go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' . | sed '/^$/d' > /out/usr/share/licenses/docklet-tools/probe-packages.txt && \
+    go version -m /out/usr/bin/docklet-probe > /out/usr/share/licenses/docklet-tools/probe-buildinfo.txt
 
 # CI overrides this empty context with a checksum-verified source archive.
 FROM scratch AS busybox-cache
@@ -98,6 +113,7 @@ RUN case "$TARGETARCH" in \
     install -Dm644 cacert.pem /out/etc/ssl/certs/ca-certificates.crt
 
 FROM acfs AS inspected
+COPY --from=probe /out/ /out/
 COPY --from=downloads /out/usr/local/bin/trivy /tmp/trivy
 RUN --network=none go version -m /tmp/trivy > /out/usr/share/licenses/docklet-tools/trivy-buildinfo.txt
 

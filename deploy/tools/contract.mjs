@@ -31,6 +31,9 @@ assert.equal(labels["org.opencontainers.image.source"], "https://github.com/flor
 assert.match(labels["org.opencontainers.image.revision"], /^[a-f0-9]{40}(?:-dirty)?$/);
 assert.equal(config.Os, "linux");
 assert.ok(pins.PLATFORMS.split(",").includes(`linux/${config.Architecture}`));
+const probeVersion = JSON.parse(run("/usr/bin/docklet-probe", "version"));
+assert.deepEqual(probeVersion, { v: 1, version: labels["org.opencontainers.image.version"] });
+assert.deepEqual(JSON.parse(run("/usr/bin/docklet-probe", "selftest")), { v: 1, ok: true });
 const version = JSON.parse(run("acfs", "version"));
 assert.equal(version.version, pins.ACFS_VERSION, "vendored acfs version");
 assert.equal(version.revision, pins.ACFS_REVISION, "vendored acfs revision");
@@ -78,6 +81,7 @@ try {
     assert.equal(digest(readFileSync(join(directory, "licenses", file.imagePath))), file.sha256, `packaged dependency notice: ${file.sha256}`);
   assert.deepEqual(JSON.parse(evidence("trivy/inventory.json")), data.trivy, "packaged Trivy dependency/source inventory");
   checkBuildEvidence(data, evidence, config.Architecture);
+  assert.deepEqual(JSON.parse(evidence("probe/inventory.json")), data.embedded.probe, "packaged probe source/dependency inventory");
   for (const [path, name, hash] of [
     ["/usr/local/bin/trivy", "trivy", data.release.platforms[config.Architecture].binarySha256],
     ["/etc/ssl/certs/ca-certificates.crt", "ca.pem", pins.CA_SHA256],

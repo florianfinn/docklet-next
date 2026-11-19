@@ -89,5 +89,25 @@
     "muslPackage": "1.2.5-r13",
     "gccPackage": "14.2.0-r6",
     "muslPackageSource": "https://gitlab.alpinelinux.org/alpine/aports/-/tree/ddaf59b84bc6983a37d6e24d2210c2c4791642bb/main/musl"
+  },
+  "probe": {
+    "source": "docklet-next/deploy/tools/probe",
+    "revision": "94ff3b632c90da82a96c28db8eefc0184a6adfd7",
+    "retrieved": "2026-11-19",
+    "license": "Apache-2.0",
+    "deviations": "Original stdlib-only HTTP/TLS probe for issue #493; no adopted code.",
+    "protocol": 1,
+    "packages": [
+      "docklet.invalid/tools/probe"
+    ],
+    "modules": [
+      "docklet.invalid/tools/probe"
+    ],
+    "sourceFiles": {
+      "deploy/tools/probe/main.go": "ac112c0815332938bc750cf38d2e77528f7c61dcc0349572e3620f5110d6c0ed",
+      "deploy/tools/probe/selftest.go": "37f5f57c89d17b7489975cf4edb565e20fc33e4df608ee6c6254da83ef517d9e",
+      "deploy/tools/probe/go.mod": "dbe22b68dba00c5378e7d9b6bef34daff6826d2c26b0cf0fac7f18f568242076"
+    },
+    "assessment": "go list -deps and go version -m on the exact independent module; the only non-stdlib package/module is original Apache-2.0 Docklet code. No external Go dependencies; Go standard library BSD-3-Clause notice is already packaged."
   }
 }

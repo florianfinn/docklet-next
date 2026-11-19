@@ -158,11 +158,25 @@
           "sha256": "db2e964d7cd1028bfdfb23319ac6cfdbbd427da56c28447c0bf156ea8fd03d61"
         }
       ]
+    },
+    {
+      "name": "docklet-probe",
+      "version": "issue-493",
+      "source": "https://github.com/florianfinn/docklet-next",
+      "license": "Apache-2.0",
+      "modifications": "Original independent stdlib-only HTTP/TLS probe; wire v1. Binary version follows the tools tag.",
+      "legalFiles": [
+        {
+          "path": "LICENSE",
+          "imagePath": "/usr/share/licenses/docklet-tools/Docklet-Apache-2.0.txt",
+          "sha256": "db2e964d7cd1028bfdfb23319ac6cfdbbd427da56c28447c0bf156ea8fd03d61"
+        }
+      ]
     }
   ],
   "embeddedInventory": {
     "path": "docs/provenance/tools-embedded.json",
-    "sha256": "8f05c7842a99ca323c2f59f3e55243e9e8589a6816baddb8e2c448d995949ee9"
+    "sha256": "a5d5068cb675c4a360a478ffc8d6344633b2b01fffd06752f5963bd674effedd"
   },
-  "dependencyAssessment": "Trivy: exact amd64/arm64 release binary build metadata and 460-module release SBOM plus two actual linked module versions absent from that SBOM; exact legal texts and source forms in dependencyInventory. acfs and BusyBox: source/compiled package graph, static C link map and embedded libc/compiler notices in embeddedInventory."
+  "dependencyAssessment": "Trivy: exact amd64/arm64 release binary build metadata and 460-module release SBOM plus two actual linked module versions absent from that SBOM; exact legal texts and source forms in dependencyInventory. acfs and BusyBox: source/compiled package graph, static C link map and embedded libc/compiler notices in embeddedInventory. docklet-probe: original Apache-2.0 independent module with no external packages; source hashes, compiled package graph and binary build information in embeddedInventory."
 }

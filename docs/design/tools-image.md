@@ -181,3 +181,85 @@ Vulnerability scanning mounts its persistent owner-specific cache at
 necessary for large cold Java DB downloads. The scanner targets local Docker IDs
 through the daemon socket with `--image-src docker`, then removes its container
 and anonymous volumes. See [vulnerability scanning](vulnerability-scanning.md).
+
+## HTTP/TLS probe (tools-v0.2.0)
+
+The next tools publication, `tools-v0.2.0`, adds `/usr/bin/docklet-probe`.
+There is no in-tree tools release version: the existing build wrapper derives
+OCI metadata and the probe version from the tools tag, or uses `development` for
+local builds. Publication still requires the explicit tag gate above. `PATH`
+stays `/usr/local/bin:/bin`; callers use the probe's absolute path.
+
+The probe is original Apache-2.0 code in the independent
+`deploy/tools/probe` module (`docklet.invalid/tools/probe`), outside `go.work`.
+It compiles only the Go standard library. Its Docker stage runs tests and vet,
+then builds with `GOTOOLCHAIN=local CGO_ENABLED=0 GOWORK=off GOPROXY=off
+GOSUMDB=off`, networking disabled, `-trimpath` and `-ldflags "-s -w"`.
+`tools-embedded.json` freezes its source hashes and package/module graph;
+`probe-packages.txt`, `probe-buildinfo.txt` and `probe/inventory.json` accompany
+the executable under `/usr/share/licenses/docklet-tools`. The existing Docklet
+Apache-2.0 and Go BSD-3-Clause notices cover this addition.
+
+```sh
+/usr/bin/docklet-probe version
+/usr/bin/docklet-probe selftest
+/usr/bin/docklet-probe http --connect 127.0.0.1:8080 \
+  --host app.example.test --target '/health?ready=1' \
+  --timeout 5s --max-body 65536
+/usr/bin/docklet-probe http --connect '[::1]:8443' \
+  --host app.example.test:443 --target / --tls --sni tls.example.test \
+  --timeout 5s --max-body 65536
+```
+
+`version` emits `{"v":1,"version":"development"}` for local builds.
+`selftest` starts in-memory HTTP and TLS servers on loopback and emits
+`{"v":1,"ok":true}` on success; it requires no external network, files or CA
+trust and works with `docker run --network none`. It does not alter trust roots.
+
+`http` performs one GET, never follows redirects, ignores all proxy environment
+variables and disables automatic compression. `--connect` must be a loopback
+IPv4/IPv6 literal with a port from 1 through 65535. Host is independent of the
+connection address and TLS SNI. `--host` is a hostname or IP literal with optional
+port, at most 253 bytes, without spaces or controls; IPv6 uses brackets.
+`--target` is a path and optional query starting with `/`, at most 2048 bytes,
+without spaces, controls or a fragment. `--timeout` is required, positive and at
+most 10 seconds, covering connection, handshake, response and body reading.
+`--max-body` is required and fixed at 65536. SNI is an LDH DNS name of at most
+253 bytes, with labels of at most 63 bytes; it defaults to Host without its port.
+TLS with an IP Host needs an explicit DNS SNI. SNI is refused without `--tls`.
+
+Every invocation emits one JSON line of at most 32 KiB. Exit 0 means an HTTP
+answer was read, including 3xx, 401 and 5xx. The v1 answer has `status`, `headers`
+and `body: {sha256, truncated}`. The hash covers at most the first 64 KiB of the
+response; reading one extra byte detects truncation. Only `location`, `server`,
+`content-type`, `content-length` and `www-authenticate` are retained. Names are
+case insensitive; repeated values use the last value, trimmed and capped at
+1024 bytes. The HTTP parser rejects malformed responses, including conflicting
+Content-Length values. Total response headers are limited to 64 KiB.
+
+With `--tls`, the result also has `tls: {version, sni, peer?, chain, verify}`,
+including on transport failure. `peer` appears only after a completed handshake
+and reports subject, issuer, SANs, validity timestamps and the SHA-256 certificate
+fingerprint. Peer strings are capped at 256 bytes, SANs at 32 entries and the
+presented certificate chain at four SHA-256 fingerprints (leaf first). Text caps
+preserve UTF-8 and replace control characters and invalid UTF-8 with `?`.
+
+TLS handshakes accept untrusted certificates so their HTTP answer can be
+inspected. The three verification results are independent: `chainTrusted` uses
+`x509.Verify` with the image's system CA pool, presented intermediates, ServerAuth
+usage, current time and no DNSName; `hostnameMatch` uses `VerifyHostname(sni)`;
+`validity` is `valid`, `expired` or `not-yet-valid` from the leaf's timestamps.
+Chain verification failure reports `chain-untrusted`; an otherwise trusted chain
+with a wrong hostname reports `hostname-mismatch`. These are observation fields,
+not transport errors. Before a completed handshake, verification has
+`error: "tls-handshake"` and no peer evidence; its other values are placeholders.
+The test-only `--roots FILE` replaces the trust pool and is refused unless
+`DOCKLET_PROBE_TEST=1`; it is not an operator configuration variable.
+
+Exit 2 is a usage error (`error: "usage"`). Exit 3 has an `error` code and no
+`status`, headers or body: `connect-refused` for a refused socket, `timeout` for
+connection/handshake/response deadline expiry, `tls-handshake` for other TLS
+handshake failures, `protocol` for other connection or HTTP framing failures,
+and `body-read` when the response body fails before the capped read finishes
+(including a deadline during that read). Error messages do not expose raw
+network or certificate errors. A failed selftest reports `selftest` with exit 3.
