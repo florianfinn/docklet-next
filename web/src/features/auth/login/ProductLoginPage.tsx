@@ -39,7 +39,7 @@ export default function ProductLoginPage() {
   if (mode.isPending || configuration.isPending) return <GateScreen busy message={t("loading")} />;
   if (currentUser.data?.isAdmin === false || mode.data === "none" || (currentUser.isSuccess && !!currentUser.data && mode.data === "local")) return <Navigate to="/dashboard" replace />;
   if (mode.data === "proxy") return <GateScreen busy={currentUser.isPending} message={currentUser.isError || (currentUser.isSuccess && !currentUser.data) ? t("proxyRejected") : t("loading")} />;
-  return <GateScreen slot="login-page" message={t("title", { hub: "Docklet" })}>
+  return <GateScreen slot="login-page" title={t("title", { hub: "Docklet" })}>
     <form className="flex flex-col gap-4" onSubmit={(event) => {
       event.preventDefault();
       if (!username.trim() || !password || busy) return;

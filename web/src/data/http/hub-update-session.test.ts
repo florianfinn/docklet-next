@@ -91,6 +91,12 @@ it("B19 recovery retries failed reads at five and ten seconds", async () => {
   await f.tick(1); expect(f.fetcher).toHaveBeenCalledTimes(2); await f.tick(9999); expect(f.fetcher).toHaveBeenCalledTimes(2);
   await f.tick(1); expect(f.session.get().state.phase).toBe("running");
 });
+it("N-3 a rejected session stops recovery retries", async () => {
+  const f = fixture(); f.fetcher.mockRejectedValueOnce(new TypeError("offline"));
+  await f.session.recover(); expect(f.fetcher).toHaveBeenCalledTimes(1);
+  f.session.unauthorized(); await f.tick(60_000);
+  expect([f.fetcher.mock.calls.length, f.session.get().state.phase]).toEqual([1, "idle"]);
+});
 it.each(["{", JSON.stringify({}), JSON.stringify({ hubOrigin: "https://other.example.com", principalId: "admin", opId: "operation", startedAt: 0 }), JSON.stringify({ hubOrigin: "https://hub.example.com", principalId: "other", opId: "operation", startedAt: 0 }), JSON.stringify({ hubOrigin: "https://hub.example.com", principalId: "admin", opId: "operation", startedAt: 99999999999999 })])("B21 invalid stored record %s never replays a historical success", async stored => {
   const f = fixture(); f.setOp({ ...f.op(), phase: "settled", outcome: "healthy" }); sessionStorage.setItem(HUB_UPDATE_RECORD, stored);
   await f.session.recover(); expect(f.session.get().state.phase).toBe("idle"); expect(sessionStorage.getItem(HUB_UPDATE_RECORD)).toBeNull();

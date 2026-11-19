@@ -2,7 +2,7 @@
 // Revision: 94ff3b632c90da82a96c28db8eefc0184a6adfd7
 // Retrieved: 2026-11-19
 // License: Apache-2.0
-// Deviations: Original adapter session subscription and tab recovery bridge.
+// Deviations: Original update-view progress curve (fixed estimate, capped before the result).
 
 
 export const UPDATE_ESTIMATE = 60_000;

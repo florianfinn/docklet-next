@@ -33,6 +33,14 @@ it.each([["auth", AuthGate], ["setup", SetupGate], ["login", ProductLoginPage]] 
   expect(document.querySelector('[data-slot="gate-screen"] [data-slot="brand-logo"] svg') !== null).toBe(true);
   result.router.dispose();
 });
+it("B-1 the sign-in page keeps its title as the page heading, not as an alert", async () => {
+  const adapter = { ...createDisconnectedAdapter(), getAuthMode: async () => "local" as const, getAuthConfiguration: async () => ({ mode: "local" as const, setupPending: false, forced: false }), getCurrentUser: async () => { throw new AdapterOutcomeError({ kind: "error", code: "auth.unauthorized", status: 401 }); } };
+  const result = renderRoutes([{ path: "/", element: <ProductLoginPage /> }], ["/"], adapter);
+  await screen.findByRole("button", { name: "Anmelden" });
+  const headings = screen.queryAllByRole("heading", { level: 1 }).map((h) => h.textContent);
+  expect([headings.length === 1 && /Docklet/.test(headings[0] ?? ""), screen.queryByRole("alert") === null]).toEqual([true, true]);
+  result.router.dispose();
+});
 it("B11 backoff is 5/10/20/30 seconds, manual retry never overlaps and unmount cancels", async () => {
   vi.useFakeTimers(); let release: (() => void) | undefined;
   const refetch = vi.fn(async () => { await new Promise<void>(resolve => { release = resolve; }); });

@@ -22,7 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 
 export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?: string }) {
   const adapter = useAdapter(), all = useTranslations(), t = useTranslations("settings.updates.selfUpdate"), errorText = useImageError();
-  const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null);
+  const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null), focusedFor = useRef<string>(undefined);
   const cap = useCapability("selfUpdate", selfUpdateRef(hostId));
   const query = useQuery({ queryKey: ["settings", "self-update", hostId], queryFn: () => adapter.getSelfUpdate(hostId), enabled: cap.available,
     // A live check reaches the agent; repeat it only while an operation is unsettled.
@@ -34,10 +34,12 @@ export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?:
   const running = !!op && op.phase !== "settled";
   const enabled = cap.available && !query.isError && canSelfUpdate(state) && !action.busy && !running;
   useEffect(() => {
-    if (hostId !== "0" || location.hash !== "#hub-update" || cap.pending || cap.available && query.isPending) return;
+    if (hostId !== "0" || location.hash !== "#hub-update" || cap.pending || cap.available && query.isPending || focusedFor.current === location.key) return;
+    // Focus once per navigation to the anchor, not again on later state changes.
+    focusedFor.current = location.key;
     const target = button.current && !button.current.disabled ? button.current : heading.current;
     target?.scrollIntoView?.({ block: "center" }); target?.focus();
-  }, [hostId, location.hash, query.isPending, enabled, cap.pending, cap.available]);
+  }, [hostId, location.hash, location.key, query.isPending, enabled, cap.pending, cap.available]);
   const codeKey = selfUpdateCodeKey(state.code), opCodeKey = selfUpdateCodeKey(op?.code);
   const runId = started ?? op?.runId;
   const title = hostId === "0" ? t("hub") : name ? t("agentOn", { name }) : t("agent");

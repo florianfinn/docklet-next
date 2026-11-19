@@ -45,6 +45,13 @@ it.each([[false, "http"], [undefined, "http"], [true, "demo"], [true, "disconnec
   await act(async () => {}); expect(f.adapter.getHubVersionHint).not.toHaveBeenCalled(); expect(f.fetcher.mock.calls.filter(([path]) => String(path).endsWith("/app-version"))).toHaveLength(0);
   expect(screen.queryByText("no hint") !== null).toBe(true);
 });
+it("B10 hint is hidden while a hub update runs", async () => {
+  const f = hintFixture();
+  render(<AdapterContext.Provider value={f.adapter}><QueryClientProvider client={f.client}><Probe /></QueryClientProvider></AdapterContext.Provider>);
+  expect(await screen.findByText("1.0.1") !== null).toBe(true);
+  act(() => { f.adapter.hubUpdateSession!.set({ state: { phase: "starting", target: "1.0.1", startedAt: Date.now() }, dismissed: false }); });
+  expect([screen.queryByText("no hint") !== null, screen.queryByText("1.0.1") === null]).toEqual([true, true]);
+});
 it("B10 both badges name the version and Settings click reaches the hub anchor", async () => {
   const f = hintFixture();
   const routes = renderRoutes([{ path: "/settings/:section", element: <><SidebarProvider><FreeUserMenu onNavigate={() => {}} /></SidebarProvider><SettingsPage /></> }], ["/settings/help"], f.adapter);

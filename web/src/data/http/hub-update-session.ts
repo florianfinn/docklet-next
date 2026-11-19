@@ -154,6 +154,8 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
     clear,
     establish(id: string, admin = true) { if (principalId !== undefined && (principalId !== id || !admin)) clear(); principalId = id; administrator = admin; },
     unauthorized() {
+      // A rejected session ends recovery retries; each retry would reject again and could cancel a sign-in.
+      clearTimeout(recoveryTimer); ++recoveryEpoch;
       const state = store.get().state;
       if (state.phase !== "running" && state.phase !== "starting") return;
       ++epoch; stop(); removeRecord(); publish({ phase: "signin", target: state.target }); void poll();
