@@ -21,7 +21,8 @@ import (
 
 // discoveryRequestHost mirrors bootstrap's TRUSTED_PROXIES CIDR/direct-peer policy.
 // AUTH_TRUSTED_PROXIES is a separate identity admission policy, not forwarding trust.
-func discoveryRequestHost(trusted, host, forwarded, peer string) string {
+// A trusted X-Forwarded-Proto of https is kept as an "https://" prefix for the request candidate.
+func discoveryRequestHost(trusted, host, forwarded, forwardedProto, peer string) string {
 	remote, _, err := net.SplitHostPort(peer)
 	if err != nil {
 		remote = peer
@@ -32,6 +33,9 @@ func discoveryRequestHost(trusted, host, forwarded, peer string) string {
 		if err == nil && ip != nil && prefix.Contains(ip) {
 			if forwarded != "" {
 				host = forwarded
+			}
+			if strings.EqualFold(strings.TrimSpace(forwardedProto), "https") && validHubHost(host) {
+				return "https://" + host
 			}
 			break
 		}
@@ -111,7 +115,8 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 			raw = "http://" + raw
 		}
 		parsed, err := url.Parse(raw)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || !validHubHost(parsed.Host) || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		// Configured values keep the earlier acceptance (container names, IDN); only the request host is strict.
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
 			return
 		}
 		parsed.Path = ""
@@ -139,7 +144,10 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 	add(publicURL, "configured")
 	add(cfg.GetAppURL(), "configured")
 	add(hubAddress, "configured")
-	requestIP := ""
+	requestIP, requestScheme := "", scheme
+	if rest, ok := strings.CutPrefix(requestHost, "https://"); ok {
+		requestHost, requestScheme = rest, "https://"
+	}
 	if validHubHost(requestHost) {
 		parsed, _ := url.Parse("http://" + requestHost)
 		if ip := net.ParseIP(parsed.Hostname()); ip != nil {
@@ -210,7 +218,7 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		}
 	}
 	if requestHost != "" {
-		add(scheme+requestHost, "request")
+		add(requestScheme+requestHost, "request")
 	}
 	return result, nil
 }

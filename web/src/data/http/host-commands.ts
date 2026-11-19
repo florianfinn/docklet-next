@@ -110,7 +110,7 @@ const NETWORK_MODES = ["host", "macvlan", "ipvlan"] as const;
 function hubContainerInternal(container: Discovery["container"]): HubDiscovery["container"] {
   if (!container || typeof container.name !== "string" || !Number.isInteger(container.listenPort)) return undefined;
   const drivers = (container.networks ?? []).map((network) => network.driver);
-  const networkMode = NETWORK_MODES.find((mode) => drivers.includes(mode)) ?? "bridge";
+  const networkMode = NETWORK_MODES.find((mode) => drivers.includes(mode)) ?? ([...new Set(drivers)].join(", ") || "bridge");
   const publishedPorts = (container.publishedPorts ?? []).filter((p) => Number.isInteger(p.hostPort))
     .map((p) => ({ hostPort: p.hostPort, containerPort: container.listenPort, ...(p.hostIp ? { hostIp: p.hostIp } : {}) }));
   return { name: container.name, networkMode, listenPort: container.listenPort, publishedPorts };

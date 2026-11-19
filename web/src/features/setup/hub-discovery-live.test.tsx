@@ -82,3 +82,15 @@ it("refuses a candidate with an unknown source or kind", async () => {
   await expect(adapter({ ...bridge, candidates: [{ ...bridge.candidates[0], source: "guessed" }] }).discoverHub()).rejects.toThrow("hosts.invalid-candidate");
   await expect(adapter({ ...bridge, candidates: [{ ...bridge.candidates[0], kind: "name" }] }).discoverHub()).rejects.toThrow("hosts.invalid-candidate");
 });
+
+it("preserves operator values with live HTTP discovery", async () => {
+ const d = await adapter(bridge).discoverHub();
+ const saved = freshSetupDraft(); saved.general.hubAddress = "192.0.2.45:3552";
+ expect(applyDiscovery(saved, d)).toBe(saved);
+ const cleared = freshSetupDraft(); cleared.hubAddressOrigin = {kind: "manual"};
+ expect(applyDiscovery(cleared, d)).toBe(cleared);
+});
+it("does not label overlay networking as bridge", async () => {
+ const d = await adapter({...bridge, container: {...bridge.container, networks: [{name: "mesh", driver: "overlay"}]}}).discoverHub();
+ expect(d.container?.networkMode).toBe("overlay");
+});

@@ -36,7 +36,8 @@ export interface HubDiscovery {
   /** The hub's own container; absent when the hub does not run in Docker. */
   container?: {
     name: string;
-    networkMode: HubNetworkMode;
+    /** Known modes drive the demo ranker; live hubs may report other drivers (overlay, custom plugins). */
+    networkMode: HubNetworkMode | (string & {});
     /** Port the hub listens on inside its container. */
     listenPort: number;
     publishedPorts: { hostPort: number; containerPort: number; hostIp?: string }[];

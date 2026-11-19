@@ -35,6 +35,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 	authtypes "github.com/florianfinn/docklet-next/types/auth"
 )
 
@@ -291,4 +292,44 @@ func TestForwardingViewerKeepsTheAuthenticationPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, <-done, "the request authenticated under none mode")
 	require.Error(t, sessionlife.Check(c.Request().Context()), "its viewer must not adopt the later local policy")
+}
+
+// Local Bearer and cookie forwarding keep the snapshot too when none is published between the
+// session lookup and the viewer binding.
+func TestForwardingLocalViewerKeepsTheAuthenticationPolicy(t *testing.T) {
+	for _, credential := range []string{"bearer", "cookie"} {
+		t.Run(credential, func(t *testing.T) {
+			f := newSignInRoutingFixture(t)
+			f.cfg.AuthMode = ""
+			require.NoError(t, f.svc.InitializeSignIn(t.Context()))
+			entered, resume := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			require.NoError(t, f.db.Callback().Query().After("gorm:query").Register("example:pause_local", func(tx *gorm.DB) {
+				if _, ok := tx.Statement.Dest.(*session.UserSession); ok && tx.Statement.Context.Value(forwardingProbeKey{}) == true {
+					once.Do(func() { close(entered); <-resume })
+				}
+			}))
+			t.Cleanup(func() { _ = f.db.Callback().Query().Remove("example:pause_local") })
+			validator := createAuthValidatorInternal(api.HandlerDeps{Auth: auth.New(f.svc, nil, nil), ApiKey: apikey.New(f.keys), Role: role.New(f.roles)})
+			req := httptest.NewRequest(http.MethodGet, "/api/environments/example/containers", nil)
+			if credential == "bearer" {
+				req.Header.Set("Authorization", "Bearer "+f.tokens.AccessToken)
+			} else {
+				req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: f.tokens.BrowserToken})
+			}
+			req = req.WithContext(context.WithValue(req.Context(), forwardingProbeKey{}, true))
+			c := echo.New().NewContext(req, httptest.NewRecorder())
+			done := make(chan bool, 1)
+			go func() {
+				_, _, ok := validator(req.Context(), c)
+				done <- ok
+			}()
+			<-entered
+			_, err := f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), f.adminID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeNone}}, authtypes.SessionMeta{})
+			close(resume)
+			require.NoError(t, err)
+			require.True(t, <-done, "the request authenticated before the publication")
+			require.Error(t, sessionlife.Check(c.Request().Context()), "local authentication keeps the policy it was checked against")
+		})
+	}
 }

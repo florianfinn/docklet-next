@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -119,6 +120,8 @@ func TestHubDiscoveryRequestHTTP(t *testing.T) {
 	for _, tc := range []struct{ name, peer, trusted, host, forwarded, want string }{
 		{"untrusted spoof", "192.0.2.20:1234", "192.0.2.10/32", "hub.example.com:3552", "spoof.example.com", "http://hub.example.com:3552"},
 		{"trusted proxy", "192.0.2.10:1234", "invalid, 192.0.2.10/32", "hub.example.com:3552", "public.example.com", "http://public.example.com"},
+		{"trusted TLS proxy", "192.0.2.10:1234", "192.0.2.10/32", "hub.example.com:3552", "public.example.com|https", "https://public.example.com"},
+		{"untrusted proto spoof", "192.0.2.20:1234", "192.0.2.10/32", "hub.example.com:3552", "|https", "http://hub.example.com:3552"},
 		{"trusted IPv6", "[2001:db8::10]:1234", "2001:db8::/32", "hub.example.com", "[2001:db8::20]:4552", "http://[2001:db8::20]:4552"},
 		{"malformed host", "192.0.2.10:1234", "", "bad host", "", ""},
 		{"malformed forwarded list", "192.0.2.10:1234", "192.0.2.10/32", "hub.example.com", "public.example.com, spoof.example.com", ""},
@@ -134,7 +137,9 @@ func TestHubDiscoveryRequestHTTP(t *testing.T) {
 			huma.Register(api, huma.Operation{OperationID: "discoverHub", Method: "GET", Path: "/hub/discovery"}, h.DiscoverHub)
 			req := httptest.NewRequest("GET", "/hub/discovery", nil)
 			req.Host, req.RemoteAddr = tc.host, tc.peer
-			req.Header.Set("X-Forwarded-Host", tc.forwarded)
+			forwarded, proto, _ := strings.Cut(tc.forwarded, "|")
+			req.Header.Set("X-Forwarded-Host", forwarded)
+			req.Header.Set("X-Forwarded-Proto", proto)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -175,4 +180,15 @@ func mustJSONField(t *testing.T, raw []byte, field string) json.RawMessage {
 	require.NoError(t, json.Unmarshal(raw, &fields))
 	require.Contains(t, fields, field)
 	return fields[field]
+}
+
+// Configured addresses keep the acceptance they had before discovery became container-aware.
+func TestHubDiscoveryKeepsConfiguredNames(t *testing.T) {
+	result, err := buildHubDiscovery(&config.Config{}, "https://bücher.example", "docklet_hub:3552", nil, nil, "")
+	require.NoError(t, err)
+	urls := []string{}
+	for _, candidate := range result.Candidates {
+		urls = append(urls, candidate.URL)
+	}
+	require.Equal(t, []string{"https://b%C3%BCcher.example", "http://docklet_hub:3552"}, urls)
 }

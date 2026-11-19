@@ -169,7 +169,8 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 			return nil, nil, false
 		}
 
-		user, ok := verifyRouterRequestUserInternal(ctx, deps.Auth.Service(), req)
+		// The request context carries the policy snapshot taken before authentication.
+		user, ok := verifyRouterRequestUserInternal(req.Context(), deps.Auth.Service(), req)
 		if !ok {
 			return nil, nil, false
 		}

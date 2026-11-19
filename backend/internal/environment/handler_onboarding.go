@@ -40,13 +40,14 @@ func agentImageReference(cfg *config.Config) (string, error) {
 
 // HubDiscoveryInput keeps request metadata out of the public input schema.
 type HubDiscoveryInput struct {
-	host          string
-	forwardedHost string
-	remoteAddr    string
+	host           string
+	forwardedHost  string
+	forwardedProto string
+	remoteAddr     string
 }
 
 func (i *HubDiscoveryInput) Resolve(ctx huma.Context) []error {
-	i.host, i.forwardedHost, i.remoteAddr = ctx.Host(), ctx.Header("X-Forwarded-Host"), ctx.RemoteAddr()
+	i.host, i.forwardedHost, i.forwardedProto, i.remoteAddr = ctx.Host(), ctx.Header("X-Forwarded-Host"), ctx.Header("X-Forwarded-Proto"), ctx.RemoteAddr()
 	return nil
 }
 
@@ -66,7 +67,7 @@ func (h *EnvironmentHandler) DiscoverHub(ctx context.Context, input *HubDiscover
 			}
 		}
 	}
-	host := discoveryRequestHost(h.cfg.TrustedProxies, input.host, input.forwardedHost, input.remoteAddr)
+	host := discoveryRequestHost(h.cfg.TrustedProxies, input.host, input.forwardedHost, input.forwardedProto, input.remoteAddr)
 	discovery, err := buildHubDiscovery(h.cfg, settings.DomainURL.Value, settings.HubAddress.Value, self, addresses, host)
 	if err != nil {
 		return nil, err
