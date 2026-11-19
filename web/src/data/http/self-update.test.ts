@@ -21,7 +21,7 @@ function fixture() {
   const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? json(accepted, 202) : json({ currentVersion: "v1.0.0" }));
   const capability = vi.fn(async (operationId: string, resourceRef: ResourceRef) => ({ operationId, resourceRef, available: true }));
   const readRun = vi.fn(async () => run()); const reload = vi.fn();
-  const api = createSelfUpdates({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability, generation: () => generation, readRun, reload });
+  const api = createSelfUpdates({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability, generation: () => generation, readRun });
   cleanups.push(api.reset);
   return { api, fetcher, capability, readRun, reload, identity: () => { generation++; api.reset(); } };
 }
@@ -49,30 +49,10 @@ it("UI-c refuses administrator-only operations before check or start HTTP", asyn
   await expect(f.api.selfUpdate("example", { targetVersion: "1.0.1" })).rejects.toMatchObject({ outcome: { kind: "not-available" } });
   expect(f.fetcher).not.toHaveBeenCalled();
 });
-it("A2-o survives delayed, offline and old-version reconnects, requiring success and target together exactly once", async () => {
+it("hub following belongs exclusively to the tab session, with no automatic legacy reload", async () => {
   const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" });
-  let release!: (value: Response) => void;
-  f.fetcher.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-  await vi.advanceTimersByTimeAsync(1000); expect(f.readRun).toHaveBeenCalledTimes(1); expect(f.reload).not.toHaveBeenCalled();
-  release(json({ currentVersion: "v1.0.0" })); await vi.advanceTimersByTimeAsync(0);
-  f.fetcher.mockRejectedValueOnce(new TypeError("offline")); await vi.advanceTimersByTimeAsync(1000); expect(f.reload).not.toHaveBeenCalled();
-  // Reconnection with the old version is not evidence of an update.
-  await vi.advanceTimersByTimeAsync(2000); expect(f.reload).not.toHaveBeenCalled();
-  f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" })); await vi.advanceTimersByTimeAsync(4000); expect(f.reload).not.toHaveBeenCalled();
-  f.readRun.mockResolvedValue(run("succeeded")); f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.0" }));
-  await vi.advanceTimersByTimeAsync(8000); expect(f.reload).not.toHaveBeenCalled();
-  f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" })); await vi.advanceTimersByTimeAsync(10_000); expect(f.reload).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(30_000); expect(f.reload).toHaveBeenCalledTimes(1);
-});
-it.each(["failed", "cancelled"])("A2-o never reloads on %s even with the target version", async status => {
-  const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); f.readRun.mockResolvedValue(run(status)); f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" }));
-  await vi.advanceTimersByTimeAsync(60_000); expect(f.reload).not.toHaveBeenCalled(); expect(f.readRun).toHaveBeenCalledTimes(1);
-});
-it("never infers success from an unavailable or foreign run, and stops at identity change", async () => {
-  const f = fixture(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); f.fetcher.mockResolvedValue(json({ currentVersion: "v1.0.1" }));
-  f.readRun.mockRejectedValueOnce(new TypeError("offline")); await vi.advanceTimersByTimeAsync(1000); expect(f.reload).not.toHaveBeenCalled();
-  f.readRun.mockResolvedValue(run("succeeded", "foreign")); await vi.advanceTimersByTimeAsync(1000); expect(f.reload).not.toHaveBeenCalled();
-  f.identity(); await vi.advanceTimersByTimeAsync(60_000); expect(f.reload).not.toHaveBeenCalled(); expect(f.readRun).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(f.readRun).not.toHaveBeenCalled(); expect(f.reload).not.toHaveBeenCalled();
 });
 it("follows agent activity without polling the app version and never repeats the POST", async () => {
   const f = fixture(); const first = f.api.selfUpdate("example", { targetVersion: "1.0.1" }); const second = f.api.selfUpdate("example", { targetVersion: "1.0.1" }); expect(first === second).toBe(true); await first;
@@ -116,11 +96,11 @@ it("uses the actual HTTP activity decoder for accepted updates and publishes the
 it("late polls from a previous identity cannot remove the next identity's follow ownership", async () => {
   const f = fixture(); let release!: (value: CodedActionRun) => void;
   f.readRun.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-  await f.api.selfUpdate("0", { targetVersion: "1.0.1" }); await vi.advanceTimersByTimeAsync(1000);
-  f.identity(); await f.api.selfUpdate("0", { targetVersion: "1.0.1" });
-  release(run("succeeded")); await vi.advanceTimersByTimeAsync(0);
+  await f.api.selfUpdate("example", { targetVersion: "1.0.1" }); await vi.advanceTimersByTimeAsync(1000);
+  f.identity(); await f.api.selfUpdate("example", { targetVersion: "1.0.1" });
+  release(run("succeeded", "example")); await vi.advanceTimersByTimeAsync(0);
   f.fetcher.mockResolvedValueOnce(json({ version: "1.0.0", eligibility: { state: "checking", manual: null }, operation: { opId: "operation", runId: "update-run", targetVersion: "1.0.1", phase: "reserved", helperRunning: false } }));
-  await f.api.getSelfUpdate("0");
+  await f.api.getSelfUpdate("example");
   await vi.advanceTimersByTimeAsync(1000);
   expect(f.readRun).toHaveBeenCalledTimes(2); expect(f.reload).not.toHaveBeenCalled();
 });

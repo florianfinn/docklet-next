@@ -151,6 +151,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     listNetworkSummaries: async () => (await adapter.getTopology()).networks.map(({ id, hostId }) => ({ id, hostId })),
     ...containerOperations.api,
     kind: "demo",
+    getHubVersionHint: async () => { throw unavailable("getHubVersionHint", HUB_REF); },
     openContainerShell: openScriptedShell,
     ...createDemoRegistries(() => db.changed("registries")),
     ...createDemoUsers(db),

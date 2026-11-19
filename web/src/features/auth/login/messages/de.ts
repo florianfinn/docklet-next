@@ -6,6 +6,7 @@ export const deLogin: typeof enLogin = {
   title: "Bei {hub} anmelden",
   exit: (import.meta.env.DEV ? "Demo verlassen" : "Zurück zum Hub"),
   loading: "Lade Anmeldeart …",
+  unreachable: "Der Hub ist nicht erreichbar. Wird automatisch erneut versucht…",
   settingsError: "Die Anmeldeart konnte nicht geladen werden. Bitte erneut versuchen.",
   retry: "Erneut laden",
   proxyRejected: "Melde dich über deinen Proxy an und lade diese Seite neu. Der Hub hat die Proxy-Identität abgelehnt.",

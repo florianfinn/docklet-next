@@ -1,6 +1,38 @@
 // American English texts of shared components (status, updates, query states).
 
 export const enCommon = {
+  hubUpdate: {
+      "available": "Hub update {version} available",
+      "availableTooltip": "Version {version} available",
+      "preparing": "Preparing update",
+      "running": "Hub is updating to version {version}",
+      "done": "Done — Docklet now runs version {version}",
+      "failed": "The update did not finish",
+      "unknown": "The result is unknown",
+      "signin": "Sign in to see the result",
+      "signinHelp": "The hub answers with version {version}. Sign in to see the result.",
+      "signinProxy": "The hub answers with version {version}. Sign in through your proxy, then reload to see the result.",
+      "versionUnknown": "unknown",
+      "unknownHelp": "Check the hub. The running version alone does not confirm the result.",
+      "failedHelp": "Check the update run and the hub before trying again.",
+      "doneHelp": "Docklet is ready to open.",
+      "estimate": "Usually about one minute. Progress is an estimate.",
+      "progress": "Estimated update progress",
+      "offline": "Hub offline — restarting",
+      "checking": "Checking the new version",
+      "waiting": "Waiting for the hub",
+      "elapsed": "Elapsed {time}",
+      "longer": "Taking longer than usual",
+      "open": "Open Docklet",
+      "countdown": "Opening Docklet in {seconds, plural, one {# second} other {# seconds}}",
+      "viewRun": "View run",
+      "close": "Close",
+      "runId": "Run {id}",
+      "errorCode": "Error: {code}",
+      "versionSeen": "Running version: {version}",
+      "signinAction": "Sign in",
+      "reload": "Reload"
+  },
   relativeTime: { justNow: "just now", soon: "shortly", now: "now", day: "day", days: "days" },
   bulkRun: {
     summary: "{action}: {started} started, {joined} joined, {skipped} skipped, {failed} failed",
