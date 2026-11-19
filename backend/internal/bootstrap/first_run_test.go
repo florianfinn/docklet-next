@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/coder/websocket"
@@ -22,6 +23,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/api"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
@@ -30,6 +32,9 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	authtypes "github.com/florianfinn/docklet-next/types/auth"
 )
 
@@ -138,7 +143,7 @@ func TestStaticAdminKeyIsAuthorizedRightAfterClaim(t *testing.T) {
 	settingsSvc, err := settings.NewSettingsService(t.Context(), f.db)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, settingsSvc.Stop(context.WithoutCancel(t.Context()))) })
-	password := "Example-Setup-Password1!"
+	password := setupExamplePassword
 	_, err = f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Code: code, Username: "owner", Password: &password}, authtypes.SessionMeta{})
 	require.NoError(t, err)
 
@@ -151,4 +156,139 @@ func TestStaticAdminKeyIsAuthorizedRightAfterClaim(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, "the static admin key works without a restart: %s", rec.Body.String())
+}
+
+// After a stored runtime change to a non-default proxy header, real Direct HTTP and Edge tunnel
+// traffic reaches the agent without the active identity header.
+func TestRuntimeIdentityHeaderIsStrippedOverRealTransports(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newSignInRoutingFixture(t)
+			f.cfg.AuthMode = ""
+			require.NoError(t, f.svc.InitializeSignIn(t.Context()))
+			change := httptest.NewRequest(http.MethodPut, "/", nil)
+			change.RemoteAddr = "127.0.0.1:5000"
+			change.Header.Set("X-Example-User", "admin")
+			_, err := f.svc.UpdateSignIn(t.Context(), change, f.adminID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeProxy, ProxyHeader: "X-Example-User", TrustedProxies: "127.0.0.1"}}, authtypes.SessionMeta{})
+			require.NoError(t, err)
+
+			var mu sync.Mutex
+			var received []http.Header
+			agent := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/environments/0/containers" {
+					mu.Lock()
+					received = append(received, r.Header.Clone())
+					mu.Unlock()
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"success":true,"data":[]}`))
+			})
+			direct := httptest.NewServer(agent)
+			t.Cleanup(direct.Close)
+			endpoint := direct.URL
+			var registry *edge.TunnelRegistry
+			if mode == "edge" {
+				actualSettingsTunnelForEnvironment(t, agent, "agent-example", "example")
+				registry, endpoint = edge.GetRegistry(), "edge://example"
+			}
+			deps := api.HandlerDeps{Auth: auth.New(f.svc, nil, nil), ApiKey: apikey.New(f.keys), Role: role.New(f.roles)}
+			token := "agent-example"
+			router := echo.New()
+			router.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", func(context.Context, string) (string, *string, bool, error) { return endpoint, &token, true, nil },
+				createAuthValidatorInternal(deps), nil, registry, nil,
+				middleware.EnvironmentProxySecurity{ProxyIdentityHeader: f.cfg.ProxyIdentityHeader(), ProxyIdentityHeaderFunc: proxyIdentityHeaderSourceInternal(f.svc)}))
+			router.GET("/api/environments/:id/*", func(c *echo.Context) error { return c.NoContent(http.StatusInternalServerError) })
+			hub := httptest.NewServer(router)
+			t.Cleanup(hub.Close)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, hub.URL+"/api/environments/example/containers", http.NoBody)
+			require.NoError(t, err)
+			req.Header.Set("X-Example-User", "admin")
+			response, err := hub.Client().Do(req)
+			require.NoError(t, err)
+			body, _ := io.ReadAll(response.Body)
+			require.NoError(t, response.Body.Close())
+			require.Equal(t, http.StatusOK, response.StatusCode, string(body))
+			mu.Lock()
+			defer mu.Unlock()
+			require.Len(t, received, 1)
+			require.Empty(t, received[0].Get("X-Example-User"), "the agent never sees the runtime identity header")
+		})
+	}
+}
+
+// Policy publication precedes the post-claim key reconciliation, so a concurrent request may cache the
+// new static key without grants; the claim must drop that cache.
+func TestStaticAdminKeyCacheFilledDuringClaimIsDropped(t *testing.T) {
+	raw := "arc_" + strings.Repeat("example", 5)
+	var keys *apikey.ApiKeyService
+	var roles *role.RoleService
+	f, code := pendingRoutingFixture(t, func(ctx context.Context) error {
+		return staticKeyAfterClaimInternal(keys, roles, raw)(ctx)
+	})
+	keys, roles = f.keys, f.roles
+	primed := false
+	var keyID string
+	// Backfill lists keys after reconciliation committed and before it writes grants.
+	require.NoError(t, f.db.Callback().Query().After("gorm:query").Register("example:key_cache", func(tx *gorm.DB) {
+		rows, ok := tx.Statement.Dest.(*[]apikey.ApiKey)
+		if !ok || primed || f.svc.CurrentPolicy().Pending {
+			return
+		}
+		for _, key := range *rows {
+			if key.ManagedBy == nil {
+				continue
+			}
+			primed, keyID = true, key.ID
+			ps, err := roles.ResolveApiKeyPermissions(t.Context(), key.ID)
+			require.NoError(t, err)
+			require.False(t, ps.Allows(authz.PermSettingsRead, "0"), "empty grants are cached at this point")
+		}
+	}))
+	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("example:key_cache") })
+	password := setupExamplePassword
+	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Code: code, Username: "owner", Password: &password}, authtypes.SessionMeta{})
+	require.NoError(t, err)
+	require.True(t, primed)
+	ps, err := roles.ResolveApiKeyPermissions(t.Context(), keyID)
+	require.NoError(t, err)
+	require.True(t, ps.Allows(authz.PermSettingsRead, "0"), "post-claim invalidation discards the empty cache")
+}
+
+// setupExamplePassword is a synthetic password for test claims only.
+const setupExamplePassword = "Example-Setup-Password1!"
+
+type forwardingProbeKey struct{}
+
+// The forwarding validator binds its viewer to the policy it authenticated under, even when local
+// sign-in is published in between.
+func TestForwardingViewerKeepsTheAuthenticationPolicy(t *testing.T) {
+	f := newSignInRoutingFixture(t)
+	f.cfg.AuthMode = ""
+	require.NoError(t, f.svc.InitializeSignIn(t.Context()))
+	_, err := f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), f.adminID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeNone}}, authtypes.SessionMeta{})
+	require.NoError(t, err)
+	entered, resume := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	require.NoError(t, f.db.Callback().Query().After("gorm:query").Register("example:pause_forwarding", func(tx *gorm.DB) {
+		if tx.Statement.Context.Value(forwardingProbeKey{}) == true {
+			once.Do(func() { close(entered); <-resume })
+		}
+	}))
+	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("example:pause_forwarding") })
+	validator := createAuthValidatorInternal(api.HandlerDeps{Auth: auth.New(f.svc, nil, nil), ApiKey: apikey.New(f.keys), Role: role.New(f.roles)})
+	req := httptest.NewRequest(http.MethodGet, "/api/environments/example/containers", nil)
+	req = req.WithContext(context.WithValue(req.Context(), forwardingProbeKey{}, true))
+	c := echo.New().NewContext(req, httptest.NewRecorder())
+	done := make(chan bool, 1)
+	go func() {
+		_, _, ok := validator(req.Context(), c)
+		done <- ok
+	}()
+	<-entered
+	password := setupExamplePassword
+	_, err = f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), f.adminID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Password: &password}, authtypes.SessionMeta{})
+	close(resume)
+	require.NoError(t, err)
+	require.True(t, <-done, "the request authenticated under none mode")
+	require.Error(t, sessionlife.Check(c.Request().Context()), "its viewer must not adopt the later local policy")
 }

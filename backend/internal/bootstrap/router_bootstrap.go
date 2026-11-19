@@ -128,6 +128,7 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 	}
 	return func(ctx context.Context, c *echo.Context) (*authz.PermissionSet, *usertypes.Actor, bool) {
 		req := c.Request()
+		*req = *req.WithContext(deps.Auth.Service().WithPolicySnapshot(req.Context()))
 		if !deps.Auth.Service().CurrentPolicy().LocalActive() {
 			if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
 				if envID, err := deps.ApiKey.Service().GetEnvironmentByApiKey(ctx, apiKey); err == nil && envID != nil {
@@ -358,7 +359,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 			return deps.Settings.Service().IsFeatureEnabled(ctx, features.VulnerabilityManagement)
 		}, PointAccess: func(ctx context.Context, env, target, point string) error {
 			return deps.Updater.Service().CheckRestorePointAccess(ctx, env, target, point, deps.Environment.Service())
-		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), ProxyIdentityHeaderFunc: func() string { return deps.Auth.Service().CurrentPolicy().Header }, AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
+		}, PointHolds: deps.Activity.Service().ReadPointHolds, Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), ProxyIdentityHeaderFunc: proxyIdentityHeaderSourceInternal(deps.Auth.Service()), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
 		}, PolicyCleanup: deps.Updater.Service().StackDestroyed, OriginOverlay: deps.Container.Service().OverlayInventory, InventoryPending: deps.Environment.Service().InventoryPending},
 	)
@@ -532,4 +533,10 @@ func remoteAddrInTrustedProxiesInternal(remoteAddr string, nets []*net.IPNet) bo
 		}
 	}
 	return false
+}
+
+// proxyIdentityHeaderSourceInternal lets forwarding strip the identity header of the current runtime
+// sign-in policy, not only the startup value.
+func proxyIdentityHeaderSourceInternal(svc *auth.AuthService) func() string {
+	return func() string { return svc.CurrentPolicy().Header }
 }

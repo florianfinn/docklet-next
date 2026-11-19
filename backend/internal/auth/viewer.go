@@ -18,6 +18,27 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 )
 
+type policySnapshotKey struct{}
+
+// WithPolicySnapshot records the published sign-in policy before a request authenticates, so a viewer
+// bound later belongs to the policy its credentials were checked against. An existing snapshot is kept.
+func (s *AuthService) WithPolicySnapshot(ctx context.Context) context.Context {
+	if s == nil {
+		return ctx
+	}
+	if _, ok := ctx.Value(policySnapshotKey{}).(*Policy); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, policySnapshotKey{}, s.policy.Load())
+}
+
+func (s *AuthService) boundPolicyInternal(ctx context.Context) *Policy {
+	if p, ok := ctx.Value(policySnapshotKey{}).(*Policy); ok {
+		return p
+	}
+	return s.policy.Load()
+}
+
 func (s *AuthService) ViewerContext(ctx context.Context, sessionID, userID string) context.Context {
 	if s == nil || s.userService == nil {
 		return ctx
@@ -47,7 +68,7 @@ func (s *AuthService) ViewerContextForPermissions(ctx context.Context, sessionID
 	original := ctx
 	// A published sign-in policy change ends every user binding made under the previous one,
 	// including sessionless none and proxy viewers that have no session row to revoke.
-	bound := s.policy.Load()
+	bound := s.boundPolicyInternal(ctx)
 	if ps.IsGlobalAdmin() {
 		// Administrators (also sessionless key, proxy and static principals) only join the user-ID
 		// registry, so an explicit status change can close their streams; no extra durable checks.

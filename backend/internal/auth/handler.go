@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints; remove dead token-version mismatch handling.
+// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity; M15 simple-user rights and identity contracts; clear expired browser sessions and their presence hints; remove dead token-version mismatch handling; M29 policy snapshot before authentication.
 
 package auth
 
@@ -727,7 +727,7 @@ func NewHumaMiddleware(
 	),
 ) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		ctx = huma.WithContext(ctx, context.WithValue(ctx.Context(), middleware.ContextKeyRemoteAddr, ctx.RemoteAddr()))
+		ctx = huma.WithContext(ctx, authService.WithPolicySnapshot(context.WithValue(ctx.Context(), middleware.ContextKeyRemoteAddr, ctx.RemoteAddr())))
 		if authService == nil {
 			next(ctx)
 			return

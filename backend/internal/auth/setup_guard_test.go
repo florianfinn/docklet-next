@@ -11,14 +11,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -342,4 +348,185 @@ func TestSignInRecoveryStoresLocalSignIn(t *testing.T) {
 		_, err = restartAuth(f, &cfg)
 		require.NoError(t, err, "the repaired policy starts without the reset value")
 	})
+}
+
+// A request that authenticated under none mode keeps that policy's lifetime, even when local sign-in
+// is published before its viewer binds.
+func TestSignInPolicyPublishedDuringAuthenticationEndsTheStream(t *testing.T) {
+	f := newSetupFixture(t, &config.Config{}, nil)
+	owner := claimNone(t, f)
+	type probeKey struct{}
+	entered, resume := make(chan struct{}), make(chan struct{})
+	var paused atomic.Bool
+	require.NoError(t, f.db.Callback().Query().After("gorm:query").Register("example:pause_auth", func(tx *gorm.DB) {
+		if tx.Statement.Context.Value(probeKey{}) == true && paused.CompareAndSwap(false, true) {
+			close(entered)
+			<-resume
+		}
+	}))
+	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("example:pause_auth") })
+	router := echo.New()
+	router.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), probeKey{}, true)))
+			return next(c)
+		}
+	})
+	router.GET("/stream", func(c *echo.Context) error {
+		conn, err := websocket.Accept(c.Response(), c.Request(), nil)
+		if err != nil {
+			return err
+		}
+		defer conn.CloseNow()
+		lease, err := sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+		if err != nil {
+			return nil
+		}
+		defer lease.Release()
+		kind, data, err := conn.Read(c.Request().Context())
+		if err != nil || sessionlife.Check(c.Request().Context()) != nil {
+			return nil
+		}
+		return conn.Write(c.Request().Context(), kind, data)
+	}, NewAuthMiddleware(f.svc, f.svc.config).WithPermissionResolver(f.roles).Add())
+	server := httptest.NewServer(router)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	type dialResult struct {
+		conn *websocket.Conn
+		err  error
+	}
+	done := make(chan dialResult, 1)
+	go func() {
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/stream", nil)
+		done <- dialResult{conn, err}
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("authentication did not reach the barrier")
+	}
+	_, err := f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), owner.ID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Password: new(setupTestPassword)}, authtypes.SessionMeta{})
+	close(resume)
+	require.NoError(t, err)
+	result := <-done
+	if result.err != nil {
+		return
+	}
+	defer result.conn.CloseNow()
+	_ = result.conn.Write(ctx, websocket.MessageText, []byte("anonymous after local publication"))
+	_, data, err := result.conn.Read(ctx)
+	require.Error(t, err, "the stream echoed %q under the later local policy", data)
+	require.NotErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestMachineStreamsSurvivePolicyPublication(t *testing.T) {
+	f := newSetupFixture(t, &config.Config{}, nil)
+	token := "example-machine-token"
+	resolver := testEnvironmentTokenResolver{env: &environment.Environment{ID: "example", Enabled: true, AccessToken: &token}}
+	router := echo.New()
+	router.GET("/stream", func(c *echo.Context) error {
+		conn, err := websocket.Accept(c.Response(), c.Request(), nil)
+		if err != nil {
+			return err
+		}
+		defer conn.CloseNow()
+		lease, err := sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+		if err != nil {
+			return nil
+		}
+		defer lease.Release()
+		for {
+			kind, data, err := conn.Read(c.Request().Context())
+			if err != nil || sessionlife.Check(c.Request().Context()) != nil {
+				return nil
+			}
+			if conn.Write(c.Request().Context(), kind, data) != nil {
+				return nil
+			}
+		}
+	}, NewAuthMiddleware(f.svc, f.svc.config).WithEnvironmentAccessTokenResolver(resolver).Add())
+	server := httptest.NewServer(router)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var connections []*websocket.Conn
+	for _, header := range []string{middleware.HeaderAgentToken, middleware.HeaderApiKey} {
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/stream", &websocket.DialOptions{HTTPHeader: http.Header{header: {token}}})
+		require.NoError(t, err)
+		defer conn.CloseNow()
+		connections = append(connections, conn)
+	}
+	check := func(stage string) {
+		for _, conn := range connections {
+			require.NoError(t, conn.Write(ctx, websocket.MessageText, []byte("machine still open")), stage)
+			_, data, err := conn.Read(ctx)
+			require.NoError(t, err, stage)
+			require.Equal(t, "machine still open", string(data), stage)
+		}
+	}
+	check("pending")
+	owner := claimNone(t, f)
+	check("after claim")
+	_, err := f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), owner.ID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Password: new(setupTestPassword)}, authtypes.SessionMeta{})
+	require.NoError(t, err)
+	check("after local publication")
+}
+
+type snapshotProbeKey struct{}
+
+// pauseAuthentication blocks the first database query of a marked request until resume is closed.
+func pauseAuthentication(t *testing.T, f *setupFixture) (entered, resume chan struct{}) {
+	t.Helper()
+	entered, resume = make(chan struct{}), make(chan struct{})
+	var paused atomic.Bool
+	require.NoError(t, f.db.Callback().Query().After("gorm:query").Register("example:pause_huma", func(tx *gorm.DB) {
+		if tx.Statement.Context.Value(snapshotProbeKey{}) == true && paused.CompareAndSwap(false, true) {
+			close(entered)
+			<-resume
+		}
+	}))
+	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("example:pause_huma") })
+	return entered, resume
+}
+
+type viewerProbeOutput struct {
+	Body struct {
+		Stale bool `json:"stale"`
+	}
+}
+
+func TestHumaViewerKeepsTheAuthenticationPolicy(t *testing.T) {
+	f := newSetupFixture(t, &config.Config{}, nil)
+	owner := claimNone(t, f)
+	entered, resume := pauseAuthentication(t, f)
+	router := echo.New()
+	router.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), snapshotProbeKey{}, true)))
+			return next(c)
+		}
+	})
+	api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
+	api.UseMiddleware(NewHumaMiddleware(api, f.svc, nil, f.svc.userServiceRoleResolver(), nil, f.svc.config))
+	api.UseMiddleware(f.svc.ViewerMiddleware(api))
+	huma.Register(api, huma.Operation{OperationID: "get-viewer-probe", Method: http.MethodGet, Path: "/viewer-probe", Security: []map[string][]string{{"BearerAuth": {}}}}, func(ctx context.Context, _ *struct{}) (*viewerProbeOutput, error) {
+		out := &viewerProbeOutput{}
+		out.Body.Stale = sessionlife.Check(ctx) != nil
+		return out, nil
+	})
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/viewer-probe", nil))
+		result <- rec
+	}()
+	<-entered
+	_, err := f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), owner.ID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Password: new(setupTestPassword)}, authtypes.SessionMeta{})
+	close(resume)
+	require.NoError(t, err)
+	rec := <-result
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"stale":true`, "a viewer bound after the publication belongs to the none policy it authenticated under")
 }
