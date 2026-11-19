@@ -118,6 +118,8 @@ export const deSettings: typeof enSettings = {
     hubAddressInvalid: "IPv4- oder IPv6-Adresse mit optionalem Port angeben, z. B. 192.0.2.10:8080 oder [2001:db8::10]:3552",
     legacyAddress: "Keine IP-Adresse. Agents brauchen die IP des Hosts.",
     moveToDomain: "Zur Domain verschieben",
+    legacyIpUrl: "Die IP-Adresse wird ohne http:// oder https:// gespeichert.",
+    stripScheme: "{address} übernehmen",
     replaceDomainTitle: "Domain ersetzen?",
     replaceDomainBody: "Die aktuelle Domain durch {domain} ersetzen? Die IP-Adresse wird geleert.",
     replaceDomain: "Ersetzen",

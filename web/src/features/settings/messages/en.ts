@@ -117,6 +117,8 @@ export const enSettings = {
     hubAddressInvalid: "Enter an IPv4 or IPv6 address with an optional port, e.g. 192.0.2.10:8080 or [2001:db8::10]:3552",
     legacyAddress: "This is not an IP address. Agents need the host''s IP.",
     moveToDomain: "Move to Domain",
+    legacyIpUrl: "The IP address is stored without http:// or https://.",
+    stripScheme: "Use {address}",
     replaceDomainTitle: "Replace the domain?",
     replaceDomainBody: "Replace the current domain with {domain}? The IP address will be cleared.",
     replaceDomain: "Replace",

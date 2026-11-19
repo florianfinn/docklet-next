@@ -9,7 +9,7 @@ import { useTranslations } from "use-intl";
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
 import { useAdapter } from "@/data/use-adapter";
 import { discoveryAppUrl } from "@/domain/hub-discovery";
-import { hubAddress, normalizeDomainUrl } from "@/domain/validation";
+import { hubAddress, ipFromLegacyUrl, normalizeDomainUrl } from "@/domain/validation";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 
 import { notificationBaseUrl, type GeneralSettings, type HubSettings, type LinkBase } from "@/domain/settings";
@@ -48,6 +48,7 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
   const e = useGeneralErrors(value, { preserveAddress, appUrl });
   const [replacement, setReplacement] = useState<string | null>(null);
   const legacy = !!value.hubAddress.trim() && !!hubAddress(value.hubAddress);
+  const strippedIp = ipFromLegacyUrl(value.hubAddress);
   const movedDomain = normalizeDomainUrl(value.hubAddress, appUrl);
   const move = (domainUrl: string) => onChange({ hubAddress: "", domainUrl });
   const links = notificationBaseUrl({ ...value, domainUrl: normalizeDomainUrl(value.domainUrl, appUrl) ?? value.domainUrl });
@@ -66,7 +67,11 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
         placeholder="192.0.2.10:8080"
         mono
       />
-      {legacy && <div className="flex flex-col items-start gap-2 text-sm">
+      {legacy && strippedIp && <div className="flex flex-col items-start gap-2 text-sm">
+        <p>{t("legacyIpUrl")}</p>
+        <Button type="button" variant="outline" onClick={() => onChange({ hubAddress: strippedIp })}>{t("stripScheme", { address: strippedIp })}</Button>
+      </div>}
+      {legacy && !strippedIp && <div className="flex flex-col items-start gap-2 text-sm">
         <p>{t("legacyAddress")}</p>
         <Button type="button" variant="outline" disabled={domainPending || movedDomain === undefined} onClick={() => {
           if (movedDomain === undefined) return;

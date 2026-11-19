@@ -195,3 +195,14 @@ it("revalidates the IP when finishing directly from the setup review", async () 
   await screen.findByLabelText("IP-Adresse");
   expect(h.writes).toHaveLength(0);
 });
+
+it("AUTO-2 a legacy http:// IP value offers the bare IP instead of a domain move", async () => {
+  const h = hub("", "http://192.0.2.10:8080"); open(h);
+  await screen.findByText("Die IP-Adresse wird ohne http:// oder https:// gespeichert.");
+  expect([screen.queryByRole("button", { name: "Zur Domain verschieben" }) === null, h.writes.length]).toEqual([true, 0]);
+  await userEvent.click(screen.getByRole("button", { name: "192.0.2.10:8080 übernehmen" }));
+  expect([input("IP-Adresse").value, input("Domain").value]).toEqual(["192.0.2.10:8080", ""]);
+  await save();
+  await waitFor(() => expect(h.writes).toHaveLength(1));
+  expect(h.writes[0]?.hubAddress).toBe("192.0.2.10:8080");
+});
