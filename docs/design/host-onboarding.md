@@ -518,7 +518,8 @@ Owner: step S2. Wire type in `types/environment/onboarding.go`, plus OpenAPI and
   4. Interface.
   5. Request.
 
-  Duplicates are removed, as today.
+  Equivalent addresses merge into one candidate that lists all of its origins (M30, see
+  [hub update experience](hub-update-experience.md)).
 - **Web prefill** (`applyDiscovery`).
   - **IP address**: the first candidate of kind `ip` that is not `same-host`.
   - **Domain**: `APP_URL` when it is a name. Otherwise the first `domain` candidate.
@@ -528,13 +529,15 @@ Owner: step S2. Wire type in `types/environment/onboarding.go`, plus OpenAPI and
 #### UI (#520)
 
 - Setup and General settings show two fields, "IP address" and "Domain", each with a one-line hint:
-  - IP address: "Agents connect here".
-  - Domain: "Public address with HTTPS".
+  - IP address: the host's IP; agents connect here (LAN or VPN).
+  - Domain: optional local name of the hub. M30 dropped the earlier "public address with HTTPS"
+    wording; Docklet does not model public exposure through a proxy.
 - "Links in notifications" shows two options, Domain and IP address.
   - Stored `auto` is shown as Domain when a domain is set, otherwise as IP address.
   - The Domain option is disabled until a domain is set, with the visible reason "Enter a domain first".
   - When both addresses are set, both options are selectable.
-  - The backend `resolveLinkBase` is unchanged; `auto` and `domain` already resolve the same way.
+  - `auto` and `domain` resolve the same way in the backend `resolveLinkBase`; since M30 it brackets a
+    bare IPv6 address.
 - Setup shows the container line ("Runs in Docker container <name>, network <mode>") from
   `container`, or "Not in a container" when it is absent.
 

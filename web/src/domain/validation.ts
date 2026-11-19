@@ -113,6 +113,14 @@ export function ipFromLegacyUrl(value: string): string | undefined {
   return authority && !hubAddress(authority) ? authority : undefined;
 }
 
+/** The stored IP address form of an IP URL: bare IPv6 without a port, brackets only with one; an explicit default port is kept. */
+export function storedIpAddress(url: string): string {
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(url.trim())?.[1] ?? "";
+  const m = /^\[([^\]]+)\](?::(\d+))?$/.exec(authority);
+  if (m) return m[2] ? `[${m[1]}]:${m[2]}` : m[1]!;
+  return authority;
+}
+
 /** http:// is assumed for IP addresses; bare IPv6 needs brackets in a URL. */
 export function hubAddressUrl(value: string): string {
   const v = value.trim().replace(/\/+$/, "");

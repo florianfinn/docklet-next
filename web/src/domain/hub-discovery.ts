@@ -3,6 +3,7 @@
 // the server and the UI only ranks and explains the result.
 
 import { cidrOverlap, parseCidr, parseIp } from "./networks";
+import { storedIpAddress } from "./validation";
 
 export type HubNetworkMode = "bridge" | "host" | "macvlan" | "ipvlan";
 
@@ -115,7 +116,7 @@ export function hubAddressCandidates(d: HubDiscovery): HubAddressCandidate[] {
     // The internal hub address is an IP address: a name is listed but never recommended.
     const best = preferredIpCandidate(d.candidates);
     return d.candidates.map((candidate) => ({
-      id: candidate.id, address: serverCandidateKind(candidate) === "domain" ? new URL(candidate.url).origin : new URL(candidate.url).host, kind: SERVER_KIND[candidate.source],
+      id: candidate.id, address: serverCandidateKind(candidate) === "domain" ? new URL(candidate.url).origin : storedIpAddress(candidate.url), kind: SERVER_KIND[candidate.source],
       addressKind: serverCandidateKind(candidate), origins: candidate.origins?.length ? candidate.origins : [candidate.source],
       reach: candidate.reach, recommended: candidate === best,
     }));

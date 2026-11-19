@@ -206,3 +206,16 @@ it("AUTO-2 a legacy http:// IP value offers the bare IP instead of a domain move
   await waitFor(() => expect(h.writes).toHaveLength(1));
   expect(h.writes[0]?.hubAddress).toBe("192.0.2.10:8080");
 });
+
+it.each([["http://[2001:db8::10]", "2001:db8::10"], ["http://[::ffff:192.0.2.10]", "::ffff:192.0.2.10"], ["http://[2001:db8::10]:80", "[2001:db8::10]:80"], ["http://192.0.2.10:80", "192.0.2.10:80"], ["http://[2001:db8::10]:3552", "[2001:db8::10]:3552"]])("C-B1 setup prefills discovered %s in the stored form %s and advances", async (url, stored) => {
+  const ip = discovery.candidates[1]!, original = ip.url;
+  ip.url = url;
+  try {
+    const h = hub("", "");
+    renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup"], h.adapter);
+    await waitFor(() => expect(input("IP-Adresse").value).toBe(stored));
+    await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+    await waitFor(() => expect(screen.queryByLabelText("IP-Adresse") === null).toBe(true));
+    expect(h.writes).toHaveLength(0);
+  } finally { ip.url = original; }
+});
