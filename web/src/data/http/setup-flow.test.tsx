@@ -24,12 +24,13 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   const fail = target === "failure";
   const errorToast = vi.spyOn(toast, "error");
   restartSetup();
-  const settings: Record<string, string> = { setupCompleted: "false", hubName: "Before setup", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin", actionPresentation: "dialog", keepActionOutput: "true" };
+  const settings: Record<string, string> = { setupCompleted: "false", hubName: "Before setup", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin", actionPresentation: "dialog", keepActionOutput: "true", moduleProxyEnabled: "false", defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true" };
   const writes: Record<string, string>[] = [];
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
     if (path === "/api/auth/mode") return new Response(JSON.stringify({ success: true, data: { mode: "local", setupPending: false } }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
     if (path === "/api/auth/me") return new Response(JSON.stringify({ success: true, data: { id: "admin", username: "admin", requiresPasswordChange: false, isAdmin: true, assignments: [] } }));
+    if (path === "/api/environments/0/settings/public") return new Response(JSON.stringify([{ key: "moduleProxyEnabled", value: settings.moduleProxyEnabled }]));
     if (path === "/api/environments/0/settings") {
       if (init?.method === "PUT") {
         const values = JSON.parse(String(init.body)) as Record<string, string>;
@@ -64,7 +65,7 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   if (fail) await waitFor(() => expect(errorToast).toHaveBeenCalledWith("Die Einrichtung konnte nicht gespeichert werden. Prüfe die Angaben und versuche es erneut."));
   else await waitFor(() => expect(settings.setupCompleted).toBe("true"));
   expect(writes[0]?.moduleProxyEnabled).toBe(String(target!=="/settings/general"));
-  expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
+  expect(writes[0]?.agentProjectsDirectory).toBe("/srv/projects");
   expect(writes[0]?.projectsDirectory).toBeUndefined();
   if (fail) expect(router.state.location.pathname).toBe("/setup");
   else {

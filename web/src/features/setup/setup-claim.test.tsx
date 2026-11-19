@@ -40,7 +40,7 @@ function hubAdapter(hub: Hub) {
       return json({ success: true, status: "authenticated", user: admin });
     }
     if (path === "/api/auth/me") return hub.pending ? problem(401, "setup.pending") : json(admin);
-    if (path === "/api/environments/0/settings") return new Response(JSON.stringify(Object.entries({ setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog" }).map(([key, value]) => ({ key, value }))));
+    if (path === "/api/environments/0/settings" || path === "/api/environments/0/settings/public") return new Response(JSON.stringify(Object.entries({ setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog", defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true" }).map(([key, value]) => ({ key, value }))));
     return new Response("{}", { status: 503 });
   } });
 }
@@ -107,12 +107,12 @@ it("shows a forced mode locked and claims with it", async () => {
   expect(hub.claims[0]).toMatchObject({ mode: "none" });
 });
 
-it("upgraded hubs start the wizard from their saved values; fresh hubs keep first-run defaults", () => {
+it("connected wizards start from saved values; addresses stay open to discovery only while none is saved", () => {
   const draft = freshSetupDraft();
   const saved = { general: { ...draft.general, hubName: "Lab", hubAddress: "192.0.2.10:3552", domainUrl: "https://hub.example.com" }, hostDefaults: { ...draft.hostDefaults, projectDir: "/srv/docker" } };
   const upgraded = hydrateFromSettings(draft, saved, { proxy: true });
   expect([upgraded.general.hubName, upgraded.general.hubAddress, upgraded.hostDefaults.projectDir, upgraded.modules.proxy, upgraded.hubAddressOrigin?.kind]).toEqual(["Lab", "192.0.2.10:3552", "/srv/docker", true, "manual"]);
-  const fresh = hydrateFromSettings(draft, { general: { ...draft.general, hubName: "Other" }, hostDefaults: draft.hostDefaults });
-  expect([fresh.general.hubName, fresh.hydrated]).toEqual(["Docklet", true]);
+  const blank = hydrateFromSettings(draft, { general: { ...draft.general, hubName: "Other" }, hostDefaults: { ...draft.hostDefaults, projectDir: "/srv/docker" } }, { proxy: true });
+  expect([blank.general.hubName, blank.hostDefaults.projectDir, blank.modules.proxy, blank.hubAddressOrigin, blank.domainEdited, blank.hydrated]).toEqual(["Other", "/srv/docker", true, null, false, true]);
   expect(hydrateFromSettings(upgraded, saved)).toBe(upgraded);
 });

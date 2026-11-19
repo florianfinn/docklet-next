@@ -78,11 +78,17 @@ export function applyDiscovery(draft: SetupDraft, discovery: HubDiscovery): Setu
 }
 
 /**
- * A hub that already holds addresses (upgraded or resumed) starts the wizard from its saved values, so
- * Finish never resets them to first-run defaults. A fresh hub keeps the first-run draft.
+ * A connected wizard starts from the hub's saved values, so Finish never resets an upgraded hub to first-run
+ * defaults; a fresh hub's saved values are those defaults. Once either address is saved both count as typed (a blank
+ * domain beside a saved IP is a choice); with neither saved, discovery may fill them.
  */
 export function hydrateFromSettings(draft: SetupDraft, saved: { general: GeneralSettings; hostDefaults: HostDefaults }, modules?: ModuleChoices): SetupDraft {
   if (draft.hydrated) return draft;
-  if (!saved.general.hubAddress.trim() && !saved.general.domainUrl.trim()) return { ...draft, hydrated: true };
-  return { ...draft, general: { ...saved.general }, hostDefaults: { ...saved.hostDefaults }, ...(modules ? { modules } : {}), hubAddressOrigin: { kind: "manual" }, domainEdited: true, hydrated: true };
+  const { hubName, hubAddress, domainUrl, linkBase, timeZone } = saved.general;
+  const addressed = hubAddress.trim() !== "" || domainUrl.trim() !== "";
+  return {
+    // Only the wizard's own fields: Finish never writes the time zone or other General settings.
+    ...draft, general: { hubName, hubAddress, domainUrl, linkBase, timeZone }, hostDefaults: { ...saved.hostDefaults }, ...(modules ? { modules } : {}),
+    hubAddressOrigin: addressed ? { kind: "manual" } : null, domainEdited: addressed, hydrated: true,
+  };
 }

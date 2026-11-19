@@ -75,14 +75,16 @@ export default function SetupPage() {
   const connected = adapter.kind === "http";
   const saved = useConnectedSettings(connected && !draft.hydrated);
   const savedModules = useQuery({ queryKey: ["module-states", "setup"], queryFn: () => adapter.getModuleStates?.() ?? null, enabled: connected && !draft.hydrated, retry: false });
+  // Editing and Finish wait until both reads succeeded; a failed read never counts as hydrated.
   useEffect(() => {
-    if (connected && saved.data && !savedModules.isPending) setupStore.set((d) => hydrateFromSettings(d, saved.data, savedModules.data ?? undefined));
-  }, [connected, saved.data, savedModules.isPending, savedModules.data]);
+    if (connected && saved.isSuccess && savedModules.isSuccess) setupStore.set((d) => hydrateFromSettings(d, saved.data, savedModules.data ?? undefined));
+  }, [connected, saved.isSuccess, saved.data, savedModules.isSuccess, savedModules.data]);
+  const initializing = connected && !draft.hydrated;
   const discovery = useQuery({ queryKey: ["hub-discovery"], queryFn: () => adapter.discoverHub(), staleTime: Infinity, retry: false });
   const unset = draft.hubAddressOrigin === null;
-  // Prefill once data is there and again after a replay; typed values are never replaced.
+  // Prefill when data arrives, after an IP change and after a replay; applyDiscovery fills each field only while untouched.
   useEffect(() => {
-    if (discovery.data && unset && (!connected || draft.hydrated)) setupStore.set((d) => applyDiscovery(d, discovery.data));
+    if (discovery.data && (!connected || draft.hydrated)) setupStore.set((d) => applyDiscovery(d, discovery.data));
   }, [discovery.data, unset, connected, draft.hydrated]);
 
   // The connected access step is complete: the claim created the administrator.
@@ -124,6 +126,24 @@ export default function SetupPage() {
       if (connected) queryClient.setQueryData(queryKeys.setupStatus, true);
       void navigate("/dashboard", { replace: true });
     }} />;
+  }
+
+  if (initializing) {
+    const failed = saved.isError || savedModules.isError;
+    return (
+      <SetupFrame connected current={step} reachable={0} onSelect={go}>
+        <Card className="flex flex-col items-center gap-3 p-8 text-center">
+          {failed ? (
+            <>
+              <p role="alert" className="text-sm text-destructive">{t("savedLoadError")}</p>
+              <Button variant="outline" onClick={() => { if (saved.isError) void saved.refetch(); if (savedModules.isError) void savedModules.refetch(); }}>{t("savedRetry")}</Button>
+            </>
+          ) : (
+            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />{t("savedLoading")}</p>
+          )}
+        </Card>
+      </SetupFrame>
+    );
   }
 
   const show = attempted.includes(step);

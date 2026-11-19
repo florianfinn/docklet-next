@@ -140,3 +140,10 @@ func TestSettingsPutRefusesStoredSignInKeys(t *testing.T) {
 		}
 	}
 }
+
+// A fresh hub's stored defaults equal the wizard's first-run values, since the connected wizard starts from them.
+func TestSetupFreshHubDefaultsMatchTheWizard(t *testing.T) {
+	d := DefaultSettingsConfig()
+	require.Equal(t, []string{"Docklet", "", "", "auto", "/home/docker", "/home/docker/docklet-agent", "direct", "true"},
+		[]string{d.HubName.Value, d.HubAddress.Value, d.DomainURL.Value, d.LinkBase.Value, d.AgentProjectsDirectory.Value, d.AgentInstallDirectory.Value, d.DefaultHostConnection.Value, d.DetectSocketGroup.Value})
+}

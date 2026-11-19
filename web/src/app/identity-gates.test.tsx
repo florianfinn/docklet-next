@@ -33,7 +33,7 @@ function adapter(mode: AuthMode, completed: boolean, change: boolean, authentica
     if (allowLogin && path === "/api/auth/login") { signedIn = true; return json({ user: user() }); }
     if (allowLogin && path === "/api/auth/password") { needsChange = false; return json({ message: "changed" }); }
     if (path === "/api/auth/password" || path === "/api/auth/login") return new Response("{}", { status: 401 });
-    if (path === "/api/environments/0/settings") return new Response(JSON.stringify(Object.entries({ setupCompleted: String(completed), hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog" }).map(([key, value]) => ({ key, value }))));
+    if (path === "/api/environments/0/settings" || path === "/api/environments/0/settings/public") return new Response(JSON.stringify(Object.entries({ setupCompleted: String(completed), hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog", defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true" }).map(([key, value]) => ({ key, value }))));
     return new Response("{}", { status: 503 });
   } });
 }

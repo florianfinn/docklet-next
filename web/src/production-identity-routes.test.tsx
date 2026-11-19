@@ -34,7 +34,7 @@ it("claims a pending hub, runs first setup, connected settings and profile on pr
   let pending = true;
   const settings: Record<string, string> = {
     moduleProxyEnabled: "false", setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
-    keepActionOutput: "true", actionPresentation: "dialog",
+    keepActionOutput: "true", actionPresentation: "dialog", defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true",
   };
   const user = { id: "admin", username: "operator", requiresPasswordChange: false, isAdmin: true, assignments: [], locale: "de" };
   const writes: string[] = [];
