@@ -11,7 +11,7 @@ import { formatPercentNumber, withPercent } from "@/domain/locale";
 import LoginPage from "@/features/auth/login/LoginPage";
 import { FlowsSection } from "@/features/design-lab/ControlsSection";
 import SetupPage from "@/features/setup/SetupPage";
-import { restartSetup } from "@/features/setup/setup-draft";
+import { restartSetup, setupStore } from "@/features/setup/setup-draft";
 import { useScheduleText } from "@/shared/components/schedule/use-schedule-text";
 import { renderRoutes, renderWithApp } from "@/test/render";
 
@@ -57,7 +57,8 @@ describe("language switch", () => {
 
   it("runs first-run setup in English, including validation and help buttons", async () => {
     restartSetup();
-    renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup"]);
+    setupStore.set((d) => ({ ...d, reached: 1 }));
+    renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=hub"]);
     await switchTo("English (US)");
     await waitFor(() => expect((screen.getByLabelText("Internal hub address") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
     await userEvent.clear(screen.getByLabelText("Internal hub address"));

@@ -48,11 +48,14 @@ describe("hub address candidates", () => {
   });
 });
 
+// The wizard starts with the access step; these cases begin at the hub step.
+const openHubStep = () => setupStore.set((d) => ({ ...d, reached: 1 }));
+
 describe("setup prefill", () => {
   it("keeps what the user typed when discovery answers late and offers the proposal explicitly", async () => {
     let answer: (d: HubDiscovery) => void = () => {};
     const adapter = { ...createDemoAdapter(), discoverHub: () => new Promise<HubDiscovery>((r) => (answer = r)) };
-    renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup"], adapter);
+    openHubStep(); renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=hub"], adapter);
     expect(await screen.findByText("Hub erkennt seine Netzwerke …") !== null).toBe(true);
     await userEvent.type(field(), "hub.example.org:8080");
     answer(DISCOVERY_BRIDGE);
@@ -67,16 +70,17 @@ describe("setup prefill", () => {
   });
 
   it("prefills again after a replay", async () => {
-    renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup"]);
+    openHubStep(); renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=hub"]);
     await waitFor(() => expect(field().value).toBe("192.0.2.10:8080"));
     setupStore.set((d) => ({ ...d, general: { ...d.general, hubAddress: "x" }, hubAddressOrigin: { kind: "manual" } }));
     restartSetup();
+    openHubStep();
     await waitFor(() => expect(field().value).toBe("192.0.2.10:8080"));
   });
 
   it("falls back to manual entry when discovery fails", async () => {
     const adapter = { ...createDemoAdapter(), discoverHub: () => Promise.reject(new Error("boom")) };
-    renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup"], adapter);
+    openHubStep(); renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=hub"], adapter);
     expect((await screen.findByRole("alert")).textContent?.includes("Adresse bitte selbst eintragen")).toBe(true);
     expect(field().value).toBe("");
   });

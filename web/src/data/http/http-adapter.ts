@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472).
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472); M29 first-run claim and sign-in policy operations.
 
 import { createNavInventory, createNavInventoryState } from "./nav-inventory";
 import { createSelfUpdates } from "./self-update";
@@ -174,6 +174,9 @@ const IMPLEMENTED = new Set<string>([
   "logout",
   "changePassword",
   "updateMyLocale",
+  "claimSetup",
+  "getSignInPolicy",
+  "updateSignIn",
   "getSetupStatus",
   "completeSetup",
   "getConnectedSettings",
@@ -944,8 +947,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (/^(read|browse|download)/.test(String(key))) return (...args: unknown[]) => (method(...args) as Promise<unknown>).catch(signedOutCancels);
     if (!/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
     return (...args: unknown[]) => {
-      // Auth and activities already implement their specialized renewal re-read.
-      if (key === "getCurrentUser" || key === "getAuthMode") return method(...args);
+      // Auth and activities already implement their specialized renewal re-read; the public sign-in
+      // configuration does not depend on the identity, so a session change never cancels it.
+      if (key === "getCurrentUser" || key === "getAuthMode" || key === "getAuthConfiguration") return method(...args);
       if (key === "listActions") return sharedOutcome(method(...args) as Promise<unknown>, signedOutCancels);
       const owner = lifetimeGeneration;
       const invoke = async (retryRenewal = true): Promise<unknown> => {

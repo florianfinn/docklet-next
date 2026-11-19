@@ -24,7 +24,16 @@ const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }
 describe("first-run setup", () => {
   it("validates each step, keeps the draft on back navigation and saves without secrets", async () => {
     const adapter = createDemoAdapter();
-    const { router } = renderRoutes([{ path: "/setup", element: <SetupPage /> }, { path: "/hosts/new", element: <p>Onboarding</p> }], ["/setup"], adapter);
+    const { router } = renderRoutes([{ path: "/setup", element: <SetupPage /> }, { path: "/dashboard", element: <p>Dashboard</p> }], ["/setup"], adapter);
+
+    // The wizard starts with access: sign-in mode and administrator.
+    await userEvent.click(await screen.findByRole("radio", { name: /Reverse Proxy/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Authentik-Beispiel einsetzen" }));
+    expect((screen.getByLabelText("Header für Benutzername") as HTMLInputElement).value).toBe("X-authentik-username");
+    await userEvent.click(screen.getByRole("radio", { name: /Lokaler Admin/ }));
+    await userEvent.type(screen.getByLabelText("Neues Passwort"), "ein-sehr-langes-passwort");
+    await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "ein-sehr-langes-passwort");
+    await next();
 
     // Discovery prefills the LAN address of the hub container; clearing it is a manual choice that stays.
     await waitFor(() => expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080"));
@@ -37,13 +46,6 @@ describe("first-run setup", () => {
     await next();
 
     expect(await screen.findByLabelText("Standard-Projektverzeichnis") !== null).toBe(true);
-    await next();
-    await userEvent.click(screen.getByRole("radio", { name: /Reverse Proxy/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Authentik-Beispiel einsetzen" }));
-    expect((screen.getByLabelText("Header für Benutzername") as HTMLInputElement).value).toBe("X-authentik-username");
-    await userEvent.click(screen.getByRole("radio", { name: /Lokaler Admin/ }));
-    await userEvent.type(screen.getByLabelText("Neues Passwort"), "ein-sehr-langes-passwort");
-    await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "ein-sehr-langes-passwort");
     await next();
     await userEvent.click(await screen.findByRole("switch", { name: "Proxy" }));
     await userEvent.click(screen.getByRole("button", { name: "Zurück" }));
@@ -58,13 +60,13 @@ describe("first-run setup", () => {
     await userEvent.click(screen.getByRole("button", { name: /Prüfen/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
 
-    expect(await screen.findByRole("heading", { name: "Docklet ist eingerichtet" }) !== null).toBe(true);
+    // Finish shows the Docklet loading animation and then opens the dashboard; there is no Done step.
+    expect(await screen.findByText("Docklet wird vorbereitet …") !== null).toBe(true);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"), { timeout: 4000 });
     const saved = await adapter.getSettings();
     expect(await adapter.getModuleStates!()).toEqual({ proxy: true });
     expect([saved.setupCompleted, saved.general.hubAddress, saved.general.domainUrl, saved.auth.mode, saved.auth.local.passwordSet]).toEqual([true, "192.0.2.10:8080", "", "local", true]);
     expect(JSON.stringify(saved).includes("ein-sehr-langes-passwort")).toBe(false);
 
-    await userEvent.click(screen.getByRole("link", { name: "Ersten Host verbinden" }));
-    expect(router.state.location.pathname).toBe("/hosts/new");
   });
 });

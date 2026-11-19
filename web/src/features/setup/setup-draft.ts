@@ -4,7 +4,7 @@ import type { AuthSettings, GeneralSettings, HostDefaults } from "@/domain/setti
 import type { PasswordDraft } from "@/features/settings/field-rules";
 import { createStore, useStore } from "@/shared/lib/store";
 
-export const SETUP_STEPS = ["hub", "projects", "auth", "modules", "review", "done"] as const;
+export const SETUP_STEPS = ["access", "hub", "projects", "modules", "review"] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 /** Where the internal hub address came from; discovery never replaces a manual value. */
@@ -18,8 +18,9 @@ export interface SetupDraft {
   auth: AuthSettings;
   /** In memory only; cleared on finish and never sent to the adapter. */
   password: PasswordDraft;
-  currentPassword: string;
   reached: number;
+  /** Connected wizard took over the hub's saved values (upgraded or resumed hub). */
+  hydrated: boolean;
 }
 
 /** First-run values of a fresh hub (not the current demo settings). */
@@ -35,8 +36,8 @@ export function freshSetupDraft(): SetupDraft {
       proxy: { userHeader: "Remote-User", emailHeader: "Remote-Email", groupsHeader: "Remote-Groups", trustedProxies: "", logoutUrl: "" },
     },
     password: { password: "", confirm: "" },
-    currentPassword: "",
     reached: 0,
+    hydrated: false,
   };
 }
 
@@ -65,4 +66,14 @@ export function applyDiscovery(draft: SetupDraft, discovery: HubDiscovery): Setu
   const best = hubAddressCandidates(discovery).find((c) => c.recommended);
   if (!best) return draft;
   return { ...draft, general: { ...draft.general, hubAddress: best.address }, hubAddressOrigin: { kind: "discovered", candidateId: best.id } };
+}
+
+/**
+ * A hub that already holds addresses (upgraded or resumed) starts the wizard from its saved values, so
+ * Finish never resets them to first-run defaults. A fresh hub keeps the first-run draft.
+ */
+export function hydrateFromSettings(draft: SetupDraft, saved: { general: GeneralSettings; hostDefaults: HostDefaults }, modules?: ModuleChoices): SetupDraft {
+  if (draft.hydrated) return draft;
+  if (!saved.general.hubAddress.trim() && !saved.general.domainUrl.trim()) return { ...draft, hydrated: true };
+  return { ...draft, general: { ...saved.general }, hostDefaults: { ...saved.hostDefaults }, ...(modules ? { modules } : {}), hubAddressOrigin: { kind: "manual" }, hydrated: true };
 }

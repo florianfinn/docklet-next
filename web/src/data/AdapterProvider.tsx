@@ -2,7 +2,7 @@
 // Revision: 8dcaf91635d017da67d2ad497797780c07348ef569f884d278f117e3dce3f929
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: #69 connected identity and hub settings. Issue #77: session-bound closure and identity generation cleanup. R1: preserve the confirmed currentUser during active identity replacement and establishment. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M14 #314: invalidate capability queries with container, stack and host changes. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: app query client with the hub maintenance retry policy (app-query-client.ts). M23 #435: bounded Dashboard events window and timeline slots. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472).
+// Deviations: #69 connected identity and hub settings. Issue #77: session-bound closure and identity generation cleanup. R1: preserve the confirmed currentUser during active identity replacement and establishment. Production image/registry UI and validation for #230. M12 #284 live volume backup domain, transport, UI and regression coverage. M14 #314: invalidate capability queries with container, stack and host changes. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: app query client with the hub maintenance retry policy (app-query-client.ts). M23 #435: bounded Dashboard events window and timeline slots. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472). M29: public sign-in configuration survives identity changes.
 
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -66,6 +66,9 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
   return null;
 }
 
+// Public sign-in reads (mode, first-run state) do not depend on who is signed in.
+const PUBLIC_AUTH_READS = new Set([String(queryKeys.authMode[0]), String(queryKeys.authConfiguration[0])]);
+
 function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
   const client = useQueryClient();
   useEffect(() => {
@@ -74,10 +77,10 @@ function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
       const version = lifetime.version();
       // Active notifications come from a confirmed identity; preserve its query and result.
       const preserveCurrentUser = lifetime.active();
-      const cancel = client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) }, { revert: false });
+      const cancel = client.cancelQueries({ predicate: (query) => !PUBLIC_AUTH_READS.has(String(query.queryKey[0])) && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) }, { revert: false });
       const clear = () => {
         for (const query of client.getQueryCache().findAll()) {
-          if (query.queryKey[0] !== queryKeys.authMode[0] && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
+          if (!PUBLIC_AUTH_READS.has(String(query.queryKey[0])) && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
         }
         if (!preserveCurrentUser) client.setQueryData(queryKeys.currentUser, null);
       };
@@ -87,7 +90,7 @@ function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
       void cancel.then(() => {
         if (version !== lifetime.version()) return;
         clear();
-        if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) });
+        if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => !PUBLIC_AUTH_READS.has(String(query.queryKey[0])) && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) });
       });
     });
   }, [adapter, client]);

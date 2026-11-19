@@ -149,6 +149,12 @@ export function useAuthMode() {
   return useQuery({ queryKey: queryKeys.authMode, queryFn: () => adapter.getAuthMode(), staleTime: 60_000 });
 }
 
+/** Public sign-in configuration: mode plus first-run state (setupPending, forced). */
+export function useSignInConfiguration() {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.authConfiguration, queryFn: () => adapter.getAuthConfiguration(), staleTime: 60_000 });
+}
+
 export function useCurrentUser(enabled = true) {
   const adapter = useAdapter();
   return useQuery<Awaited<ReturnType<typeof adapter.getCurrentUser>> | null>({ queryKey: queryKeys.currentUser, queryFn: () => adapter.getCurrentUser(), enabled, staleTime: 60_000 });

@@ -12,7 +12,7 @@ import { simulationStore } from "@/data/demo/simulation";
 import { renderRoutes } from "@/test/render";
 import { InitialPasswordPage } from "./InitialPasswordPage";
 import SetupPage from "./SetupPage";
-import { restartSetup, setupStore } from "./setup-draft";
+import { restartSetup } from "./setup-draft";
 
 afterEach(() => { setAppLocale("de"); restartSetup(); simulationStore.reset(); });
 it.each(["en-US", "de"] as const)("%s forced change is neutral for every user; first-run setup keeps administrator wording", async (locale) => {
@@ -22,8 +22,9 @@ it.each(["en-US", "de"] as const)("%s forced change is neutral for every user; f
   await screen.findByRole("heading", { name: locale === "de" ? "Neues Passwort festlegen" : "Set a new password" });
   for (const label of locale === "de" ? ["Bisheriges Passwort", "Neues Passwort", "Neues Passwort bestätigen"] : ["Current password", "New password", "Confirm new password"]) expect(screen.getByLabelText(label) !== null).toBe(true);
   expect(document.body.textContent?.includes(locale === "de" ? "Administratorpasswort" : "administrator password")).toBe(false);
-  view.unmount(); restartSetup(); setupStore.set((s) => ({ ...s, reached: 2 }));
-  renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=auth"], adapter);
-  await screen.findByLabelText(locale === "de" ? "Neues Administratorpasswort" : "New administrator password");
-  expect(screen.getByLabelText(locale === "de" ? "Bisheriges Administratorpasswort" : "Current administrator password") !== null).toBe(true);
+  view.unmount(); restartSetup();
+  // The claim created the administrator; the connected access step only summarises it and asks for no password.
+  renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=access"], adapter);
+  await screen.findByText(locale === "de" ? /Angemeldet als member/ : /Signed in as member/);
+  expect(document.querySelector('input[type="password"]') === null).toBe(true);
 });

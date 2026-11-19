@@ -59,6 +59,12 @@ export interface AuthApi {
   logout(): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
   updateMyLocale(locale: string): Promise<CurrentUser>;
+  /** First-run claim: stores the sign-in mode and creates the first administrator (local mode signs in). */
+  claimSetup(input: components["schemas"]["AuthSetupIdentityRequest"]): Promise<CurrentUser>;
+  /** Administrator read of the active sign-in policy with its proxy settings. */
+  getSignInPolicy(): Promise<components["schemas"]["AuthSignInConfiguration"]>;
+  /** Changes the stored sign-in policy; every session is revoked and local mode signs the caller in again. */
+  updateSignIn(input: components["schemas"]["AuthSignInUpdateRequest"]): Promise<CurrentUser>;
 }
 
 /** Error codes of the hosts, storage and settings contracts; UIs translate them. */

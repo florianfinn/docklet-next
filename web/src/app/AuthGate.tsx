@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Mode-aware route guard and administrator locale sync.
+// Deviations: Mode-aware route guard and administrator locale sync; M29 pending setup opens setup before sign-in.
 
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
@@ -10,7 +10,7 @@ import { useTranslations } from "use-intl";
 
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { AdapterOutcomeError } from "@/data/capability";
-import { useAuthMode, useCurrentUser, useSetupStatus } from "@/data/queries";
+import { useAuthMode, useCurrentUser, useSetupStatus, useSignInConfiguration } from "@/data/queries";
 import { operationReasonKey } from "@/data/operation-reason";
 import { isLocale } from "@/domain/locale";
 import { Button } from "@/shared/ui/button";
@@ -19,6 +19,7 @@ export function AuthGate() {
   const t = useTranslations("login");
   const reasons = useTranslations("containers.operationReasons");
   const mode = useAuthMode();
+  const configuration = useSignInConfiguration();
   const currentUser = useCurrentUser();
   const setup = useSetupStatus(currentUser.isSuccess && !!currentUser.data);
   const location = useLocation();
@@ -30,7 +31,8 @@ export function AuthGate() {
     window.addEventListener("docklet:unauthorized", reject);
     return () => window.removeEventListener("docklet:unauthorized", reject);
   }, []);
-  if (mode.isPending || (mode.data && currentUser.isPending)) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
+  if (configuration.data?.setupPending) return <Navigate to="/setup" replace />;
+  if (configuration.isPending || mode.isPending || (mode.data && currentUser.isPending)) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (mode.isError) return <main className="p-6"><p>{t("settingsError")}</p><Button onClick={() => void mode.refetch()}>{t("retry")}</Button></main>;
   if (currentUser.isError || unauthorized || (currentUser.isSuccess && !currentUser.data)) {
     const rejected = (currentUser.isSuccess && !currentUser.data) || unauthorized || (currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401);

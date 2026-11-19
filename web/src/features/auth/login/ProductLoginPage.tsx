@@ -2,14 +2,14 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Connected local login and proxy rejection screen; the sign-in form sits on the shared dot background.
+// Deviations: Connected local login and proxy rejection screen; the sign-in form sits on the shared dot background; M29 pending setup opens setup.
 
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 
-import { useAuthMode, useCurrentUser } from "@/data/queries";
+import { useAuthMode, useCurrentUser, useSignInConfiguration } from "@/data/queries";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -21,6 +21,7 @@ import { Card } from "@/shared/ui/card";
 export default function ProductLoginPage() {
   const t = useTranslations("login");
   const mode = useAuthMode();
+  const configuration = useSignInConfiguration();
   const currentUser = useCurrentUser();
   const adapter = useAdapter();
   const client = useQueryClient();
@@ -28,6 +29,7 @@ export default function ProductLoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  if (configuration.data?.setupPending) return <Navigate to="/setup" replace />;
   if (mode.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (mode.isError) return <main className="p-6"><p>{t("settingsError")}</p><Button onClick={() => void mode.refetch()}>{t("retry")}</Button></main>;
   if (currentUser.data?.isAdmin === false || mode.data === "none" || (currentUser.isSuccess && !!currentUser.data && mode.data === "local")) return <Navigate to="/dashboard" replace />;

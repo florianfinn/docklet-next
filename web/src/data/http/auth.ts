@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Connected sign-in and profile HTTP calls. M23 #425: session discovery skips the anonymous probe without the session hint in local mode.
+// Deviations: Connected sign-in and profile HTTP calls. M23 #425: session discovery skips the anonymous probe without the session hint in local mode. M29 first-run claim and sign-in policy calls with typed refusal codes.
 
 import { discardResponse } from "./identity-reads";
 import { clearSessionHint, hasSessionHint } from "./session-hint";
@@ -57,12 +57,19 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
     }
     if (response.status === 403) {
-      // Proxy refusals (access.not-registered, access.disabled) carry their code for the sign-in gate.
+      // Proxy refusals (access.not-registered, access.disabled) and the setup code refusal carry their code.
       const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
-      const code = typeof problem?.code === "string" && problem.code.startsWith("access.") ? problem.code : "http.error";
+      const code = typeof problem?.code === "string" && (problem.code.startsWith("access.") || /^(?:setup|auth|user)\.[a-z-]+$/.test(problem.code)) ? problem.code : "http.error";
       throw new AdapterOutcomeError({ kind: "error", code, status: 403 });
     }
-    if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    if (!response.ok) {
+      const refused = maintenanceOutcome(response);
+      if (refused) { discardResponse(response); throw refused; }
+      // Setup and sign-in policy refusals carry their problem code for the setup and settings screens.
+      const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
+      const code = typeof problem?.code === "string" && /^(?:setup|auth|user)\.[a-z-]+$/.test(problem.code) ? problem.code : "http.error";
+      throw new AdapterOutcomeError({ kind: "error", code, status: response.status });
+    }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");
     return payload.data;
@@ -141,5 +148,27 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       sessionChanged("renewed", currentUserId, from);
     },
     async updateMyLocale(locale) { return user(await request("/auth/me/profile", "PUT", { locale })); },
+    async claimSetup(input) {
+      const version = ++sessionVersion + sessionGeneration();
+      const result = await request("/setup/identity", "POST", input) as { user?: unknown };
+      const signedIn = user(result.user);
+      assertCurrent(version);
+      principal(signedIn);
+      currentRights = JSON.stringify([signedIn.isAdmin, signedIn.assignments]);
+      sessionChanged("established", signedIn.id);
+      return signedIn;
+    },
+    getSignInPolicy: async () => await request("/auth/sign-in") as components["schemas"]["AuthSignInConfiguration"],
+    async updateSignIn(input) {
+      const version = ++sessionVersion + sessionGeneration();
+      const result = await request("/auth/sign-in", "PUT", input) as { user?: unknown };
+      const signedIn = user(result.user);
+      assertCurrent(version);
+      principal(signedIn);
+      currentRights = JSON.stringify([signedIn.isAdmin, signedIn.assignments]);
+      // Every session was revoked; the caller now holds a new one (local) or none is needed.
+      sessionChanged("established", signedIn.id);
+      return signedIn;
+    },
   };
 }
