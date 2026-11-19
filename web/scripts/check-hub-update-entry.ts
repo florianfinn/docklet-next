@@ -9,8 +9,8 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// Run after `pnpm -C web run build --sourcemap`; ordinary unit tests need no build artefacts.
-const dist = resolve(import.meta.dirname, "../../../../dist");
+// Run after `pnpm -C web run build --sourcemap`: node web/scripts/check-hub-update-entry.ts. Unit tests need no build artefacts.
+const dist = resolve(import.meta.dirname, "../dist");
 const html = readFileSync(resolve(dist, "index.html"), "utf8");
 const entry = html.match(/<script[^>]+src="\/([^"]+\.js)"/)?.[1];
 assert.equal(typeof entry, "string", "Production index must name its entry chunk");
