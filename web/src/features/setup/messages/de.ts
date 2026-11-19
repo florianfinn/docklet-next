@@ -60,7 +60,7 @@ export const deSetup: typeof enSetup = {
   finishing: "Schließe ab …",
   fixErrors: "{count, plural, one {# Feld prüfen} other {# Felder prüfen}}",
   discovery: {
-    title: "Interne Adresse aus der Hub-Erkennung",
+    title: "Erkannte Adressen",
     lead: "Der Hub prüft auf dem Server seinen Container und seine Docker-Netzwerke. Der Browser selbst kann Docker-Adressen nicht sehen.",
     simulated: "Simuliert",
     loading: "Hub erkennt seine Netzwerke …",
@@ -78,6 +78,9 @@ export const deSetup: typeof enSetup = {
     use: "Übernehmen",
     useAria: "{address} übernehmen",
     inUse: "Im Feld",
+    candidateList: "Erkannte Adressen: {field}",
+    fields: { ip: "IP-Adresse", domain: "Domain" },
+    origins: { settingsDomain: "Domain in den Einstellungen", settingsAddress: "IP-Adresse in den Einstellungen", appUrl: "APP_URL", published: "Veröffentlichter Port", interface: "Hub-Schnittstelle", request: "Adresse dieser Sitzung", configured: "Konfigurierte Adresse" },
     reach: { lan: "aus dem LAN erreichbar", "same-host": "nur auf diesem Host", unknown: "Erreichbarkeit unklar" },
     kinds: {
       "lan-interface": "Netzwerk {via}",

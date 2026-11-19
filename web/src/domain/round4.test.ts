@@ -51,8 +51,8 @@ describe("system components", () => {
 describe("hub address", () => {
   const g = (patch: Partial<GeneralSettings>): GeneralSettings => ({ hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", timeZone: "UTC", ...patch });
 
-  it("accepts internal IPs, host names and URLs", () => {
-    expect(["192.0.2.10", "192.0.2.10:8080", "docklet.lan", "http://docklet.lan:8080", "https://hub.example.com"].map(hubAddress)).toEqual([undefined, undefined, undefined, undefined, undefined]);
+  it("accepts host IPs and rejects names and URLs", () => {
+    expect(["192.0.2.10", "192.0.2.10:8080", "docklet.example.com", "http://docklet.example.com:8080", "https://hub.example.com"].map(hubAddress)).toEqual([undefined, undefined, "hubAddress", "hubAddress", "hubAddress"]);
     expect(["", "two words", "192.0.2.10:99999", "ftp://x"].map(hubAddress)).toEqual(["required", "hubAddress", "hubAddress", "hubAddress"]);
   });
 

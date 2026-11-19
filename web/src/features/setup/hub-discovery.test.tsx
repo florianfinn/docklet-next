@@ -34,7 +34,7 @@ describe("hub address candidates", () => {
     expect(hubAddressCandidates(DISCOVERY_BRIDGE).map((c) => c.address)).toEqual(["192.0.2.10:8080", "198.51.100.242:8080"]);
     // Host network: loopback and link-local interfaces are dropped, so is a localhost request.
     expect(hubAddressCandidates(DISCOVERY_HOST).map((c) => c.address)).toEqual(["192.0.2.10:8080"]);
-    expect(best(DISCOVERY_BRIDGE_UNKNOWN)).toBe("docklet-hub.example.net:8080");
+    expect(best(DISCOVERY_BRIDGE_UNKNOWN)).toBe(undefined);
     expect(best({ ...DISCOVERY_BRIDGE_UNKNOWN, requestHost: undefined })).toBe(undefined);
   });
 
@@ -59,7 +59,7 @@ describe("setup prefill", () => {
     expect(await screen.findByText("Hub erkennt seine Netzwerke …") !== null).toBe(true);
     await userEvent.type(field(), "hub.example.org:8080");
     answer(DISCOVERY_BRIDGE);
-    const list = await screen.findByRole("list", { name: "Erkannte Adressen" });
+    const list = await screen.findByRole("group", { name: "Erkannte Adressen" });
     expect(field().value).toBe("hub.example.org:8080");
     expect(screen.getByText(/Manuell eingetragen/) !== null).toBe(true);
 

@@ -1,3 +1,5 @@
+import { discoveryAppUrl } from "@/domain/hub-discovery";
+import { normalizeDomainUrl } from "@/domain/validation";
 import { MODULES } from "@/domain/modules";
 import { ModuleChoicesFields } from "@/features/settings/sections/ModuleChoicesFields";
 import { ArrowLeft, ArrowRight, CheckCircle2, KeyRound, Pencil, Server } from "lucide-react";
@@ -69,7 +71,7 @@ export default function SetupPage() {
   const [attempted, setAttempted] = useState<SetupStep[]>([]);
   const [busy, setBusy] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const general = useGeneralErrors(draft.general);
+
   const hostErr = useHostDefaultErrors(draft.hostDefaults);
   const authErr = useAuthErrors(draft.auth, draft.password);
   const connected = adapter.kind === "http";
@@ -81,6 +83,8 @@ export default function SetupPage() {
   }, [connected, saved.isSuccess, saved.data, savedModules.isSuccess, savedModules.data]);
   const initializing = connected && !draft.hydrated;
   const discovery = useQuery({ queryKey: ["hub-discovery"], queryFn: () => adapter.discoverHub(), staleTime: Infinity, retry: false });
+  const appUrl = discoveryAppUrl(discovery.data);
+  const general = useGeneralErrors(draft.general, { appUrl });
   const unset = draft.hubAddressOrigin === null;
   // Prefill when data arrives, after an IP change and after a replay; applyDiscovery fills each field only while untouched.
   useEffect(() => {
@@ -96,15 +100,18 @@ export default function SetupPage() {
   const go = (s: SetupStep) => setParams({ step: s });
 
   const next = async () => {
-    if (errorCount) {
-      setAttempted((a) => [...new Set([...a, step])]);
+    if (discovery.isPending && draft.general.domainUrl.trim() && !/^https?:\/\//i.test(draft.general.domainUrl.trim()) && (step === "hub" || step === "review")) return;
+    if (errorCount || (step === "review" && Object.values(general).some(Boolean))) {
+      setAttempted((a) => [...new Set([...a, step, ...(step === "review" ? ["hub" as const] : [])])]);
+      if (step === "review") go("hub");
       return;
     }
     if (step === "review") {
       setBusy(true);
       try {
         const passwordSet = connected || (draft.auth.mode === "local" && draft.password.password.length > 0);
-        await adapter.completeSetup({ modules: draft.modules, general: draft.general, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet } } });
+        const { local } = draft.auth;
+        await adapter.completeSetup({ modules: draft.modules, general: { ...draft.general, hubAddress: draft.general.hubAddress.trim(), domainUrl: normalizeDomainUrl(draft.general.domainUrl, appUrl)! }, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...local, passwordSet } } });
         await Promise.all([queryClient.invalidateQueries({ queryKey: ["module-states"] }), queryClient.invalidateQueries({ queryKey: queryKeys.settings }), queryClient.invalidateQueries({ queryKey: queryKeys.connectedSettings })]);
         patchSetup({ password: { password: "", confirm: "" } });
         setCompleting(true);
@@ -172,13 +179,16 @@ export default function SetupPage() {
               <HubAddressDiscovery
                 discovery={discovery}
                 address={draft.general.hubAddress}
+                domain={draft.general.domainUrl}
                 origin={draft.hubAddressOrigin}
-                onPick={(c) => patchSetup({ general: { ...draft.general, hubAddress: c.address }, hubAddressOrigin: { kind: "discovered", candidateId: c.id } })}
+                onPick={(c) => patchSetup(c.addressKind === "ip" ? { general: { ...draft.general, hubAddress: c.address }, hubAddressOrigin: { kind: "discovered", candidateId: c.id } } : { general: { ...draft.general, domainUrl: c.address }, domainEdited: true })}
               />
               <GeneralFields
                 value={{ ...draft.general, timeZone }}
                 onChange={(p) => patchSetup({ general: { ...draft.general, ...p }, ...(p.hubAddress !== undefined ? { hubAddressOrigin: { kind: "manual" as const } } : {}), ...(p.domainUrl !== undefined ? { domainEdited: true } : {}) })}
                 showErrors={show}
+                appUrl={appUrl}
+                domainPending={discovery.isPending}
                 idPrefix="setup-gen"
               />
             </>

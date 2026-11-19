@@ -54,7 +54,7 @@ it("maps the live container, recommends the reachable IP and never prefills a na
   expect(discovery.containerDetection).toBe("container");
   const candidates = hubAddressCandidates(discovery);
   expect(candidates.map((c) => [c.address, c.kind, c.recommended])).toEqual([
-    ["hub.example.com", "configured", false],
+    ["https://hub.example.com", "configured", false],
     ["127.0.0.1:8080", "host-address", false],
     ["[2001:db8::10]:8080", "request", true],
   ]);
