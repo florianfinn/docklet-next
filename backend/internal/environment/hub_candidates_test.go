@@ -36,8 +36,11 @@ func bridgeHubSelf() *hubSelf {
 	return &hubSelf{inspect: container.InspectResponse{ID: "hub-id", Name: "/hub", HostConfig: &container.HostConfig{NetworkMode: "example-network"}, NetworkSettings: &container.NetworkSettings{Networks: map[string]*network.EndpointSettings{"example-network": {NetworkID: "net-id", IPAddress: netip.MustParseAddr("192.0.2.200")}}, Ports: network.PortMap{}}}, drivers: map[string]string{"example-network": "bridge"}}
 }
 
-func candidate(url, source, kind, reach string) environmenttypes.HubAddressCandidate {
-	return environmenttypes.HubAddressCandidate{ID: source + ":" + url, URL: url, Source: source, Kind: kind, Reach: reach}
+func candidate(url, source, kind, reach string, origins ...string) environmenttypes.HubAddressCandidate {
+	if len(origins) == 0 {
+		origins = []string{source}
+	}
+	return environmenttypes.HubAddressCandidate{ID: source + ":" + url, URL: url, Source: source, Origins: origins, Kind: kind, Reach: reach}
 }
 
 func TestHubCandidatesNetworkShapes(t *testing.T) {
@@ -106,11 +109,21 @@ func TestHubCandidatesOrderAndDeduplication(t *testing.T) {
 	result, err := buildHubDiscovery(&config.Config{AppUrl: "https://app.example.com"}, "https://public.example.com/", "192.0.2.5:3552", self, nil, "192.0.2.200:3552")
 	require.NoError(t, err)
 	require.Equal(t, []environmenttypes.HubAddressCandidate{
-		candidate("https://public.example.com", "configured", "domain", "unknown"),
-		candidate("https://app.example.com", "configured", "domain", "unknown"),
-		candidate("http://192.0.2.5:3552", "configured", "ip", "unknown"),
+		candidate("https://public.example.com", "configured", "domain", "unknown", "settingsDomain"),
+		candidate("https://app.example.com", "configured", "domain", "unknown", "appUrl"),
+		candidate("http://192.0.2.5:3552", "configured", "ip", "unknown", "settingsAddress"),
 		candidate("http://192.0.2.10:4552", "published", "ip", "unknown"),
-		candidate("http://192.0.2.200:3552", "interface", "ip", "unknown"),
+		candidate("http://192.0.2.200:3552", "interface", "ip", "unknown", "interface", "request"),
+	}, result.Candidates)
+}
+
+// The same URL from settings, APP_URL and the request is one candidate that names every origin.
+func TestHubCandidatesMergeOrigins(t *testing.T) {
+	result, err := buildHubDiscovery(&config.Config{AppUrl: "https://hub.example.com"}, "https://hub.example.com/", "hub.example.com", nil, nil, "https://hub.example.com")
+	require.NoError(t, err)
+	require.Equal(t, []environmenttypes.HubAddressCandidate{
+		candidate("https://hub.example.com", "configured", "domain", "unknown", "settingsDomain", "appUrl", "request"),
+		candidate("http://hub.example.com", "configured", "domain", "unknown", "settingsAddress"),
 	}, result.Candidates)
 }
 

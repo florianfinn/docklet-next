@@ -2,7 +2,7 @@
 // Revision: 462df7e945082b44e1d90532d8296aa9743c4b6e
 // Retrieved: 2026-11-19
 // License: Apache-2.0
-// Deviations: Original pure container-aware candidate builder and trusted request host parsing.
+// Deviations: Original pure container-aware candidate builder and trusted request host parsing; M30 merged candidate origins.
 
 package environment
 
@@ -105,8 +105,8 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		return environmenttypes.HubDiscovery{}, err
 	}
 	result := environmenttypes.HubDiscovery{DetectedAt: time.Now().UTC(), AgentImage: image, ContainerDetection: "unknown", Candidates: []environmenttypes.HubAddressCandidate{}}
-	seen := map[string]bool{}
-	add := func(raw, source string) {
+	seen := map[string]int{}
+	add := func(raw, source, origin string) {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			return
@@ -121,10 +121,13 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		}
 		parsed.Path = ""
 		value := parsed.String()
-		if seen[value] {
+		if index, ok := seen[value]; ok {
+			if candidate := &result.Candidates[index]; !slices.Contains(candidate.Origins, origin) {
+				candidate.Origins = append(candidate.Origins, origin)
+			}
 			return
 		}
-		seen[value] = true
+		seen[value] = len(result.Candidates)
 		kind, reach := "domain", "unknown"
 		if ip := net.ParseIP(parsed.Hostname()); ip != nil {
 			kind = "ip"
@@ -134,16 +137,16 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		} else if strings.EqualFold(parsed.Hostname(), "localhost") {
 			reach = "same-host"
 		}
-		result.Candidates = append(result.Candidates, environmenttypes.HubAddressCandidate{ID: source + ":" + value, URL: value, Reach: reach, Source: source, Kind: kind})
+		result.Candidates = append(result.Candidates, environmenttypes.HubAddressCandidate{ID: source + ":" + value, URL: value, Reach: reach, Source: source, Origins: []string{origin}, Kind: kind})
 	}
 	scheme := "http://"
 	if cfg.TLSEnabled {
 		scheme = "https://"
 	}
-	addIP := func(address, port, source string) { add(scheme+net.JoinHostPort(address, port), source) }
-	add(publicURL, "configured")
-	add(cfg.GetAppURL(), "configured")
-	add(hubAddress, "configured")
+	addIP := func(address, port, source string) { add(scheme+net.JoinHostPort(address, port), source, source) }
+	add(publicURL, "configured", "settingsDomain")
+	add(cfg.GetAppURL(), "configured", "appUrl")
+	add(hubAddress, "configured", "settingsAddress")
 	requestIP, requestScheme := "", scheme
 	if rest, ok := strings.CutPrefix(requestHost, "https://"); ok {
 		requestHost, requestScheme = rest, "https://"
@@ -218,7 +221,7 @@ func buildHubDiscovery(cfg *config.Config, publicURL, hubAddress string, self *h
 		}
 	}
 	if requestHost != "" {
-		add(requestScheme+requestHost, "request")
+		add(requestScheme+requestHost, "request", "request")
 	}
 	return result, nil
 }

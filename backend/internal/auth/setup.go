@@ -2,20 +2,17 @@
 // Revision: 462df7e945082b44e1d90532d8296aa9743c4b6e
 // Retrieved: 2026-11-18
 // License: Apache-2.0
-// Deviations: Original first-run claim, setup code and runtime sign-in policy change (docs/design/first-run-setup.md).
+// Deviations: Original first-run claim and runtime sign-in policy change (docs/design/first-run-setup.md).
 
 package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -28,29 +25,17 @@ import (
 
 var (
 	ErrSetupNotPending   = errors.New(authtypes.CodeSetupNotPending)
-	ErrSetupCodeInvalid  = errors.New(authtypes.CodeSetupCodeInvalid)
-	ErrSetupRateLimited  = errors.New(authtypes.CodeSetupRateLimited)
 	ErrModeForced        = errors.New(authtypes.CodeModeForced)
 	ErrProxyUnverified   = errors.New(authtypes.CodeProxyUnverified)
 	ErrPasswordRequired  = errors.New(authtypes.CodePasswordRequired)
 	ErrInvalidSignInMode = errors.New("invalid sign-in policy")
 )
 
-const (
-	setupCodeAlphabet   = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-	setupCodeLength     = 12
-	setupFailureLimit   = 10
-	setupFailureWindow  = time.Minute
-	setupCompletedKey   = "setupCompleted"
-	setupLogFormatGroup = 4
-)
+const setupCompletedKey = "setupCompleted"
 
-// setupGuard holds the in-memory setup code of this process; it is never persisted.
+// setupGuard holds process-local first-run hooks; nothing in it is persisted.
 type setupGuard struct {
-	mu       sync.Mutex
-	code     string
-	failures []time.Time
-	now      func() time.Time
+	mu sync.Mutex
 	// afterClaim runs once the claim committed (static admin key reconciliation); failures only log.
 	afterClaim func(context.Context) error
 }
@@ -68,65 +53,13 @@ func (s *AuthService) SetAfterClaim(fn func(context.Context) error) {
 	s.setup.afterClaim = fn
 }
 
-func newSetupCodeInternal() string {
-	random := make([]byte, setupCodeLength)
-	_, _ = rand.Read(random)
-	code := make([]byte, setupCodeLength)
-	for i, b := range random {
-		code[i] = setupCodeAlphabet[int(b)%len(setupCodeAlphabet)]
-	}
-	return string(code)
-}
-
-func normalizeSetupCodeInternal(code string) string {
-	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(code))
-}
-
-func formatSetupCodeInternal(code string) string {
-	var parts []string
-	for i := 0; i < len(code); i += setupLogFormatGroup {
-		parts = append(parts, code[i:min(i+setupLogFormatGroup, len(code))])
-	}
-	return strings.Join(parts, "-")
-}
-
-// startSetupInternal creates this start's setup code and logs it once.
+// startSetupInternal runs once per start while first-run setup is pending.
 func (s *AuthService) startSetupInternal(ctx context.Context) {
-	code := newSetupCodeInternal()
-	s.setup.mu.Lock()
-	s.setup.code = code
-	s.setup.failures = nil
-	s.setup.mu.Unlock()
 	if s.config.AuthResetAdminPassword != "" {
 		s.config.AuthResetAdminPassword = ""
 		slog.WarnContext(ctx, "AUTH_RESET_ADMIN_PASSWORD is ignored until setup has created the first administrator")
 	}
-	slog.InfoContext(ctx, "Setup code: "+formatSetupCodeInternal(code)+" (enter it in setup at "+s.config.GetAppURL()+" to create the first administrator; a restart creates a new code)")
-}
-
-func (s *AuthService) checkSetupCodeInternal(presented string) error {
-	s.setup.mu.Lock()
-	defer s.setup.mu.Unlock()
-	now := time.Now()
-	if s.setup.now != nil {
-		now = s.setup.now()
-	}
-	recent := s.setup.failures[:0]
-	for _, at := range s.setup.failures {
-		if now.Sub(at) < setupFailureWindow {
-			recent = append(recent, at)
-		}
-	}
-	s.setup.failures = recent
-	if len(recent) >= setupFailureLimit {
-		return ErrSetupRateLimited
-	}
-	given := normalizeSetupCodeInternal(presented)
-	if s.setup.code == "" || subtle.ConstantTimeCompare([]byte(given), []byte(s.setup.code)) != 1 {
-		s.setup.failures = append(s.setup.failures, now)
-		return ErrSetupCodeInvalid
-	}
-	return nil
+	slog.InfoContext(ctx, "First-run setup is pending: open "+s.config.GetAppURL()+" to create the first administrator")
 }
 
 // requestedPolicyInternal builds the next policy; a forced policy only accepts its own mode.
@@ -188,9 +121,6 @@ func (s *AuthService) ClaimSetup(ctx context.Context, req *http.Request, in auth
 	if !current.Pending {
 		return nil, ErrSetupNotPending
 	}
-	if err := s.checkSetupCodeInternal(in.Code); err != nil {
-		return nil, err
-	}
 	next, err := requestedPolicyInternal(current, in.SignInPolicyInput)
 	if err != nil {
 		return nil, err
@@ -246,7 +176,6 @@ func (s *AuthService) ClaimSetup(ctx context.Context, req *http.Request, in auth
 	}
 	s.userService.AfterFirstAdministratorClaim(claimed.ID)
 	s.setup.mu.Lock()
-	s.setup.code = ""
 	afterClaim := s.setup.afterClaim
 	s.setup.mu.Unlock()
 	if s.settingsService != nil {

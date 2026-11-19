@@ -85,7 +85,7 @@ type Settings struct {
 	StackStopMode               SettingVariable `key:"stackStopMode,authrequired" meta:"label=Stack Stop Mode;type=select;category=general;description=Stop uses Compose down or stop"`
 	HubName                     SettingVariable `key:"hubName" meta:"label=Hub Name;type=text;category=general;description=Name displayed for this hub"`
 	HubAddress                  SettingVariable `key:"hubAddress" meta:"label=Hub Address;type=text;category=general;description=Address agents use to reach this hub"`
-	DomainURL                   SettingVariable `key:"domainUrl" meta:"label=Domain URL;type=text;category=general;description=Optional public hub URL"`
+	DomainURL                   SettingVariable `key:"domainUrl" meta:"label=Domain URL;type=text;category=general;description=Optional local domain of the hub"`
 	LinkBase                    SettingVariable `key:"linkBase" meta:"label=Link Base;type=select;category=general;description=Which hub address links use"`
 	AgentProjectsDirectory      SettingVariable `key:"agentProjectsDirectory" meta:"label=Agent Projects Directory;type=text;category=general;description=Default project directory on agent hosts"`
 	AgentInstallDirectory       SettingVariable `key:"agentInstallDirectory" meta:"label=Agent Install Directory;type=text;category=general;description=Default agent installation directory"`

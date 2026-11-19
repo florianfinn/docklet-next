@@ -70,8 +70,7 @@ it("claims a pending hub, runs first setup, connected settings and profile on pr
   const adapter = productAdapter({ fetch: fetcher as typeof fetch, eventSource: () => ({ close() {}, onopen: null, onmessage: null, onerror: null }) });
   const { router } = renderProductRoutes(routes, ["/dashboard"], adapter);
   await waitFor(() => expect(router.state.location.pathname).toBe("/setup"));
-  await userEvent.type(await screen.findByLabelText("Setup-Code"), "ABCD-EFGH-JKMN");
-  await userEvent.type(screen.getByLabelText("Benutzername des Administrators"), "operator");
+  await userEvent.type(await screen.findByLabelText("Benutzername des Administrators"), "operator");
   await userEvent.type(screen.getByLabelText("Neues Passwort"), "New-password1!");
   await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "New-password1!");
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3a07b03cb978befcb51af68d9ce74309e119bb38171e17d4585bc31a9bce9245
+// Revision: d86e203f50a56d63d2c7b4a2b999e592a43581ae428a636b8cfef769fcbb5e90
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5214,7 +5214,7 @@ export interface paths {
         put?: never;
         /**
          * Create the first administrator
-         * @description While first-run setup is pending, store the sign-in mode and create the first administrator. Requires the setup code from the hub log, hub Origin and the CSRF pair; no credential exemption applies. Local mode signs the browser in.
+         * @description While first-run setup is pending, store the sign-in mode and create the first administrator. Requires the hub Origin and the CSRF pair; no credential exemption applies. Local mode signs the browser in.
          */
         post: operations["claim-setup-identity"];
         delete?: never;
@@ -6081,8 +6081,6 @@ export interface components {
              * @example /api/schemas/AuthSetupIdentityRequest.json
              */
             readonly $schema?: string;
-            /** @description One-time setup code from the hub log */
-            code: string;
             /** @description Display name of the first administrator */
             displayName?: string;
             /**
@@ -10138,6 +10136,8 @@ export interface components {
             id: string;
             /** @enum {string} */
             kind: "ip" | "domain";
+            /** @description Where this address came from, in ranking order */
+            origins: ("settingsDomain" | "appUrl" | "settingsAddress" | "published" | "interface" | "request")[] | null;
             /** @enum {string} */
             reach: "unknown" | "same-host";
             /** @enum {string} */

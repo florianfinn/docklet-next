@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -39,9 +38,8 @@ import (
 	authtypes "github.com/florianfinn/docklet-next/types/auth"
 )
 
-// pendingRoutingFixture turns the claimed routing fixture into an upgraded, pending hub and returns
-// the setup code from the startup log.
-func pendingRoutingFixture(t *testing.T, afterClaim func(context.Context) error) (signInRoutingFixture, string) {
+// pendingRoutingFixture turns the claimed routing fixture into an upgraded, pending hub.
+func pendingRoutingFixture(t *testing.T, afterClaim func(context.Context) error) signInRoutingFixture {
 	t.Helper()
 	f := newSignInRoutingFixture(t)
 	f.cfg.AuthMode = ""
@@ -56,9 +54,8 @@ func pendingRoutingFixture(t *testing.T, afterClaim func(context.Context) error)
 	slog.SetDefault(previous)
 	require.NoError(t, err)
 	require.True(t, f.svc.CurrentPolicy().Pending)
-	code := regexp.MustCompile(`Setup code: ([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})`).FindStringSubmatch(output.String())
-	require.Len(t, code, 2, output.String())
-	return f, code[1]
+	require.Contains(t, output.String(), "First-run setup is pending")
+	return f
 }
 
 func pendingForwardingServer(t *testing.T, f signInRoutingFixture) *httptest.Server {
@@ -81,7 +78,7 @@ func pendingForwardingServer(t *testing.T, f signInRoutingFixture) *httptest.Ser
 }
 
 func TestPendingForwardingKeepsTheTypedProblem(t *testing.T) {
-	f, _ := pendingRoutingFixture(t, nil)
+	f := pendingRoutingFixture(t, nil)
 	server := pendingForwardingServer(t, f)
 	for _, credential := range []string{"", "bearer"} {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/environments/example/containers", http.NoBody)
@@ -100,7 +97,7 @@ func TestPendingForwardingKeepsTheTypedProblem(t *testing.T) {
 }
 
 func TestPendingWebSocketHandshakeIsRefused(t *testing.T) {
-	f, _ := pendingRoutingFixture(t, nil)
+	f := pendingRoutingFixture(t, nil)
 	server := pendingForwardingServer(t, f)
 	conn, response, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http")+"/api/environments/example/containers/example/logs/ws", nil)
 	if conn != nil {
@@ -114,7 +111,7 @@ func TestPendingWebSocketHandshakeIsRefused(t *testing.T) {
 }
 
 func TestPendingKeepsEnvironmentTokenIngress(t *testing.T) {
-	f, _ := pendingRoutingFixture(t, nil)
+	f := pendingRoutingFixture(t, nil)
 	validator := csrfTransportValidatorInternal(api.HandlerDeps{ApiKey: apikey.New(f.keys)})
 	router := echo.New()
 	router.Use(middleware.NewCSRFMiddleware(f.cfg).WithTransportValidator(validator).
@@ -137,7 +134,7 @@ func TestStaticAdminKeyIsAuthorizedRightAfterClaim(t *testing.T) {
 	raw := "arc_" + strings.Repeat("example", 5)
 	var keys *apikey.ApiKeyService
 	var roles *role.RoleService
-	f, code := pendingRoutingFixture(t, func(ctx context.Context) error {
+	f := pendingRoutingFixture(t, func(ctx context.Context) error {
 		return staticKeyAfterClaimInternal(keys, roles, raw)(ctx)
 	})
 	keys, roles = f.keys, f.roles
@@ -145,7 +142,7 @@ func TestStaticAdminKeyIsAuthorizedRightAfterClaim(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, settingsSvc.Stop(context.WithoutCancel(t.Context()))) })
 	password := setupExamplePassword
-	_, err = f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Code: code, Username: "owner", Password: &password}, authtypes.SessionMeta{})
+	_, err = f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Username: "owner", Password: &password}, authtypes.SessionMeta{})
 	require.NoError(t, err)
 
 	router := echo.New()
@@ -223,7 +220,7 @@ func TestStaticAdminKeyCacheFilledDuringClaimIsDropped(t *testing.T) {
 	raw := "arc_" + strings.Repeat("example", 5)
 	var keys *apikey.ApiKeyService
 	var roles *role.RoleService
-	f, code := pendingRoutingFixture(t, func(ctx context.Context) error {
+	f := pendingRoutingFixture(t, func(ctx context.Context) error {
 		return staticKeyAfterClaimInternal(keys, roles, raw)(ctx)
 	})
 	keys, roles = f.keys, f.roles
@@ -247,7 +244,7 @@ func TestStaticAdminKeyCacheFilledDuringClaimIsDropped(t *testing.T) {
 	}))
 	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("example:key_cache") })
 	password := setupExamplePassword
-	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Code: code, Username: "owner", Password: &password}, authtypes.SessionMeta{})
+	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Username: "owner", Password: &password}, authtypes.SessionMeta{})
 	require.NoError(t, err)
 	require.True(t, primed)
 	ps, err := roles.ResolveApiKeyPermissions(t.Context(), keyID)

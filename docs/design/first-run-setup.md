@@ -1,6 +1,7 @@
 # First-run setup and stored sign-in policy
 
 M29 (#518) revises the mode selection of decision #68 ([identity](identity.md)).
+M30 (#529) removes the setup code.
 
 ## Decision
 
@@ -28,7 +29,7 @@ Rejected alternatives:
 ## Setup phases
 
 1. **Identity claim** (public, `POST /api/setup/identity`). The request carries the
-   setup code, the mode, the proxy header and trusted proxies (proxy mode only), the
+   mode, the proxy header and trusted proxies (proxy mode only), the
    username and, for `local`, the password. On success the hub signs the browser in:
    local mode sets a session cookie, while proxy and none need no session.
 2. **Configuration wizard** (authenticated, unchanged). It covers addresses,
@@ -43,16 +44,16 @@ While the claim is pending, the same endpoint also returns the effective proxy
 header and trusted proxies for display. Administrators read them later through
 `GET /api/auth/sign-in`.
 
-## Setup code
+## No setup code
 
-- Each hub start that finds the claim open creates a code: 12 characters from
-  `crypto/rand` in an unambiguous alphabet, shown as `XXXX-XXXX-XXXX`.
-- The code is logged once and kept only in memory. Comparison ignores case and
-  dashes and runs in constant time.
-- The code becomes invalid when the claim commits. A restart before the claim
-  replaces it.
-- After 10 failed attempts within a rolling minute the endpoint answers 429. The
-  claim route also shares the per-IP limit of login and refresh.
+M30 removed the one-time setup code from the hub log (maintainer decision). Until
+the claim commits, whoever reaches the hub first can create the first
+administrator; install and upgrade guides say to complete setup right after the
+first start, before others can reach the hub. Kept: the claim exists only while
+pending, it commits once (transaction marker), it requires the hub Origin and the
+CSRF pair without transport or header-credential exemptions, and it shares the
+per-IP limit of login and refresh. An old request body that still sends `code` is
+rejected by the schema (422).
 
 ## Claim states
 
@@ -138,7 +139,7 @@ receives a fresh session in the response.
 |---|---|---|---|
 | 1 | claim recheck inside the transaction | `setupIdentity` read in the tx | marker check disabled → late claim creates a user |
 | 2 | concurrent claims | mutex + tx re-check | one success, one `setup.not-pending`, one user |
-| 3 | wrong / brute-forced code | constant-time compare, 10 per minute | limiter disabled → 11th attempt not 429 |
+| 3 | claim without code; legacy body with `code` | schema without `code`, additionalProperties false | `code` back in the schema → legacy body accepted (200, not 422) |
 | 4 | forced mode | `auth.mode-forced`, forced triple stored at claim | check removed → stored mode differs; triple not stored → mode flips on env removal |
 | 5 | upgraded hub | takeover keeps the ID; old sessions and password refused | takeover disabled → new user |
 | 6 | pending gate (REST, stream, login) | `Policy.Pending` in identity and local checks | gate removed → forced none opens; local check ignores pending → old token valid |

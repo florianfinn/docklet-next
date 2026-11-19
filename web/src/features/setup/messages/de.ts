@@ -5,10 +5,7 @@ export const deSetup: typeof enSetup = {
   forcedChange: { heading: "Neues Passwort festlegen", newLabel: "Neues Passwort", confirmationLabel: "Neues Passwort bestätigen" },
   claim: {
     title: "Zugang",
-    lead: "Bestätige, dass du diesen Server betreibst, und lege den ersten Administrator an.",
-    code: "Setup-Code",
-    codeHint: "Steht beim Start im Hub-Log (docker compose logs hub). Ein Neustart erzeugt einen neuen Code.",
-    codeRequired: "Setup-Code eingeben",
+    lead: "Lege fest, wie sich Personen anmelden, und erstelle den ersten Administrator.",
     mode: "Wie sich Personen anmelden",
     forced: "AUTH_MODE legt die Anmeldung auf „{mode}“ fest. Entferne die Variable, um hier oder später in den Einstellungen zu wählen.",
     proxyCheck: "Docklet übernimmt den Proxy nur, wenn diese Seite bereits über diesen Proxy mit deiner Identität ankommt – ein falscher Wert sperrt dich nicht aus.",
@@ -21,8 +18,6 @@ export const deSetup: typeof enSetup = {
     create: "Administrator anlegen",
     creating: "Wird angelegt …",
     errors: {
-      setupCodeInvalid: "Der Setup-Code stimmt nicht. Kopiere ihn aus dem aktuellen Hub-Log.",
-      setupRateLimited: "Zu viele falsche Codes. Warte eine Minute und versuche es erneut.",
       setupNotPending: "Das Setup hat bereits einen Administrator angelegt. Lade die Seite neu, um dich anzumelden.",
       authModeForced: "AUTH_MODE legt die Anmeldeart fest; lade die Seite neu.",
       authProxyUnverified: "Diese Seite erreicht Docklet nicht über den vertrauenswürdigen Proxy mit einer Identität. Prüfe Proxy-Adressen und Header oder öffne die Seite über den Proxy.",
@@ -44,7 +39,7 @@ export const deSetup: typeof enSetup = {
   exit: "Vorschau verlassen",
   railLabel: "Schritte der Ersteinrichtung",
   steps: {
-    access: { title: "Zugang", description: "Setup-Code, Anmeldung, Administrator" },
+    access: { title: "Zugang", description: "Anmeldung, Administrator" },
     hub: { title: "Hub", description: "Name, Adresse, Zeitzone" },
     projects: { title: "Projekte", description: "Verzeichnisse und Datei-IDs" },
     modules: { title: "Module", description: "Optionale Funktionen" },
