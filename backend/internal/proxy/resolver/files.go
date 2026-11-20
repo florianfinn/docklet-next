@@ -157,3 +157,38 @@ func accessDirectory(fd int) error {
 	defer unix.Close(fd)
 	return unix.Faccessat(fd, ".", unix.W_OK, 0)
 }
+
+// unsupportedState marks a path that exists but is not a plain readable file.
+const unsupportedState = "unsupported"
+
+// observe hashes a path for confirmation without the writer's metadata rules:
+// symlinks, special files and unreadable paths get a distinct stable state.
+func observe(root, p string) (dto.FileState, error) {
+	if !relative(p) || !filepath.IsAbs(root) {
+		return dto.FileState{}, dto.Fail(dto.TargetUnclear, 409)
+	}
+	n, e := unix.Open(filepath.Join(root, p), unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if errors.Is(e, unix.ENOENT) || errors.Is(e, unix.ENOTDIR) {
+		return dto.FileState{}, nil
+	}
+	if errors.Is(e, unix.EIO) || errors.Is(e, unix.EAGAIN) || errors.Is(e, unix.EINTR) {
+		return dto.FileState{}, e
+	}
+	if e != nil {
+		return dto.FileState{Present: true, Hash: unsupportedState}, nil
+	}
+	f := os.NewFile(uintptr(n), p)
+	defer f.Close()
+	var st unix.Stat_t
+	if e = unix.Fstat(n, &st); e != nil {
+		return dto.FileState{}, e
+	}
+	if st.Mode&unix.S_IFMT != unix.S_IFREG {
+		return dto.FileState{Present: true, Hash: unsupportedState}, nil
+	}
+	h := sha256.New()
+	if _, e = io.Copy(h, f); e != nil {
+		return dto.FileState{}, e
+	}
+	return dto.FileState{Present: true, Hash: hex.EncodeToString(h.Sum(nil))}, nil
+}

@@ -159,6 +159,7 @@ func Remove(root, id string) error {
 }
 
 // Current is a stable confirmation of every touched path and current file hash.
+// It must not apply the writer's metadata rules, so Release stays possible.
 func Current(t Target) (dto.FileState, error) {
 	type entry struct {
 		Path  string        `json:"path"`
@@ -166,11 +167,11 @@ func Current(t Target) (dto.FileState, error) {
 	}
 	states := make([]entry, 0, len(t.Files))
 	for _, f := range t.Files {
-		b, e := Read(t.Directory, f.Path)
+		state, e := observe(t.Directory, f.Path)
 		if e != nil {
 			return dto.FileState{}, dto.Fail(dto.AgentUnavailable, 503)
 		}
-		states = append(states, entry{f.Path, b.Old})
+		states = append(states, entry{f.Path, state})
 	}
 	b, e := json.Marshal(states)
 	if e != nil {

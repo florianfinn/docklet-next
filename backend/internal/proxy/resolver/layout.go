@@ -7,6 +7,7 @@
 package resolver
 
 import (
+	"bytes"
 	"context"
 	"path"
 	"slices"
@@ -179,7 +180,8 @@ func Build(ctx context.Context, t Target, q dto.ResolverRequest, inv dto.Invento
 		return t, err
 	}
 	ef.After = env
-	if ef.Old.Present && ef.Mode&0077 != 0 {
+	// Only a changed .env must be owner-only; Docklet creates it with FILE_PERM.
+	if ef.Old.Present && ef.Mode&0077 != 0 && !bytes.Equal(ef.After, ef.Before) {
 		return t, dto.Fail(dto.UnsupportedMetadata, 409)
 	}
 	changes := map[string]any{}

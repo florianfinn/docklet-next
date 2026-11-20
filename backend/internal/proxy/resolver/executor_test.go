@@ -231,9 +231,14 @@ func TestR4RecoveryPreflightBranches(t *testing.T) {
 			}
 			result, err := e.Resume(t.Context(), envelope(q), *o)
 			if branch == "unreadable" {
-				require.Error(t, err)
-				require.Equal(t, dto.ResolverRecreating, o.Resolver.Phase)
+				// A symlinked target is a persistent third version, never a retry loop.
+				require.NoError(t, err)
+				require.Equal(t, dto.RecoveryRequired, result.State)
+				require.Equal(t, dto.ThirdVersion, result.Reason)
 				require.Zero(t, f.recreates)
+				link, er := os.Readlink(filepath.Join(f.target.Directory, ".env"))
+				require.NoError(t, er)
+				require.Equal(t, "missing", link)
 				return
 			}
 			require.NoError(t, err)
@@ -323,4 +328,40 @@ func TestR1AbsentEnvironmentRestoredAfterPartialWrite(t *testing.T) {
 	require.Equal(t, dto.RolledBack, result.State)
 	_, err = os.Stat(filepath.Join(f.target.Directory, ".env"))
 	require.True(t, os.IsNotExist(err))
+}
+
+// B3: a touched file whose metadata changes during observation is a third
+// version; the operation must end releasable instead of retrying forever.
+func TestRestoreMetadataChangeIsReleasable(t *testing.T) {
+	e, f, q, o := fixture(t)
+	f.failStartup = true
+	static := filepath.Join(f.target.Directory, "config", "static.yaml")
+	f.observing = func() { require.NoError(t, os.Chmod(static, 0664)) }
+	result, err := e.Run(t.Context(), q, *o)
+	require.NoError(t, err)
+	require.Equal(t, dto.RecoveryRequired, result.State)
+	require.Equal(t, dto.ThirdVersion, result.Reason)
+	current, err := resolver.Current(f.target)
+	require.NoError(t, err)
+	released, err := e.Release(t.Context(), envelope(q), result, dto.ReleaseRequest{Confirmed: current, Actor: "admin-one"})
+	require.NoError(t, err)
+	require.Equal(t, dto.Released, released.State)
+}
+
+// B3: confirmation ignores the writer's metadata rules, so a group-writable or
+// replaced file still yields a stable state that changes with the content.
+func TestCurrentToleratesUnsupportedMetadata(t *testing.T) {
+	_, f, _, _ := fixture(t)
+	p := filepath.Join(f.target.Directory, "compose.yaml")
+	require.NoError(t, os.Chmod(p, 0664))
+	first, err := resolver.Current(f.target)
+	require.NoError(t, err)
+	again, err := resolver.Current(f.target)
+	require.NoError(t, err)
+	require.Equal(t, first, again)
+	require.NoError(t, os.Remove(p))
+	require.NoError(t, os.Symlink("elsewhere.yaml", p))
+	linked, err := resolver.Current(f.target)
+	require.NoError(t, err)
+	require.NotEqual(t, first, linked)
 }

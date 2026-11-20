@@ -243,9 +243,13 @@ func (e *Executor) restore(ctx context.Context, original dto.Instance, o dto.Ope
 	states := make([]dto.FileState, len(t.Files))
 	for j, f := range t.Files {
 		b, err := Read(t.Directory, f.Path)
+		if _, refused := errors.AsType[*dto.Problem](err); refused {
+			// Changed metadata, type or size is a third version, not a transient read.
+			return e.finish(ctx, o, dto.RecoveryRequired, dto.ThirdVersion)
+		}
 		if err != nil {
 			return o, dto.Fail(dto.AgentUnavailable, 503)
-		} // unreadable: retry, same journal
+		} // transient I/O: retry, same journal
 		states[j] = b.Old
 		if b.Old != f.Old && b.Old != f.New {
 			return e.finish(ctx, o, dto.RecoveryRequired, dto.ThirdVersion)

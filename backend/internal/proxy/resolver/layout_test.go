@@ -7,6 +7,7 @@
 package resolver_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,4 +180,29 @@ func TestEffectiveEnvironmentMapListAndReuse(t *testing.T) {
 	q.Variables = []dto.ResolverVariable{{Name: "HTTPREQ_ENDPOINT"}}
 	out := build(t, v, q)
 	require.Equal(t, v.Files[1].Before, out.Files[1].After)
+}
+
+// B2: Docklet creates .env with FILE_PERM (0644); an untouched .env is accepted,
+// a changed one stays refused.
+func TestEnvModeOnlyGuardsChangedEnv(t *testing.T) {
+	v := target(t, false)
+	require.NoError(t, os.Chmod(filepath.Join(v.Directory, ".env"), 0644))
+	for i := range v.Files {
+		if v.Files[i].Path == ".env" {
+			f, e := resolver.Read(v.Directory, ".env")
+			require.NoError(t, e)
+			f.Kind = "env"
+			v.Files[i] = f
+		}
+	}
+	build(t, v, request())
+	q := request()
+	value := "secret-sentinel"
+	endpoint := "http://sink.example.test"
+	q.Challenge = dto.ResolverChallenge{Kind: "dns", Provider: dto.HTTPRequest}
+	q.Variables = []dto.ResolverVariable{{Name: "HTTPREQ_ENDPOINT", Value: &endpoint}, {Name: "HTTPREQ_PASSWORD", Value: &value}}
+	_, e := resolver.Build(t.Context(), v, q, inventory(), traefik.Splice)
+	p, ok := errors.AsType[*dto.Problem](e)
+	require.True(t, ok)
+	require.Equal(t, dto.UnsupportedMetadata, p.Code)
 }

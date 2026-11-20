@@ -494,30 +494,25 @@ func adoptResolver(tx *gorm.DB, record Record, o dto.Operation) error {
 	if err := tx.First(&row, "id = ?", record.InstanceID).Error; err != nil {
 		return err
 	}
+	// A changed instance row skips adoption: the final receipt and reservation
+	// release still persist, and the instance shows container-changed as in M27.
 	var current dto.Instance
 	if json.Unmarshal(row.Data, &current) != nil {
-		return dto.Fail(dto.ContainerChanged, 409)
+		return nil
 	}
 	if current.Registration != q.Registration || current.Source.Canonical != replacement.Canonical || current.Source.MountTarget != replacement.MountTarget || current.Source.Kind != replacement.Kind {
-		return dto.Fail(dto.ContainerChanged, 409)
+		return nil
 	}
 	if current.Identity.ContainerID == replacement.ContainerID {
 		return nil
 	}
 	if current.Identity.ContainerID != q.Instance.Identity.ContainerID {
-		return dto.Fail(dto.ContainerChanged, 409)
+		return nil
 	}
 	current.Identity = dto.Identity{ContainerID: replacement.ContainerID, ContainerName: replacement.Name, StartedAt: replacement.StartedAt}
 	data, err := marshal(current)
 	if err != nil {
 		return err
 	}
-	res := tx.Model(&instanceRow{}).Where("id = ? AND data = ?", record.InstanceID, row.Data).Update("data", data)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected != 1 {
-		return dto.Fail(dto.ContainerChanged, 409)
-	}
-	return nil
+	return tx.Model(&instanceRow{}).Where("id = ? AND data = ?", record.InstanceID, row.Data).Update("data", data).Error
 }

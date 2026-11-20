@@ -209,8 +209,12 @@ func TestR5R16HubAdoptsDispatchQueryAndReconciler(t *testing.T) {
 			var adopted dto.Instance
 			require.NoError(t, json.Unmarshal(row.Data, &adopted))
 			if mode == "cas-conflict" {
-				require.Equal(t, dto.RecoveryRequired, result.State)
+				// B1: no adoption, but the final receipt persists and frees the reservation.
+				require.Equal(t, dto.Applied, result.State)
 				require.Equal(t, "concurrent-container", adopted.Identity.ContainerID)
+				var held int64
+				require.NoError(t, x.db.Model(&reservation{}).Where("operation_id = ?", q.ID).Count(&held).Error)
+				require.Zero(t, held)
 				return
 			}
 			require.Contains(t, []dto.State{dto.Applied, dto.RolledBack}, result.State)
