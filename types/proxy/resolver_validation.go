@@ -18,12 +18,26 @@ import (
 
 var resolverName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$`)
 var variableName = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+var entryPointName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+var storagePath = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+var resolverHost = regexp.MustCompile(`^[A-Za-z0-9.:-]+$`)
+
+// unsafeLiteral rejects characters that YAML, Compose interpolation or the
+// command list would reinterpret; values are written verbatim by the executor.
+func unsafeLiteral(s string) bool {
+	for _, c := range s {
+		if c < 0x21 || c == 0x7f || strings.ContainsRune("$'\"`\\", c) {
+			return true
+		}
+	}
+	return false
+}
 
 // Validate checks live input before a stub or future executor can admit work.
 // Inventory uniqueness, storage mounts and effective Compose checks belong to admission.
 func (q ResolverRequest) Validate() error {
 	invalid := func() error { return Fail(InvalidInput, 422) }
-	if !resolverName.MatchString(q.Name) || len(q.Email) > 254 || len(q.Email) == 0 || strings.ContainsAny(q.Email, "\r\n") {
+	if !resolverName.MatchString(q.Name) || len(q.Email) > 254 || len(q.Email) == 0 || unsafeLiteral(q.Email) {
 		return invalid()
 	}
 	email, err := mail.ParseAddress(q.Email)
@@ -37,13 +51,13 @@ func (q ResolverRequest) Validate() error {
 		}
 	case "custom":
 		u, err := url.Parse(q.CA.URL)
-		if err != nil || len(q.CA.URL) > 512 || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		if err != nil || len(q.CA.URL) > 512 || unsafeLiteral(q.CA.URL) || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 			return invalid()
 		}
 	default:
 		return invalid()
 	}
-	if len(q.Storage) == 0 || len(q.Storage) > 256 || !path.IsAbs(q.Storage) || path.Clean(q.Storage) != q.Storage || strings.ContainsRune(q.Storage, 0) {
+	if len(q.Storage) == 0 || len(q.Storage) > 256 || !path.IsAbs(q.Storage) || path.Clean(q.Storage) != q.Storage || !storagePath.MatchString(q.Storage) {
 		return invalid()
 	}
 	c := q.Challenge
@@ -52,7 +66,7 @@ func (q ResolverRequest) Validate() error {
 	}
 	switch c.Kind {
 	case "http":
-		if c.EntryPoint == "" || len(c.EntryPoint) > 128 || c.Provider != "" || c.DelayBeforeCheck != 0 || len(c.Resolvers) != 0 || len(q.Variables) != 0 {
+		if !entryPointName.MatchString(c.EntryPoint) || c.Provider != "" || c.DelayBeforeCheck != 0 || len(c.Resolvers) != 0 || len(q.Variables) != 0 {
 			return invalid()
 		}
 	case "dns":
@@ -68,7 +82,7 @@ func (q ResolverRequest) Validate() error {
 	for _, resolver := range c.Resolvers {
 		host, port, err := net.SplitHostPort(resolver)
 		n, er := strconv.Atoi(port)
-		if err != nil || er != nil || host == "" || strings.ContainsAny(host, " /\t\r\n") || n < 1 || n > 65535 {
+		if err != nil || er != nil || !resolverHost.MatchString(host) || n < 1 || n > 65535 {
 			return invalid()
 		}
 	}
@@ -103,6 +117,10 @@ func validateProviderVariables(provider DNSProvider, variables []ResolverVariabl
 		name := v.Name
 		if entry.AliasOf != "" {
 			name = entry.AliasOf
+		}
+		// Two spellings of one credential (an alias and its canonical name) are refused.
+		if canonical[name] {
+			return Fail(InvalidInput, 422)
 		}
 		canonical[name] = true
 		if v.Value != nil && (len(*v.Value) == 0 || len(*v.Value) > 4096 || strings.ContainsAny(*v.Value, "\x00\r\n'")) {

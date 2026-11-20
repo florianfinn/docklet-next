@@ -56,7 +56,7 @@ func decodeResolverPayload(raw, result []byte, id, generation, registration, dig
 	if json.Unmarshal(raw, &envelope, json.RejectUnknownMembers(true)) != nil || json.Unmarshal(result, &o) != nil || envelope.Intent.Validate() != nil || envelope.Kind != dto.ResolverOperation || envelope.ID != id || envelope.Generation != generation || envelope.Registration != registration || envelope.Instance.ID == "" || o.Kind != dto.ResolverOperation || o.ID != id || o.InstanceID != envelope.Instance.ID || o.Generation != generation || o.Registration != registration || o.Digest != digest || o.State != state || !state.ValidFor(dto.ResolverOperation) || o.Resolver == nil || !o.Resolver.Phase.Valid() {
 		return dto.ApplyRequest{}, dto.Operation{}, false
 	}
-	intentDigest, err := envelope.Intent.Digest()
+	intentDigest, err := envelope.Digest()
 	if err != nil || intentDigest != digest {
 		return dto.ApplyRequest{}, dto.Operation{}, false
 	}

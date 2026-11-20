@@ -63,6 +63,17 @@ func TestM28ResolverIngress(t *testing.T) {
 		"missing-required":        func(q *ResolverRequest) { q.Variables = nil },
 		"duplicate":               func(q *ResolverRequest) { q.Variables = append(q.Variables, q.Variables[0]) },
 		"variables-limit":         func(q *ResolverRequest) { q.Variables = make([]ResolverVariable, 17) },
+		"email-dollar":            func(q *ResolverRequest) { q.Email = "a$b@example.test" },
+		"ca-dollar":               func(q *ResolverRequest) { q.CA.URL = "https://ca.example.test/${X}" },
+		"ca-quote":                func(q *ResolverRequest) { q.CA.URL = "https://ca.example.test/a\"b" },
+		"storage-newline":         func(q *ResolverRequest) { q.Storage = "/certs/acme\n.json" },
+		"storage-dollar":          func(q *ResolverRequest) { q.Storage = "/certs/$X.json" },
+		"resolver-host-comma":     func(q *ResolverRequest) { q.Challenge.Resolvers = []string{"192.0.2.53,192.0.2.54:53"} },
+		"resolver-host-quote":     func(q *ResolverRequest) { q.Challenge.Resolvers = []string{"\"ns\".example.test:53"} },
+		"alias-duplicate": func(q *ResolverRequest) {
+			q.Challenge.Provider = Cloudflare
+			q.Variables = []ResolverVariable{{Name: "CF_DNS_API_TOKEN"}, {Name: "CLOUDFLARE_DNS_API_TOKEN"}}
+		},
 	}
 	for _, value := range []string{"", strings.Repeat("v", 4097), "line\nnext", "line\rnext", "a\x00b", "a'b"} {
 		tests["value-"+strings.ReplaceAll(value[:min(8, len(value))], "\x00", "NUL")] = func(q *ResolverRequest) { q.Variables[0].Value = &value }
@@ -84,6 +95,10 @@ func TestM28ResolverIngress(t *testing.T) {
 	require.NoError(t, q.Validate())
 	q.Challenge.EntryPoint = ""
 	require.Error(t, q.Validate())
+	for _, entryPoint := range []string{"web secure", "web,x", "-web", "web$"} {
+		q.Challenge.EntryPoint = entryPoint
+		require.Error(t, q.Validate(), entryPoint)
+	}
 }
 func TestM28ProviderRequirements(t *testing.T) {
 	expected := map[DNSProvider][]string{Hetzner: {"HETZNER_API_TOKEN"}, IONOS: {"IONOS_API_KEY"}, INWX: {"INWX_USERNAME", "INWX_PASSWORD"}, Netcup: {"NETCUP_CUSTOMER_NUMBER", "NETCUP_API_KEY", "NETCUP_API_PASSWORD"}, DeSEC: {"DESEC_TOKEN"}, DuckDNS: {"DUCKDNS_TOKEN"}, HTTPRequest: {"HTTPREQ_ENDPOINT"}, Cloudflare: {"CF_DNS_API_TOKEN"}}
@@ -136,4 +151,23 @@ func TestM28StateKindsStayDisjoint(t *testing.T) {
 		require.False(t, state.ValidFor(ResolverOperation))
 	}
 	require.False(t, Pending.ValidFor("future"))
+}
+
+func TestM28ResolverDigestBindsOperation(t *testing.T) {
+	base := ResolverEnvelope{Kind: ResolverOperation, ID: "op-1", Instance: Instance{ID: "instance-1"}, Generation: "g1", Registration: "r1", Intent: resolverRequest().Redact()}
+	want, err := base.Digest()
+	require.NoError(t, err)
+	for name, mutate := range map[string]func(*ResolverEnvelope){
+		"id":           func(e *ResolverEnvelope) { e.ID = "op-2" },
+		"instance":     func(e *ResolverEnvelope) { e.Instance.ID = "instance-2" },
+		"generation":   func(e *ResolverEnvelope) { e.Generation = "g2" },
+		"registration": func(e *ResolverEnvelope) { e.Registration = "r2" },
+		"intent":       func(e *ResolverEnvelope) { e.Intent.Name = "other" },
+	} {
+		e := base
+		mutate(&e)
+		got, err := e.Digest()
+		require.NoError(t, err)
+		require.NotEqual(t, want, got, name)
+	}
 }

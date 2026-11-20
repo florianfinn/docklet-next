@@ -161,10 +161,12 @@ POST /api/environments/:id/jobs/:jobId/runs/:runId/cancel
 POST /api/environments/:id/jobs/:jobId/runs/:runId/resolve
 POST /api/environments/:id/jobs/:jobId/runs/:runId/retry
 POST /api/environments/:id/modules/proxy/apply
+POST /api/environments/:id/modules/proxy/certificate-check
 POST /api/environments/:id/modules/proxy/fence
 POST /api/environments/:id/modules/proxy/inventory
 POST /api/environments/:id/modules/proxy/read
 POST /api/environments/:id/modules/proxy/release
+POST /api/environments/:id/modules/proxy/resolvers
 POST /api/environments/:id/networks
 POST /api/environments/:id/networks/:networkId/connect
 POST /api/environments/:id/networks/:networkId/disconnect

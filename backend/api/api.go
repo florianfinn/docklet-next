@@ -284,7 +284,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	e.JSONSerializer = jsonV2Serializer{}
 
 	humaConfig := huma.DefaultConfig("Docklet Next API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer, proxy.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -399,7 +399,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	apiGroup := e.Group("/api")
 
 	humaConfig := huma.DefaultConfig("Docklet Next API", config.Version)
-	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer, personalHistoryErrorTransformer, widget.ErrorTransformer, proxy.ErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format

@@ -149,7 +149,7 @@ func TestM28TypedResolverEnvelopeAcrossRestart(t *testing.T) {
 		t.Run(string(phase), func(t *testing.T) {
 			x := newFixture(t)
 			intent := dto.ResolverIntent{ResolverConfig: dto.ResolverConfig{Name: "example", Email: "admin@example.test", CA: dto.ResolverCA{Kind: "letsencrypt"}, Storage: "/certs/acme.json", Challenge: dto.ResolverChallenge{Kind: "http", EntryPoint: "web"}}, Variables: []dto.ResolverVariableIntent{}}
-			digest, err := intent.Digest()
+			digest, err := dto.ResolverEnvelope{Kind: dto.ResolverOperation, ID: x.request.ID, Instance: x.request.Instance, Generation: x.a.Generation(), Registration: x.request.Registration, Intent: intent}.Digest()
 			require.NoError(t, err)
 			state := dto.Pending
 			if phase.Final() {

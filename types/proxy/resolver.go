@@ -102,6 +102,25 @@ type ResolverEnvelope struct {
 	Registration string         `json:"registration"`
 	Intent       ResolverIntent `json:"intent"`
 }
+
+// Digest binds the redacted intent to its operation, like the route digest:
+// a replay must match ID, instance, generation and registration as well.
+func (e ResolverEnvelope) Digest() (string, error) {
+	b, err := json.Marshal(struct {
+		Kind         OperationKind  `json:"kind"`
+		ID           string         `json:"id"`
+		InstanceID   string         `json:"instanceId"`
+		Generation   string         `json:"generation"`
+		Registration string         `json:"registration"`
+		Intent       ResolverIntent `json:"intent"`
+	}{e.Kind, e.ID, e.Instance.ID, e.Generation, e.Registration, e.Intent})
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:]), nil
+}
+
 type ResolverSummary struct {
 	Name      string                    `json:"name"`
 	Email     string                    `json:"email,omitempty"`
