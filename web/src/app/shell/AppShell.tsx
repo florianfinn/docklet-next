@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Product preference/demo boundary after the historical L4 import: build-selected runtime, shared preference modules and regression coverage; existing UI catalogue bytes and storage contracts preserved; M2 review follow-up for production route, navigation and boundary coverage. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M10 #231: production stack updates and lifecycle UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #391: hub maintenance status.
 
+import { RuntimePeerDialog } from "@/shared/components/runtime-peer-dialog";
 import { BulkResultController } from "@/shared/components/bulk-result-dialog";
 import { GlobalSearch } from "./GlobalSearch";
 import { MaintenanceStatus } from "./MaintenanceStatus";
@@ -150,7 +151,7 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
             <BackendNotice />
             <Suspense fallback={<PageFallback />}>
               <Outlet />
-          <StackUpdateDialogController />
+          <StackUpdateDialogController /><RuntimePeerDialog />
             </Suspense>
           </div>
         </div>

@@ -15,6 +15,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	a "github.com/florianfinn/docklet-next/types/activity"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,13 @@ func (p *refusingExecution) ResolveRuntimeProjectIdentity(ctx context.Context, i
 		return projectDTO.Reference{}, false, errors.New("docker unavailable")
 	}
 	return p.ProjectService.ResolveRuntimeProjectIdentity(ctx, id, name)
+}
+
+func (p *refusingExecution) ResolveRuntimeProjectIdentityAcknowledged(ctx context.Context, id, name, digest string) (projectDTO.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
+	if dto.ObservedExecutionFromContext(ctx).Mode != "" {
+		return projectDTO.Reference{}, false, nil, errors.New("docker unavailable")
+	}
+	return p.ProjectService.ResolveRuntimeProjectIdentityAcknowledged(ctx, id, name, digest)
 }
 
 // R2S1-3: an observed adapter refusal completes as a known failed run with

@@ -120,3 +120,18 @@ it("W6 an unrelated settings failure does not block Stop", async () => {
   await userEvent.click(stop);
   await waitFor(() => expect(run).toHaveBeenCalledExactlyOnceWith(stack.id, "stop"));
 });
+
+it("S4 renders the concrete missing-env-file marker and removes it after repair", async () => {
+  const adapter = createDemoAdapter();
+  const original = renderStackDetail(await adapter.getStack("media"), "de");
+  const row = { id: "media", name: "Media", status: "stopped", definitionHint: "definition-invalid", definitionReason: "compose.env-file-missing", definitionFile: "nested/service.env", runtimeServices: [] } as unknown as ProjectRow;
+  const broken = mapStack(row, "0", [], { stale: false });
+  const view = renderWithApp(<StackHeader stack={{ ...original, ...broken }} host={undefined} />, adapter);
+  expect(screen.getByText("Eine erforderliche Service-Umgebungsdatei fehlt: nested/service.env.") !== null).toBe(true);
+  view.unmount();
+  const repaired = mapStack({ ...row, definitionHint: undefined, definitionReason: undefined, definitionFile: undefined }, "0", [], { stale: false });
+  renderWithApp(<StackHeader stack={{ ...original, ...repaired }} host={undefined} />, adapter);
+  expect(screen.queryByText(/Service-Umgebungsdatei fehlt/) === null).toBe(true);
+  const unsafe = mapStack({ ...row, definitionFile: "../outside.env" }, "0", [], { stale: false });
+  expect(unsafe.definitionFile).toBeUndefined();
+});

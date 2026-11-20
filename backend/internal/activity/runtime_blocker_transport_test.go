@@ -39,7 +39,9 @@ func TestRuntimeBlockerDetailDirectEdge(t *testing.T) {
 			var problem *imageDTO.OperationError
 			require.ErrorAs(t, err, &problem)
 			require.Equal(t, "runtime.target-unavailable", problem.Problem.Code)
-			require.Equal(t, &imageDTO.RuntimeIdentityBlocker{Name: "example-peer", Reason: "compose.selection-unsupported", Archived: true}, problem.Problem.Blocker)
+			require.True(t, problem.Problem.Blocker.Confirmable)
+			require.Equal(t, "compose.selection-unsupported", problem.Problem.Blocker.Uncertainty.Peers[0].Reason)
+			require.True(t, problem.Problem.Blocker.Uncertainty.Peers[0].Archived)
 			encoded, err := json.Marshal(problem)
 			require.NoError(t, err)
 			require.NotContains(t, string(encoded), path)

@@ -1,6 +1,7 @@
 // American English texts of shared components (status, updates, query states).
 
 export const enCommon = {
+ runtimePeers: {"auditUnavailable": "Stack confirmation details are unavailable.","definitionInvalid": "The Compose definition cannot be resolved. Repair it to restore the services list.","title": "Run despite unreadable stacks?", "question": "Docklet cannot rule out that these stacks use the same project name. Run anyway?", "peer": "Docklet could not read stack \"{name}\": {reason}.", "file": " File: {file}.", "more": "and {count} more", "confirm": "Run anyway", "cancel": "Cancel", "updateRequired": "Update the agent on {host} to confirm this action.", "selection": "the Compose selection is unsupported", "identity": "the Compose identity cannot be read", "missing": "a required service environment file is missing", "duplicate": "Stack \"{name}\" uses the same project name; resolve the duplicate first.", "audit": "Run despite {count, plural, one {# unreadable stack} other {# unreadable stacks}}: {peers}", "auditPeerFile": "{name} ({reason}, {file})", "auditPeer": "{name} ({reason})", "invalid": "The stack confirmation is invalid. Try the action again.", "markerMissing": "A required service environment file is missing.", "markerFile": "A required service environment file is missing: {file}."},
   hubUpdate: {
       "available": "Hub update {version} available",
       "availableTooltip": "Version {version} available",

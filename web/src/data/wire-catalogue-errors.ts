@@ -16,6 +16,7 @@ export const REQUEST_CODE_KEYS = {
 } satisfies Record<Schema["RequestProblem"]["code"], CatalogueKey>;
 
 export const IMAGE_ERROR_KEYS = {
+ "runtime.invalid-acknowledgement": "common.runtimePeers.invalid",
   "update.unstable": "images.errors.update_unstable",
   "update.auto-restored": "images.errors.update_auto-restored",
   "update.auto-restore-failed": "images.errors.update_auto-restore-failed",

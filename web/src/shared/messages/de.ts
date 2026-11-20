@@ -2,6 +2,7 @@
 import type { enCommon } from "./en";
 
 export const deCommon: typeof enCommon = {
+ runtimePeers: {"auditUnavailable": "Die Details der Stack-Bestätigung sind nicht verfügbar.","definitionInvalid": "Die Compose-Definition kann nicht aufgelöst werden. Repariere sie, um die Service-Liste wiederherzustellen.","title": "Trotz unlesbarer Stacks ausführen?", "question": "Docklet kann nicht ausschließen, dass diese Stacks denselben Projektnamen verwenden. Trotzdem ausführen?", "peer": "Docklet konnte Stack „{name}“ nicht lesen: {reason}.", "file": " Datei: {file}.", "more": "und {count} weitere", "confirm": "Trotzdem ausführen", "cancel": "Abbrechen", "updateRequired": "Aktualisiere den Agent auf {host}, um diese Aktion zu bestätigen.", "selection": "die Compose-Auswahl wird nicht unterstützt", "identity": "die Compose-Identität kann nicht gelesen werden", "missing": "eine erforderliche Service-Umgebungsdatei fehlt", "duplicate": "Stack „{name}“ verwendet denselben Projektnamen. Löse zuerst den Namenskonflikt.", "audit": "Trotz {count, plural, one {# unlesbarem Stack} other {# unlesbaren Stacks}} ausgeführt: {peers}", "auditPeerFile": "{name} ({reason}, {file})", "auditPeer": "{name} ({reason})", "invalid": "Die Stack-Bestätigung ist ungültig. Starte die Aktion erneut.", "markerMissing": "Eine erforderliche Service-Umgebungsdatei fehlt.", "markerFile": "Eine erforderliche Service-Umgebungsdatei fehlt: {file}."},
   hubUpdate: {
       "available": "Hub-Update {version} verfügbar",
       "availableTooltip": "Version {version} verfügbar",

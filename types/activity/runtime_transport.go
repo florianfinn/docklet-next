@@ -47,11 +47,12 @@ type RuntimeTarget struct {
 // sorted unique set; nil/empty means whole stack for restart only. Keep null
 // versus [] on the wire so an unsupported supplied option is not hidden.
 type RuntimeOptions struct {
-	ContainerImage  *updater.ContainerImageRequest `json:"containerImage,omitempty"`
-	Recreate        *container.Edit                `json:"recreate,omitzero"`
-	Lifecycle       *updater.LifecycleIntent       `json:"lifecycle,omitempty"`
-	Deploy          *project.DeployOptions         `json:"deploy"`
-	RestartServices []string                       `json:"restartServices"`
+	AcknowledgedUncertainty string                         `json:"acknowledgedUncertainty,omitempty"`
+	ContainerImage          *updater.ContainerImageRequest `json:"containerImage,omitempty"`
+	Recreate                *container.Edit                `json:"recreate,omitzero"`
+	Lifecycle               *updater.LifecycleIntent       `json:"lifecycle,omitempty"`
+	Deploy                  *project.DeployOptions         `json:"deploy"`
+	RestartServices         []string                       `json:"restartServices"`
 }
 
 // RuntimeExecutorIdentity is bound by authenticated construction, never granted

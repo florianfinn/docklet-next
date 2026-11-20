@@ -4,10 +4,12 @@
 // License: Apache-2.0
 // Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys. M24 recovery evidence, validation and reason contracts.
 
+import { deCommon } from "@/shared/messages/de";
 import { deBackend } from "@/data/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 
 export const deImageErrors = {
+ "runtime_invalid-acknowledgement": deCommon.runtimePeers.invalid,
   "runtime_stack-blocker": "Stack „{name}“ blockiert Laufzeitaktionen: {reason}. Repariere diesen Stack, um fortzufahren.",
   "runtime_archived-stack-blocker": "Der archivierte Stack „{name}“ blockiert Laufzeitaktionen: {reason}. Repariere diesen Stack, um fortzufahren.",
   "runtime_blocker-selection": "seine Compose-Auswahl wird nicht unterstützt",

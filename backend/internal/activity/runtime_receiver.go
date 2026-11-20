@@ -145,7 +145,7 @@ func (r *RuntimeReceiver) Execute(ctx context.Context, envelope activitytypes.Ru
 	}
 	target := c.command.Target
 	target.Name, target.ParentProjectID = copyPtrInternal(target.Name), copyPtrInternal(target.ParentProjectID)
-	resolved, err := s.resolver.ResolveRuntimeTarget(ctx, target)
+	resolved, err := resolveRuntimeAcknowledged(ctx, s.resolver, target, c.command.Options.AcknowledgedUncertainty)
 	if ctx.Err() != nil {
 		return RuntimeReceiverResult{}, ctx.Err()
 	}
@@ -165,6 +165,7 @@ func (r *RuntimeReceiver) Execute(ctx context.Context, envelope activitytypes.Ru
 		c.command.Target.Name = copyPtrInternal(resolved.Target.Name)
 	}
 	c.replacementRunID = resolved.ReplacementRunID
+	c.command.PeerOverrides = resolved.PeerOverrides
 	result, _, err = r.receivePassInternal(ctx, c, true)
 	return result, err
 }

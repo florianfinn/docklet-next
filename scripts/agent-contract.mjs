@@ -68,6 +68,12 @@ export function agentFixture(spec, fixture) {
     recovery: summary.properties.recovery,
     recoveryProperties: recovery.properties,
   };
+  manifest.runtimePeerIdentity = {
+    minimumConfirmationContract: 20, hubHeader: "X-Docklet-Hub-Contract",
+    acknowledgement: "SHA-256 of sorted complete peerId:reason lines; empty preserves legacy semantic digest",
+    displayPeers: 16, receiptPeers: 64,
+    schemas: Object.fromEntries(["ImageRuntimeIdentityBlocker", "ImageRuntimeUncertainty", "ImageRuntimeIdentityPeer", "ActivityRuntimePeerAdmissionRequest", "ActivityRuntimeDeployAdmissionRequest", "ActivityRuntimeLifecycleAdmissionRequest"].map((name) => [name, { sha256: createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex") }])),
+  };
   manifest.imageSafety.errorCodes = schemas.ImageProblem.properties.code.enum;
   const update = document.paths["/environments/{id}/updater/projects/{projectId}/update"]?.post;
   if (update) {
@@ -312,7 +318,7 @@ function formatFixture(value, depth = 0) {
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
   if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
-  if (depth >= 3 && JSON.stringify(value).length <= 400) return JSON.stringify(value);
+  if (depth >= 3 && JSON.stringify(value).length <= 800) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

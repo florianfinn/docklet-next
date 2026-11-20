@@ -23,6 +23,14 @@ func (s *ProjectService) fillDefinitionServices(ctx context.Context, records []P
 			model, err := s.getCachedComposeProject(ctx, &records[i], env)
 			if err != nil {
 				rows[i].DefinitionHint = "definition-invalid"
+				rows[i].DefinitionReason = "compose.identity-unreadable"
+				_, file, identityErr := s.runtimeComposeEvidence(ctx, &records[i])
+				if file != "" && identityErr == nil {
+					rows[i].DefinitionReason = "compose.env-file-missing"
+					rows[i].DefinitionFile = runtimeIdentityDisplayFile(file)
+				} else if UnsupportedUpdateLayout(identityErr) != nil {
+					rows[i].DefinitionReason = "compose.selection-unsupported"
+				}
 				return nil
 			}
 			services := make([]projecttypes.RuntimeService, 0, len(model.Services))

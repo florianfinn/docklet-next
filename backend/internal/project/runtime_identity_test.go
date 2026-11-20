@@ -107,10 +107,10 @@ func TestResolveRuntimeProjectIdentityEnvAndAmbiguity(t *testing.T) {
 
 	second := runtimeIdentityProject(t, svc, root, "example-project-b", "beta", "name: second_stack\nservices:\n  app:\n    image: example.invalid/app:1\n")
 	_, found, err = svc.ResolveRuntimeProjectIdentity(t.Context(), "", "second_stack")
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.False(t, found)
 	_, found, err = svc.ResolveRuntimeProjectIdentity(t.Context(), row.ID, "second_stack")
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.False(t, found)
 	_ = second
 }
@@ -395,7 +395,11 @@ func TestProjectIdentityReadOnlyAndAvailabilityRecovery(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(peer.Path, "compose.yaml"), []byte("name: healthy_stack\n"+identityServices), 0600))
 	for _, selector := range []struct{ id, name string }{{row.ID, ""}, {peer.ID, ""}, {"", "healthy_stack"}, {"missing-id", "healthy_stack"}, {row.ID, "other_stack"}} {
 		_, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), selector.id, selector.name)
-		require.NoError(t, err)
+		if selector.id != "missing-id" && selector.name != "other_stack" {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
 		require.False(t, found)
 	}
 }

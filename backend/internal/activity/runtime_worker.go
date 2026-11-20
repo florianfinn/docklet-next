@@ -9,6 +9,7 @@ package activity
 import (
 	"context"
 	"errors"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"io"
 	"time"
 
@@ -106,6 +107,9 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 			command.ProposedRunID = owner.id.RunID
 			execution := updaterDTO.WithResultSink(owner.ctx, func(result updaterDTO.LifecycleResult) { owned := result; imageResult = &owned })
 			execution = containerDTO.WithRecreateResultSink(execution, func(result containerDTO.RecreateResult) { owned := result; recreateResult = &owned })
+			execution = context.WithValue(execution, runtimePeerSinkKey{}, func(used *imageDTO.RuntimePeerOverrides) error {
+				return s.recordRuntimePeerEvidence(execution, command.ProposedRunID, command.Options.AcknowledgedUncertainty, used)
+			})
 			phaseErr = s.localExecution.Executor.ExecuteRuntime(execution, command, output)
 			outputErr = runtimeCaptureFailureInternal(output, phaseErr)
 			outputErr = errors.Join(outputErr, runtimeFinishOutputInternal(owner.ctx, output))
