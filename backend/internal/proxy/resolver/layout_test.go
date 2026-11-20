@@ -7,7 +7,6 @@
 package resolver_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,9 +181,9 @@ func TestEffectiveEnvironmentMapListAndReuse(t *testing.T) {
 	require.Equal(t, v.Files[1].Before, out.Files[1].After)
 }
 
-// B2: Docklet creates .env with FILE_PERM (0644); an untouched .env is accepted,
-// a changed one stays refused.
-func TestEnvModeOnlyGuardsChangedEnv(t *testing.T) {
+// B2/D-A1: Docklet creates .env with FILE_PERM (0644). An untouched .env keeps
+// its mode; a changed one (new secrets) is planned owner-only.
+func TestEnvModeOnlyChangedEnvIsTightened(t *testing.T) {
 	v := target(t, false)
 	require.NoError(t, os.Chmod(filepath.Join(v.Directory, ".env"), 0644))
 	for i := range v.Files {
@@ -195,14 +194,23 @@ func TestEnvModeOnlyGuardsChangedEnv(t *testing.T) {
 			v.Files[i] = f
 		}
 	}
-	build(t, v, request())
+	envOf := func(out resolver.Target) resolver.File {
+		for _, f := range out.Files {
+			if f.Path == ".env" {
+				return f
+			}
+		}
+		t.Fatal("no .env")
+		return resolver.File{}
+	}
+	unchanged := envOf(build(t, v, request()))
+	require.Zero(t, unchanged.WriteMode)
 	q := request()
-	value := "secret-sentinel"
+	value := "submitted-sentinel"
 	endpoint := "http://sink.example.test"
 	q.Challenge = dto.ResolverChallenge{Kind: "dns", Provider: dto.HTTPRequest}
 	q.Variables = []dto.ResolverVariable{{Name: "HTTPREQ_ENDPOINT", Value: &endpoint}, {Name: "HTTPREQ_PASSWORD", Value: &value}}
-	_, e := resolver.Build(t.Context(), v, q, inventory(), traefik.Splice)
-	p, ok := errors.AsType[*dto.Problem](e)
-	require.True(t, ok)
-	require.Equal(t, dto.UnsupportedMetadata, p.Code)
+	changed := envOf(build(t, v, q))
+	require.EqualValues(t, 0600, changed.WriteMode)
+	require.EqualValues(t, 0644, changed.Mode)
 }

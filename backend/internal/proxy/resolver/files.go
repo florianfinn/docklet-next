@@ -27,6 +27,9 @@ type File struct {
 	Mode   uint32 `json:"mode"`
 	Before []byte `json:"-"`
 	After  []byte `json:"-"`
+	// WriteMode overrides Mode for the forward write only (a changed .env is
+	// written owner-only); restore always uses the original Mode.
+	WriteMode uint32 `json:"-"`
 }
 
 func snapshot(b []byte, present bool) dto.FileState {
@@ -104,7 +107,7 @@ func Read(root, p string) (File, error) {
 }
 
 // Replace compares hashes on the pinned directory immediately before rename or
-// unlink. Owner-only .env modes are preserved; new secret files start at 0600.
+// unlink and writes with the given mode; Build decides the .env write mode.
 func Replace(root, p string, expected dto.FileState, data []byte, present bool, mode uint32) error {
 	fd, n, e := parent(root, p)
 	if e != nil {
@@ -126,9 +129,6 @@ func Replace(root, p string, expected dto.FileState, data []byte, present bool, 
 			return e
 		}
 		return unix.Fsync(fd)
-	}
-	if p == ".env" && mode&0077 != 0 {
-		return dto.Fail(dto.UnsupportedMetadata, 409)
 	}
 	tmp := ".docklet-resolver-" + randomID() + ".tmp"
 	nfd, e := unix.Openat(fd, tmp, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)

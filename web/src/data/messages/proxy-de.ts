@@ -9,7 +9,7 @@ export const deProxyContract = {
     "resolverCreate": {
   "create": "Zertifikatsresolver erstellen",
   "hint": "Nur der Traefik-Dienst wird neu erstellt. Die Ausstellung ist von der Startprüfung getrennt.",
-  "envDisclosure": "Administratoren können .env im Stack-Editor lesen. Übermittelte Werte werden dort gespeichert.",
+  "envDisclosure": "Administratoren können .env im Stack-Editor lesen. Übermittelte Werte werden dort gespeichert. Können andere Benutzer .env lesen, beschränkt Docklet die Datei auf ihren Besitzer (Modus 600); ein Rollback stellt den vorherigen Modus wieder her.",
   "injection": "Wenn autoInjectEnv aktiviert ist, werden .env-Variablen auch in andere Dienste eingefügt. Andere Dienste können diese Datei bereits lesen.",
   "email": "ACME-E-Mail",
   "storage": "Speicherpfad für Zertifikate",

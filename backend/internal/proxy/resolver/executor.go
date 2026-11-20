@@ -142,7 +142,11 @@ func (e *Executor) Run(ctx context.Context, q dto.ResolverApplyRequest, o dto.Op
 			if f.Old == f.New {
 				continue
 			}
-			if er := Replace(t.Directory, f.Path, f.Old, f.After, f.New.Present, f.Mode); er != nil {
+			mode := f.Mode
+			if f.WriteMode != 0 {
+				mode = f.WriteMode
+			}
+			if er := Replace(t.Directory, f.Path, f.Old, f.After, f.New.Present, mode); er != nil {
 				return er
 			}
 			written++

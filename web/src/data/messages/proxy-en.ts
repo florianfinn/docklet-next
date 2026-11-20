@@ -9,7 +9,7 @@ export const enProxyContract = {
     "resolverCreate": {
   "create": "Create certificate resolver",
   "hint": "Only the Traefik service is recreated. Issuance is separate from startup verification.",
-  "envDisclosure": "Administrators can read .env in the stack editor. Submitted values are stored there.",
+  "envDisclosure": "Administrators can read .env in the stack editor. Submitted values are stored there. If other users can read .env, Docklet restricts it to its owner (mode 600); a rollback restores the previous mode.",
   "injection": "When autoInjectEnv is enabled, .env variables are also injected into other services. Other services may already read this file.",
   "email": "ACME email",
   "storage": "Certificate storage path",

@@ -57,8 +57,25 @@ func (f *fakeHost) Observe(_ context.Context, _ dto.Instance, _ string, present 
 }
 func fixture(t *testing.T) (*resolver.Executor, *fakeHost, dto.ResolverApplyRequest, *dto.Operation) {
 	t.Helper()
-	q := dto.ResolverApplyRequest{ID: "resolver-one", Generation: "generation-one", Registration: "local", Request: request(), Instance: dto.Instance{ID: "instance-one", Kind: dto.Traefik, EnvironmentID: "0", Registration: "local", Identity: dto.Identity{ContainerID: "original", ContainerName: "example-gateway", StartedAt: "2026-11-20T01:00:00Z"}, Source: dto.Source{Kind: dto.ProjectSource, MountTarget: "/etc/traefik", Canonical: "/example/project/config"}}}
-	f := &fakeHost{target: build(t, target(t, true), q.Request), identity: q.Instance}
+	return fixtureFor(t, request(), nil)
+}
+
+// fixtureFor builds the executor fixture for a request; prep may adjust the
+// target directory before Build reads it.
+func fixtureFor(t *testing.T, r dto.ResolverRequest, prep func(dir string)) (*resolver.Executor, *fakeHost, dto.ResolverApplyRequest, *dto.Operation) {
+	t.Helper()
+	v := target(t, true)
+	if prep != nil {
+		prep(v.Directory)
+		for i := range v.Files {
+			f, e := resolver.Read(v.Directory, v.Files[i].Path)
+			require.NoError(t, e)
+			f.Kind = v.Files[i].Kind
+			v.Files[i] = f
+		}
+	}
+	q := dto.ResolverApplyRequest{ID: "resolver-one", Generation: "generation-one", Registration: "local", Request: r, Instance: dto.Instance{ID: "instance-one", Kind: dto.Traefik, EnvironmentID: "0", Registration: "local", Identity: dto.Identity{ContainerID: "original", ContainerName: "example-gateway", StartedAt: "2026-11-20T01:00:00Z"}, Source: dto.Source{Kind: dto.ProjectSource, MountTarget: "/etc/traefik", Canonical: "/example/project/config"}}}
+	f := &fakeHost{target: build(t, v, q.Request), identity: q.Instance}
 	en := dto.ResolverEnvelope{Kind: dto.ResolverOperation, ID: q.ID, Generation: q.Generation, Registration: q.Registration, Instance: q.Instance, Intent: q.Request.Redact()}
 	digest, e := en.Digest()
 	require.NoError(t, e)
@@ -364,4 +381,31 @@ func TestCurrentToleratesUnsupportedMetadata(t *testing.T) {
 	linked, err := resolver.Current(f.target)
 	require.NoError(t, err)
 	require.NotEqual(t, first, linked)
+}
+
+// D-A1: a changed .env with Docklet's default mode (0644) is written owner-only;
+// a rollback restores the previous bytes and mode.
+func TestChangedEnvWrittenOwnerOnlyAndRestored(t *testing.T) {
+	for _, rollback := range []bool{false, true} {
+		t.Run(map[bool]string{false: "applied", true: "rolled-back"}[rollback], func(t *testing.T) {
+			r := request()
+			endpoint, value := "http://sink.example.test", "submitted-sentinel"
+			r.Challenge = dto.ResolverChallenge{Kind: "dns", Provider: dto.HTTPRequest}
+			r.Variables = []dto.ResolverVariable{{Name: "HTTPREQ_ENDPOINT", Value: &endpoint}, {Name: "HTTPREQ_PASSWORD", Value: &value}}
+			e, f, q, o := fixtureFor(t, r, func(dir string) { require.NoError(t, os.Chmod(filepath.Join(dir, ".env"), 0644)) })
+			f.failStartup = rollback
+			result, err := e.Run(t.Context(), q, *o)
+			require.NoError(t, err)
+			st, err := os.Stat(filepath.Join(f.target.Directory, ".env"))
+			require.NoError(t, err)
+			if rollback {
+				require.Equal(t, dto.RolledBack, result.State)
+				require.Equal(t, os.FileMode(0644), st.Mode().Perm())
+				assertOriginal(t, f)
+				return
+			}
+			require.Equal(t, dto.Applied, result.State)
+			require.Equal(t, os.FileMode(0600), st.Mode().Perm())
+		})
+	}
 }

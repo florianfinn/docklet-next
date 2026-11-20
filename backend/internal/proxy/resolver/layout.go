@@ -180,9 +180,10 @@ func Build(ctx context.Context, t Target, q dto.ResolverRequest, inv dto.Invento
 		return t, err
 	}
 	ef.After = env
-	// Only a changed .env must be owner-only; Docklet creates it with FILE_PERM.
-	if ef.Old.Present && ef.Mode&0077 != 0 && !bytes.Equal(ef.After, ef.Before) {
-		return t, dto.Fail(dto.UnsupportedMetadata, 409)
+	// A changed .env holds secrets and is written owner-only (D-A1). Docklet creates
+	// it with FILE_PERM (0644); Mode keeps that, so a rollback restores it.
+	if !bytes.Equal(ef.After, ef.Before) {
+		ef.WriteMode = 0600
 	}
 	changes := map[string]any{}
 	en := field(svc, "environment")
