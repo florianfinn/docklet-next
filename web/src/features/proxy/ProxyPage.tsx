@@ -17,6 +17,13 @@ import { InstanceWorkspace } from "./InstanceWorkspace";
 import { Setup } from "./Setup";
 import type { CreateInstance, Instance } from "./types";
 
+/** The page shows exactly one view; the instance Select is derived from it, never the other way round. */
+type View = { kind: "instance"; id: string } | { kind: "setup" };
+const SETUP = "\u0000setup";
+// Cancel from setup returns to the instance shown last.
+const to = (next: View) => (old: { last: string }) => ({ view: next, last: next.kind === "instance" ? next.id : old.last });
+const first = (rows: Instance[]): View => (rows[0] ? { kind: "instance", id: rows[0].id } : { kind: "setup" });
+
 function Manager() {
   const t = useTranslations("proxyContract.ui"),
     hosts = useHosts();
@@ -36,8 +43,7 @@ function Manager() {
   });
   const api = connection.api;
   const [instances, setInstances] = useState<Instance[]>(),
-    [selected, setSelected] = useState(""),
-    [setup, setSetup] = useState(false),
+    [{ view, last }, setPage] = useState<{ view: View; last: string }>({ view: { kind: "setup" }, last: "" }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>();
   useEffect(() => {
@@ -52,7 +58,7 @@ function Manager() {
         if (live && active.current) {
           setError(undefined);
           setInstances(rows);
-          setSelected(rows[0]?.id ?? "");
+          setPage(to(first(rows)));
         }
       },
       e => {
@@ -66,7 +72,8 @@ function Manager() {
       stop();
     };
   }, [api, lifetime, connection]);
-  const instance = instances?.find(i => i.id === selected);
+  const instance = view.kind === "instance" ? instances?.find(i => i.id === view.id) : undefined;
+  const back = instances?.find(i => i.id === last);
   const create = async (input: CreateInstance) => {
     if (lock.current) return;
     lock.current = true;
@@ -76,8 +83,7 @@ function Manager() {
       const i = await api.create(input);
       if (active.current) {
         setInstances(old => [...(old ?? []), i]);
-        setSelected(i.id);
-        setSetup(false);
+        setPage(to({ kind: "instance", id: i.id }));
       }
     } catch (e) {
       if (active.current) setError(e);
@@ -96,26 +102,28 @@ function Manager() {
       {hosts.isError && <ErrorView error={hosts.error} />}
       {instances && (
         <>
-          <div className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[1fr_auto]">
-            <Choice
-              id="proxy-instance"
-              label={t("instances")}
-              value={selected}
-              placeholder={t("instance")}
-              onChange={v => {
-                setSelected(v);
-                setSetup(false);
-              }}
-              options={instances.map(i => ({
-                value: i.id,
-                label: `${i.name} · ${hosts.data?.find(h => h.id === i.environmentId)?.name ?? i.environmentId} · ${i.identity.containerName}`,
-              }))}
-            />
-            <Button variant="outline" className="self-end" onClick={() => setSetup(true)}>
-              {t("newInstance")}
-            </Button>
-          </div>
-          {instance && !setup ? (
+          {instances.length > 0 && (
+            <div className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[1fr_auto]">
+              <Choice
+                id="proxy-instance"
+                label={t("instances")}
+                value={instance ? instance.id : SETUP}
+                placeholder={t("instance")}
+                onChange={v => setPage(to(v === SETUP ? { kind: "setup" } : { kind: "instance", id: v }))}
+                options={[
+                  ...instances.map(i => ({
+                    value: i.id,
+                    label: `${i.name} · ${hosts.data?.find(h => h.id === i.environmentId)?.name ?? i.environmentId} · ${i.identity.containerName}`,
+                  })),
+                  { value: SETUP, label: t("newInstanceOption") },
+                ]}
+              />
+              <Button variant="outline" className="self-end" disabled={!instance} onClick={() => setPage(to({ kind: "setup" }))}>
+                {t("newInstance")}
+              </Button>
+            </div>
+          )}
+          {instance ? (
             <>
               <div className="flex min-w-0 flex-wrap gap-x-5 gap-y-2 text-sm">
                 <span className="break-all">
@@ -134,8 +142,9 @@ function Manager() {
                 api={api}
                 updated={i => setInstances(old => old?.map(row => (row.id === i.id ? i : row)))}
                 removed={() => {
-                  setInstances(old => old?.filter(row => row.id !== instance.id));
-                  setSelected("");
+                  const rest = instances.filter(row => row.id !== instance.id);
+                  setInstances(rest);
+                  setPage(to(first(rest)));
                 }}
               />
             </>
@@ -152,8 +161,8 @@ function Manager() {
                 }}
                 busy={busy}
               />
-              {instance && (
-                <Button variant="ghost" onClick={() => setSetup(false)}>
+              {back && (
+                <Button variant="ghost" onClick={() => setPage(to({ kind: "instance", id: back.id }))}>
                   {t("back")}
                 </Button>
               )}
@@ -170,7 +179,7 @@ function Manager() {
                 if (active.current) {
                   setError(undefined);
                   setInstances(rows);
-                  setSelected(rows[0]?.id ?? "");
+                  setPage(to(first(rows)));
                 }
               },
               e => {

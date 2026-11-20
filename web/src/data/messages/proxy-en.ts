@@ -11,6 +11,7 @@ export const enProxyContract = {
     "instances": "Configured instances",
     "candidates": "Setup candidates",
     "newInstance": "Add instance",
+    "newInstanceOption": "New instance…",
     "instance": "Instance",
     "host": "Host",
     "container": "Container",

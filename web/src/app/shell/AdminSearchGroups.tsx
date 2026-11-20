@@ -16,7 +16,7 @@ import { IDS } from "@/features/settings/settings-sections";
 import type { Stack } from "@/domain/model";
 import type { SearchEntry } from "./search-model";
 import { SearchGroup } from "./SearchGroup";
-import { NAV, visibleNavItems } from "./nav-items";
+import { effectiveNavigation, NAV } from "./nav-items";
 interface Props { query: string; select: (to?: string, run?: () => void) => void; hostName: (id: string) => string; pages: SearchEntry[]; actions: SearchEntry[]; stacks: Stack[]; stacksLoading: boolean }
 /** Instantiated only for administrators; these hooks never mount in the reduced shell. */
 export function AdminSearchGroups({ query, select, hostName, pages, actions: sharedActions, stacks, stacksLoading }: Props) {
@@ -31,7 +31,7 @@ export function AdminSearchGroups({ query, select, hostName, pages, actions: sha
     ...(updates.available ? [{ id: "updates", label: t("checkUpdates"), run: () => { const failure = captureCommandFailure(adapter); void (adapter.checkAllUpdates ? adapter.checkAllUpdates() : adapter.checkUpdates({})).catch((error) => failure.error(commandError(error))); } }] : []),
     ...(activity.available ? [{ id: "activity", label: t("activity"), run: () => openActivity() }] : []),
   ];
-  return <><SearchGroup name={t("pages")} entries={[...pages, ...visibleNavItems(NAV.flatMap((group) => group.items), true, modules.data).filter((item) => !item.comingSoon && !["dashboard", "stacks"].includes(item.key)).map((item) => ({ id: item.key, label: nav(item.key), to: item.to }))]} query={query} select={select} /><SearchGroup name={t("settings")} entries={IDS.map((id) => ({ id, label: settings(id), keywords: [id], to: `/settings/${id}` }))} query={query} select={select} />
+  return <><SearchGroup name={t("pages")} entries={[...pages, ...effectiveNavigation(NAV, true, modules.data).flatMap((group) => group.items).filter((item) => !item.comingSoon && !["dashboard", "stacks"].includes(item.key)).map((item) => ({ id: item.key, label: nav(item.key), to: item.to }))]} query={query} select={select} /><SearchGroup name={t("settings")} entries={IDS.map((id) => ({ id, label: settings(id), keywords: [id], to: `/settings/${id}` }))} query={query} select={select} />
     <SearchGroup name={nav("hosts")} entries={hosts.data?.map((host) => ({ id: host.id, label: host.name, to: "/hosts" })) ?? []} query={query} select={select} loading={hosts.isPending} list="/hosts" />
     <SearchGroup name={nav("stacks")} entries={stacks.map((item) => ({ id: item.id, label: item.name, host: hostName(item.hostId), keywords: item.labels, to: `/stacks/${encodeURIComponent(item.id)}` }))} query={query} select={select} loading={stacksLoading} list="/stacks" />
     <SearchGroup name={nav("containers")} entries={containers.data?.map((item) => ({ id: item.id, label: item.name, keywords: Object.entries(item.dockerLabels ?? {}).flat(), host: hostName(item.hostId), to: `/containers?c=${encodeURIComponent(item.id)}` })) ?? []} query={query} select={select} loading={containers.isPending} list="/containers" />

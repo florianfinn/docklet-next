@@ -42,7 +42,7 @@ export interface NavItem {
 }
 
 export interface NavGroup {
-  key: "operate" | "resources" | "system" | "later";
+  key: "operate" | "resources" | "system" | "modules" | "later";
   items: NavItem[];
 }
 
@@ -75,9 +75,12 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    key: "modules",
+    items: [{ key: "proxy", to: "/proxy", icon: Waypoints, module: "proxy" }],
+  },
+  {
     key: "later",
     items: [
-      { key: "proxy", to: "/proxy", icon: Waypoints, comingSoon: true, module: "proxy" },
       { key: "games", to: "/games", icon: Gamepad2, comingSoon: true },
     ],
   },
@@ -95,4 +98,9 @@ export function navigationForRoutes(routes: RouteObject[]): NavGroup[] {
 
 export function visibleNavItems(items: NavItem[], canReadHubBackups: boolean, modules?: ModuleChoices): NavItem[] {
   return items.filter((item) => (item.key !== "hubBackups" || canReadHubBackups) && (!item.module || modules?.[item.module] === true));
+}
+
+/** The one effective projection for sidebar and search: access and module filters applied, empty groups dropped. */
+export function effectiveNavigation(groups: NavGroup[], canReadHubBackups: boolean, modules?: ModuleChoices): NavGroup[] {
+  return groups.map((group) => ({ ...group, items: visibleNavItems(group.items, canReadHubBackups, modules) })).filter((group) => group.items.length > 0);
 }

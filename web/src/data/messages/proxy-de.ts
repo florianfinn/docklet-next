@@ -11,6 +11,7 @@ export const deProxyContract = {
     "instances": "Konfigurierte Instanzen",
     "candidates": "Einrichtungskandidaten",
     "newInstance": "Instanz hinzufügen",
+    "newInstanceOption": "Neue Instanz…",
     "instance": "Instanz",
     "host": "Host",
     "container": "Container",

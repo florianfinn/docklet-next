@@ -25,7 +25,7 @@ import {
 } from "@/shared/ui/sidebar";
 
 import { HostFilter } from "../HostFilter";
-import { type NavGroup, type NavItem, visibleNavItems } from "../nav-items";
+import { effectiveNavigation, type NavGroup, type NavItem } from "../nav-items";
 import { isNavActive, useNavCounts, useRunningActionCount, type NavCounts } from "../use-nav-counts";
 import { FreeUserMenu } from "./FreeUserMenu";
 import { useHubBackupAccess } from "@/features/hub-backups/use-backup-access";
@@ -129,7 +129,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
-        {navigation.map((group) => (
+        {effectiveNavigation(navigation, backupAccess.data?.read === true, modules.data).map((group) => (
           <SidebarGroup key={group.key}>
             <SidebarGroupLabel className="text-[11px] font-medium tracking-wide">
               {t(`groups.${group.key}`)}
@@ -137,7 +137,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {visibleNavItems(group.items, backupAccess.data?.read === true, modules.data).map((item) => (
+                {group.items.map((item) => (
                   <NavEntry key={item.key} item={item} groupBadge={group.key === "later"} count={counts[item.key]} active={isNavActive(pathname, item.to)} onNavigate={closeMobile} />
                 ))}
               </SidebarMenu>

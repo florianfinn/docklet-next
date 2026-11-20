@@ -16,7 +16,7 @@ export const deShell: typeof enShell = {
   breadcrumb: "Brotkrümelnavigation",
   navigationTitle: "Navigation",
   navigationDescription: "Hauptnavigation",
-  groups: { operate: "Betrieb", resources: "Ressourcen", system: "System", later: "Später" },
+  groups: { operate: "Betrieb", resources: "Ressourcen", system: "System", modules: "Module", later: "Später" },
   nav: {
     dashboard: "Dashboard",
     stacks: "Stacks",
