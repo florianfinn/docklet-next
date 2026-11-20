@@ -7,7 +7,7 @@ import { agentFixture } from "../scripts/agent-contract.mjs";
 
 test("the v9 manifest records the merged activity discovery producer", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v19.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json", import.meta.url));
   assert.deepEqual(agentFixture(spec, fixture), fixture);
   const changed = JSON.parse(spec);
   const recoveryName = JSON.parse(fixture).activityDiscovery.recovery.$ref.split("/").at(-1);

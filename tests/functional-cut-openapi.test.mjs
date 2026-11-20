@@ -27,6 +27,11 @@ const laterOperations = new Map([
   ["POST /modules/proxy/instances/{instanceId}/operations", "create-proxy-operation"],
   ["GET /modules/proxy/operations/{operationId}", "get-proxy-operation"],
   ["POST /modules/proxy/operations/{operationId}/release", "release-proxy-operation"],
+  // M28 proxy contract foundation (#492/#493).
+  ["POST /environments/{id}/modules/proxy/certificate-check", "check-host-proxy-certificate"],
+  ["POST /environments/{id}/modules/proxy/resolvers", "create-host-proxy-resolver"],
+  ["POST /modules/proxy/instances/{instanceId}/certificate-check", "check-proxy-certificate"],
+  ["POST /modules/proxy/instances/{instanceId}/resolvers", "create-proxy-resolver"],
  ["GET /modules", "list-modules"],
  ["DELETE /modules/{id}/data", "delete-module-data"],
  ["DELETE /environments/{id}/modules/{module}/data", "delete-host-module-data"],
