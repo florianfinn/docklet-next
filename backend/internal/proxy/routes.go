@@ -107,7 +107,7 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 	api.OpenAPI().Extensions["x-proxy-dns-providers"] = dto.DNSProviders()
 	const host = "/environments/{id}/modules/proxy"
 	register(api, m, agent, "discover-proxy-containers", "GET", host+"/discover", func(ctx context.Context, _ *HostInput) (*handlerutil.Out[[]dto.Discovery], error) {
-		return out(m.Runtime.Discover(ctx))
+		return out(m.DiscoverHost(ctx))
 	})
 	register(api, m, agent, "get-proxy-inventory", "POST", host+"/inventory", func(ctx context.Context, i *HostInstanceInput) (*handlerutil.Out[dto.Inventory], error) {
 		return out(m.Inventory(ctx, i.Body))

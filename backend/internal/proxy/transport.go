@@ -101,7 +101,7 @@ func (t *HostTransport) Release(ctx context.Context, q dto.ReleaseRequest) (dto.
 }
 func (t *HostTransport) Discover(ctx context.Context, env string) ([]dto.Discovery, error) {
 	if env == "0" {
-		return t.Local.Runtime.Discover(ctx)
+		return t.Local.DiscoverHost(ctx)
 	}
 	var r base.ApiResponse[[]dto.Discovery]
 	err := t.call(ctx, env, "GET", "/discover", nil, &r)

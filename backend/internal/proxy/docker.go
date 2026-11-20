@@ -53,7 +53,10 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 	// Writability follows the module's writer (agent project writer or volume/bind
 	// helper, Q-SRC), not the proxy container's own mount access: a proxy may mount
 	// its configuration read-only and still be configured through Docklet.
-	source := dto.Source{Canonical: path.Clean(m.Source), MountTarget: m.Destination, Kind: dto.UnknownSourceKind}
+	source := dto.Source{Canonical: path.Clean(m.Source), MountTarget: m.Destination, Kind: dto.UnknownSourceKind, MountMode: dto.MountReadOnly}
+	if m.RW {
+		source.MountMode = dto.MountReadWrite
+	}
 	cli, err := d.Docker.GetClient(ctx)
 	if err != nil {
 		return source, err
@@ -78,8 +81,13 @@ func (d *DockerRuntime) Source(ctx context.Context, c container.InspectResponse,
 		source.Kind = dto.NamedVolume
 		helperOnly(&source)
 	case mount.TypeBind:
-		if _, err = acfs.LogicalPath(d.projects(), m.Source); err == nil {
+		if logical, lerr := acfs.LogicalPath(d.projects(), m.Source); lerr == nil {
 			source.Kind = dto.ProjectSource
+			// Shown relative to the projects directory; "." is the directory itself.
+			source.ProjectPath = strings.TrimPrefix(path.Clean("/"+logical), "/")
+			if source.ProjectPath == "" {
+				source.ProjectPath = "."
+			}
 		} else {
 			source.Kind = dto.BindSource
 			var refused *backup.Problem

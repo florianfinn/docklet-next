@@ -275,6 +275,9 @@ func (m *Module) CreateInstance(ctx context.Context, q dto.CreateInstanceRequest
 	if !found {
 		return i, dto.Fail(dto.ContainerChanged, 409)
 	}
+	if err := revalidateSource(i.Source, i.RouteDirectory); err != nil {
+		return i, err
+	}
 	i.ID = uuid.NewString()
 	i.Registration, err = m.Transport.Registration(ctx, i.EnvironmentID)
 	if err != nil {
@@ -315,6 +318,9 @@ func (m *Module) UpdateInstance(ctx context.Context, id string, s dto.Settings) 
 		return i, dto.Fail(dto.ModuleBusy, 409)
 	}
 	if !missing(err) {
+		return i, err
+	}
+	if err := m.revalidateSettings(ctx, i); err != nil {
 		return i, err
 	}
 	inv, err := m.Transport.Inventory(ctx, i)
